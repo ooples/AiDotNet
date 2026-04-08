@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.UnitTests.Inference;
 
 public class DebugQuantizationTest
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Debug_WeightOnlyQuantization()
     {
         Console.WriteLine("DEBUG: Starting Debug_WeightOnlyQuantization");

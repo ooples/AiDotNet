@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.FederatedLearning;
 
 public class FederatedLearningPersonalizationAndMetaLearningIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task BuildAsync_WithFedPerPersonalization_MasksPersonalizedParametersFromGlobalAggregation()
     {
         var (x, y) = CreateToyData();
@@ -64,7 +64,7 @@ public class FederatedLearningPersonalizationAndMetaLearningIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task BuildAsync_WithReptileMetaLearning_AppliesServerStepSize()
     {
         var (x, y) = CreateToyData();

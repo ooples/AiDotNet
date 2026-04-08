@@ -60,14 +60,14 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region LocalOutlierFactor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LOF_Construction_NotFittedByDefault()
     {
         var detector = new LocalOutlierFactor<double>();
         Assert.False(detector.IsFitted);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LOF_OutlierGetsHighestScore()
     {
         var detector = new LocalOutlierFactor<double>();
@@ -79,7 +79,7 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LOF_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new LocalOutlierFactor<double>();
@@ -93,7 +93,7 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region KNNDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KNN_OutlierGetsHighestScore()
     {
         var detector = new KNNDetector<double>();
@@ -104,7 +104,7 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KNN_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new KNNDetector<double>();
@@ -118,7 +118,7 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region COFDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void COF_OutlierGetsHighestScore()
     {
         var detector = new COFDetector<double>();
@@ -129,7 +129,7 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void COF_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new COFDetector<double>();
@@ -143,7 +143,7 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region INFLODetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void INFLO_OutlierGetsHighestScore()
     {
         var detector = new INFLODetector<double>();
@@ -154,7 +154,7 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void INFLO_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new INFLODetector<double>();
@@ -168,7 +168,7 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region LoOPDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LoOP_OutlierGetsHighestScore()
     {
         var detector = new LoOPDetector<double>();
@@ -179,7 +179,7 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LoOP_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new LoOPDetector<double>();
@@ -193,7 +193,7 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region LOCIDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LOCI_OutlierGetsHighestScore()
     {
         var detector = new LOCIDetector<double>();
@@ -204,7 +204,7 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LOCI_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new LOCIDetector<double>();
@@ -218,7 +218,7 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region LDCOFDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDCOF_OutlierGetsHighestScore()
     {
         var detector = new LDCOFDetector<double>();
@@ -229,7 +229,7 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDCOF_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new LDCOFDetector<double>();
@@ -243,7 +243,7 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region OCSVMDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OCSVM_OutlierGetsHighestScore()
     {
         var detector = new OCSVMDetector<double>();
@@ -254,7 +254,7 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OCSVM_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new OCSVMDetector<double>();
@@ -268,7 +268,7 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region SOSDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SOS_OutlierGetsHighestScore()
     {
         var detector = new SOSDetector<double>();
@@ -279,7 +279,7 @@ public class DistanceBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SOS_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new SOSDetector<double>();
@@ -293,7 +293,7 @@ public class DistanceBasedAnomalyDetectionTests
 
     #region Cross-Detector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllDistanceDetectors_PredictBeforeFit_Throws()
     {
         var detectors = new AnomalyDetectorBase<double>[]

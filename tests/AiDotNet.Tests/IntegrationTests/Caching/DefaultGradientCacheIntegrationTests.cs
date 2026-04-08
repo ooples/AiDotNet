@@ -14,7 +14,7 @@ public class DefaultGradientCacheIntegrationTests
 {
     #region Basic CRUD Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetCachedGradient_NonExistentKey_ReturnsNull()
     {
         // Arrange
@@ -27,7 +27,7 @@ public class DefaultGradientCacheIntegrationTests
         Assert.Null(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheGradient_ThenGet_ReturnsSameGradient()
     {
         // Arrange
@@ -44,7 +44,7 @@ public class DefaultGradientCacheIntegrationTests
         Assert.Same(gradient, retrieved);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheGradient_OverwriteExistingKey_ReturnsNewGradient()
     {
         // Arrange
@@ -63,7 +63,7 @@ public class DefaultGradientCacheIntegrationTests
         Assert.NotSame(gradient1, retrieved);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ClearCache_RemovesAllEntries()
     {
         // Arrange
@@ -85,7 +85,7 @@ public class DefaultGradientCacheIntegrationTests
 
     #region Multiple Keys Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cache_MultipleKeys_EachRetrievableIndependently()
     {
         // Arrange
@@ -113,7 +113,7 @@ public class DefaultGradientCacheIntegrationTests
 
     #region Thread Safety Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConcurrentCacheOperations_DoesNotThrow()
     {
         // Arrange
@@ -161,7 +161,7 @@ public class DefaultGradientCacheIntegrationTests
         Assert.Empty(exceptions);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConcurrentReadWrite_SameKey_ThreadSafe()
     {
         // Arrange
@@ -197,7 +197,7 @@ public class DefaultGradientCacheIntegrationTests
         Assert.Empty(exceptions);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConcurrentClearAndAccess_ThreadSafe()
     {
         // Arrange
@@ -242,7 +242,7 @@ public class DefaultGradientCacheIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheGradient_EmptyKey_StoresSuccessfully()
     {
         // Arrange
@@ -257,7 +257,7 @@ public class DefaultGradientCacheIntegrationTests
         Assert.Same(gradient, retrieved);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheGradient_VeryLongKey_StoresSuccessfully()
     {
         // Arrange
@@ -273,7 +273,7 @@ public class DefaultGradientCacheIntegrationTests
         Assert.Same(gradient, retrieved);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheGradient_SpecialCharactersInKey_StoresSuccessfully()
     {
         // Arrange
@@ -289,7 +289,7 @@ public class DefaultGradientCacheIntegrationTests
         Assert.Same(gradient, retrieved);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ClearCache_OnEmptyCache_DoesNotThrow()
     {
         // Arrange
@@ -300,7 +300,7 @@ public class DefaultGradientCacheIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ClearCache_CalledMultipleTimes_DoesNotThrow()
     {
         // Arrange
@@ -317,7 +317,7 @@ public class DefaultGradientCacheIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetCachedGradient_NullKey_ThrowsArgumentNullException()
     {
         // Arrange
@@ -328,7 +328,7 @@ public class DefaultGradientCacheIntegrationTests
         Assert.Equal("key", ex.ParamName);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheGradient_NullKey_ThrowsArgumentNullException()
     {
         // Arrange
@@ -340,7 +340,7 @@ public class DefaultGradientCacheIntegrationTests
         Assert.Equal("key", ex.ParamName);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheGradient_NullGradient_ThrowsArgumentNullException()
     {
         // Arrange
@@ -355,7 +355,7 @@ public class DefaultGradientCacheIntegrationTests
 
     #region Type Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GradientCache_FloatType_WorksCorrectly()
     {
         // Arrange
@@ -370,7 +370,7 @@ public class DefaultGradientCacheIntegrationTests
         Assert.Same(gradient, retrieved);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GradientCache_DecimalType_WorksCorrectly()
     {
         // Arrange

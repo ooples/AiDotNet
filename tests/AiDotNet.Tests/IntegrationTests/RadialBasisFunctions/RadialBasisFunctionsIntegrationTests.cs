@@ -14,7 +14,7 @@ public class RadialBasisFunctionsIntegrationTests
 
     #region Gaussian RBF Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianRBF_ComputeAtZero_ReturnsOne()
     {
         // Arrange
@@ -27,7 +27,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianRBF_ComputePositive_DecreasesWithDistance()
     {
         // Arrange
@@ -43,7 +43,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.True(r2 < r1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianRBF_ComputeDerivativeAtZero_ReturnsZero()
     {
         // Arrange
@@ -56,7 +56,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianRBF_ComputeDerivative_IsNegativeForPositiveR()
     {
         // Arrange
@@ -69,7 +69,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.True(result < 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianRBF_ComputeWidthDerivative_IsNegativeForNonZeroR()
     {
         // Arrange
@@ -82,7 +82,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.True(result < 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianRBF_DifferentEpsilon_ProducesDifferentResults()
     {
         // Arrange
@@ -101,7 +101,7 @@ public class RadialBasisFunctionsIntegrationTests
 
     #region Multiquadric RBF Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiquadricRBF_ComputeAtZero_ReturnsEpsilon()
     {
         // Arrange
@@ -114,7 +114,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(2.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiquadricRBF_ComputePositive_IncreasesWithDistance()
     {
         // Arrange
@@ -130,7 +130,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.True(r2 > r1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiquadricRBF_ComputeDerivative_IsPositiveForPositiveR()
     {
         // Arrange
@@ -147,7 +147,7 @@ public class RadialBasisFunctionsIntegrationTests
 
     #region Inverse Multiquadric RBF Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseMultiquadricRBF_ComputeAtZero_ReturnsInverseEpsilon()
     {
         // Arrange
@@ -160,7 +160,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseMultiquadricRBF_ComputePositive_DecreasesWithDistance()
     {
         // Arrange
@@ -176,7 +176,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.True(r2 < r1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseMultiquadricRBF_ComputeDerivative_IsNegativeForPositiveR()
     {
         // Arrange
@@ -193,7 +193,7 @@ public class RadialBasisFunctionsIntegrationTests
 
     #region Inverse Quadratic RBF Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseQuadraticRBF_ComputeAtZero_ReturnsOne()
     {
         // Arrange
@@ -206,7 +206,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseQuadraticRBF_ComputePositive_DecreasesWithDistance()
     {
         // Arrange
@@ -226,7 +226,7 @@ public class RadialBasisFunctionsIntegrationTests
 
     #region Linear RBF Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearRBF_ComputeAtZero_ReturnsZero()
     {
         // Arrange
@@ -239,7 +239,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearRBF_Compute_ReturnsInputValue()
     {
         // Arrange
@@ -252,7 +252,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearRBF_ComputeDerivative_ReturnsOne()
     {
         // Arrange
@@ -269,7 +269,7 @@ public class RadialBasisFunctionsIntegrationTests
 
     #region Cubic RBF Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CubicRBF_ComputeAtZero_ReturnsZero()
     {
         // Arrange
@@ -282,7 +282,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CubicRBF_Compute_ReturnsCubeOfInput()
     {
         // Arrange
@@ -295,7 +295,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(8.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CubicRBF_ComputeDerivative_ReturnsThreeRSquared()
     {
         // Arrange
@@ -312,7 +312,7 @@ public class RadialBasisFunctionsIntegrationTests
 
     #region Thin Plate Spline RBF Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThinPlateSplineRBF_ComputeAtZero_ReturnsZero()
     {
         // Arrange
@@ -325,7 +325,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThinPlateSplineRBF_ComputePositive_ReturnsPositive()
     {
         // Arrange
@@ -342,7 +342,7 @@ public class RadialBasisFunctionsIntegrationTests
 
     #region Polyharmonic Spline RBF Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolyharmonicSplineRBF_ComputeAtZero_ReturnsZero()
     {
         // Arrange
@@ -355,7 +355,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolyharmonicSplineRBF_OddK_ReturnsRToTheK()
     {
         // Arrange
@@ -372,7 +372,7 @@ public class RadialBasisFunctionsIntegrationTests
 
     #region Exponential RBF Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExponentialRBF_ComputeAtZero_ReturnsOne()
     {
         // Arrange
@@ -385,7 +385,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExponentialRBF_ComputePositive_DecreasesWithDistance()
     {
         // Arrange
@@ -405,7 +405,7 @@ public class RadialBasisFunctionsIntegrationTests
 
     #region Matern RBF Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaternRBF_ComputeAtZero_ReturnsOne()
     {
         // Arrange
@@ -418,7 +418,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaternRBF_ComputePositive_DecreasesWithDistance()
     {
         // Arrange
@@ -434,7 +434,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.True(r2 < r1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaternRBF_DifferentNu_ProducesDifferentResults()
     {
         // Arrange
@@ -453,7 +453,7 @@ public class RadialBasisFunctionsIntegrationTests
 
     #region Rational Quadratic RBF Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RationalQuadraticRBF_ComputeAtZero_ReturnsOne()
     {
         // Arrange
@@ -466,7 +466,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RationalQuadraticRBF_ComputePositive_DecreasesWithDistance()
     {
         // Arrange
@@ -486,7 +486,7 @@ public class RadialBasisFunctionsIntegrationTests
 
     #region Squared Exponential RBF Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SquaredExponentialRBF_ComputeAtZero_ReturnsOne()
     {
         // Arrange
@@ -499,7 +499,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SquaredExponentialRBF_ComputePositive_DecreasesWithDistance()
     {
         // Arrange
@@ -519,7 +519,7 @@ public class RadialBasisFunctionsIntegrationTests
 
     #region Wendland RBF Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_ComputeAtZero_ReturnsOne()
     {
         // Arrange
@@ -532,7 +532,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_ComputeOutsideSupport_ReturnsZero()
     {
         // Arrange
@@ -545,7 +545,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_ComputeInsideSupport_ReturnsPositive()
     {
         // Arrange
@@ -563,7 +563,7 @@ public class RadialBasisFunctionsIntegrationTests
 
     #region Spherical RBF Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SphericalRBF_ComputeAtZero_ReturnsOne()
     {
         // Arrange
@@ -576,7 +576,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SphericalRBF_ComputeOutsideRange_ReturnsZero()
     {
         // Arrange
@@ -593,7 +593,7 @@ public class RadialBasisFunctionsIntegrationTests
 
     #region Wave RBF Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WaveRBF_ComputeAtZero_ReturnsOne()
     {
         // Arrange
@@ -606,7 +606,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WaveRBF_Compute_Oscillates()
     {
         // Arrange
@@ -629,7 +629,7 @@ public class RadialBasisFunctionsIntegrationTests
 
     #region Bessel RBF Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BesselRBF_ComputeAtZero_ReturnsOne()
     {
         // Arrange
@@ -642,7 +642,7 @@ public class RadialBasisFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BesselRBF_ComputePositive_DoesNotReturnNaN()
     {
         // Arrange
@@ -659,7 +659,7 @@ public class RadialBasisFunctionsIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllRBFs_ComputeDoesNotReturnNaN()
     {
         // Arrange
@@ -691,7 +691,7 @@ public class RadialBasisFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecreasingRBFs_ComputeDecreasesWithDistance()
     {
         // Arrange - RBFs that should decrease with distance
@@ -715,7 +715,7 @@ public class RadialBasisFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllRBFs_ComputeDerivativeDoesNotReturnNaN()
     {
         // Arrange

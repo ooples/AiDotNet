@@ -10,14 +10,14 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
 {
     public class FlatIndexTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullMetric_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() => new FlatIndex<double>(null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Add_WithValidVector_IncreasesCount()
         {
             // Arrange
@@ -32,7 +32,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(1, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Add_WithNullId_ThrowsArgumentException()
         {
             // Arrange
@@ -44,7 +44,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => index.Add(null!, vector));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Add_WithEmptyId_ThrowsArgumentException()
         {
             // Arrange
@@ -56,7 +56,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => index.Add("", vector));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Add_WithNullVector_ThrowsArgumentNullException()
         {
             // Arrange
@@ -67,7 +67,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentNullException>(() => index.Add("vec1", null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Add_WithDuplicateId_OverwritesExisting()
         {
             // Arrange
@@ -84,7 +84,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(1, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddBatch_WithValidVectors_IncreasesCount()
         {
             // Arrange
@@ -104,7 +104,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(3, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddBatch_WithNullDictionary_ThrowsArgumentNullException()
         {
             // Arrange
@@ -115,7 +115,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentNullException>(() => index.AddBatch(null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_WithCosineSimilarity_ReturnsClosestVectors()
         {
             // Arrange
@@ -137,7 +137,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal("vec3", results[1].Id); // Second most similar
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_WithEuclideanDistance_ReturnsNearestVectors()
         {
             // Arrange
@@ -159,7 +159,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal("vec3", results[1].Id); // Distance sqrt(2)
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_WithNullQuery_ThrowsArgumentNullException()
         {
             // Arrange
@@ -170,7 +170,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentNullException>(() => index.Search(null!, 5));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_WithNegativeK_ThrowsArgumentException()
         {
             // Arrange
@@ -182,7 +182,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => index.Search(query, -1));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_WithZeroK_ThrowsArgumentException()
         {
             // Arrange
@@ -194,7 +194,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => index.Search(query, 0));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_WithKLargerThanCount_ReturnsAllVectors()
         {
             // Arrange
@@ -213,7 +213,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_OnEmptyIndex_ReturnsEmptyList()
         {
             // Arrange
@@ -228,7 +228,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Empty(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Remove_WithExistingId_RemovesVectorAndReturnsTrue()
         {
             // Arrange
@@ -244,7 +244,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(0, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Remove_WithNonExistingId_ReturnsFalse()
         {
             // Arrange
@@ -260,7 +260,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(1, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Clear_RemovesAllVectors()
         {
             // Arrange
@@ -278,7 +278,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(0, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_WithManhattanDistance_WorksCorrectly()
         {
             // Arrange
@@ -301,7 +301,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal("vec2", results[2].Id); // Distance 10
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_WithDotProduct_WorksCorrectly()
         {
             // Arrange
@@ -323,7 +323,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(1.0, results[1].Score); // vec1 or vec2, both have dot product = 1
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_ReturnsExactResults()
         {
             // Arrange
@@ -356,7 +356,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Index_WithFloatType_WorksCorrectly()
         {
             // Arrange

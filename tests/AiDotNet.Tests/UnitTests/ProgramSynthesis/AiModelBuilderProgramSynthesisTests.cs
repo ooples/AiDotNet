@@ -12,7 +12,7 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public sealed class AiModelBuilderProgramSynthesisTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ConfigureProgramSynthesis_BuildAsync_ProducesResultWithCodeModel()
     {
         var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
@@ -39,7 +39,7 @@ public sealed class AiModelBuilderProgramSynthesisTests
         Assert.False(string.IsNullOrWhiteSpace(summary.Summary));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ConfigureProgramSynthesisServing_WithCustomClient_WiresAiModelResult()
     {
         var fakeClient = new FakeServingClient();

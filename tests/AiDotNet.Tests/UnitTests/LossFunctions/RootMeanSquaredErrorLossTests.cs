@@ -8,7 +8,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
 {
     public class RootMeanSquaredErrorLossTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithPerfectPredictions_ReturnsZero()
         {
             // Arrange
@@ -23,7 +23,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithDifferentPredictions_ReturnsCorrectValue()
         {
             // Arrange
@@ -40,7 +40,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(2.160246899469287, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithNegativeValues_ReturnsCorrectValue()
         {
             // Arrange
@@ -57,7 +57,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(4.320493798938574, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithSingleValue_ReturnsCorrectValue()
         {
             // Arrange
@@ -74,7 +74,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(2.0, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithDifferentLengths_ThrowsArgumentException()
         {
             // Arrange
@@ -86,7 +86,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateLoss(predicted, actual));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithPerfectPredictions_ReturnsZero()
         {
             // Arrange
@@ -101,7 +101,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.All(result, item => Assert.Equal(0.0, item, 10));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithDifferentPredictions_ReturnsCorrectValues()
         {
             // Arrange
@@ -121,7 +121,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.46291004988627574, result[2], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithNegativeDifferences_ReturnsNegativeValues()
         {
             // Arrange
@@ -143,7 +143,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(-0.46291004988627574, result[2], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithDifferentLengths_ThrowsArgumentException()
         {
             // Arrange
@@ -155,7 +155,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateDerivative(predicted, actual));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -171,7 +171,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(2.160246899469287f, result, 5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -188,7 +188,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.46291004988627574f, result[2], 5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithLargeErrors_ReturnsSquareRootOfMSE()
         {
             // Arrange
@@ -205,7 +205,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(19.44222209522358, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithSmallErrors_ReturnsCorrectValue()
         {
             // Arrange
@@ -222,7 +222,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.1, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_ReturnsNonNegativeValue()
         {
             // Arrange

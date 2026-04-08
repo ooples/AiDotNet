@@ -13,7 +13,7 @@ public class TrainTestSplitTests
 
     #region Split Tests (Two-way)
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Split_DefaultParameters_Returns80_20Split()
     {
         // Arrange
@@ -30,7 +30,7 @@ public class TrainTestSplitTests
         Assert.Equal(20, yTest.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Split_CustomTestSize_CorrectSplit()
     {
         // Arrange
@@ -47,7 +47,7 @@ public class TrainTestSplitTests
         Assert.Equal(30, yTest.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Split_PreservesFeatureCount()
     {
         // Arrange
@@ -62,7 +62,7 @@ public class TrainTestSplitTests
         Assert.Equal(5, XTest.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Split_NoDataLoss_AllSamplesInOutput()
     {
         // Arrange
@@ -77,7 +77,7 @@ public class TrainTestSplitTests
         Assert.Equal(10, yTrain.Length + yTest.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Split_SameSeed_ProducesSameResults()
     {
         // Arrange
@@ -98,7 +98,7 @@ public class TrainTestSplitTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Split_DifferentSeeds_ProducesDifferentResults()
     {
         // Arrange
@@ -124,7 +124,7 @@ public class TrainTestSplitTests
         Assert.True(anyDifferent);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Split_NoShuffle_PreservesOrder()
     {
         // Arrange - Create data with sequential values
@@ -148,7 +148,7 @@ public class TrainTestSplitTests
         Assert.Equal(9.0, XTest[1, 0], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Split_InvalidTestSize_ThrowsException()
     {
         // Arrange
@@ -162,7 +162,7 @@ public class TrainTestSplitTests
         Assert.Throws<ArgumentException>(() => TrainTestSplit<double>.Split(X, y, testSize: 1.5));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Split_NullInputs_ThrowsException()
     {
         // Arrange
@@ -174,7 +174,7 @@ public class TrainTestSplitTests
         Assert.Throws<ArgumentNullException>(() => TrainTestSplit<double>.Split(X, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Split_MismatchedSizes_ThrowsException()
     {
         // Arrange
@@ -189,7 +189,7 @@ public class TrainTestSplitTests
 
     #region SplitThreeWay Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SplitThreeWay_DefaultParameters_CorrectSplit()
     {
         // Arrange
@@ -209,7 +209,7 @@ public class TrainTestSplitTests
         Assert.Equal(15, yTest.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SplitThreeWay_CustomSizes_CorrectSplit()
     {
         // Arrange
@@ -226,7 +226,7 @@ public class TrainTestSplitTests
         Assert.Equal(20, XTest.Rows);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SplitThreeWay_NoDataLoss_AllSamplesInOutput()
     {
         // Arrange
@@ -241,7 +241,7 @@ public class TrainTestSplitTests
         Assert.Equal(50, XTrain.Rows + XVal.Rows + XTest.Rows);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SplitThreeWay_InvalidSizes_ThrowsException()
     {
         // Arrange
@@ -259,7 +259,7 @@ public class TrainTestSplitTests
             TrainTestSplit<double>.SplitThreeWay(X, y, trainSize: 0.7, validationSize: 0.4)); // Sum >= 1
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SplitThreeWay_SameSeed_ProducesSameResults()
     {
         // Arrange
@@ -278,7 +278,7 @@ public class TrainTestSplitTests
 
     #region SplitX Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SplitX_BasicSplit_Works()
     {
         // Arrange
@@ -294,14 +294,14 @@ public class TrainTestSplitTests
         Assert.Equal(3, XTest.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SplitX_NullInput_ThrowsException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => TrainTestSplit<double>.SplitX(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SplitX_InvalidTestSize_ThrowsException()
     {
         // Arrange
@@ -316,7 +316,7 @@ public class TrainTestSplitTests
 
     #region KFoldSplit Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void KFoldSplit_DefaultK_ReturnsFiveFolds()
     {
         // Arrange
@@ -330,7 +330,7 @@ public class TrainTestSplitTests
         Assert.Equal(5, folds.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void KFoldSplit_CustomK_ReturnsCorrectFolds()
     {
         // Arrange
@@ -344,7 +344,7 @@ public class TrainTestSplitTests
         Assert.Equal(10, folds.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void KFoldSplit_EachFoldHasCorrectTestSize()
     {
         // Arrange
@@ -362,7 +362,7 @@ public class TrainTestSplitTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void KFoldSplit_TrainingSetCorrectSize()
     {
         // Arrange
@@ -380,7 +380,7 @@ public class TrainTestSplitTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void KFoldSplit_InvalidK_ThrowsException()
     {
         // Arrange
@@ -393,7 +393,7 @@ public class TrainTestSplitTests
         Assert.Throws<ArgumentException>(() => TrainTestSplit<double>.KFoldSplit(X, y, k: -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void KFoldSplit_KGreaterThanSamples_ThrowsException()
     {
         // Arrange
@@ -404,7 +404,7 @@ public class TrainTestSplitTests
         Assert.Throws<ArgumentException>(() => TrainTestSplit<double>.KFoldSplit(X, y, k: 10));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void KFoldSplit_NullInputs_ThrowsException()
     {
         // Arrange
@@ -416,7 +416,7 @@ public class TrainTestSplitTests
         Assert.Throws<ArgumentNullException>(() => TrainTestSplit<double>.KFoldSplit(X, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void KFoldSplit_SameSeed_ProducesSameResults()
     {
         // Arrange
@@ -434,7 +434,7 @@ public class TrainTestSplitTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void KFoldSplit_HandlesUnevenDivision()
     {
         // Arrange - 23 samples with k=5 doesn't divide evenly

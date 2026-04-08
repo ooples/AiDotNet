@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class FrameInterpolationTestBase : VideoNNModelTestBase
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InterpolatedFrame_ShouldBeBetweenInputs()
     {
         var network = CreateNetwork();
@@ -30,7 +30,7 @@ public abstract class FrameInterpolationTestBase : VideoNNModelTestBase
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Interpolation_OutputNonEmpty()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

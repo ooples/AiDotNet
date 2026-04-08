@@ -65,14 +65,14 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region MovingAverageDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MovingAverage_Construction_NotFittedByDefault()
     {
         var detector = new MovingAverageDetector<double>();
         Assert.False(detector.IsFitted);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MovingAverage_OutlierGetsHighestScore()
     {
         var detector = new MovingAverageDetector<double>(windowSize: 5);
@@ -84,7 +84,7 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MovingAverage_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new MovingAverageDetector<double>(windowSize: 5);
@@ -98,7 +98,7 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region ARIMADetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ARIMA_OutlierGetsHighestScore()
     {
         var detector = new ARIMADetector<double>(p: 1, d: 0, q: 0);
@@ -109,7 +109,7 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ARIMA_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new ARIMADetector<double>(p: 1, d: 0, q: 0);
@@ -123,7 +123,7 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region STLDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void STL_OutlierGetsHighestScore()
     {
         var detector = new STLDetector<double>(seasonLength: 12);
@@ -134,7 +134,7 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void STL_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new STLDetector<double>(seasonLength: 12);
@@ -148,7 +148,7 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region MatrixProfileDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatrixProfile_OutlierGetsHighestScore()
     {
         var detector = new MatrixProfileDetector<double>(subsequenceLength: 5);
@@ -159,7 +159,7 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatrixProfile_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new MatrixProfileDetector<double>(subsequenceLength: 5);
@@ -173,7 +173,7 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region SpectralResidualDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpectralResidual_OutlierGetsHighestScore()
     {
         var detector = new SpectralResidualDetector<double>();
@@ -184,7 +184,7 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpectralResidual_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new SpectralResidualDetector<double>();
@@ -198,7 +198,7 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region SeasonalHybridESDDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SeasonalHybridESD_OutlierGetsHighestScore()
     {
         var detector = new SeasonalHybridESDDetector<double>(seasonLength: 12);
@@ -209,7 +209,7 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SeasonalHybridESD_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new SeasonalHybridESDDetector<double>(seasonLength: 12);
@@ -223,7 +223,7 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region LSTMDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LSTM_OutlierGetsHighestScore()
     {
         var detector = new LSTMDetector<double>(seqLength: 5, epochs: 5);
@@ -234,7 +234,7 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LSTM_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new LSTMDetector<double>(seqLength: 5, epochs: 5);
@@ -248,7 +248,7 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region NBEATSDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NBEATS_OutlierGetsHighestScore()
     {
         var detector = new NBEATSDetector<double>(epochs: 5);
@@ -259,7 +259,7 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NBEATS_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new NBEATSDetector<double>(epochs: 5);
@@ -273,7 +273,7 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region AnomalyTransformerDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AnomalyTransformer_OutlierGetsHighestScore()
     {
         var detector = new AnomalyTransformerDetector<double>(seqLength: 10, epochs: 5);
@@ -284,7 +284,7 @@ public class TimeSeriesAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, AnomalyIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AnomalyTransformer_PredictClassifiesAnomalyCorrectly()
     {
         var detector = new AnomalyTransformerDetector<double>(seqLength: 10, epochs: 5);
@@ -298,7 +298,7 @@ public class TimeSeriesAnomalyDetectionTests
 
     #region Cross-Detector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllTimeSeriesDetectors_PredictBeforeFit_Throws()
     {
         var detectors = new AnomalyDetectorBase<double>[]

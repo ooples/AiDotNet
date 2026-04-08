@@ -91,7 +91,7 @@ public class MAMLTrainerIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MetaTrain_WithMultipleIterations_UpdatesParametersCorrectly()
     {
         // Arrange
@@ -129,7 +129,7 @@ public class MAMLTrainerIntegrationTests
         Assert.All(lossHistory, loss => Assert.True(loss >= 0, "Loss should be non-negative"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MetaTrain_TrainsModelOnMultipleTasks()
     {
         // This test verifies the framework correctly processes multiple meta-learning tasks
@@ -177,7 +177,7 @@ public class MAMLTrainerIntegrationTests
         Assert.True(paramsDifferent, "Meta-training should change parameters differently than baseline");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Adapt_ProducesTaskSpecificModel()
     {
         // This test verifies that MAML adaptation creates a task-specialized model
@@ -219,7 +219,7 @@ public class MAMLTrainerIntegrationTests
         Assert.True(metaParamsUnchanged, "Adaptation should not modify meta-model parameters");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Evaluate_ProducesValidMetrics()
     {
         // This test verifies evaluation produces valid loss values
@@ -245,7 +245,7 @@ public class MAMLTrainerIntegrationTests
         Assert.False(double.IsPositiveInfinity(evalLoss), "Evaluation loss should not be infinite");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MAML_FirstOrderApproximation_WorksCorrectly()
     {
         // This test verifies FOMAML (first-order approximation) works
@@ -278,7 +278,7 @@ public class MAMLTrainerIntegrationTests
         Assert.All(losses, loss => Assert.False(double.IsNaN(loss), "Loss should not be NaN"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MetaTrain_LongTraining_TracksLossCorrectly()
     {
         // Arrange
@@ -307,7 +307,7 @@ public class MAMLTrainerIntegrationTests
         Assert.True(!double.IsNaN(lastLoss), "Loss should not be NaN");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MetaTrain_WithLargeBatch_ProcessesAllTasks()
     {
         // Arrange

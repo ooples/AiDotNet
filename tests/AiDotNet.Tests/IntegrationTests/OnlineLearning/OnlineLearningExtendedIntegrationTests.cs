@@ -18,7 +18,7 @@ public class OnlineLearningExtendedIntegrationTests
 
     #region OnlineSGDClassifier - Gradient and Convergence Verification
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_LinearSeparable_ConvergesTo100PercentAccuracy()
     {
         // Generate linearly separable data: y=1 if x[0]+x[1]>0, else y=0
@@ -61,7 +61,7 @@ public class OnlineLearningExtendedIntegrationTests
             $"SGD classifier should achieve >90% on linearly separable data, got {accuracy:P}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_ProbabilityOutput_IsBetween0And1()
     {
         var classifier = new OnlineSGDClassifier<double>(learningRate: 0.01);
@@ -85,7 +85,7 @@ public class OnlineLearningExtendedIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_Sigmoid_HandCalculated()
     {
         // Set known weights and verify sigmoid output
@@ -110,7 +110,7 @@ public class OnlineLearningExtendedIntegrationTests
         Assert.Equal(1.0 - expected, classifier.PredictProbability(x2), 1e-4);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_L2Regularization_ShrinkWeights()
     {
         // Train two models: one with L2, one without
@@ -152,7 +152,7 @@ public class OnlineLearningExtendedIntegrationTests
             $"L2-regularized weights (norm={Math.Sqrt(normWithReg):F4}) should be smaller than unregularized (norm={Math.Sqrt(normNoReg):F4})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_L1Regularization_ProducesSparseWeights()
     {
         // y depends only on x[0], x[1..4] are noise
@@ -188,7 +188,7 @@ public class OnlineLearningExtendedIntegrationTests
             $"L1 should push at least 2 of 4 noise features near zero, got {nearZero}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_Reset_ClearsAllState()
     {
         var classifier = new OnlineSGDClassifier<double>(learningRate: 0.01);
@@ -205,7 +205,7 @@ public class OnlineLearningExtendedIntegrationTests
         Assert.Null(classifier.GetWeights());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_DecisionFunction_MatchesLinearPrediction()
     {
         var classifier = new OnlineSGDClassifier<double>(learningRate: 0.01, l2Penalty: 0.0);
@@ -220,7 +220,7 @@ public class OnlineLearningExtendedIntegrationTests
         Assert.Equal(5.5, decision, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_FeatureImportance_ReflectsAbsoluteWeights()
     {
         var classifier = new OnlineSGDClassifier<double>();
@@ -241,7 +241,7 @@ public class OnlineLearningExtendedIntegrationTests
 
     #region OnlineSGDRegressor - Loss Function and Gradient Verification
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDRegressor_SimpleLinear_ConvergesToTrueLine()
     {
         // True model: y = 2*x + 1 + noise
@@ -275,7 +275,7 @@ public class OnlineLearningExtendedIntegrationTests
             $"Bias should be close to 1.0, got {bias:F4}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDRegressor_HuberLoss_GradientHandCalculated()
     {
         // Huber loss gradient: 2*residual if |residual| <= epsilon, else 2*epsilon*sign(residual)
@@ -317,7 +317,7 @@ public class OnlineLearningExtendedIntegrationTests
         Assert.Equal(0.02, weights[0], 1e-4);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDRegressor_EpsilonInsensitiveLoss_ZeroGradientInBand()
     {
         // Epsilon-insensitive: gradient = 0 if |residual| <= epsilon
@@ -342,7 +342,7 @@ public class OnlineLearningExtendedIntegrationTests
         Assert.Equal(1.0, weights[0], Tolerance); // No update
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDRegressor_RobustToOutliers_HuberVsSquaredError()
     {
         // Huber should be more robust to outliers than squared error
@@ -391,7 +391,7 @@ public class OnlineLearningExtendedIntegrationTests
             $"Huber MSE ({huberMSE:F4}) should not be much worse than Squared ({squaredMSE:F4})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDRegressor_Score_R2_HandCalculated()
     {
         var regressor = new OnlineSGDRegressor<double>(learningRate: 0.01, l2Penalty: 0.0);
@@ -414,7 +414,7 @@ public class OnlineLearningExtendedIntegrationTests
 
     #region OnlinePassiveAggressiveClassifier - Update Rule Verification
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PAClassifier_PA_UpdateRule_HandCalculated()
     {
         // PA update: w = w + tau * y * x, where tau = loss / ||x||^2
@@ -439,7 +439,7 @@ public class OnlineLearningExtendedIntegrationTests
         Assert.Equal(0.0, weights[1], 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PAClassifier_PA_I_BoundedUpdate()
     {
         // PA-I: tau = min(C, loss / ||x||^2)
@@ -462,7 +462,7 @@ public class OnlineLearningExtendedIntegrationTests
         Assert.Equal(0.5, weights[0], 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PAClassifier_CorrectPrediction_NoUpdate()
     {
         var pac = new OnlinePassiveAggressiveClassifier<double>(type: PAType.PA);
@@ -482,7 +482,7 @@ public class OnlineLearningExtendedIntegrationTests
         Assert.Equal(1.0, weights[1], 0.01); // Unchanged
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PAClassifier_LinearSeparable_ConvergesToZeroLoss()
     {
         var pac = new OnlinePassiveAggressiveClassifier<double>(c: 1.0, type: PAType.PA_I);
@@ -523,7 +523,7 @@ public class OnlineLearningExtendedIntegrationTests
 
     #region OnlinePassiveAggressiveRegressor - Update Rule Verification
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PARegressor_SimpleConvergence()
     {
         // PA regressor should converge on a simple linear relationship
@@ -552,7 +552,7 @@ public class OnlineLearningExtendedIntegrationTests
             $"PA regressor weight should be close to 3.0, got {weights[0]:F4}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PARegressor_EpsilonInsensitive_NoUpdateInBand()
     {
         var regressor = new OnlinePassiveAggressiveRegressor<double>(
@@ -576,7 +576,7 @@ public class OnlineLearningExtendedIntegrationTests
 
     #region Learning Rate Schedule Verification
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_InverseScaling_ProducesSmallerUpdates()
     {
         // With InverseScaling, effective lr decreases over time
@@ -622,7 +622,7 @@ public class OnlineLearningExtendedIntegrationTests
             $"InverseScaling weight norm ({Math.Sqrt(normInv):F4}) should be smaller than Constant ({Math.Sqrt(normConst):F4})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_ConstantLR_SameUpdateMagnitude()
     {
         var classifier = new OnlineSGDClassifier<double>(
@@ -649,7 +649,7 @@ public class OnlineLearningExtendedIntegrationTests
 
     #region Get/Set Parameters Round-Trip
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_GetSetParameters_RoundTrip()
     {
         var classifier = new OnlineSGDClassifier<double>();
@@ -666,7 +666,7 @@ public class OnlineLearningExtendedIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDRegressor_GetSetParameters_RoundTrip()
     {
         var regressor = new OnlineSGDRegressor<double>();
@@ -683,7 +683,7 @@ public class OnlineLearningExtendedIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PAClassifier_WithParameters_CreatesEquivalentModel()
     {
         var pac = new OnlinePassiveAggressiveClassifier<double>(c: 1.0, type: PAType.PA_I);
@@ -710,7 +710,7 @@ public class OnlineLearningExtendedIntegrationTests
 
     #region Batch Prediction
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_BatchPredict_MatchesSinglePredictions()
     {
         var classifier = new OnlineSGDClassifier<double>(learningRate: 0.01);
@@ -748,7 +748,7 @@ public class OnlineLearningExtendedIntegrationTests
 
     #region ADWINDriftDetector in Online Learning Context
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ADWINDriftDetector_DetectsConceptDriftDuringOnlineLearning()
     {
         // Simulate concept drift: first half y = x[0]>0, second half y = x[0]<0

@@ -47,7 +47,7 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== StandardScaler Tests =====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
@@ -80,7 +80,7 @@ public class PreprocessingSerializationIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardScaler_RoundTrip_PreservesConfiguration()
     {
         // Arrange - test with non-default options
@@ -102,7 +102,7 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== MinMaxScaler Tests =====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MinMaxScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
@@ -135,7 +135,7 @@ public class PreprocessingSerializationIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MinMaxScaler_CustomRange_RoundTrip_PreservesRange()
     {
         // Arrange
@@ -182,7 +182,7 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== RobustScaler Tests =====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RobustScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
@@ -217,7 +217,7 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== MaxAbsScaler Tests =====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaxAbsScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
@@ -251,7 +251,7 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== SimpleImputer Tests =====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleImputer_RoundTrip_PreservesFittedState()
     {
         // Arrange
@@ -286,7 +286,7 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== Pipeline Tests =====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pipeline_SingleStep_RoundTrip_PreservesFittedState()
     {
         // Arrange
@@ -322,7 +322,7 @@ public class PreprocessingSerializationIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pipeline_MultiStep_RoundTrip_PreservesFittedState()
     {
         // Arrange
@@ -362,7 +362,7 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== PreprocessingInfo Tests =====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PreprocessingInfo_RoundTrip_PreservesPipeline()
     {
         // Arrange
@@ -400,7 +400,7 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== InverseTransform Tests =====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardScaler_InverseTransform_WorksAfterDeserialization()
     {
         // Arrange
@@ -428,7 +428,7 @@ public class PreprocessingSerializationIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MinMaxScaler_InverseTransform_WorksAfterDeserialization()
     {
         // Arrange
@@ -456,7 +456,7 @@ public class PreprocessingSerializationIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pipeline_InverseTransform_WorksAfterDeserialization()
     {
         // Arrange
@@ -489,7 +489,7 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== DecimalScaler Tests =====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecimalScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
@@ -522,7 +522,7 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== LogScaler Tests =====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
@@ -555,7 +555,7 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== LpNormScaler Tests =====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LpNormScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
@@ -588,7 +588,7 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== Normalizer Tests =====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Normalizer_RoundTrip_PreservesFittedState()
     {
         // Arrange
@@ -621,7 +621,7 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== LogMeanVarianceScaler Tests =====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogMeanVarianceScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
@@ -656,7 +656,7 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== GlobalContrastScaler Tests =====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GlobalContrastScaler_RoundTrip_PreservesFittedState()
     {
         // Arrange
@@ -690,7 +690,7 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== ColumnIndices Round-Trip Test =====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardScaler_WithColumnIndices_RoundTripPreservesIndices()
     {
         // Arrange: Create a scaler that only operates on columns 0 and 2
@@ -731,7 +731,7 @@ public class PreprocessingSerializationIntegrationTests
 
     // ===================== TargetPipeline Round-Trip Test =====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PreprocessingInfo_WithNullTargetPipeline_RoundTripPreservesNullTarget()
     {
         // Arrange: PreprocessingInfo with feature pipeline but null target pipeline
@@ -770,7 +770,7 @@ public class PreprocessingSerializationIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PreprocessingInfo_WithTargetPipeline_RoundTripPreservesTarget()
     {
         // Arrange: Create PreprocessingInfo where TOutput is also Matrix<double>

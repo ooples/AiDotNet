@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class AudioDiffusionTestBase : LatentDiffusionTestBase
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AudioLength_ShouldBeReasonable()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -22,7 +22,7 @@ public abstract class AudioDiffusionTestBase : LatentDiffusionTestBase
             $"Audio output length ({output.Length}) is unreasonably large relative to input ({input.Length}).");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpectralEnergy_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

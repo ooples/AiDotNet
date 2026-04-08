@@ -14,7 +14,7 @@ public class MobileNetTests
 {
     #region MobileNetV2 Configuration Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MobileNetV2Configuration_DefaultValues_AreCorrect()
     {
         // Arrange & Act - Use the standard factory method
@@ -49,7 +49,7 @@ public class MobileNetTests
 
     #region MobileNetV2 Construction Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MobileNetV2_100_Construction_CreatesValidNetwork()
     {
         // Arrange & Act
@@ -62,7 +62,7 @@ public class MobileNetTests
         Assert.True(network.Layers.Count > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MobileNetV2_035_Construction_CreatesValidNetwork()
     {
         // Arrange & Act
@@ -74,7 +74,7 @@ public class MobileNetTests
         Assert.Equal(10, network.NumClasses);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MobileNetV2_CustomConfig_CreatesValidNetwork()
     {
         // Arrange - Use factory method for testing custom channels
@@ -113,7 +113,7 @@ public class MobileNetTests
 
     #region MobileNetV2 Forward Pass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void MobileNetV2_Forward_ProducesCorrectOutputShape()
     {
@@ -133,7 +133,7 @@ public class MobileNetTests
         Assert.True(output.Length >= 10, "Output should have at least 10 values for 10 classes");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void MobileNetV2_Forward_ReturnsNonZeroOutput()
     {
@@ -157,7 +157,7 @@ public class MobileNetTests
 
     #region MobileNetV3 Configuration Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MobileNetV3Configuration_DefaultValues_AreCorrect()
     {
         // Arrange & Act - Use the Large factory method
@@ -189,7 +189,7 @@ public class MobileNetTests
 
     #region MobileNetV3 Construction Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MobileNetV3Large_Construction_CreatesValidNetwork()
     {
         // Arrange & Act
@@ -202,7 +202,7 @@ public class MobileNetTests
         Assert.True(network.Layers.Count > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MobileNetV3Small_Construction_CreatesValidNetwork()
     {
         // Arrange & Act
@@ -215,7 +215,7 @@ public class MobileNetTests
         Assert.True(network.Layers.Count > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MobileNetV3_CustomConfig_CreatesValidNetwork()
     {
         // Arrange - Use factory method for testing custom channels
@@ -248,7 +248,7 @@ public class MobileNetTests
 
     #region MobileNetV3 Forward Pass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void MobileNetV3Large_Forward_ProducesCorrectOutputShape()
     {
@@ -268,7 +268,7 @@ public class MobileNetTests
         Assert.True(output.Length >= 10, "Output should have at least 10 values for 10 classes");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void MobileNetV3Small_Forward_ProducesCorrectOutputShape()
     {
@@ -292,7 +292,7 @@ public class MobileNetTests
 
     #region InvertedResidualBlock Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvertedResidualBlock_Construction_CreatesValidBlock()
     {
         // Arrange & Act
@@ -314,7 +314,7 @@ public class MobileNetTests
         Assert.True(block.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvertedResidualBlock_WithSE_CreatesValidBlock()
     {
         // Arrange & Act
@@ -333,7 +333,7 @@ public class MobileNetTests
         Assert.True(block.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvertedResidualBlock_Forward_ProducesOutput()
     {
         // Arrange
@@ -362,7 +362,7 @@ public class MobileNetTests
         Assert.Equal(8, output.Shape[3]); // Width
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvertedResidualBlock_WithStride2_ReducesSpatialDimensions()
     {
         // Arrange
@@ -394,7 +394,7 @@ public class MobileNetTests
 
     #region ReLU6 Activation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReLU6Activation_Activate_ClampsToSix()
     {
         // Arrange
@@ -408,7 +408,7 @@ public class MobileNetTests
         Assert.Equal(6.0, activation.Activate(10.0), 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReLU6Activation_Derivative_ReturnsCorrectValues()
     {
         // Arrange
@@ -422,7 +422,7 @@ public class MobileNetTests
         Assert.Equal(0.0, activation.Derivative(10.0), 6); // Out of range
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReLU6Activation_SupportsJitCompilation()
     {
         // Arrange
@@ -436,7 +436,7 @@ public class MobileNetTests
 
     #region HardSwish Activation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HardSwishActivation_Activate_ComputesCorrectly()
     {
         // Arrange
@@ -459,7 +459,7 @@ public class MobileNetTests
         Assert.Equal(0.6666, activation.Activate(1.0), 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HardSwishActivation_Derivative_ReturnsCorrectValues()
     {
         // Arrange
@@ -480,7 +480,7 @@ public class MobileNetTests
         Assert.Equal(0.8333, activation.Derivative(1.0), 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HardSwishActivation_SupportsJitCompilation()
     {
         // Arrange
@@ -494,7 +494,7 @@ public class MobileNetTests
 
     #region Metadata Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MobileNetV2_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -511,7 +511,7 @@ public class MobileNetTests
         Assert.True((int)metadata.AdditionalInfo["LayerCount"] > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MobileNetV3_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -532,7 +532,7 @@ public class MobileNetTests
 
     #region Clone Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MobileNetV2_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -551,7 +551,7 @@ public class MobileNetTests
         Assert.Equal(original.NumClasses, clonedNetwork.NumClasses);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MobileNetV3_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -574,7 +574,7 @@ public class MobileNetTests
 
     #region Enum Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MobileNetV2WidthMultiplier_EnumValues_AreDistinct()
     {
         // Arrange
@@ -591,7 +591,7 @@ public class MobileNetTests
         Assert.Contains(MobileNetV2WidthMultiplier.Alpha140, values);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MobileNetV3Variant_EnumValues_AreDistinct()
     {
         // Arrange

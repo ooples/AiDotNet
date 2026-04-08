@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class AudioClassifierTestBase : AudioNNModelTestBase
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ClassOutput_ShouldBeNonNegative()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -26,7 +26,7 @@ public abstract class AudioClassifierTestBase : AudioNNModelTestBase
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SilenceClassification_ShouldNotCrash()
     {
         var network = CreateNetwork();

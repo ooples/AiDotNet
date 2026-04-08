@@ -15,7 +15,7 @@ public class FitDetectorsDeepMathIntegrationTests
     // FitType Enum Coverage
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FitType_HasFifteenValues()
     {
         var values = (((FitType[])Enum.GetValues(typeof(FitType))));
@@ -71,7 +71,7 @@ public class FitDetectorsDeepMathIntegrationTests
             "Train-test gap should typically be non-negative or small");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FitMath_OverfitDetection_LargeGapIndicatesOverfit()
     {
         double trainAccuracy = 0.99;
@@ -82,7 +82,7 @@ public class FitDetectorsDeepMathIntegrationTests
         Assert.True(gap > 0.20, $"Gap of {gap} should indicate overfitting");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FitMath_UnderfitDetection_BothLowIndicatesUnderfit()
     {
         double trainAccuracy = 0.55;
@@ -123,7 +123,7 @@ public class FitDetectorsDeepMathIntegrationTests
         Assert.True(upper >= mean);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FitMath_CrossValidation_HighVarianceIndicatesInstability()
     {
         double[] foldScores = { 0.95, 0.60, 0.88, 0.55, 0.92 };
@@ -162,7 +162,7 @@ public class FitDetectorsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FitMath_ResidualNormality_SkewnessAndKurtosis()
     {
         // For normally distributed residuals:
@@ -282,7 +282,7 @@ public class FitDetectorsDeepMathIntegrationTests
         Assert.Equal(expectedAdjusted, adjustedRSquared, 1e-2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FitMath_AdjustedRSquared_AlwaysLessOrEqualToRSquared()
     {
         double rSquared = 0.85;
@@ -318,7 +318,7 @@ public class FitDetectorsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FitMath_AIC_LowerIsBetter()
     {
         int n = 100;
@@ -336,7 +336,7 @@ public class FitDetectorsDeepMathIntegrationTests
     // Learning Curve Analysis
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FitMath_LearningCurve_OverfitPattern()
     {
         // Overfit: train score stays high, test score stays low
@@ -351,7 +351,7 @@ public class FitDetectorsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FitMath_LearningCurve_GoodFitPattern()
     {
         // Good fit: train and test converge

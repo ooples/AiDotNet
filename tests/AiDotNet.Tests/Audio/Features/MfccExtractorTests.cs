@@ -22,7 +22,7 @@ namespace AiDotNet.Tests.Audio.Features
             return audio;
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MfccExtractor_DefaultOptions_ExtractsCorrectDimension()
         {
             // Arrange
@@ -43,7 +43,7 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.True(mfccs.Shape[0] > 0, "Should have at least one frame");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MfccExtractor_WithDelta_DoublesDimension()
         {
             // Arrange
@@ -63,7 +63,7 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal(26, mfccs.Shape[1]); // 13 MFCC + 13 delta
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MfccExtractor_WithDeltaDelta_TriplesDimension()
         {
             // Arrange
@@ -84,7 +84,7 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal(39, mfccs.Shape[1]); // 13 MFCC + 13 delta + 13 delta-delta
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MfccExtractor_Name_IsMFCC()
         {
             // Arrange
@@ -94,7 +94,7 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal("MFCC", extractor.Name);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MfccExtractor_FeatureDimension_MatchesCoefficients()
         {
             // Arrange
@@ -105,7 +105,7 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal(20, extractor.FeatureDimension);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MfccExtractor_OutputValues_AreFinite()
         {
             // Arrange
@@ -127,7 +127,7 @@ namespace AiDotNet.Tests.Audio.Features
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MfccExtractor_DifferentFrequencies_ProduceDifferentMFCCs()
         {
             // Arrange

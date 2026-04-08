@@ -14,7 +14,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 /// </summary>
 public class ClipNeuralNetworkTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithNullImageEncoderPath_ThrowsArgumentException()
     {
         // Arrange
@@ -28,7 +28,7 @@ public class ClipNeuralNetworkTests
         Assert.Contains("Image encoder path", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithEmptyImageEncoderPath_ThrowsArgumentException()
     {
         // Arrange
@@ -42,7 +42,7 @@ public class ClipNeuralNetworkTests
         Assert.Contains("Image encoder path", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithNullTextEncoderPath_ThrowsArgumentException()
     {
         // Arrange
@@ -56,7 +56,7 @@ public class ClipNeuralNetworkTests
         Assert.Contains("Text encoder path", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithEmptyTextEncoderPath_ThrowsArgumentException()
     {
         // Arrange
@@ -70,7 +70,7 @@ public class ClipNeuralNetworkTests
         Assert.Contains("Text encoder path", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithNonExistentImageEncoder_ThrowsFileNotFoundException()
     {
         // Arrange
@@ -83,7 +83,7 @@ public class ClipNeuralNetworkTests
             new ClipNeuralNetwork<float>(architecture, nonExistentPath, "text.onnx", tokenizer));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithZeroEmbeddingDimension_PathValidationComesFirst()
     {
         // Arrange
@@ -101,7 +101,7 @@ public class ClipNeuralNetworkTests
                 embeddingDimension: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithNegativeMaxSequenceLength_PathValidationComesFirst()
     {
         // Arrange
@@ -118,7 +118,7 @@ public class ClipNeuralNetworkTests
                 maxSequenceLength: -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithNegativeImageSize_PathValidationComesFirst()
     {
         // Arrange

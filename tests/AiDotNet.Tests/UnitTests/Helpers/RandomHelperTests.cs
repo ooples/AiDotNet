@@ -7,7 +7,7 @@ namespace AiDotNetTests.UnitTests.Helpers
 {
     public class RandomHelperTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CreateSeededRandom_CoversLockedRandomOverrides()
         {
             var rng = RandomHelper.CreateSeededRandom(123);
@@ -34,7 +34,7 @@ namespace AiDotNetTests.UnitTests.Helpers
 #endif
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CreateSeededRandom_WithSameSeed_IsDeterministic()
         {
             var a = RandomHelper.CreateSeededRandom(42);
@@ -46,7 +46,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(expected, actual);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CreateSecureRandom_ReturnsUsableGenerator()
         {
             var rng = RandomHelper.CreateSecureRandom();

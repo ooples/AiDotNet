@@ -106,7 +106,7 @@ public class PDEAnalyticalSolutionTests
     /// Tests Poisson Equation with analytical solution: u(x) = x² for f(x) = 2
     /// The Poisson equation: ∂²u/∂x² = f(x)
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PoissonEquation_QuadraticSolution_ReturnsZeroResidual()
     {
         // f(x) = 2, so u(x) = x² satisfies ∂²u/∂x² = 2
@@ -233,7 +233,7 @@ public class PDEAnalyticalSolutionTests
     /// Tests Navier-Stokes with Poiseuille flow (steady laminar flow between parallel plates).
     /// For steady flow with u = u(y) only (no x or t dependence), the solution is parabolic.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void NavierStokesEquation_PoiseuilleFlow_ReturnsZeroResidual()
     {
         double viscosity = 1.0;
@@ -296,7 +296,7 @@ public class PDEAnalyticalSolutionTests
     /// <summary>
     /// Tests Navier-Stokes continuity equation with divergence-free velocity field.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void NavierStokesEquation_DivergenceFreeField_SatisfiesContinuity()
     {
         var pde = new NavierStokesEquation<double>(viscosity: 1.0);
@@ -345,7 +345,7 @@ public class PDEAnalyticalSolutionTests
     /// Tests Maxwell's Equations with a plane wave solution in vacuum.
     /// E = E0 * sin(kx - ωt), B = B0 * sin(kx - ωt) where ω = c*k
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MaxwellEquations_PlaneWaveSolution_ReturnsZeroResidual()
     {
         double epsilon = 1.0;  // Vacuum permittivity (normalized)
@@ -403,7 +403,7 @@ public class PDEAnalyticalSolutionTests
     /// <summary>
     /// Tests Maxwell's Equations with static field (no time dependence).
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MaxwellEquations_StaticField_ReturnsZeroResidual()
     {
         var pde = new MaxwellEquations<double>(permittivity: 1.0, permeability: 1.0);
@@ -439,7 +439,7 @@ public class PDEAnalyticalSolutionTests
     /// For a free particle (V=0), ψ = exp(i(kx - ωt)) where ω = k²/2
     /// Real: ψ_r = cos(kx - ωt), Imaginary: ψ_i = sin(kx - ωt)
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SchrodingerEquation_FreeParticlePlaneWave_ReturnsZeroResidual()
     {
         var pde = new SchrodingerEquation<double>();  // Free particle (V=0)
@@ -494,7 +494,7 @@ public class PDEAnalyticalSolutionTests
     /// Tests Schrodinger Equation with stationary state solution.
     /// For a stationary state with energy E: ψ(x,t) = φ(x)*exp(-iEt)
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SchrodingerEquation_StationaryState_SatisfiesTimeEvolution()
     {
         // Use a simple constant potential
@@ -559,7 +559,7 @@ public class PDEAnalyticalSolutionTests
     /// <summary>
     /// Tests that heat equation gradient is computed correctly.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HeatEquation_GradientComputation_ReturnsExpectedValues()
     {
         double alpha = 1.5;
@@ -583,7 +583,7 @@ public class PDEAnalyticalSolutionTests
     /// <summary>
     /// Tests that wave equation gradient is computed correctly.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void WaveEquation_GradientComputation_ReturnsExpectedValues()
     {
         double c = 2.0;

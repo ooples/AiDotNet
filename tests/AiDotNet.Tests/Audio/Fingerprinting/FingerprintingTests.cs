@@ -27,7 +27,7 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             return audio;
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ChromaprintFingerprinter_Fingerprint_ReturnsNonEmptyHash()
         {
             // Arrange
@@ -43,7 +43,7 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.True(fingerprint.Hash.Length > 0, "Fingerprint hash should not be empty");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ChromaprintFingerprinter_SameAudio_SameFingerprint()
         {
             // Arrange
@@ -60,7 +60,7 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.Equal(fp1.Hash, fp2.Hash);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ChromaprintFingerprinter_DifferentAudio_DifferentFingerprint()
         {
             // Arrange
@@ -87,7 +87,7 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.NotEqual(fp1.Hash, fp2.Hash);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SpectrogramFingerprinter_Fingerprint_ReturnsNonEmptyHash()
         {
             // Arrange
@@ -103,7 +103,7 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.True(fingerprint.Hash.Length > 0, "Fingerprint hash should not be empty");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SpectrogramFingerprinter_SameAudio_SameFingerprint()
         {
             // Arrange
@@ -120,7 +120,7 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.Equal(fp1.Hash, fp2.Hash);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SpectrogramFingerprinter_HasFrameCount()
         {
             // Arrange
@@ -134,7 +134,7 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.True(fingerprint.FrameCount > 0, "Should have frame count");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ChromaprintFingerprinter_IdenticalFingerprints_HighSimilarity()
         {
             // Arrange
@@ -149,7 +149,7 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.Equal(1.0, similarity, 3); // Should be exactly 1.0
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ChromaprintFingerprinter_DifferentFingerprints_LowerSimilarity()
         {
             // Arrange
@@ -177,7 +177,7 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.True(similarity >= 0.0, "Similarity should be >= 0.0");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ChromaprintFingerprinter_SimilaritySymmetric()
         {
             // Arrange
@@ -205,7 +205,7 @@ namespace AiDotNet.Tests.Audio.Fingerprinting
             Assert.Equal(sim1to2, sim2to1, 6);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AudioFingerprint_HasRequiredProperties()
         {
             // Arrange

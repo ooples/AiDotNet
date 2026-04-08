@@ -51,7 +51,7 @@ public class AdvancedMetaTests
 
     // ── Phase 7a: Task Augmentation ──
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetaTask_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -71,7 +71,7 @@ public class AdvancedMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ATAML_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -91,7 +91,7 @@ public class AdvancedMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MPTS_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -111,7 +111,7 @@ public class AdvancedMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DynamicTaskSampling_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -131,7 +131,7 @@ public class AdvancedMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UnsupervisedMetaLearn_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -153,7 +153,7 @@ public class AdvancedMetaTests
 
     // ── Phase 7b: Transductive ──
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GCDPLNet_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -173,7 +173,7 @@ public class AdvancedMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BayTransProto_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -193,7 +193,7 @@ public class AdvancedMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void JMP_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -213,7 +213,7 @@ public class AdvancedMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ETPN_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -233,7 +233,7 @@ public class AdvancedMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActiveTransFSL_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -255,7 +255,7 @@ public class AdvancedMetaTests
 
     // ── Phase 7c: Hypernetwork ──
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TaskCondHyperNet_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -275,7 +275,7 @@ public class AdvancedMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HyperCLIP_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -295,7 +295,7 @@ public class AdvancedMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RecurrentHyperNet_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -315,7 +315,7 @@ public class AdvancedMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HyperNeRFMeta_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -337,7 +337,7 @@ public class AdvancedMetaTests
 
     // ── Multi-step stability tests ──
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GCDPLNet_MultiStep_StableLoss()
     {
         var model = new LinearVectorModel(3);
@@ -357,7 +357,7 @@ public class AdvancedMetaTests
         Assert.True(finiteCount >= 4, $"Only {finiteCount}/5 GCDPLNet steps produced finite loss");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TaskCondHyperNet_MultiStep_StableLoss()
     {
         var model = new LinearVectorModel(3);
@@ -377,7 +377,7 @@ public class AdvancedMetaTests
         Assert.True(finiteCount >= 4, $"Only {finiteCount}/5 TaskCondHyperNet steps produced finite loss");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RecurrentHyperNet_MultiStep_StableLoss()
     {
         var model = new LinearVectorModel(3);

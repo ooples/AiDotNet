@@ -19,7 +19,7 @@ public class PromptEngineeringIntegrationTests
 {
     #region SimplePromptTemplate Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimplePromptTemplate_Constructor_SetsTemplate()
     {
         // Arrange & Act
@@ -29,14 +29,14 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal("Hello, {name}!", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimplePromptTemplate_Constructor_ThrowsOnNullTemplate()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new SimplePromptTemplate(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimplePromptTemplate_Constructor_ThrowsOnEmptyTemplate()
     {
         // Act & Assert
@@ -44,7 +44,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Throws<ArgumentException>(() => new SimplePromptTemplate("   "));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimplePromptTemplate_InputVariables_ExtractsVariables()
     {
         // Arrange
@@ -56,7 +56,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Contains("age", template.InputVariables);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimplePromptTemplate_InputVariables_HandlesDuplicates()
     {
         // Arrange
@@ -67,7 +67,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Contains("name", template.InputVariables);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimplePromptTemplate_Format_SubstitutesVariables()
     {
         // Arrange
@@ -81,7 +81,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal("Hello, World!", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimplePromptTemplate_Format_MultipleVariables()
     {
         // Arrange
@@ -100,7 +100,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal("Translate 'Hello' from English to Spanish.", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimplePromptTemplate_Format_ThrowsOnNullVariables()
     {
         // Arrange
@@ -110,7 +110,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Throws<ArgumentNullException>(() => template.Format(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimplePromptTemplate_Format_ThrowsOnMissingVariable()
     {
         // Arrange
@@ -121,7 +121,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Throws<ArgumentException>(() => template.Format(variables));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimplePromptTemplate_Validate_ReturnsTrueWhenAllVariablesPresent()
     {
         // Arrange
@@ -135,7 +135,7 @@ public class PromptEngineeringIntegrationTests
         Assert.True(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimplePromptTemplate_Validate_ReturnsFalseWhenMissingVariable()
     {
         // Arrange
@@ -149,7 +149,7 @@ public class PromptEngineeringIntegrationTests
         Assert.False(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimplePromptTemplate_Validate_ReturnsFalseOnNullVariables()
     {
         // Arrange
@@ -162,7 +162,7 @@ public class PromptEngineeringIntegrationTests
         Assert.False(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimplePromptTemplate_FromTemplate_CreatesInstance()
     {
         // Act
@@ -173,7 +173,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal("Hello, {name}!", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimplePromptTemplate_NoVariables_FormatReturnsTemplate()
     {
         // Arrange
@@ -191,7 +191,7 @@ public class PromptEngineeringIntegrationTests
 
     #region PromptMetrics Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PromptMetrics_DefaultValues_AreCorrect()
     {
         // Arrange & Act
@@ -210,7 +210,7 @@ public class PromptEngineeringIntegrationTests
         Assert.NotNull(metrics.ModelName);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PromptMetrics_SetProperties_ReturnsCorrectValues()
     {
         // Arrange & Act
@@ -237,7 +237,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal("gpt-4", metrics.ModelName);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PromptMetrics_AnalyzedAt_IsSetToCurrentTime()
     {
         // Arrange & Act
@@ -249,7 +249,7 @@ public class PromptEngineeringIntegrationTests
         Assert.InRange(metrics.AnalyzedAt, before, after);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PromptMetrics_DetectedPatterns_CanBeSet()
     {
         // Arrange & Act
@@ -269,7 +269,7 @@ public class PromptEngineeringIntegrationTests
 
     #region PromptIssue Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PromptIssue_DefaultValues()
     {
         // Arrange & Act
@@ -283,7 +283,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Null(issue.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PromptIssue_SetProperties()
     {
         // Arrange & Act
@@ -304,7 +304,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(10, issue.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IssueSeverity_HasCorrectValues()
     {
         // Assert
@@ -317,7 +317,7 @@ public class PromptEngineeringIntegrationTests
 
     #region ValidationOptions Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ValidationOptions_DefaultValues()
     {
         // Arrange & Act
@@ -330,7 +330,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(IssueSeverity.Info, options.MinSeverityToReport);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ValidationOptions_Strict_HasCorrectValues()
     {
         // Act
@@ -343,7 +343,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(IssueSeverity.Info, options.MinSeverityToReport);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ValidationOptions_Lenient_HasCorrectValues()
     {
         // Act
@@ -360,7 +360,7 @@ public class PromptEngineeringIntegrationTests
 
     #region CompressionResult Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionResult_DefaultValues()
     {
         // Arrange & Act
@@ -380,7 +380,7 @@ public class PromptEngineeringIntegrationTests
         Assert.False(result.IsSuccessful);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionResult_TokensSaved_CalculatesCorrectly()
     {
         // Arrange & Act
@@ -394,7 +394,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(30, result.TokensSaved);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionResult_CompressionRatio_CalculatesCorrectly()
     {
         // Arrange & Act
@@ -408,7 +408,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(0.3, result.CompressionRatio, 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionResult_CompressionRatio_ZeroOriginal_ReturnsZero()
     {
         // Arrange & Act
@@ -422,7 +422,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(0.0, result.CompressionRatio);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionResult_IsSuccessful_TrueWhenCompressed()
     {
         // Arrange & Act
@@ -436,7 +436,7 @@ public class PromptEngineeringIntegrationTests
         Assert.True(result.IsSuccessful);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionResult_IsSuccessful_FalseWhenNoCompression()
     {
         // Arrange & Act
@@ -450,7 +450,7 @@ public class PromptEngineeringIntegrationTests
         Assert.False(result.IsSuccessful);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionResult_CompressedAt_IsSetToCurrentTime()
     {
         // Arrange & Act
@@ -466,7 +466,7 @@ public class PromptEngineeringIntegrationTests
 
     #region CompressionOptions Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionOptions_DefaultValues()
     {
         // Arrange & Act
@@ -481,7 +481,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal("gpt-4", options.ModelName);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionOptions_Default_ReturnsDefaultOptions()
     {
         // Act
@@ -491,7 +491,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(0.2, options.TargetReduction);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionOptions_Aggressive_ReturnsAggressiveOptions()
     {
         // Act
@@ -502,7 +502,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(20, options.MinTokenCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionOptions_Conservative_ReturnsConservativeOptions()
     {
         // Act
@@ -518,7 +518,7 @@ public class PromptEngineeringIntegrationTests
 
     #region FixedExampleSelector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedExampleSelector_Constructor_CreatesEmptySelector()
     {
         // Act
@@ -528,7 +528,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(0, selector.ExampleCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedExampleSelector_AddExample_IncreasesCount()
     {
         // Arrange
@@ -541,7 +541,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(1, selector.ExampleCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedExampleSelector_AddExample_ThrowsOnNullExample()
     {
         // Arrange
@@ -551,7 +551,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Throws<ArgumentNullException>(() => selector.AddExample(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedExampleSelector_AddExample_ThrowsOnEmptyInput()
     {
         // Arrange
@@ -562,7 +562,7 @@ public class PromptEngineeringIntegrationTests
             selector.AddExample(new FewShotExample { Input = "", Output = "result" }));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedExampleSelector_AddExample_ThrowsOnEmptyOutput()
     {
         // Arrange
@@ -573,7 +573,7 @@ public class PromptEngineeringIntegrationTests
             selector.AddExample(new FewShotExample { Input = "test", Output = "" }));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedExampleSelector_SelectExamples_ReturnsFirstN()
     {
         // Arrange
@@ -591,7 +591,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal("second", selected[1].Input);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedExampleSelector_SelectExamples_ReturnsAllIfCountExceedsAvailable()
     {
         // Arrange
@@ -606,7 +606,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal("only", selected[0].Input);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedExampleSelector_SelectExamples_ThrowsOnEmptyQuery()
     {
         // Arrange
@@ -618,7 +618,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Throws<ArgumentException>(() => selector.SelectExamples("   ", 1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedExampleSelector_SelectExamples_ThrowsOnNonPositiveCount()
     {
         // Arrange
@@ -630,7 +630,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Throws<ArgumentException>(() => selector.SelectExamples("query", -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedExampleSelector_SelectExamples_ReturnsEmptyWhenNoExamples()
     {
         // Arrange
@@ -643,7 +643,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Empty(selected);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedExampleSelector_RemoveExample_DecreasesCount()
     {
         // Arrange
@@ -659,7 +659,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(0, selector.ExampleCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedExampleSelector_RemoveExample_ReturnsFalseWhenNotFound()
     {
         // Arrange
@@ -673,7 +673,7 @@ public class PromptEngineeringIntegrationTests
         Assert.False(removed);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedExampleSelector_RemoveExample_ReturnsFalseOnNull()
     {
         // Arrange
@@ -686,7 +686,7 @@ public class PromptEngineeringIntegrationTests
         Assert.False(removed);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedExampleSelector_GetAllExamples_ReturnsAllExamples()
     {
         // Arrange
@@ -705,7 +705,7 @@ public class PromptEngineeringIntegrationTests
 
     #region ToolRegistry Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_Constructor_CreatesEmptyRegistry()
     {
         // Act
@@ -715,7 +715,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(0, registry.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_RegisterTool_IncrementsCount()
     {
         // Arrange
@@ -729,7 +729,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(1, registry.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_RegisterTool_ThrowsOnNullTool()
     {
         // Arrange
@@ -739,7 +739,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Throws<ArgumentNullException>(() => registry.RegisterTool(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_RegisterTool_ThrowsOnDuplicateName()
     {
         // Arrange
@@ -752,7 +752,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Throws<ArgumentException>(() => registry.RegisterTool(tool2));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_GetTool_ReturnsTool()
     {
         // Arrange
@@ -768,7 +768,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal("test_tool", retrieved.Name);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_GetTool_ReturnsNullWhenNotFound()
     {
         // Arrange
@@ -781,7 +781,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Null(retrieved);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_GetTool_IsCaseInsensitive()
     {
         // Arrange
@@ -796,7 +796,7 @@ public class PromptEngineeringIntegrationTests
         Assert.NotNull(retrieved);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_GetTool_ReturnsNullOnEmptyName()
     {
         // Arrange
@@ -807,7 +807,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Null(registry.GetTool("   "));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_UnregisterTool_RemovesTool()
     {
         // Arrange
@@ -824,7 +824,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Null(registry.GetTool("test_tool"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_UnregisterTool_ReturnsFalseWhenNotFound()
     {
         // Arrange
@@ -837,7 +837,7 @@ public class PromptEngineeringIntegrationTests
         Assert.False(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_UnregisterTool_ReturnsFalseOnEmptyName()
     {
         // Arrange
@@ -848,7 +848,7 @@ public class PromptEngineeringIntegrationTests
         Assert.False(registry.UnregisterTool("   "));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_HasTool_ReturnsTrueWhenExists()
     {
         // Arrange
@@ -863,7 +863,7 @@ public class PromptEngineeringIntegrationTests
         Assert.True(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_HasTool_ReturnsFalseWhenNotExists()
     {
         // Arrange
@@ -876,7 +876,7 @@ public class PromptEngineeringIntegrationTests
         Assert.False(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_HasTool_ReturnsFalseOnEmptyName()
     {
         // Arrange
@@ -887,7 +887,7 @@ public class PromptEngineeringIntegrationTests
         Assert.False(registry.HasTool("   "));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_GetAllTools_ReturnsAllTools()
     {
         // Arrange
@@ -902,7 +902,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(2, tools.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_ExecuteTool_ExecutesTool()
     {
         // Arrange
@@ -918,7 +918,7 @@ public class PromptEngineeringIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_ExecuteTool_ThrowsWhenToolNotFound()
     {
         // Arrange
@@ -929,7 +929,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Throws<ArgumentException>(() => registry.ExecuteTool("nonexistent", args));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_Clear_RemovesAllTools()
     {
         // Arrange
@@ -944,7 +944,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(0, registry.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolRegistry_GenerateToolsDescription_ReturnsDescription()
     {
         // Arrange
@@ -963,7 +963,7 @@ public class PromptEngineeringIntegrationTests
 
     #region SequentialChain Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequentialChain_Constructor_CreatesChain()
     {
         // Act
@@ -973,7 +973,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Empty(chain.Steps);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequentialChain_AddStep_AddsStep()
     {
         // Arrange
@@ -987,7 +987,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal("Step1", chain.Steps[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequentialChain_AddStep_ThrowsOnEmptyName()
     {
         // Arrange
@@ -1000,7 +1000,7 @@ public class PromptEngineeringIntegrationTests
             chain.AddStep("   ", input => input));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequentialChain_AddStep_ThrowsOnNullFunction()
     {
         // Arrange
@@ -1011,7 +1011,7 @@ public class PromptEngineeringIntegrationTests
             chain.AddStep("Step1", (Func<object, object>)null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequentialChain_Run_ExecutesStepsInOrder()
     {
         // Arrange
@@ -1026,7 +1026,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal("HELLO!", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequentialChain_Run_SingleStep()
     {
         // Arrange
@@ -1040,7 +1040,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(10, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequentialChain_AddStep_ReturnsSelfForChaining()
     {
         // Arrange
@@ -1056,7 +1056,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(2, chain.Steps.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SequentialChain_RunAsync_ExecutesSteps()
     {
         // Arrange
@@ -1070,7 +1070,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal("HELLO", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SequentialChain_RunAsync_SupportsAsyncSteps()
     {
         // Arrange
@@ -1088,7 +1088,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal("HELLO", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SequentialChain_RunAsync_SupportsCancellation()
     {
         // Arrange
@@ -1107,7 +1107,7 @@ public class PromptEngineeringIntegrationTests
             chain.RunAsync("hello", cts.Token));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequentialChain_Run_ThrowsWhenAsyncStepUsed()
     {
         // Arrange
@@ -1126,7 +1126,7 @@ public class PromptEngineeringIntegrationTests
 
     #region FewShotExample Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FewShotExample_DefaultValues()
     {
         // Arrange & Act
@@ -1137,7 +1137,7 @@ public class PromptEngineeringIntegrationTests
         Assert.Equal(string.Empty, example.Output);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FewShotExample_SetProperties()
     {
         // Arrange & Act

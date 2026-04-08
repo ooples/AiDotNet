@@ -14,7 +14,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         private static string GetMissingModelPath() =>
             Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.onnx");
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -32,7 +32,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(512, model.MaxTokens);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullBaseModelPath_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
@@ -40,7 +40,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
                 new SentenceTransformersFineTuner<double>(null, GetMissingModelPath(), 10, 0.00002, 384));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullOutputModelPath_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
@@ -48,7 +48,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
                 new SentenceTransformersFineTuner<double>(GetMissingModelPath(), null, 10, 0.00002, 384));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithZeroEpochs_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
@@ -56,7 +56,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
                 new SentenceTransformersFineTuner<double>(GetMissingModelPath(), GetMissingModelPath(), 0, 0.00002, 384));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNegativeEpochs_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
@@ -64,7 +64,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
                 new SentenceTransformersFineTuner<double>(GetMissingModelPath(), GetMissingModelPath(), -1, 0.00002, 384));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithMissingModelFile_ThrowsFileNotFoundException()
         {
             // Arrange - model file does not exist on disk
@@ -80,7 +80,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Test text"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithNullText_ThrowsArgumentException()
         {
             // Arrange
@@ -96,7 +96,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(null));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithEmptyText_ThrowsArgumentException()
         {
             // Arrange
@@ -112,7 +112,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(string.Empty));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FineTune_WithMissingModelFile_ThrowsFileNotFoundException()
         {
             // Arrange - using a non-existent model path
@@ -134,7 +134,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.FineTune(trainingPairs));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FineTune_WithNullTrainingPairs_ThrowsArgumentNullException()
         {
             // Arrange
@@ -150,7 +150,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentNullException>(() => model.FineTune(null));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FineTune_WithEmptyTrainingPairs_ThrowsArgumentException()
         {
             // Arrange
@@ -168,7 +168,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Training pairs cannot be empty", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
         {
             // Arrange
@@ -184,7 +184,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentNullException>(() => model.EmbedBatch(null));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
         {
             // Arrange
@@ -201,7 +201,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithMissingModelFile_ThrowsFileNotFoundException()
         {
             // Arrange - model file does not exist on disk
@@ -218,7 +218,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithFloatType_MissingModelFile_ThrowsFileNotFoundException()
         {
             // Arrange - model file does not exist on disk
@@ -234,7 +234,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Test with float type"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MaxTokens_ReturnsCorrectValue()
         {
             // Arrange
@@ -253,7 +253,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(512, maxTokens);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FineTune_WithLargeTrainingSet_ThrowsFileNotFoundException()
         {
             // Arrange - using a non-existent model path
@@ -272,7 +272,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.FineTune(trainingPairs));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FineTune_WithDifferentLearningRates_MissingModelFile_ThrowsFileNotFoundException()
         {
             // Arrange - model files don't exist, both should throw

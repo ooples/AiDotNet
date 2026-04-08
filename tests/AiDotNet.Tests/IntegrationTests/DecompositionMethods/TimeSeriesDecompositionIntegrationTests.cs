@@ -64,7 +64,7 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region AdditiveDecomposition Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Additive_Construction_DoesNotThrow()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -72,7 +72,7 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.NotNull(decomp);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Additive_GetComponents_ReturnsMultipleComponents()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -82,7 +82,7 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.True(components.Count >= 2, $"Should have at least 2 components (trend+residual), got {components.Count}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Additive_TimeSeries_PreservedAfterDecomposition()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -94,7 +94,7 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region MultiplicativeDecomposition Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Multiplicative_Construction_DoesNotThrow()
     {
         var ts = CreatePositiveTimeSeries();
@@ -102,7 +102,7 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.NotNull(decomp);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Multiplicative_GetComponents_ReturnsComponents()
     {
         var ts = CreatePositiveTimeSeries();
@@ -112,7 +112,7 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.True(components.Count > 0, "Should have at least one component");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Multiplicative_WithSeasonalPeriod_DoesNotThrow()
     {
         var ts = CreatePositiveTimeSeries();
@@ -124,7 +124,7 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region STLTimeSeriesDecomposition Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void STL_Construction_DoesNotThrow()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -133,7 +133,7 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.NotNull(decomp);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void STL_GetComponents_ReturnsComponents()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -148,7 +148,7 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region SSADecomposition Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SSA_Construction_DoesNotThrow()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -156,7 +156,7 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.NotNull(decomp);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SSA_GetComponents_ReturnsComponents()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -170,7 +170,7 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region EMDDecomposition Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EMD_Construction_DoesNotThrow()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -178,7 +178,7 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.NotNull(decomp);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EMD_GetComponents_ReturnsComponents()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -192,7 +192,7 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region WaveletDecomposition Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Wavelet_Construction_DoesNotThrow()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -200,7 +200,7 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.NotNull(decomp);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Wavelet_GetComponents_ReturnsComponents()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -214,7 +214,7 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region HodrickPrescottDecomposition Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HodrickPrescott_Construction_DoesNotThrow()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -222,7 +222,7 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.NotNull(decomp);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HodrickPrescott_GetComponents_ContainsTrend()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -233,7 +233,7 @@ public class TimeSeriesDecompositionIntegrationTests
             "HP filter should produce a Trend component");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HodrickPrescott_TrendComponent_HasCorrectLength()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -250,7 +250,7 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region BeveridgeNelsonDecomposition Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BeveridgeNelson_Construction_DoesNotThrow()
     {
         var ts = CreateSimpleTimeSeries();
@@ -258,7 +258,7 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.NotNull(decomp);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BeveridgeNelson_GetComponents_ReturnsComponents()
     {
         var ts = CreateSimpleTimeSeries();
@@ -272,7 +272,7 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region SEATSDecomposition Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SEATS_Construction_DoesNotThrow()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -280,7 +280,7 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.NotNull(decomp);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SEATS_GetComponents_ReturnsComponents()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -294,7 +294,7 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region X11Decomposition Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void X11_Construction_DoesNotThrow()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -302,7 +302,7 @@ public class TimeSeriesDecompositionIntegrationTests
         Assert.NotNull(decomp);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void X11_GetComponents_ReturnsComponents()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -316,7 +316,7 @@ public class TimeSeriesDecompositionIntegrationTests
 
     #region Cross-Decomposition Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllDecompositions_PreserveOriginalTimeSeries()
     {
         var ts = CreateSeasonalTimeSeries();
@@ -340,7 +340,7 @@ public class TimeSeriesDecompositionIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllDecompositions_ProduceNonEmptyComponents()
     {
         var ts = CreateSeasonalTimeSeries();

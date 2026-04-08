@@ -14,7 +14,7 @@ namespace AiDotNet.Tests.IntegrationTests.Regression;
 /// </summary>
 public class AiModelBuilderAccuracyTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_KnownLinearData_R2AboveZero()
     {
         // Arrange: y = 2*x1 + 3*x2 + 1 + noise(σ=0.1)
@@ -57,7 +57,7 @@ public class AiModelBuilderAccuracyTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DirectModel_KnownLinearData_CoefficientsRecovered()
     {
         // Arrange: y = 2*x1 + 3*x2 + 1, use direct model training (no builder/optimizer)
@@ -96,7 +96,7 @@ public class AiModelBuilderAccuracyTests
         Assert.InRange(approxIntercept, -1.0, 3.0);  // true value: 1.0
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DirectModel_PerfectLinearData_ExactPredictions()
     {
         // Arrange: y = 5*x1 - 2*x2 with ZERO noise using direct model training.
@@ -131,7 +131,7 @@ public class AiModelBuilderAccuracyTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_SinusoidalData_R2NotTerrible()
     {
         // Arrange: y = sin(x) on [0, 2π] — non-linear challenge.
@@ -183,7 +183,7 @@ public class AiModelBuilderAccuracyTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LargeDataset_PredictionStability()
     {
         // Arrange: Train on 500 samples, verify prediction determinism

@@ -16,7 +16,7 @@ public class GPInferenceCorrectnessTests
 
     #region GPWithMCMC Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GPWithMCMC_Construction_Succeeds()
     {
         var kernel = new GaussianKernel<double>(1.0);
@@ -26,7 +26,7 @@ public class GPInferenceCorrectnessTests
         Assert.False(gp.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GPWithMCMC_Fit_SetsIsTrained()
     {
         var kernel = new GaussianKernel<double>(1.0);
@@ -47,7 +47,7 @@ public class GPInferenceCorrectnessTests
         Assert.True(gp.NumStoredSamples > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GPWithMCMC_Predict_ReturnsReasonableValues()
     {
         var kernel = new GaussianKernel<double>(1.0);
@@ -75,7 +75,7 @@ public class GPInferenceCorrectnessTests
             $"Variance should be positive, got {variance}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GPWithMCMC_Predict_UncertaintyIncreasesAwayFromData()
     {
         var kernel = new GaussianKernel<double>(1.0);
@@ -103,7 +103,7 @@ public class GPInferenceCorrectnessTests
             $"Variance should be higher far from data: var(near)={varNear}, var(far)={varFar}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GPWithMCMC_GetPosteriorStatistics_ReturnsValidStats()
     {
         var kernel = new GaussianKernel<double>(1.0);
@@ -130,7 +130,7 @@ public class GPInferenceCorrectnessTests
         Assert.True(lsStd >= 0, "Lengthscale std should be non-negative");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GPWithMCMC_GetSamples_ReturnsCorrectCount()
     {
         var kernel = new GaussianKernel<double>(1.0);
@@ -157,7 +157,7 @@ public class GPInferenceCorrectnessTests
 
     #region BetaLikelihood Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BetaLikelihood_Construction_Succeeds()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
@@ -166,7 +166,7 @@ public class GPInferenceCorrectnessTests
         Assert.Equal(10.0, likelihood.Precision);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BetaLikelihood_GetMeans_ReturnsBetweenZeroAndOne()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
@@ -181,7 +181,7 @@ public class GPInferenceCorrectnessTests
         });
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BetaLikelihood_GetMeans_SigmoidCorrect()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
@@ -194,7 +194,7 @@ public class GPInferenceCorrectnessTests
             $"sigmoid(0) should be 0.5, got {mu[0]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BetaLikelihood_GetBetaParameters_ArePositive()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
@@ -215,7 +215,7 @@ public class GPInferenceCorrectnessTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BetaLikelihood_LogLikelihood_IsNegative()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
@@ -230,7 +230,7 @@ public class GPInferenceCorrectnessTests
             $"Log-likelihood should be negative and finite, got {logLik}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BetaLikelihood_LogLikelihood_HigherForGoodFit()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
@@ -250,7 +250,7 @@ public class GPInferenceCorrectnessTests
             $"Good fit should have higher log-likelihood: good={logLikGood}, bad={logLikBad}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BetaLikelihood_Gradient_IsFinite()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
@@ -267,7 +267,7 @@ public class GPInferenceCorrectnessTests
         });
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BetaLikelihood_Hessian_IsNegative()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
@@ -285,7 +285,7 @@ public class GPInferenceCorrectnessTests
         });
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BetaLikelihood_PredictiveMoments_AreReasonable()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
@@ -305,7 +305,7 @@ public class GPInferenceCorrectnessTests
             $"Predictive variance should increase: var(low)={varLowVar}, var(high)={varHighVar}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BetaLikelihood_Sample_IsInUnitInterval()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
@@ -325,7 +325,7 @@ public class GPInferenceCorrectnessTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BetaLikelihood_Sample_HasCorrectMean()
     {
         var likelihood = new BetaLikelihood<double>(precision: 20.0);
@@ -348,7 +348,7 @@ public class GPInferenceCorrectnessTests
             $"Sample mean {sampleMean} should be close to {mu} (stdErr={stdErr})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BetaLikelihood_FromData_EstimatesPrecision()
     {
         // Generate data from Beta(3, 7) which has mean 0.3 and variance 0.3*0.7/11 ≈ 0.019
@@ -377,7 +377,7 @@ public class GPInferenceCorrectnessTests
 
     #region Heteroscedastic GP Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HeteroscedasticGP_Construction_Succeeds()
     {
         var kernel = new GaussianKernel<double>(1.0);
@@ -386,7 +386,7 @@ public class GPInferenceCorrectnessTests
         Assert.NotNull(gp);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HeteroscedasticGP_Fit_Succeeds()
     {
         var kernel = new GaussianKernel<double>(1.0);
@@ -407,7 +407,7 @@ public class GPInferenceCorrectnessTests
         Assert.NotNull(noiseVars);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HeteroscedasticGP_GetNoiseVariances_ReturnsPositiveValues()
     {
         var kernel = new GaussianKernel<double>(1.0);
@@ -437,7 +437,7 @@ public class GPInferenceCorrectnessTests
 
     #region Student-t GP Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StudentTGP_Construction_Succeeds()
     {
         var kernel = new GaussianKernel<double>(1.0);
@@ -446,7 +446,7 @@ public class GPInferenceCorrectnessTests
         Assert.NotNull(gp);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StudentTGP_Fit_Succeeds()
     {
         var kernel = new GaussianKernel<double>(1.0);
@@ -467,7 +467,7 @@ public class GPInferenceCorrectnessTests
         Assert.NotNull(weights);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StudentTGP_Predict_ReturnsReasonableValues()
     {
         var kernel = new GaussianKernel<double>(1.0);
@@ -490,7 +490,7 @@ public class GPInferenceCorrectnessTests
         Assert.True(variance > 0, "Prediction variance should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StudentTGP_GetOutlierWeights_ReturnsValidWeights()
     {
         var kernel = new GaussianKernel<double>(1.0);
@@ -518,7 +518,7 @@ public class GPInferenceCorrectnessTests
         });
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StudentTGP_DetectsOutliers()
     {
         var kernel = new GaussianKernel<double>(2.0);

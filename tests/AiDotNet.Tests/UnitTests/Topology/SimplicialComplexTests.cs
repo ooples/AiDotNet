@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.UnitTests.Topology;
 
 public class SimplicialComplexTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AddSimplex_IncludesFaces()
     {
         var complex = new SimplicialComplex();
@@ -16,7 +16,7 @@ public class SimplicialComplexTests
         Assert.Single(complex.GetSimplices(2));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BoundaryOfBoundary_IsZero()
     {
         var complex = new SimplicialComplex();
@@ -35,7 +35,7 @@ public class SimplicialComplexTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HodgeLaplacian_HasExpectedShape()
     {
         var complex = new SimplicialComplex();

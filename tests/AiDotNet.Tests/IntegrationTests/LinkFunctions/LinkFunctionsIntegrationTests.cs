@@ -14,7 +14,7 @@ public class LinkFunctionsIntegrationTests
 
     #region Edge Case Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogitLink_NearBoundary_ProducesLargeValues()
     {
         var link = new LogitLink<double>();
@@ -26,7 +26,7 @@ public class LinkFunctionsIntegrationTests
         Assert.True(nearOne > 5.0, $"Logit(0.9999) should be large positive, got {nearOne}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProbitLink_NearBoundary_ProducesLargeValues()
     {
         var link = new ProbitLink<double>();
@@ -36,7 +36,7 @@ public class LinkFunctionsIntegrationTests
         Assert.True(nearOne > 2.0, $"Probit(0.999) should be large positive, got {nearOne}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogLink_VerySmallPositive_ProducesLargeNegative()
     {
         var link = new LogLink<double>();
@@ -48,7 +48,7 @@ public class LinkFunctionsIntegrationTests
 
     #region LogitLink Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogitLink_LinkAt05_ReturnsZero()
     {
         var link = new LogitLink<double>();
@@ -56,7 +56,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogitLink_InverseLinkAtZero_Returns05()
     {
         var link = new LogitLink<double>();
@@ -64,7 +64,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogitLink_RoundTrip_ReturnsOriginal()
     {
         var link = new LogitLink<double>();
@@ -76,7 +76,7 @@ public class LinkFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogitLink_LinkDerivative_IsPositiveInUnitInterval()
     {
         var link = new LogitLink<double>();
@@ -88,7 +88,7 @@ public class LinkFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogitLink_InverseLinkDerivative_MatchesSigmoidDerivative()
     {
         var link = new LogitLink<double>();
@@ -97,7 +97,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal(0.25, deriv, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogitLink_Variance_CorrectForBinomial()
     {
         var link = new LogitLink<double>();
@@ -105,7 +105,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal(0.25, variance, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogitLink_IsCanonical_ReturnsTrue()
     {
         var link = new LogitLink<double>();
@@ -117,7 +117,7 @@ public class LinkFunctionsIntegrationTests
 
     #region ProbitLink Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProbitLink_LinkAt05_ReturnsZero()
     {
         var link = new ProbitLink<double>();
@@ -125,7 +125,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProbitLink_InverseLinkAtZero_Returns05()
     {
         var link = new ProbitLink<double>();
@@ -133,7 +133,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProbitLink_RoundTrip_ReturnsOriginal()
     {
         var link = new ProbitLink<double>();
@@ -145,7 +145,7 @@ public class LinkFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProbitLink_IsNotCanonical()
     {
         var link = new ProbitLink<double>();
@@ -153,7 +153,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal("Probit", link.Name);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProbitLink_DerivativeChainRule_ProductIsOne()
     {
         // For any link function: LinkDerivative(mu) * InverseLinkDerivative(Link(mu)) = 1
@@ -169,7 +169,7 @@ public class LinkFunctionsIntegrationTests
 
     #region LogLink Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogLink_LinkAt1_ReturnsZero()
     {
         var link = new LogLink<double>();
@@ -177,7 +177,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogLink_InverseLinkAtZero_ReturnsOne()
     {
         var link = new LogLink<double>();
@@ -185,7 +185,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogLink_RoundTrip_ReturnsOriginal()
     {
         var link = new LogLink<double>();
@@ -197,7 +197,7 @@ public class LinkFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogLink_IsCanonical_ReturnsTrue()
     {
         var link = new LogLink<double>();
@@ -205,7 +205,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal("Log", link.Name);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogLink_LinkDerivative_IsReciprocal()
     {
         var link = new LogLink<double>();
@@ -217,7 +217,7 @@ public class LinkFunctionsIntegrationTests
 
     #region IdentityLink Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IdentityLink_LinkEqualsInput()
     {
         var link = new IdentityLink<double>();
@@ -229,7 +229,7 @@ public class LinkFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IdentityLink_DerivativeIsOne()
     {
         var link = new IdentityLink<double>();
@@ -237,7 +237,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal(1.0, link.InverseLinkDerivative(42.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IdentityLink_IsCanonical_ReturnsTrue()
     {
         var link = new IdentityLink<double>();
@@ -249,7 +249,7 @@ public class LinkFunctionsIntegrationTests
 
     #region CLogLogLink Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CLogLogLink_RoundTrip_ReturnsOriginal()
     {
         var link = new CLogLogLink<double>();
@@ -261,7 +261,7 @@ public class LinkFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CLogLogLink_IsNotCanonical()
     {
         var link = new CLogLogLink<double>();
@@ -269,7 +269,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal("CLogLog", link.Name);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CLogLogLink_IsAsymmetricAroundHalf()
     {
         var link = new CLogLogLink<double>();
@@ -282,7 +282,7 @@ public class LinkFunctionsIntegrationTests
 
     #region SqrtLink Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SqrtLink_LinkAt4_Returns2()
     {
         var link = new SqrtLink<double>();
@@ -290,7 +290,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal(2.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SqrtLink_InverseLinkAt2_Returns4()
     {
         var link = new SqrtLink<double>();
@@ -298,7 +298,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal(4.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SqrtLink_RoundTrip_ReturnsOriginal()
     {
         var link = new SqrtLink<double>();
@@ -310,7 +310,7 @@ public class LinkFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SqrtLink_IsNotCanonical()
     {
         var link = new SqrtLink<double>();
@@ -322,7 +322,7 @@ public class LinkFunctionsIntegrationTests
 
     #region ReciprocalLink Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReciprocalLink_LinkAt2_ReturnsHalf()
     {
         var link = new ReciprocalLink<double>();
@@ -330,7 +330,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReciprocalLink_InverseLinkAtHalf_Returns2()
     {
         var link = new ReciprocalLink<double>();
@@ -338,7 +338,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal(2.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReciprocalLink_RoundTrip_ReturnsOriginal()
     {
         var link = new ReciprocalLink<double>();
@@ -350,7 +350,7 @@ public class LinkFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReciprocalLink_IsCanonical_ReturnsTrue()
     {
         var link = new ReciprocalLink<double>();
@@ -362,7 +362,7 @@ public class LinkFunctionsIntegrationTests
 
     #region InverseSquaredLink Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseSquaredLink_KnownValues()
     {
         var link = new InverseSquaredLink<double>();
@@ -372,7 +372,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal(1.0, link.Link(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseSquaredLink_RoundTrip_ReturnsOriginal()
     {
         var link = new InverseSquaredLink<double>();
@@ -384,7 +384,7 @@ public class LinkFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseSquaredLink_IsCanonical_ReturnsTrue()
     {
         var link = new InverseSquaredLink<double>();
@@ -412,7 +412,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Equal(expectedName, link.Name);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Factory_GetAllLinkFunctions_ReturnsAllEight()
     {
         var allLinks = LinkFunctionFactory<double>.GetAllLinkFunctions();
@@ -430,7 +430,7 @@ public class LinkFunctionsIntegrationTests
         Assert.Contains("InverseSquared", names);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Factory_GetCanonicalLink_ReturnsCorrectLinks()
     {
         var normalLink = LinkFunctionFactory<double>.GetCanonicalLink(GlmDistributionFamily.Normal);

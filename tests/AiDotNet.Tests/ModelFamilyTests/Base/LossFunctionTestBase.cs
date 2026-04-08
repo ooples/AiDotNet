@@ -81,7 +81,7 @@ public abstract class LossFunctionTestBase
     // INVARIANT 1: Loss is finite for normal inputs
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateLoss_ShouldBeFinite()
     {
         var loss = CreateLoss();
@@ -98,7 +98,7 @@ public abstract class LossFunctionTestBase
     // INVARIANT 2: Loss is non-negative (for standard losses)
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateLoss_ShouldBeNonNegative()
     {
         if (!IsNonNegative) return;
@@ -115,7 +115,7 @@ public abstract class LossFunctionTestBase
     // INVARIANT 3: Identical inputs → zero loss
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateLoss_IdenticalInputs_ShouldBeZero()
     {
         if (!ZeroLossForIdentical) return;
@@ -132,7 +132,7 @@ public abstract class LossFunctionTestBase
     // INVARIANT 4: Larger errors produce larger loss
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateLoss_LargerError_ShouldProduceLargerLoss()
     {
         // Skip for losses that can go negative (MBE, Wasserstein) — larger error
@@ -155,7 +155,7 @@ public abstract class LossFunctionTestBase
     // INVARIANT 5: Derivative is finite
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateDerivative_ShouldBeFinite()
     {
         var loss = CreateLoss();
@@ -178,7 +178,7 @@ public abstract class LossFunctionTestBase
     // INVARIANT 6: Derivative is zero for identical inputs
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateDerivative_IdenticalInputs_ShouldBeZero()
     {
         if (!ZeroDerivativeForIdentical) return;
@@ -201,7 +201,7 @@ public abstract class LossFunctionTestBase
     // This is the gold standard for gradient correctness.
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateDerivative_ShouldMatchNumericalGradient()
     {
         var loss = CreateLoss();
@@ -239,7 +239,7 @@ public abstract class LossFunctionTestBase
     // If predicted < actual, derivative should be negative (push predicted up).
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateDerivative_SignShouldMatchErrorDirection()
     {
         if (!HasStandardGradientSign) return;
@@ -260,7 +260,7 @@ public abstract class LossFunctionTestBase
     // |L(a+δ, a)| ≈ |L(a-δ, a)| for MSE, MAE, Huber
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateLoss_ShouldBeSymmetricInErrorMagnitude()
     {
         // Only test symmetry for standard regression-style losses.

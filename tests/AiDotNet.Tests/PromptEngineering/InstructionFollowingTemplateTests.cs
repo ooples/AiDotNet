@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.PromptEngineering;
 
 public class InstructionFollowingTemplateTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_Default_CreatesTemplate()
     {
         var template = new InstructionFollowingTemplate();
@@ -13,7 +13,7 @@ public class InstructionFollowingTemplateTests
         Assert.NotNull(template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithCustomTemplate_UsesCustomTemplate()
     {
         var customTemplate = "Custom instruction: {input}";
@@ -22,7 +22,7 @@ public class InstructionFollowingTemplateTests
         Assert.Equal(customTemplate, template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void WithObjective_SetsObjective()
     {
         var template = new InstructionFollowingTemplate()
@@ -32,7 +32,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Summarize the document", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AddInstruction_AddsInstruction()
     {
         var template = new InstructionFollowingTemplate()
@@ -42,7 +42,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Read the document carefully", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AddInstructions_AddsMultipleInstructions()
     {
         var template = new InstructionFollowingTemplate()
@@ -54,7 +54,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Step 3", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AddConstraint_AddsConstraint()
     {
         var template = new InstructionFollowingTemplate()
@@ -64,7 +64,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Keep under 200 words", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AddConstraints_AddsMultipleConstraints()
     {
         var template = new InstructionFollowingTemplate()
@@ -76,7 +76,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("No jargon", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void WithInputDescription_SetsInputDescription()
     {
         var template = new InstructionFollowingTemplate()
@@ -86,7 +86,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("meeting notes", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void WithOutputDescription_SetsOutputDescription()
     {
         var template = new InstructionFollowingTemplate()
@@ -96,7 +96,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("bullet-point summary", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_ReplacesInputVariable()
     {
         var template = new InstructionFollowingTemplate()
@@ -111,7 +111,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("This is the document content.", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Summarization_CreatesSummarizationTemplate()
     {
         var template = InstructionFollowingTemplate.Summarization();
@@ -120,7 +120,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("summary", template.Template.ToLower());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Summarization_WithMaxLength_IncludesMaxLength()
     {
         var template = InstructionFollowingTemplate.Summarization(100);
@@ -129,7 +129,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("100", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Translation_CreatesTranslationTemplate()
     {
         var template = InstructionFollowingTemplate.Translation("Spanish");
@@ -139,7 +139,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Translate", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Classification_CreatesClassificationTemplate()
     {
         var template = InstructionFollowingTemplate.Classification("Positive", "Negative", "Neutral");
@@ -150,7 +150,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Neutral", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Classification_WithNoCategories_CreatesTemplate()
     {
         var template = InstructionFollowingTemplate.Classification();
@@ -159,7 +159,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Classify", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void QuestionAnswering_CreatesQATemplate()
     {
         var template = InstructionFollowingTemplate.QuestionAnswering();
@@ -169,7 +169,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("question", template.Template.ToLower());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Builder_CreatesTemplateWithObjective()
     {
         var template = InstructionFollowingTemplate.Builder()
@@ -180,7 +180,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Extract key points", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Builder_AddInstruction_AddsInstruction()
     {
         var template = InstructionFollowingTemplate.Builder()
@@ -191,7 +191,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("First, read carefully", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Builder_AddConstraint_AddsConstraint()
     {
         var template = InstructionFollowingTemplate.Builder()
@@ -202,7 +202,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Be accurate", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Builder_WithInputDescription_SetsDescription()
     {
         var template = InstructionFollowingTemplate.Builder()
@@ -213,7 +213,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Raw data file", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Builder_WithOutputDescription_SetsDescription()
     {
         var template = InstructionFollowingTemplate.Builder()
@@ -224,7 +224,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Formatted report", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Builder_CompleteExample_WorksCorrectly()
     {
         var template = InstructionFollowingTemplate.Builder()
@@ -247,7 +247,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("bullet points", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Template_ContainsInstructionsSection()
     {
         var template = new InstructionFollowingTemplate()
@@ -256,7 +256,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Instructions", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Template_ContainsConstraintsSection()
     {
         var template = new InstructionFollowingTemplate()
@@ -265,7 +265,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Constraints", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Template_ContainsInputSection()
     {
         var template = new InstructionFollowingTemplate()
@@ -274,7 +274,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Input", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Template_ContainsOutputSection()
     {
         var template = new InstructionFollowingTemplate()
@@ -283,7 +283,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Output", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FluentChaining_WorksCorrectly()
     {
         var template = new InstructionFollowingTemplate()
@@ -303,7 +303,7 @@ public class InstructionFollowingTemplateTests
         Assert.Contains("Constraint 2", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Builder_WithEmptyObjective_HandlesGracefully()
     {
         var template = InstructionFollowingTemplate.Builder()
@@ -313,7 +313,7 @@ public class InstructionFollowingTemplateTests
         Assert.NotNull(template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Builder_WithWhitespaceObjective_HandlesGracefully()
     {
         var template = InstructionFollowingTemplate.Builder()

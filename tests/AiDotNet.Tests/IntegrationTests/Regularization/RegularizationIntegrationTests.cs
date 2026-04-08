@@ -16,7 +16,7 @@ public class RegularizationIntegrationTests
 
     #region L1 Regularization Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1Regularization_RegularizeVector_AppliesSoftThresholding()
     {
         // Arrange
@@ -36,7 +36,7 @@ public class RegularizationIntegrationTests
         Assert.True(result[4] > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1Regularization_RegularizeMatrix_AppliesSoftThresholding()
     {
         // Arrange
@@ -59,7 +59,7 @@ public class RegularizationIntegrationTests
         Assert.True(result[0, 1] > -0.5);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1Regularization_RegularizeGradient_AppliesRegularization()
     {
         // Arrange
@@ -81,7 +81,7 @@ public class RegularizationIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1Regularization_ZeroStrength_ReturnsOriginalValues()
     {
         // Arrange
@@ -98,7 +98,7 @@ public class RegularizationIntegrationTests
         Assert.Equal(1.0, result[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1Regularization_GetOptions_ReturnsCorrectStrength()
     {
         // Arrange
@@ -112,7 +112,7 @@ public class RegularizationIntegrationTests
         Assert.Equal(0.25, returnedOptions.Strength, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1Regularization_DefaultStrength_IsApplied()
     {
         // Arrange - default constructor uses default options (strength = 0.1)
@@ -129,7 +129,7 @@ public class RegularizationIntegrationTests
 
     #region L2 Regularization Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2Regularization_RegularizeVector_AppliesShrinkage()
     {
         // Arrange
@@ -151,7 +151,7 @@ public class RegularizationIntegrationTests
         Assert.True(result[2] > result[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2Regularization_RegularizeMatrix_AppliesShrinkage()
     {
         // Arrange
@@ -174,7 +174,7 @@ public class RegularizationIntegrationTests
         Assert.True(result[1, 1] < 4.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2Regularization_RegularizeGradient_AppliesRegularization()
     {
         // Arrange
@@ -195,7 +195,7 @@ public class RegularizationIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2Regularization_ZeroStrength_ReturnsOriginalValues()
     {
         // Arrange
@@ -212,7 +212,7 @@ public class RegularizationIntegrationTests
         Assert.Equal(3.0, result[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2Regularization_GetOptions_ReturnsCorrectStrength()
     {
         // Arrange
@@ -226,7 +226,7 @@ public class RegularizationIntegrationTests
         Assert.Equal(0.05, returnedOptions.Strength, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2Regularization_DefaultStrength_IsApplied()
     {
         // Arrange - default constructor uses default options (strength = 0.01)
@@ -239,7 +239,7 @@ public class RegularizationIntegrationTests
         Assert.Equal(0.01, options.Strength, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2Regularization_PreservesSign()
     {
         // Arrange
@@ -261,7 +261,7 @@ public class RegularizationIntegrationTests
 
     #region ElasticNet Regularization Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNetRegularization_RegularizeVector_CombinesL1AndL2()
     {
         // Arrange
@@ -282,7 +282,7 @@ public class RegularizationIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNetRegularization_RegularizeMatrix_CombinesL1AndL2()
     {
         // Arrange
@@ -311,7 +311,7 @@ public class RegularizationIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNetRegularization_HighL1Ratio_BehavesMoreLikeL1()
     {
         // Arrange
@@ -330,7 +330,7 @@ public class RegularizationIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNetRegularization_LowL1Ratio_BehavesMoreLikeL2()
     {
         // Arrange
@@ -349,7 +349,7 @@ public class RegularizationIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNetRegularization_ZeroStrength_ProducesValidResults()
     {
         // Arrange
@@ -371,7 +371,7 @@ public class RegularizationIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNetRegularization_GetOptions_ReturnsCorrectValues()
     {
         // Arrange
@@ -386,7 +386,7 @@ public class RegularizationIntegrationTests
         Assert.Equal(0.7, returnedOptions.L1Ratio, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNetRegularization_DefaultValues_AreApplied()
     {
         // Arrange - default constructor uses default options
@@ -400,7 +400,7 @@ public class RegularizationIntegrationTests
         Assert.Equal(0.5, options.L1Ratio, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNetRegularization_RegularizeGradient_AppliesRegularization()
     {
         // Arrange
@@ -425,7 +425,7 @@ public class RegularizationIntegrationTests
 
     #region NoRegularization Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NoRegularization_RegularizeVector_ReturnsOriginalValues()
     {
         // Arrange
@@ -441,7 +441,7 @@ public class RegularizationIntegrationTests
         Assert.Equal(3.0, result[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NoRegularization_RegularizeMatrix_ReturnsOriginalValues()
     {
         // Arrange
@@ -462,7 +462,7 @@ public class RegularizationIntegrationTests
         Assert.Equal(4.0, result[1, 1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NoRegularization_RegularizeGradient_ReturnsOriginalGradient()
     {
         // Arrange
@@ -479,7 +479,7 @@ public class RegularizationIntegrationTests
         Assert.Equal(3.0, result[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NoRegularization_GetOptions_ReturnsZeroStrength()
     {
         // Arrange
@@ -492,7 +492,7 @@ public class RegularizationIntegrationTests
         Assert.Equal(0.0, options.Strength, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NoRegularization_NegativeValues_PreservedExactly()
     {
         // Arrange
@@ -508,7 +508,7 @@ public class RegularizationIntegrationTests
         Assert.Equal(-3.0, result[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NoRegularization_ZeroValues_PreservedExactly()
     {
         // Arrange
@@ -528,7 +528,7 @@ public class RegularizationIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllRegularizations_HandleEmptyVector()
     {
         // Arrange
@@ -550,7 +550,7 @@ public class RegularizationIntegrationTests
         Assert.Equal(0, noRegResult.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllRegularizations_HandleLargeValues()
     {
         // Arrange
@@ -576,7 +576,7 @@ public class RegularizationIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllRegularizations_HandleSmallValues()
     {
         // Arrange
@@ -602,7 +602,7 @@ public class RegularizationIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RegularizationStrength_AffectsResults()
     {
         // Arrange
@@ -622,7 +622,7 @@ public class RegularizationIntegrationTests
         Assert.True(strongResult[2] < weakResult[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FloatType_AllRegularizations_Work()
     {
         // Arrange

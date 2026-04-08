@@ -131,7 +131,7 @@ public class NmfDecompositionIntegrationTests
             $"Relative reconstruction error {relError} should be less than {ReconstructionTolerance}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NmfDecomposition_WH_Product_EqualsReconstruct()
     {
         // Arrange
@@ -157,7 +157,7 @@ public class NmfDecompositionIntegrationTests
 
     #region Convergence Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NmfDecomposition_MoreIterations_ImproveReconstruction()
     {
         // Arrange
@@ -178,7 +178,7 @@ public class NmfDecompositionIntegrationTests
             $"More iterations should improve or maintain error. Few: {errorFew}, Many: {errorMany}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NmfDecomposition_MoreComponents_ImproveReconstruction()
     {
         // Arrange
@@ -203,7 +203,7 @@ public class NmfDecompositionIntegrationTests
 
     #region Error Handling Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NmfDecomposition_NegativeMatrix_ThrowsArgumentException()
     {
         // Arrange
@@ -214,7 +214,7 @@ public class NmfDecompositionIntegrationTests
         Assert.Throws<ArgumentException>(() => new NmfDecomposition<double>(V, 2));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NmfDecomposition_ZeroComponents_ThrowsArgumentException()
     {
         // Arrange
@@ -224,7 +224,7 @@ public class NmfDecompositionIntegrationTests
         Assert.Throws<ArgumentException>(() => new NmfDecomposition<double>(V, 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NmfDecomposition_TooManyComponents_ThrowsArgumentException()
     {
         // Arrange
@@ -238,7 +238,7 @@ public class NmfDecompositionIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NmfDecomposition_ZeroMatrix_ProducesZeroFactors()
     {
         // Arrange - Matrix with all zeros
@@ -254,7 +254,7 @@ public class NmfDecompositionIntegrationTests
             $"Zero matrix reconstruction should be zero. Error: {error}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NmfDecomposition_SparseMatrix_HandledCorrectly()
     {
         // Arrange - Sparse matrix with many zeros
@@ -270,7 +270,7 @@ public class NmfDecompositionIntegrationTests
         Assert.True(IsNonNegative(nmf.H), "H should be non-negative for sparse input");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NmfDecomposition_DefaultComponents_UsesHalfMinDimension()
     {
         // Arrange
@@ -287,7 +287,7 @@ public class NmfDecompositionIntegrationTests
 
     #region Numerical Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NmfDecomposition_ReconstructedValues_AreNonNegative()
     {
         // Arrange
@@ -302,7 +302,7 @@ public class NmfDecompositionIntegrationTests
             "Reconstructed matrix should be non-negative");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NmfDecomposition_NoNaNOrInfinity_InFactors()
     {
         // Arrange

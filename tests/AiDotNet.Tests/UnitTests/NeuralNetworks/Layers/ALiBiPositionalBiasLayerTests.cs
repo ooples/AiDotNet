@@ -29,7 +29,7 @@ public class ALiBiPositionalBiasLayerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetSlopes_GeometricSequence()
     {
         // For 8 heads, slopes should be: 2^(-1), 2^(-2), ..., 2^(-8)
@@ -44,7 +44,7 @@ public class ALiBiPositionalBiasLayerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeBias_CorrectShape()
     {
         int numHeads = 4;
@@ -57,7 +57,7 @@ public class ALiBiPositionalBiasLayerTests
         Assert.Equal(new[] { numHeads, queryLen, keyLen }, bias.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeBias_DiagonalIsZero()
     {
         int numHeads = 4;
@@ -76,7 +76,7 @@ public class ALiBiPositionalBiasLayerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeBias_FuturePositionsMasked()
     {
         int numHeads = 2;
@@ -99,7 +99,7 @@ public class ALiBiPositionalBiasLayerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeBias_DistancePenaltyIncreases()
     {
         int numHeads = 2;
@@ -122,7 +122,7 @@ public class ALiBiPositionalBiasLayerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeBias_CachingWorks()
     {
         int numHeads = 4;
@@ -135,7 +135,7 @@ public class ALiBiPositionalBiasLayerTests
         Assert.Same(bias1, bias2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeBias_DifferentSizeInvalidatesCache()
     {
         int numHeads = 4;
@@ -148,7 +148,7 @@ public class ALiBiPositionalBiasLayerTests
         Assert.Equal(new[] { numHeads, 16, 16 }, bias2.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Forward_3D_PreservesShape()
     {
         int numHeads = 4;
@@ -162,7 +162,7 @@ public class ALiBiPositionalBiasLayerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Forward_4D_PreservesShape()
     {
         int numHeads = 4;
@@ -178,14 +178,14 @@ public class ALiBiPositionalBiasLayerTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetParameters_ReturnsEmpty()
     {
         var layer = new ALiBiPositionalBiasLayer<float>(4);
         Assert.Equal(0, layer.GetParameters().Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResetState_ClearsBiasCache()
     {
         var layer = new ALiBiPositionalBiasLayer<float>(4);

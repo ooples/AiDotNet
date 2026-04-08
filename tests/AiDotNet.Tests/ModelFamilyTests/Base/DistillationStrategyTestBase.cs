@@ -65,7 +65,7 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 1: Loss is non-negative (KL divergence, MSE, CE are all >= 0)
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeLoss_IsNonNegative()
     {
         ValidateDimensions();
@@ -80,7 +80,7 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 2: Loss is finite
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeLoss_IsFinite()
     {
         var strategy = CreateStrategy();
@@ -93,7 +93,7 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 3: Identical inputs → zero/minimal loss
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeLoss_IdenticalInputs_ProducesMinimalLoss()
     {
         if (!ZeroLossForIdentical) return;
@@ -108,7 +108,7 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 4: Larger divergence → larger loss (monotonicity)
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeLoss_LargerDivergence_ProducesLargerLoss()
     {
         var strategy = CreateStrategy();
@@ -137,7 +137,7 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 5: Gradient has correct shape [batch, classes]
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeGradient_HasCorrectShape()
     {
         var strategy = CreateStrategy();
@@ -150,7 +150,7 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 6: Gradient is finite
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeGradient_IsFinite()
     {
         var strategy = CreateStrategy();
@@ -169,7 +169,7 @@ public abstract class DistillationStrategyTestBase
     // Analytical gradient should match finite-difference approximation.
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeGradient_MatchesNumericalGradient()
     {
         var strategy = CreateStrategy();
@@ -224,7 +224,7 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 8: Gradient for identical inputs is near-zero
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeGradient_IdenticalInputs_IsNearZero()
     {
         if (!ZeroLossForIdentical) return;
@@ -246,7 +246,7 @@ public abstract class DistillationStrategyTestBase
     // Moving student in the negative gradient direction should reduce loss.
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeGradient_DescentDirectionReducesLoss()
     {
         var strategy = CreateStrategy();
@@ -281,7 +281,7 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 10: Temperature is positive
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Temperature_IsPositive()
     {
         var strategy = CreateStrategy();
@@ -293,7 +293,7 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 11: Alpha is in valid range [0, 1]
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Alpha_IsInValidRange()
     {
         var strategy = CreateStrategy();
@@ -305,7 +305,7 @@ public abstract class DistillationStrategyTestBase
     // INVARIANT 12: Higher temperature → softer distribution → smaller gradient magnitude
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HigherTemperature_ProducesSmallerGradients()
     {
         var strategy1 = CreateStrategy();

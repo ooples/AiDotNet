@@ -21,7 +21,7 @@ public abstract class MultiLabelClassifierTestBase
     protected virtual int Features => 3;
     protected virtual int NumLabels => 3;
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Predictions_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -48,7 +48,7 @@ public abstract class MultiLabelClassifierTestBase
             }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Predict_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -75,7 +75,7 @@ public abstract class MultiLabelClassifierTestBase
                 Assert.Equal(pred1[i, j], pred2[i, j]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OutputDimension_ShouldMatchLabels()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

@@ -18,7 +18,7 @@ public class ScalerMathTests
 {
     #region StandardScaler — (x - mean) / std
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardScaler_Transform_ZeroMeanUnitVariance()
     {
         var data = CreateKnownData();
@@ -39,7 +39,7 @@ public class ScalerMathTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardScaler_InverseTransform_RecoversOriginal()
     {
         var data = CreateKnownData();
@@ -59,7 +59,7 @@ public class ScalerMathTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardScaler_FitTransform_MatchesSeparateFitAndTransform()
     {
         var data = CreateKnownData();
@@ -84,7 +84,7 @@ public class ScalerMathTests
 
     #region MinMaxScaler — (x - min) / (max - min)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MinMaxScaler_Transform_OutputInZeroOneRange()
     {
         var data = CreateKnownData();
@@ -117,7 +117,7 @@ public class ScalerMathTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MinMaxScaler_InverseTransform_RecoversOriginal()
     {
         var data = CreateKnownData();
@@ -141,7 +141,7 @@ public class ScalerMathTests
 
     #region RobustScaler — (x - median) / IQR
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RobustScaler_Transform_MedianIsZero()
     {
         var data = CreateDataWithOutliers();
@@ -166,7 +166,7 @@ public class ScalerMathTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RobustScaler_InverseTransform_RecoversOriginal()
     {
         var data = CreateDataWithOutliers();
@@ -190,7 +190,7 @@ public class ScalerMathTests
 
     #region MaxAbsScaler — x / max(|x|)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaxAbsScaler_Transform_OutputInNegOneToOneRange()
     {
         var data = CreateKnownData();
@@ -208,7 +208,7 @@ public class ScalerMathTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaxAbsScaler_InverseTransform_RecoversOriginal()
     {
         var data = CreateKnownData();
@@ -232,7 +232,7 @@ public class ScalerMathTests
 
     #region Cross-Scaler Consistency
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardScaler_TransformDoesNotMutateOriginalData()
     {
         var data = CreateKnownData();

@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class OpticalFlowTestBase : VideoNNModelTestBase
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IdenticalFrames_NearZeroFlow()
     {
         var network = CreateNetwork();
@@ -27,7 +27,7 @@ public abstract class OpticalFlowTestBase : VideoNNModelTestBase
             $"Optical flow RMS = {rms:F4} for constant input — expected near-zero flow for no motion.");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlowVectors_ShouldBeBounded()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

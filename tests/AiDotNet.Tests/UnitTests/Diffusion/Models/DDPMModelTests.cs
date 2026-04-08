@@ -12,7 +12,7 @@ public class DDPMModelTests
 {
     #region Construction Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithDefaultParameters_CreatesModel()
     {
         // Arrange & Act
@@ -24,7 +24,7 @@ public class DDPMModelTests
         Assert.Equal(0, model.ParameterCount); // No neural network, so no parameters
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithScheduler_UsesProvidedScheduler()
     {
         // Arrange
@@ -38,7 +38,7 @@ public class DDPMModelTests
         Assert.Same(scheduler, model.Scheduler);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithNullScheduler_UsesDefaultScheduler()
     {
         // Arrange & Act
@@ -50,7 +50,7 @@ public class DDPMModelTests
         Assert.IsType<DDIMScheduler<double>>(model.Scheduler);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithNoisePredictor_UsesProvidedPredictor()
     {
         // Arrange
@@ -71,7 +71,7 @@ public class DDPMModelTests
         Assert.True(predictorCalled);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithSeed_ProducesReproducibleResults()
     {
         // Arrange
@@ -97,7 +97,7 @@ public class DDPMModelTests
 
     #region PredictNoise Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PredictNoise_WithoutPredictor_ReturnsZeros()
     {
         // Arrange
@@ -117,7 +117,7 @@ public class DDPMModelTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PredictNoise_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange
@@ -127,7 +127,7 @@ public class DDPMModelTests
         Assert.Throws<ArgumentNullException>(() => model.PredictNoise(null!, 500));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PredictNoise_WithCustomPredictor_CallsPredictor()
     {
         // Arrange
@@ -167,7 +167,7 @@ public class DDPMModelTests
 
     #region Generate Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Generate_WithValidShape_ReturnsCorrectShape()
     {
         // Arrange
@@ -181,7 +181,7 @@ public class DDPMModelTests
         Assert.Equal(shape, result.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Generate_ReturnsFiniteValues()
     {
         // Arrange
@@ -200,7 +200,7 @@ public class DDPMModelTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Generate_WithNullShape_ThrowsArgumentException()
     {
         // Arrange
@@ -210,7 +210,7 @@ public class DDPMModelTests
         Assert.Throws<ArgumentException>(() => model.Generate(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Generate_WithEmptyShape_ThrowsArgumentException()
     {
         // Arrange
@@ -261,7 +261,7 @@ public class DDPMModelTests
 
     #region ComputeLoss Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeLoss_WithValidInputs_ReturnsFiniteLoss()
     {
         // Arrange
@@ -280,7 +280,7 @@ public class DDPMModelTests
         Assert.True(loss >= 0, "Loss should be non-negative");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeLoss_WithNullCleanSamples_ThrowsArgumentNullException()
     {
         // Arrange
@@ -292,7 +292,7 @@ public class DDPMModelTests
         Assert.Throws<ArgumentNullException>(() => model.ComputeLoss(null!, noise, timesteps));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeLoss_WithNullNoise_ThrowsArgumentNullException()
     {
         // Arrange
@@ -304,7 +304,7 @@ public class DDPMModelTests
         Assert.Throws<ArgumentNullException>(() => model.ComputeLoss(cleanSamples, null!, timesteps));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeLoss_WithEmptyTimesteps_ThrowsArgumentException()
     {
         // Arrange
@@ -320,7 +320,7 @@ public class DDPMModelTests
 
     #region Parameter Management Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetParameters_ReturnsEmptyVector_WhenNoNeuralNetwork()
     {
         // Arrange
@@ -334,7 +334,7 @@ public class DDPMModelTests
         Assert.Equal(0, parameters.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SetParameters_ThenGetParameters_ReturnsSetParameters()
     {
         // Arrange
@@ -353,7 +353,7 @@ public class DDPMModelTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SetParameters_WithNull_ThrowsArgumentNullException()
     {
         // Arrange
@@ -363,7 +363,7 @@ public class DDPMModelTests
         Assert.Throws<ArgumentNullException>(() => model.SetParameters(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetParameters_ReturnsCopy_NotReference()
     {
         // Arrange
@@ -384,7 +384,7 @@ public class DDPMModelTests
 
     #region State Persistence Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SaveState_ThenLoadState_RestoresModel()
     {
         // Arrange
@@ -410,7 +410,7 @@ public class DDPMModelTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SaveState_WithNullStream_ThrowsArgumentNullException()
     {
         // Arrange
@@ -420,7 +420,7 @@ public class DDPMModelTests
         Assert.Throws<ArgumentNullException>(() => model.SaveState(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LoadState_WithNullStream_ThrowsArgumentNullException()
     {
         // Arrange
@@ -430,7 +430,7 @@ public class DDPMModelTests
         Assert.Throws<ArgumentNullException>(() => model.LoadState(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SaveState_WithNonWritableStream_ThrowsArgumentException()
     {
         // Arrange
@@ -446,7 +446,7 @@ public class DDPMModelTests
 
     #region Clone Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clone_ReturnsNewInstance()
     {
         // Arrange
@@ -461,7 +461,7 @@ public class DDPMModelTests
         Assert.NotSame(model, clone);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clone_CopiesParameters()
     {
         // Arrange
@@ -481,7 +481,7 @@ public class DDPMModelTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clone_IsIndependent()
     {
         // Arrange
@@ -504,7 +504,7 @@ public class DDPMModelTests
 
     #region Factory Method Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Create_WithDefaultConfig_ReturnsWorkingModel()
     {
         // Arrange & Act
@@ -515,7 +515,7 @@ public class DDPMModelTests
         Assert.NotNull(model.Scheduler);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Create_WithStableDiffusionConfig_ReturnsWorkingModel()
     {
         // Arrange & Act
@@ -527,7 +527,7 @@ public class DDPMModelTests
         Assert.Equal(4, result.ToVector().Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Create_WithCustomPredictor_UsesPredictor()
     {
         // Arrange
@@ -551,7 +551,7 @@ public class DDPMModelTests
 
     #region Integration with Different Schedulers
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Generate_WithDDIMScheduler_Succeeds()
     {
         // Arrange
@@ -566,7 +566,7 @@ public class DDPMModelTests
         Assert.Equal(shape, result.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Generate_WithPNDMScheduler_Succeeds()
     {
         // Arrange
@@ -585,7 +585,7 @@ public class DDPMModelTests
 
     #region Float Type Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DDPMModel_WithFloatType_Works()
     {
         // Arrange & Act

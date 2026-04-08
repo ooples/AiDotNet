@@ -14,7 +14,7 @@ public class MathHelperIntegrationTests
 
     #region GetNumericOperations Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetNumericOperations_Double_ReturnsValidOperations()
     {
         var ops = MathHelper.GetNumericOperations<double>();
@@ -24,7 +24,7 @@ public class MathHelperIntegrationTests
         Assert.Equal(6.0, ops.Multiply(2.0, 3.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetNumericOperations_Float_ReturnsValidOperations()
     {
         var ops = MathHelper.GetNumericOperations<float>();
@@ -34,7 +34,7 @@ public class MathHelperIntegrationTests
         Assert.Equal(6.0f, ops.Multiply(2.0f, 3.0f));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetNumericOperations_Int_ReturnsValidOperations()
     {
         var ops = MathHelper.GetNumericOperations<int>();
@@ -48,37 +48,37 @@ public class MathHelperIntegrationTests
 
     #region Type Check Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IsFloatingPoint_Double_ReturnsTrue()
     {
         Assert.True(MathHelper.IsFloatingPoint<double>());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IsFloatingPoint_Float_ReturnsTrue()
     {
         Assert.True(MathHelper.IsFloatingPoint<float>());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IsFloatingPoint_Int_ReturnsFalse()
     {
         Assert.False(MathHelper.IsFloatingPoint<int>());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IsIntegerType_Int_ReturnsTrue()
     {
         Assert.True(MathHelper.IsIntegerType<int>());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IsIntegerType_Long_ReturnsTrue()
     {
         Assert.True(MathHelper.IsIntegerType<long>());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IsIntegerType_Double_ReturnsFalse()
     {
         Assert.False(MathHelper.IsIntegerType<double>());
@@ -88,35 +88,35 @@ public class MathHelperIntegrationTests
 
     #region Clamp Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clamp_ValueWithinRange_ReturnsValue()
     {
         double result = MathHelper.Clamp(5.0, 0.0, 10.0);
         Assert.Equal(5.0, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clamp_ValueBelowMin_ReturnsMin()
     {
         double result = MathHelper.Clamp(-5.0, 0.0, 10.0);
         Assert.Equal(0.0, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clamp_ValueAboveMax_ReturnsMax()
     {
         double result = MathHelper.Clamp(15.0, 0.0, 10.0);
         Assert.Equal(10.0, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clamp_Float_WorksCorrectly()
     {
         float result = MathHelper.Clamp(0.5f, 0.0f, 1.0f);
         Assert.Equal(0.5f, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clamp_Int_WorksCorrectly()
     {
         int result = MathHelper.Clamp(50, 0, 100);
@@ -127,84 +127,84 @@ public class MathHelperIntegrationTests
 
     #region Trigonometric Functions
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sin_ZeroAngle_ReturnsZero()
     {
         double result = MathHelper.Sin(0.0);
         Assert.True(Math.Abs(result) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sin_PiOverTwo_ReturnsOne()
     {
         double result = MathHelper.Sin(Math.PI / 2);
         Assert.True(Math.Abs(result - 1.0) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cos_ZeroAngle_ReturnsOne()
     {
         double result = MathHelper.Cos(0.0);
         Assert.True(Math.Abs(result - 1.0) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cos_Pi_ReturnsNegativeOne()
     {
         double result = MathHelper.Cos(Math.PI);
         Assert.True(Math.Abs(result + 1.0) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tanh_Zero_ReturnsZero()
     {
         double result = MathHelper.Tanh(0.0);
         Assert.True(Math.Abs(result) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tanh_LargeValue_ReturnsNearOne()
     {
         double result = MathHelper.Tanh(10.0);
         Assert.True(Math.Abs(result - 1.0) < 0.001);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ArcSin_Zero_ReturnsZero()
     {
         double result = MathHelper.ArcSin(0.0);
         Assert.True(Math.Abs(result) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ArcSin_One_ReturnsPiOverTwo()
     {
         double result = MathHelper.ArcSin(1.0);
         Assert.True(Math.Abs(result - Math.PI / 2) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ArcCos_One_ReturnsZero()
     {
         double result = MathHelper.ArcCos(1.0);
         Assert.True(Math.Abs(result) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ArcCos_Zero_ReturnsPiOverTwo()
     {
         double result = MathHelper.ArcCos(0.0);
         Assert.True(Math.Abs(result - Math.PI / 2) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ArcTan_Zero_ReturnsZero()
     {
         double result = MathHelper.ArcTan(0.0);
         Assert.True(Math.Abs(result) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ArcTan_One_ReturnsPiOverFour()
     {
         double result = MathHelper.ArcTan(1.0);
@@ -215,14 +215,14 @@ public class MathHelperIntegrationTests
 
     #region Atanh Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Atanh_Zero_ReturnsZero()
     {
         double result = MathHelper.Atanh(0.0);
         Assert.True(Math.Abs(result) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Atanh_Half_ReturnsCorrectValue()
     {
         double result = MathHelper.Atanh(0.5);
@@ -230,7 +230,7 @@ public class MathHelperIntegrationTests
         Assert.True(Math.Abs(result - expected) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Atanh_NearOne_ReturnsLargeValue()
     {
         double result = MathHelper.Atanh(0.99);
@@ -241,35 +241,35 @@ public class MathHelperIntegrationTests
 
     #region Bessel Functions
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BesselI0_Zero_ReturnsOne()
     {
         double result = MathHelper.BesselI0(0.0);
         Assert.True(Math.Abs(result - 1.0) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BesselI0_PositiveValue_ReturnsPositive()
     {
         double result = MathHelper.BesselI0(2.0);
         Assert.True(result > 1.0); // I0(x) > 1 for x > 0
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BesselJ_OrderZero_Zero_ReturnsOne()
     {
         double result = MathHelper.BesselJ(0.0, 0.0);
         Assert.True(Math.Abs(result - 1.0) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BesselJ_OrderOne_Zero_ReturnsZero()
     {
         double result = MathHelper.BesselJ(1.0, 0.0);
         Assert.True(Math.Abs(result) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BesselK_PositiveValue_ReturnsPositive()
     {
         double result = MathHelper.BesselK(0.0, 1.0);
@@ -280,14 +280,14 @@ public class MathHelperIntegrationTests
 
     #region Gamma and Factorial
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gamma_One_ReturnsOne()
     {
         double result = MathHelper.Gamma(1.0);
         Assert.True(Math.Abs(result - 1.0) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gamma_Two_ReturnsOne()
     {
         // Gamma(2) = 1! = 1
@@ -295,7 +295,7 @@ public class MathHelperIntegrationTests
         Assert.True(Math.Abs(result - 1.0) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gamma_Three_ReturnsTwo()
     {
         // Gamma(3) = 2! = 2
@@ -303,7 +303,7 @@ public class MathHelperIntegrationTests
         Assert.True(Math.Abs(result - 2.0) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gamma_Half_ReturnsSqrtPi()
     {
         // Gamma(0.5) = sqrt(π)
@@ -312,21 +312,21 @@ public class MathHelperIntegrationTests
         Assert.True(Math.Abs(result - expected) < 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Factorial_Zero_ReturnsOne()
     {
         double result = MathHelper.Factorial<double>(0);
         Assert.Equal(1.0, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Factorial_Five_Returns120()
     {
         double result = MathHelper.Factorial<double>(5);
         Assert.Equal(120.0, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Factorial_Ten_Returns3628800()
     {
         double result = MathHelper.Factorial<double>(10);
@@ -337,14 +337,14 @@ public class MathHelperIntegrationTests
 
     #region Pi and Constants
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pi_Double_ReturnsCorrectValue()
     {
         double result = MathHelper.Pi<double>();
         Assert.True(Math.Abs(result - Math.PI) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pi_Float_ReturnsCorrectValue()
     {
         float result = MathHelper.Pi<float>();
@@ -355,21 +355,21 @@ public class MathHelperIntegrationTests
 
     #region Reciprocal Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Reciprocal_Two_ReturnsHalf()
     {
         double result = MathHelper.Reciprocal(2.0);
         Assert.Equal(0.5, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Reciprocal_Half_ReturnsTwo()
     {
         double result = MathHelper.Reciprocal(0.5);
         Assert.Equal(2.0, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Reciprocal_Float_WorksCorrectly()
     {
         float result = MathHelper.Reciprocal(4.0f);
@@ -380,7 +380,7 @@ public class MathHelperIntegrationTests
 
     #region Sinc Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sinc_Zero_ReturnsOne()
     {
         // sinc(0) = 1 by definition (limit)
@@ -388,7 +388,7 @@ public class MathHelperIntegrationTests
         Assert.True(Math.Abs(result - 1.0) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sinc_One_ReturnsZero()
     {
         // Normalized sinc: sinc(1) = sin(π*1)/(π*1) = sin(π)/π = 0
@@ -400,14 +400,14 @@ public class MathHelperIntegrationTests
 
     #region Modulo Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Modulo_PositiveValues_ReturnsRemainder()
     {
         double result = MathHelper.Modulo(7.0, 3.0);
         Assert.True(Math.Abs(result - 1.0) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Modulo_Float_WorksCorrectly()
     {
         float result = MathHelper.Modulo(5.5f, 2.0f);
@@ -418,25 +418,25 @@ public class MathHelperIntegrationTests
 
     #region IsInteger Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IsInteger_WholeNumber_ReturnsTrue()
     {
         Assert.True(MathHelper.IsInteger(5.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IsInteger_DecimalNumber_ReturnsFalse()
     {
         Assert.False(MathHelper.IsInteger(5.5));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IsInteger_Zero_ReturnsTrue()
     {
         Assert.True(MathHelper.IsInteger(0.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IsInteger_NegativeWhole_ReturnsTrue()
     {
         Assert.True(MathHelper.IsInteger(-3.0));
@@ -446,28 +446,28 @@ public class MathHelperIntegrationTests
 
     #region Sigmoid Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sigmoid_Zero_ReturnsHalf()
     {
         double result = MathHelper.Sigmoid(0.0);
         Assert.True(Math.Abs(result - 0.5) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sigmoid_LargePositive_ReturnsNearOne()
     {
         double result = MathHelper.Sigmoid(10.0);
         Assert.True(result > 0.999);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sigmoid_LargeNegative_ReturnsNearZero()
     {
         double result = MathHelper.Sigmoid(-10.0);
         Assert.True(result < 0.001);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sigmoid_OutputRange_BetweenZeroAndOne()
     {
         for (double x = -5; x <= 5; x += 0.5)
@@ -481,31 +481,31 @@ public class MathHelperIntegrationTests
 
     #region AlmostEqual Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AlmostEqual_ExactlyEqual_ReturnsTrue()
     {
         Assert.True(MathHelper.AlmostEqual(1.0, 1.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AlmostEqual_VeryClose_ReturnsTrue()
     {
         Assert.True(MathHelper.AlmostEqual(1.0, 1.0 + 1e-15));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AlmostEqual_Different_ReturnsFalse()
     {
         Assert.False(MathHelper.AlmostEqual(1.0, 2.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AlmostEqual_WithTolerance_ReturnsTrue()
     {
         Assert.True(MathHelper.AlmostEqual(1.0, 1.1, 0.2));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AlmostEqual_WithTolerance_ReturnsFalse()
     {
         Assert.False(MathHelper.AlmostEqual(1.0, 1.5, 0.1));
@@ -515,28 +515,28 @@ public class MathHelperIntegrationTests
 
     #region Log2 Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Log2_One_ReturnsZero()
     {
         double result = MathHelper.Log2(1.0);
         Assert.True(Math.Abs(result) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Log2_Two_ReturnsOne()
     {
         double result = MathHelper.Log2(2.0);
         Assert.True(Math.Abs(result - 1.0) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Log2_Eight_ReturnsThree()
     {
         double result = MathHelper.Log2(8.0);
         Assert.True(Math.Abs(result - 3.0) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Log2_PowerOfTwo_ReturnsExact()
     {
         double result = MathHelper.Log2(1024.0);
@@ -547,28 +547,28 @@ public class MathHelperIntegrationTests
 
     #region Min/Max Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Min_FirstSmaller_ReturnsFirst()
     {
         double result = MathHelper.Min(1.0, 2.0);
         Assert.Equal(1.0, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Min_SecondSmaller_ReturnsSecond()
     {
         double result = MathHelper.Min(3.0, 2.0);
         Assert.Equal(2.0, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Max_FirstLarger_ReturnsFirst()
     {
         double result = MathHelper.Max(5.0, 3.0);
         Assert.Equal(5.0, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Max_SecondLarger_ReturnsSecond()
     {
         double result = MathHelper.Max(2.0, 4.0);
@@ -579,28 +579,28 @@ public class MathHelperIntegrationTests
 
     #region Erf (Error Function) Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Erf_Zero_ReturnsZero()
     {
         double result = MathHelper.Erf(0.0);
         Assert.True(Math.Abs(result) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Erf_LargePositive_ReturnsNearOne()
     {
         double result = MathHelper.Erf(3.0);
         Assert.True(Math.Abs(result - 1.0) < 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Erf_LargeNegative_ReturnsNearNegativeOne()
     {
         double result = MathHelper.Erf(-3.0);
         Assert.True(Math.Abs(result + 1.0) < 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Erf_OddFunction_NegatesWithInput()
     {
         double positive = MathHelper.Erf(1.5);
@@ -612,7 +612,7 @@ public class MathHelperIntegrationTests
 
     #region GetNormalRandom Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetNormalRandom_ZeroStdDev_ReturnsMean()
     {
         // With stdDev = 0, result should always be the mean
@@ -621,7 +621,7 @@ public class MathHelperIntegrationTests
         Assert.Equal(5.0, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetNormalRandom_GeneratesVaried_WithNonZeroStdDev()
     {
         var random = new Random(42);
@@ -637,7 +637,7 @@ public class MathHelperIntegrationTests
         Assert.True(distinct > 50, "Should generate varied random values");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetNormalRandom_WithSeed_IsReproducible()
     {
         var random1 = new Random(123);
@@ -653,28 +653,28 @@ public class MathHelperIntegrationTests
 
     #region Float Type Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sin_Float_WorksCorrectly()
     {
         float result = MathHelper.Sin(0.0f);
         Assert.True(Math.Abs(result) < FloatTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cos_Float_WorksCorrectly()
     {
         float result = MathHelper.Cos(0.0f);
         Assert.True(Math.Abs(result - 1.0f) < FloatTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sigmoid_Float_WorksCorrectly()
     {
         float result = MathHelper.Sigmoid(0.0f);
         Assert.True(Math.Abs(result - 0.5f) < FloatTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Erf_Float_WorksCorrectly()
     {
         float result = MathHelper.Erf(0.0f);
@@ -685,7 +685,7 @@ public class MathHelperIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Factorial_NegativeInput_ThrowsOrReturnsSpecialValue()
     {
         // Depending on implementation, this might throw or return NaN/special value
@@ -702,14 +702,14 @@ public class MathHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Reciprocal_Zero_ThrowsDivideByZeroException()
     {
         // MathHelper.Reciprocal properly throws exception for zero input
         Assert.Throws<DivideByZeroException>(() => MathHelper.Reciprocal(0.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clamp_MinEqualsMax_ReturnsMinMax()
     {
         double result = MathHelper.Clamp(5.0, 3.0, 3.0);

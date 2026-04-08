@@ -16,7 +16,7 @@ public class BlipNeuralNetworkTests
 {
     #region ONNX Mode Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_Onnx_WithNullVisionEncoderPath_ThrowsArgumentException()
     {
         // Arrange
@@ -30,7 +30,7 @@ public class BlipNeuralNetworkTests
         Assert.Contains("Vision encoder path", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_Onnx_WithEmptyVisionEncoderPath_ThrowsArgumentException()
     {
         // Arrange
@@ -44,7 +44,7 @@ public class BlipNeuralNetworkTests
         Assert.Contains("Vision encoder path", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_Onnx_WithNullTextEncoderPath_ThrowsArgumentException()
     {
         // Arrange
@@ -58,7 +58,7 @@ public class BlipNeuralNetworkTests
         Assert.Contains("Text encoder path", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_Onnx_WithEmptyTextEncoderPath_ThrowsArgumentException()
     {
         // Arrange
@@ -72,7 +72,7 @@ public class BlipNeuralNetworkTests
         Assert.Contains("Text encoder path", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_Onnx_WithNullDecoderPath_ThrowsArgumentException()
     {
         // Arrange
@@ -86,7 +86,7 @@ public class BlipNeuralNetworkTests
         Assert.Contains("Text decoder path", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_Onnx_WithEmptyDecoderPath_ThrowsArgumentException()
     {
         // Arrange
@@ -100,7 +100,7 @@ public class BlipNeuralNetworkTests
         Assert.Contains("Text decoder path", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_Onnx_WithNonExistentVisionEncoder_ThrowsFileNotFoundException()
     {
         // Arrange

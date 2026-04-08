@@ -15,7 +15,7 @@ public class OptimizerHelperIntegrationTests
 {
     #region SelectFeatures Tests - Matrix with Indices
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelectFeatures_Matrix_SingleFeature_ReturnsCorrectColumn()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -35,7 +35,7 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(10, result[2, 0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelectFeatures_Matrix_MultipleFeatures_ReturnsCorrectColumns()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -55,7 +55,7 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(7, result[1, 1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelectFeatures_Matrix_AllFeatures_ReturnsSameShape()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -71,7 +71,7 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(3, result.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelectFeatures_Matrix_ReorderedFeatures_ReordersColumns()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -87,7 +87,7 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(2, result[0, 2]); // Originally column 1
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelectFeatures_Matrix_Float_WorksCorrectly()
     {
         var matrix = new Matrix<float>(new float[,]
@@ -105,7 +105,7 @@ public class OptimizerHelperIntegrationTests
 
     #region SelectFeatures Tests - Tensor with Indices
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelectFeatures_Tensor2D_SingleFeature_ReturnsCorrectColumn()
     {
         var tensor = new Tensor<double>(new[] { 2, 4 });
@@ -121,7 +121,7 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(7, result[1, 0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelectFeatures_Tensor2D_MultipleFeatures_ReturnsCorrectColumns()
     {
         var tensor = new Tensor<double>(new[] { 2, 3 });
@@ -137,7 +137,7 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(3, result[0, 1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelectFeatures_Tensor1D_ThrowsArgumentException()
     {
         var tensor = new Tensor<double>(new[] { 5 }); // 1D tensor
@@ -151,7 +151,7 @@ public class OptimizerHelperIntegrationTests
 
     #region SelectFeatures Tests - With Vector Features
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelectFeatures_MatrixWithVectors_CreatesNewMatrixFromColumns()
     {
         var col1 = new Vector<double>(new[] { 1.0, 4.0, 7.0 });
@@ -169,7 +169,7 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(3.0, result[0, 1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelectFeatures_TensorWithVectors_CreatesTensorFromColumns()
     {
         var col1 = new Vector<double>(new[] { 1.0, 2.0 });
@@ -185,7 +185,7 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(2, result.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelectFeatures_WithVectors_EmptyList_ReturnsEmptyResult()
     {
         var selectedFeatures = new List<Vector<double>>();
@@ -198,7 +198,7 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(0, result.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelectFeatures_WithVectors_MismatchedLengths_ThrowsException()
     {
         var col1 = new Vector<double>(new[] { 1.0, 2.0 });
@@ -216,7 +216,7 @@ public class OptimizerHelperIntegrationTests
 
     #region CreateOptimizationInputData Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateOptimizationInputData_MatrixVector_CreatesValidObject()
     {
         var xTrain = new Matrix<double>(10, 5);
@@ -238,7 +238,7 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(yTest, result.YTest);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateOptimizationInputData_TensorTensor_CreatesValidObject()
     {
         var xTrain = new Tensor<double>(new[] { 10, 5 });
@@ -256,7 +256,7 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(yTrain, result.YTrain);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateOptimizationInputData_Float_WorksCorrectly()
     {
         var xTrain = new Matrix<float>(5, 3);
@@ -276,7 +276,7 @@ public class OptimizerHelperIntegrationTests
 
     #region CreateDatasetResult Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateDatasetResult_WithNullStats_UsesEmptyStats()
     {
         var predictions = new Vector<double>(5);
@@ -299,7 +299,7 @@ public class OptimizerHelperIntegrationTests
         Assert.NotNull(result.PredictionStats);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateDatasetResult_WithValidStats_PreservesStats()
     {
         var predictions = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -323,7 +323,7 @@ public class OptimizerHelperIntegrationTests
 
     #region CreateOptimizationResult Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateOptimizationResult_CreatesValidResultObject()
     {
         var bestSolution = new VectorModel<double>(new Vector<double>(new[] { 0.5, 0.3, 0.2 }));
@@ -371,7 +371,7 @@ public class OptimizerHelperIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelectFeatures_Matrix_EmptyList_ReturnsEmptyMatrix()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -387,7 +387,7 @@ public class OptimizerHelperIntegrationTests
         Assert.Equal(0, result.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelectFeatures_UnsupportedType_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -395,7 +395,7 @@ public class OptimizerHelperIntegrationTests
                 "invalid", new List<int> { 0 }));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelectFeatures_Matrix_LargeDataset_PerformsCorrectly()
     {
         int rows = 1000;

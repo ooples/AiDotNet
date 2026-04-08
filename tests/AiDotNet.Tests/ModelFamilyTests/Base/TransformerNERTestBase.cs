@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class TransformerNERTestBase : NERModelTestBase
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContextualSensitivity_DifferentContext_DifferentLabels()
     {
         var network = CreateNetwork();
@@ -35,7 +35,7 @@ public abstract class TransformerNERTestBase : NERModelTestBase
             "Transformer NER produces identical labels for different contexts — attention may be broken.");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Output_ShouldBeFiniteSequence()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

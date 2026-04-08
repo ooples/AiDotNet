@@ -10,14 +10,14 @@ public class PostprocessingIntegrationTests
 {
     #region TextPostprocessor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TextPostprocessor_Construction_WithDefaults()
     {
         using var processor = new TextPostprocessor<double>();
         Assert.NotNull(processor);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TextPostprocessor_Construction_WithOptions()
     {
         var opts = new TextPostprocessorOptions
@@ -31,7 +31,7 @@ public class PostprocessingIntegrationTests
         Assert.NotNull(processor);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TextPostprocessor_Process_PreservesText()
     {
         using var processor = new TextPostprocessor<double>();
@@ -41,7 +41,7 @@ public class PostprocessingIntegrationTests
         Assert.Contains("World", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TextPostprocessor_Process_NormalizesWhitespace()
     {
         var opts = new TextPostprocessorOptions
@@ -60,14 +60,14 @@ public class PostprocessingIntegrationTests
 
     #region StructuredOutputParser Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StructuredOutputParser_Construction()
     {
         using var parser = new StructuredOutputParser<double>();
         Assert.NotNull(parser);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StructuredOutputParser_ParseKeyValuePairs_ExtractsPairsCorrectly()
     {
         using var parser = new StructuredOutputParser<double>();
@@ -84,21 +84,21 @@ public class PostprocessingIntegrationTests
 
     #region SpellCorrection Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpellCorrection_Construction_WithDefaults()
     {
         using var corrector = new SpellCorrection<double>();
         Assert.NotNull(corrector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpellCorrection_Construction_WithMaxEditDistance()
     {
         using var corrector = new SpellCorrection<double>(3);
         Assert.NotNull(corrector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpellCorrection_Process_ReturnsProcessedText()
     {
         using var corrector = new SpellCorrection<double>();
@@ -112,14 +112,14 @@ public class PostprocessingIntegrationTests
 
     #region EntityLinking Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EntityLinking_Construction()
     {
         using var linker = new EntityLinking<double>();
         Assert.NotNull(linker);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EntityLinking_RegisterEntity_PersistsEntity()
     {
         using var linker = new EntityLinking<double>();
@@ -141,7 +141,7 @@ public class PostprocessingIntegrationTests
 
     #region Data Class Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Entity_Properties_SetCorrectly()
     {
         var entity = new Entity
@@ -165,7 +165,7 @@ public class PostprocessingIntegrationTests
         Assert.NotNull(entity.Attributes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ValidationResult_Properties_SetCorrectly()
     {
         var result = new ValidationResult
@@ -178,7 +178,7 @@ public class PostprocessingIntegrationTests
         Assert.Empty(result.Warnings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ValidationResult_WithErrors_IsInvalid()
     {
         var result = new ValidationResult
@@ -191,7 +191,7 @@ public class PostprocessingIntegrationTests
         Assert.Single(result.Errors);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DocumentSchema_Properties_SetCorrectly()
     {
         var schema = new DocumentSchema();
@@ -205,7 +205,7 @@ public class PostprocessingIntegrationTests
         Assert.Single(schema.FieldPatterns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TextPostprocessorOptions_DefaultValues()
     {
         var opts = new TextPostprocessorOptions();
@@ -218,7 +218,7 @@ public class PostprocessingIntegrationTests
         Assert.True(opts.RemoveDuplicateSpaces);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvoiceData_Construction()
     {
         var invoice = new InvoiceData
@@ -238,7 +238,7 @@ public class PostprocessingIntegrationTests
         Assert.NotNull(invoice.LineItems);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReceiptData_Construction()
     {
         var receipt = new ReceiptData

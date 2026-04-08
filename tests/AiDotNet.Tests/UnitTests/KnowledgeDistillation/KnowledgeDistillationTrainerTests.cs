@@ -37,7 +37,7 @@ public class KnowledgeDistillationTrainerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
@@ -51,7 +51,7 @@ public class KnowledgeDistillationTrainerTests
         Assert.NotNull(trainer);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithNullTeacher_ThrowsArgumentNullException()
     {
         // Arrange
@@ -62,7 +62,7 @@ public class KnowledgeDistillationTrainerTests
             new KnowledgeDistillationTrainer<double>(null!, distillationLoss));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithNullDistillationStrategy_ThrowsArgumentNullException()
     {
         // Arrange
@@ -73,7 +73,7 @@ public class KnowledgeDistillationTrainerTests
             new KnowledgeDistillationTrainer<double>(teacher, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TrainBatch_WithValidInputs_ReturnsPositiveLoss()
     {
         // Arrange
@@ -109,7 +109,7 @@ public class KnowledgeDistillationTrainerTests
         Assert.Equal(inputs.Length, backwardCalls); // Should call backward for each sample
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TrainBatch_WithNullInputs_ThrowsArgumentNullException()
     {
         // Arrange
@@ -126,7 +126,7 @@ public class KnowledgeDistillationTrainerTests
             trainer.TrainBatch(studentForward, studentBackward, null!, null));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TrainBatch_WithEmptyInputs_ThrowsArgumentException()
     {
         // Arrange
@@ -143,7 +143,7 @@ public class KnowledgeDistillationTrainerTests
             trainer.TrainBatch(studentForward, studentBackward, new Vector<Vector<double>>(0), null));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Train_WithValidParameters_CompletesSuccessfully()
     {
         // Arrange
@@ -189,7 +189,7 @@ public class KnowledgeDistillationTrainerTests
         Assert.Equal(2, epochsCompleted);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Train_WithInvalidEpochs_ThrowsArgumentException()
     {
         // Arrange
@@ -211,7 +211,7 @@ public class KnowledgeDistillationTrainerTests
             trainer.Train(studentForward, studentBackward, trainInputs, trainLabels, epochs: -1, batchSize: 1, null, null, null, null));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Evaluate_ReturnsAccuracyBetweenZeroAndOne()
     {
         // Arrange
@@ -243,7 +243,7 @@ public class KnowledgeDistillationTrainerTests
         Assert.Equal(0.5, accuracy); // Should get 1 out of 2 correct (predicts class 1, second is class 1)
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Evaluate_WithPerfectPredictions_ReturnsOne()
     {
         // Arrange
@@ -274,7 +274,7 @@ public class KnowledgeDistillationTrainerTests
         Assert.Equal(1.0, accuracy);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Evaluate_WithNoCorrectPredictions_ReturnsZero()
     {
         // Arrange

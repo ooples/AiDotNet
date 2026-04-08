@@ -16,7 +16,7 @@ public class MatrixHelperDeepMathIntegrationTests
 
     // ─── Determinant Mathematical Properties ────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Determinant_Multiplicativity_DetAB_Equals_DetA_Times_DetB()
     {
         // det(AB) = det(A) * det(B)
@@ -34,7 +34,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(detA * detB, detAB, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Determinant_TransposeInvariance_DetAT_Equals_DetA()
     {
         var A = new Matrix<double>(new double[,] { { 2, 3, 1 }, { 1, 4, 5 }, { 6, 2, 3 } });
@@ -46,7 +46,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(detA, detAT, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Determinant_ScalingProperty_Det_kA_Equals_kn_DetA()
     {
         // det(kA) = k^n * det(A) for n x n matrix
@@ -63,7 +63,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(Math.Pow(k, n) * detA, detkA, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Determinant_TriangularMatrix_IsProductOfDiagonal()
     {
         var upper = new Matrix<double>(new double[,]
@@ -79,7 +79,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(24.0, det, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Determinant_RowSwap_NegatesDeterminant()
     {
         var A = new Matrix<double>(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -92,7 +92,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(-detA, detB, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Determinant_OrthogonalMatrix_HasAbsValueOne()
     {
         // Rotation matrix is orthogonal with det = 1
@@ -108,7 +108,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(1.0, Math.Abs(det), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Determinant_4x4_HandComputed()
     {
         // Matrix with known determinant
@@ -131,7 +131,7 @@ public class MatrixHelperDeepMathIntegrationTests
 
     // ─── Givens Rotation ────────────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GivensRotation_CSS_SumToOne()
     {
         var (c, s) = MatrixHelper<double>.ComputeGivensRotation(3.0, 4.0);
@@ -139,7 +139,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(1.0, c * c + s * s, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GivensRotation_AppliedToVector_ZeroesOneElement()
     {
         // Standard Givens: for (a,b), compute c,s so that applying rotation zeroes one element
@@ -160,7 +160,7 @@ public class MatrixHelperDeepMathIntegrationTests
             "Neither is zero - c and s don't produce a valid Givens rotation.");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GivensRotation_PreservesNorm()
     {
         // For any valid rotation [c,s;-s,c], ||R*v|| = ||v||
@@ -177,7 +177,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(originalNorm, rotatedNorm, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ApplyGivensRotation_PreservesRowNormSum()
     {
         // An orthogonal row operation preserves the Frobenius norm of the affected rows
@@ -209,7 +209,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(normBefore, normAfter, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ApplyGivensRotation_TransformationIsOrthogonal()
     {
         // The 2x2 transformation matrix [c,s;row2] should have determinant ±1
@@ -234,7 +234,7 @@ public class MatrixHelperDeepMathIntegrationTests
 
     // ─── Householder Vector and Transformation ──────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HouseholderVector_IsUnitNorm()
     {
         var x = new Vector<double>(new double[] { 3, 1, 4, 1, 5 });
@@ -247,7 +247,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(1.0, norm, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HouseholderVector_ReflectionZeroesSubdiagonal()
     {
         // After applying P = I - 2*v*v^T to x, result should be [±||x||, 0, 0, ...]
@@ -270,7 +270,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(xNorm, Math.Abs(px[0]), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HouseholderVector_ReflectionPreservesNorm()
     {
         var x = new Vector<double>(new double[] { 2, 6, 3 });
@@ -288,7 +288,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(xNorm, pxNorm, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HouseholderVector_NearZeroInput_ReturnsZeroVector()
     {
         var x = new Vector<double>(new double[] { 1e-16, 1e-17, 1e-18 });
@@ -302,7 +302,7 @@ public class MatrixHelperDeepMathIntegrationTests
 
     // ─── Power Iteration ────────────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PowerIteration_DiagonalMatrix_ReturnsDominantEigenvalue()
     {
         // Diagonal matrix: eigenvalues are 5, 2, 3
@@ -323,7 +323,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(5.0, rayleigh, 0.1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PowerIteration_Symmetric2x2_ReturnsCorrectEigenvalue()
     {
         // [[4,1],[1,3]]: eigenvalues are (7±sqrt(5))/2 ≈ 4.618, 2.382
@@ -345,7 +345,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(expectedDominant, rayleigh, 0.05);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PowerIteration_ScaledIdentity_ReturnsScaleFactor()
     {
         // 3*I has all eigenvalues = 3
@@ -364,7 +364,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(3.0, rayleigh, 0.1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PowerIteration_EigenvectorSatisfies_Av_Equals_LambdaV()
     {
         var A = new Matrix<double>(new double[,]
@@ -392,7 +392,7 @@ public class MatrixHelperDeepMathIntegrationTests
             $"Eigenvector residual ||Av - lambda*v|| = {residual}, expected near 0");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PowerIteration_ReturnedEigenvalue_MatchesRayleighQuotient()
     {
         // This test specifically checks if the returned eigenvalue field is correct
@@ -415,7 +415,7 @@ public class MatrixHelperDeepMathIntegrationTests
 
     // ─── Gram-Schmidt Orthogonalization ─────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GramSchmidt_ProducesOrthonormalColumns()
     {
         var A = new Matrix<double>(new double[,]
@@ -440,7 +440,7 @@ public class MatrixHelperDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GramSchmidt_NearlyParallelVectors_StillOrthogonalizes()
     {
         // Two nearly parallel columns
@@ -461,7 +461,7 @@ public class MatrixHelperDeepMathIntegrationTests
             $"Nearly-parallel columns not orthogonalized: dot = {dot}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GramSchmidt_AlreadyOrthonormal_PreservesColumns()
     {
         // Standard basis vectors are already orthonormal
@@ -484,7 +484,7 @@ public class MatrixHelperDeepMathIntegrationTests
 
     // ─── Tridiagonal Solver ─────────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TridiagonalSolve_KnownSolution_VerifiesResidual()
     {
         // System: [2,-1,0; -1,2,-1; 0,-1,2] * x = [1; 0; 1]
@@ -503,7 +503,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(1.0, solution[2], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TridiagonalSolve_VerifyAxEqualsB()
     {
         // Arbitrary tridiagonal system
@@ -533,7 +533,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(rhs[3], r3, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TridiagonalSolve_DiagonalSystem_ReturnsDivision()
     {
         // Pure diagonal (no sub/super): Dx = b => x = b/d
@@ -552,7 +552,7 @@ public class MatrixHelperDeepMathIntegrationTests
 
     // ─── Hat Matrix Properties ──────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HatMatrix_Idempotent_HH_Equals_H()
     {
         var X = new Matrix<double>(new double[,]
@@ -573,7 +573,7 @@ public class MatrixHelperDeepMathIntegrationTests
                     $"H not idempotent at [{i},{j}]: H={H[i, j]}, H^2={HH[i, j]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HatMatrix_TraceEqualsNumberOfPredictors()
     {
         // Use columns that are linearly independent: 1, x, x^2
@@ -595,7 +595,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(3.0, trace, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HatMatrix_ResidualMakerAnnihilatesX()
     {
         // (I - H) * X = 0 for any design matrix X
@@ -624,7 +624,7 @@ public class MatrixHelperDeepMathIntegrationTests
                     $"(I-H)*X not zero at [{i},{j}]: {residual[i, j]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HatMatrix_LeverageValuesInRange()
     {
         // For proper design matrix, diagonal elements h_ii in [1/n, 1]
@@ -647,7 +647,7 @@ public class MatrixHelperDeepMathIntegrationTests
 
     // ─── Hessenberg Reduction Properties ────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HessenbergReduction_PreservesTrace()
     {
         // Similarity transformation preserves trace (sum of eigenvalues)
@@ -670,7 +670,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(traceOriginal, traceH, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HessenbergReduction_PreservesDeterminant()
     {
         // Similarity transformation preserves determinant (product of eigenvalues)
@@ -688,7 +688,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(detOriginal, detH, 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HessenbergReduction_ResultIsHessenberg()
     {
         var A = new Matrix<double>(new double[,]
@@ -706,7 +706,7 @@ public class MatrixHelperDeepMathIntegrationTests
 
     // ─── Outer Product Properties ───────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OuterProduct_RankOne_DeterminantZero()
     {
         // Rank-1 matrix has determinant 0 (for n >= 2)
@@ -720,7 +720,7 @@ public class MatrixHelperDeepMathIntegrationTests
             $"Rank-1 outer product should have det=0, got {det}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OuterProduct_Trace_EqualsInnerProduct()
     {
         // tr(v1 * v2^T) = v1 . v2 (when same length)
@@ -736,7 +736,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(innerProduct, trace, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OuterProduct_Symmetric_WhenSameVector()
     {
         // v * v^T is symmetric
@@ -750,7 +750,7 @@ public class MatrixHelperDeepMathIntegrationTests
 
     // ─── Hypotenuse Numerical Stability ─────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hypotenuse_LargeValues_DoesNotOverflow()
     {
         // Direct sqrt(a^2+b^2) would overflow for large values
@@ -764,7 +764,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(expected, result, expected * 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hypotenuse_SmallValues_DoesNotUnderflow()
     {
         double a = 1e-200;
@@ -777,7 +777,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(expected, result, expected * 1e-6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hypotenuse_MixedMagnitudes_AccurateResult()
     {
         // Very different magnitudes: sqrt(1e-300^2 + 1^2) ≈ 1.0
@@ -789,7 +789,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(1.0, result, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hypotenuse_ArrayVersion_MatchesPythagorean()
     {
         // sqrt(3^2 + 4^2 + 12^2) = sqrt(9+16+144) = sqrt(169) = 13
@@ -801,7 +801,7 @@ public class MatrixHelperDeepMathIntegrationTests
 
     // ─── Spectral Norm ──────────────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpectralNorm_DiagonalMatrix_ReturnsMaxAbsDiagonal()
     {
         var A = new Matrix<double>(new double[,]
@@ -817,7 +817,7 @@ public class MatrixHelperDeepMathIntegrationTests
             $"Spectral norm of diag(-3,2) = {norm}, expected ~3.0");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpectralNorm_OrthogonalMatrix_ReturnsOne()
     {
         double theta = Math.PI / 3;
@@ -835,7 +835,7 @@ public class MatrixHelperDeepMathIntegrationTests
 
     // ─── Cross-Property Identity Tests ──────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Identity_DetInverse_IsReciprocal()
     {
         var A = new Matrix<double>(new double[,]
@@ -852,7 +852,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(1.0 / detA, detAinv, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Identity_HatMatrix_Symmetric()
     {
         var X = new Matrix<double>(new double[,]
@@ -870,7 +870,7 @@ public class MatrixHelperDeepMathIntegrationTests
                 Assert.Equal(H[i, j], H[j, i], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Identity_GramSchmidt_SpanPreserved()
     {
         // After orthogonalization, Q*Q^T*A should equal A
@@ -895,7 +895,7 @@ public class MatrixHelperDeepMathIntegrationTests
                     $"Column space not preserved at [{i},{j}]: PA={PA[i, j]}, A={A[i, j]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BandDiagonalMultiply_TridiagonalCase_MatchesHandComputed()
     {
         // Full tridiagonal matrix: A = [2, -1, 0; -1, 2, -1; 0, -1, 2]
@@ -922,7 +922,7 @@ public class MatrixHelperDeepMathIntegrationTests
         Assert.Equal(4.0, result[2], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExtractDiagonal_RecoversDiagonalMatrix()
     {
         var D = new Matrix<double>(new double[,]

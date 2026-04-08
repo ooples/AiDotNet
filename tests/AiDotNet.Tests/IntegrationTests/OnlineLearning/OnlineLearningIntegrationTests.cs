@@ -11,7 +11,7 @@ public class OnlineLearningIntegrationTests
 {
     #region OnlineSGDClassifier Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnlineSGDClassifier_Construction_DefaultParams()
     {
         var clf = new OnlineSGDClassifier<double>();
@@ -19,7 +19,7 @@ public class OnlineLearningIntegrationTests
         Assert.False(clf.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnlineSGDClassifier_PartialFit_DoesNotThrow()
     {
         var clf = new OnlineSGDClassifier<double>(learningRate: 0.1);
@@ -28,7 +28,7 @@ public class OnlineLearningIntegrationTests
         Assert.True(clf.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnlineSGDClassifier_PartialFitBatch_TrainsModel()
     {
         var clf = new OnlineSGDClassifier<double>(learningRate: 0.1, l2Penalty: 0.0);
@@ -52,7 +52,7 @@ public class OnlineLearningIntegrationTests
         Assert.True(clf.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnlineSGDClassifier_Predict_ReturnsValues()
     {
         var clf = new OnlineSGDClassifier<double>(learningRate: 0.1);
@@ -80,7 +80,7 @@ public class OnlineLearningIntegrationTests
 
     #region OnlineSGDRegressor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnlineSGDRegressor_Construction_DefaultParams()
     {
         var reg = new OnlineSGDRegressor<double>();
@@ -88,7 +88,7 @@ public class OnlineLearningIntegrationTests
         Assert.False(reg.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnlineSGDRegressor_PartialFit_DoesNotThrow()
     {
         var reg = new OnlineSGDRegressor<double>(learningRate: 0.01);
@@ -97,7 +97,7 @@ public class OnlineLearningIntegrationTests
         Assert.True(reg.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnlineSGDRegressor_PartialFitBatch_TrainsModel()
     {
         var reg = new OnlineSGDRegressor<double>(learningRate: 0.01, l2Penalty: 0.0);
@@ -128,7 +128,7 @@ public class OnlineLearningIntegrationTests
 
     #region OnlinePassiveAggressiveClassifier Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnlinePAClassifier_Construction_DefaultParams()
     {
         var clf = new OnlinePassiveAggressiveClassifier<double>();
@@ -136,7 +136,7 @@ public class OnlineLearningIntegrationTests
         Assert.False(clf.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnlinePAClassifier_PartialFit_DoesNotThrow()
     {
         var clf = new OnlinePassiveAggressiveClassifier<double>();
@@ -145,7 +145,7 @@ public class OnlineLearningIntegrationTests
         Assert.True(clf.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnlinePAClassifier_LinearlySeparableData_ClassifiesCorrectly()
     {
         var clf = new OnlinePassiveAggressiveClassifier<double>();
@@ -174,7 +174,7 @@ public class OnlineLearningIntegrationTests
 
     #region OnlinePassiveAggressiveRegressor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnlinePARegressor_Construction_DefaultParams()
     {
         var reg = new OnlinePassiveAggressiveRegressor<double>();
@@ -182,7 +182,7 @@ public class OnlineLearningIntegrationTests
         Assert.False(reg.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnlinePARegressor_PartialFit_DoesNotThrow()
     {
         var reg = new OnlinePassiveAggressiveRegressor<double>();
@@ -191,7 +191,7 @@ public class OnlineLearningIntegrationTests
         Assert.True(reg.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnlinePARegressor_LinearData_LearnsApproximately()
     {
         var reg = new OnlinePassiveAggressiveRegressor<double>(c: 1.0, epsilon: 0.1);
@@ -219,7 +219,7 @@ public class OnlineLearningIntegrationTests
                 $"Prediction {predictions[i]} should be close to {y[i]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnlinePARegressor_EpsilonInsensitiveLoss_DecreasesWithTraining()
     {
         var reg = new OnlinePassiveAggressiveRegressor<double>(c: 1.0, epsilon: 0.1);
@@ -249,7 +249,7 @@ public class OnlineLearningIntegrationTests
             $"Loss after more training ({lateLoss}) should not be much greater than earlier loss ({earlyLoss})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnlinePARegressor_Reset_ClearsWeights()
     {
         var reg = new OnlinePassiveAggressiveRegressor<double>();
@@ -261,7 +261,7 @@ public class OnlineLearningIntegrationTests
         Assert.Null(reg.GetWeights());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnlinePARegressor_GetWeightsAndBias_ReturnsValues()
     {
         var reg = new OnlinePassiveAggressiveRegressor<double>();
@@ -280,7 +280,7 @@ public class OnlineLearningIntegrationTests
 
     #region ADWINDriftDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ADWINDriftDetector_StableStream_NoDrift()
     {
         var detector = new ADWINDriftDetector<double>();
@@ -290,7 +290,7 @@ public class OnlineLearningIntegrationTests
         Assert.False(detector.IsDriftDetected);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ADWINDriftDetector_Reset_ClearsState()
     {
         var detector = new ADWINDriftDetector<double>();

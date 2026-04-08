@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class SemiSupervisedClassifierTestBase : ClassificationModelTestBase
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SemiSupervisedPredictions_ShouldBeValid()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -29,7 +29,7 @@ public abstract class SemiSupervisedClassifierTestBase : ClassificationModelTest
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SemiSupervised_OutputDimMatchesInput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

@@ -10,14 +10,14 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
 {
     public class HNSWIndexTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullMetric_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() => new HNSWIndex<double>(null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNegativeMaxConnections_ThrowsArgumentException()
         {
             // Arrange
@@ -27,7 +27,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => new HNSWIndex<double>(metric, maxConnections: -1));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithZeroMaxConnections_ThrowsArgumentException()
         {
             // Arrange
@@ -37,7 +37,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => new HNSWIndex<double>(metric, maxConnections: 0));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNegativeEfConstruction_ThrowsArgumentException()
         {
             // Arrange
@@ -47,7 +47,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => new HNSWIndex<double>(metric, efConstruction: -1));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Add_WithValidVector_IncreasesCount()
         {
             // Arrange
@@ -62,7 +62,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(1, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Add_WithNullId_ThrowsArgumentException()
         {
             // Arrange
@@ -74,7 +74,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => index.Add(null!, vector));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Add_WithNullVector_ThrowsArgumentNullException()
         {
             // Arrange
@@ -85,7 +85,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentNullException>(() => index.Add("vec1", null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddBatch_WithValidVectors_IncreasesCount()
         {
             // Arrange
@@ -105,7 +105,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(3, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_WithCosineSimilarity_ReturnsNearestVectors()
         {
             // Arrange
@@ -127,7 +127,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             // Should return vec1 and vec3 as they're closest to query
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_OnEmptyIndex_ReturnsEmptyList()
         {
             // Arrange
@@ -142,7 +142,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Empty(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_WithNullQuery_ThrowsArgumentNullException()
         {
             // Arrange
@@ -153,7 +153,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentNullException>(() => index.Search(null!, 5));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_WithNegativeK_ThrowsArgumentException()
         {
             // Arrange
@@ -165,7 +165,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => index.Search(query, -1));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Remove_WithExistingId_RemovesVectorAndReturnsTrue()
         {
             // Arrange
@@ -182,7 +182,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(1, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Remove_WithNonExistingId_ReturnsFalse()
         {
             // Arrange
@@ -198,7 +198,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(1, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Clear_RemovesAllVectors()
         {
             // Arrange
@@ -216,7 +216,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(0, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GraphConnections_RespectMaxConnections()
         {
             // Arrange
@@ -241,7 +241,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.True(results.Count <= 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_WithEuclideanDistance_WorksCorrectly()
         {
             // Arrange
@@ -261,7 +261,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Index_WithLargeNumberOfVectors_MaintainsPerformance()
         {
             // Arrange
@@ -290,7 +290,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(100, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_ReturnsResultsInCorrectOrder()
         {
             // Arrange
@@ -315,7 +315,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Index_WithHighDimensionalVectors_WorksCorrectly()
         {
             // Arrange
@@ -343,7 +343,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(5, results.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Index_WithFloatType_WorksCorrectly()
         {
             // Arrange

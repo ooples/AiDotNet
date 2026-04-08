@@ -15,7 +15,7 @@ public class VideoSafetyIntegrationTests
 {
     #region FrameSamplingVideoModerator Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FrameSampling_StandardFrames_ProcessesWithoutError()
     {
         var moderator = new FrameSamplingVideoModerator<double>(samplingRate: 1.0);
@@ -25,7 +25,7 @@ public class VideoSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FrameSampling_FewFrames_HandlesGracefully()
     {
         var moderator = new FrameSamplingVideoModerator<double>(samplingRate: 1.0);
@@ -35,7 +35,7 @@ public class VideoSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FrameSampling_LargerFrames_ProcessesWithoutError()
     {
         var moderator = new FrameSamplingVideoModerator<double>(samplingRate: 0.5);
@@ -45,7 +45,7 @@ public class VideoSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FrameSampling_SingleFrame_HandlesGracefully()
     {
         var moderator = new FrameSamplingVideoModerator<double>(samplingRate: 1.0);
@@ -59,7 +59,7 @@ public class VideoSafetyIntegrationTests
 
     #region TemporalConsistencyDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Temporal_MotionSequence_ProcessesWithoutError()
     {
         var detector = new TemporalConsistencyDetector<double>();
@@ -69,7 +69,7 @@ public class VideoSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Temporal_StaticFrames_ProcessesWithoutError()
     {
         var detector = new TemporalConsistencyDetector<double>();
@@ -79,7 +79,7 @@ public class VideoSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Temporal_ManyFrames_ProcessesWithoutError()
     {
         var detector = new TemporalConsistencyDetector<double>();
@@ -89,7 +89,7 @@ public class VideoSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Temporal_TwoFrames_HandlesGracefully()
     {
         var detector = new TemporalConsistencyDetector<double>();
@@ -103,7 +103,7 @@ public class VideoSafetyIntegrationTests
 
     #region MultimodalVideoModerator Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Multimodal_StandardFrames_ProcessesWithoutError()
     {
         var moderator = new MultimodalVideoModerator<double>();
@@ -113,7 +113,7 @@ public class VideoSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Multimodal_LargerFrames_ProcessesWithoutError()
     {
         var moderator = new MultimodalVideoModerator<double>();
@@ -123,7 +123,7 @@ public class VideoSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Multimodal_DifferentFrameRates_Work()
     {
         var moderator = new MultimodalVideoModerator<double>();
@@ -140,7 +140,7 @@ public class VideoSafetyIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllModerators_SameFrames_ProduceResults()
     {
         var frames = GenerateTestFrames(10, 8, 8);

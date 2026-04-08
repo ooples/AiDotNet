@@ -17,7 +17,7 @@ public abstract class NonLinearRegressionTestBase : RegressionModelTestBase
     // If it can't, the non-linear capacity is not functioning.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CanFitQuadratic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -50,7 +50,7 @@ public abstract class NonLinearRegressionTestBase : RegressionModelTestBase
     // non-linear model should have lower MSE than a constant predictor.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void NonLinearResiduals_ShouldBeSmaller()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -94,7 +94,7 @@ public abstract class NonLinearRegressionTestBase : RegressionModelTestBase
     // be finite. Infinite extrapolation indicates numerical instability.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Extrapolation_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

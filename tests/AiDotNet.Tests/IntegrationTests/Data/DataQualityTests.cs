@@ -10,7 +10,7 @@ public class DataQualityTests
 {
     // ==================== Deduplication Tests ====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExactHashDeduplicator_DefaultOptions()
     {
         var options = new ExactHashDeduplicatorOptions();
@@ -18,7 +18,7 @@ public class DataQualityTests
         Assert.True(options.CaseInsensitive);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExactHashDeduplicator_FindsDuplicates()
     {
         var dedup = new ExactHashDeduplicator();
@@ -40,7 +40,7 @@ public class DataQualityTests
         Assert.DoesNotContain(3, duplicates);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExactHashDeduplicator_WhitespaceNormalization()
     {
         var dedup = new ExactHashDeduplicator(new ExactHashDeduplicatorOptions
@@ -55,7 +55,7 @@ public class DataQualityTests
         Assert.Equal(hash1, hash2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MinHashDeduplicator_DefaultOptions()
     {
         var options = new MinHashDeduplicatorOptions();
@@ -65,7 +65,7 @@ public class DataQualityTests
         Assert.Equal(5, options.ShingleSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MinHashDeduplicator_FindsNearDuplicates()
     {
         var dedup = new MinHashDeduplicator(new MinHashDeduplicatorOptions
@@ -94,7 +94,7 @@ public class DataQualityTests
             $"Near-duplicate similarity {similarity} should exceed unrelated {dissimilarity}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SemanticDeduplicator_DefaultOptions()
     {
         var options = new SemanticDeduplicatorOptions();
@@ -103,7 +103,7 @@ public class DataQualityTests
         Assert.Equal(64, options.BatchSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SemanticDeduplicator_FindsSimilarEmbeddings()
     {
         var dedup = new SemanticDeduplicator(new SemanticDeduplicatorOptions
@@ -127,7 +127,7 @@ public class DataQualityTests
         Assert.DoesNotContain(3, duplicates);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SemanticDeduplicator_CosineSimilarity()
     {
         var dedup = new SemanticDeduplicator();
@@ -145,7 +145,7 @@ public class DataQualityTests
 
     // ==================== Quality Filtering Tests ====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PerplexityFilter_DefaultOptions()
     {
         var options = new PerplexityFilterOptions();
@@ -155,7 +155,7 @@ public class DataQualityTests
         Assert.Equal(1.0, options.SmoothingFactor);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PerplexityFilter_TrainsAndScores()
     {
         var filter = new PerplexityFilter(new PerplexityFilterOptions
@@ -181,14 +181,14 @@ public class DataQualityTests
             $"Similar text perplexity {perpSimilar} should be less than random {perpRandom}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PerplexityFilter_ThrowsWithoutTraining()
     {
         var filter = new PerplexityFilter();
         Assert.Throws<InvalidOperationException>(() => filter.ComputePerplexity("test text"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HeuristicTextFilter_DefaultOptions()
     {
         var options = new HeuristicTextFilterOptions();
@@ -198,7 +198,7 @@ public class DataQualityTests
         Assert.True(options.FilterBoilerplate);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HeuristicTextFilter_PassesGoodText()
     {
         var filter = new HeuristicTextFilter(new HeuristicTextFilterOptions
@@ -214,7 +214,7 @@ public class DataQualityTests
         Assert.True(filter.PassesFilter(goodText));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HeuristicTextFilter_FiltersBoilerplate()
     {
         var filter = new HeuristicTextFilter(new HeuristicTextFilterOptions
@@ -228,14 +228,14 @@ public class DataQualityTests
         Assert.False(filter.PassesFilter(boilerplate));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HeuristicTextFilter_FiltersTooShort()
     {
         var filter = new HeuristicTextFilter();
         Assert.False(filter.PassesFilter("Too short."));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LanguageIdFilter_DefaultOptions()
     {
         var options = new LanguageIdFilterOptions();
@@ -244,7 +244,7 @@ public class DataQualityTests
         Assert.Equal(0.8, options.MinConfidence);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LanguageIdFilter_DetectsLanguage()
     {
         var filter = new LanguageIdFilter(new LanguageIdFilterOptions
@@ -266,7 +266,7 @@ public class DataQualityTests
         Assert.Equal("en", lang);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ImageQualityFilter_DefaultOptions()
     {
         var options = new ImageQualityFilterOptions();
@@ -276,7 +276,7 @@ public class DataQualityTests
         Assert.Equal(5.0, options.MinPixelStdDev);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ImageQualityFilter_PassesGoodImage()
     {
         var filter = new ImageQualityFilter();
@@ -293,14 +293,14 @@ public class DataQualityTests
         Assert.True(filter.PassesPixelCheck(pixels));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ImageQualityFilter_RejectsTinyImage()
     {
         var filter = new ImageQualityFilter();
         Assert.False(filter.PassesDimensionCheck(32, 32));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ImageQualityFilter_RejectsSolidImage()
     {
         var filter = new ImageQualityFilter();
@@ -313,7 +313,7 @@ public class DataQualityTests
 
     // ==================== Dataset Efficiency Tests ====================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CoresetSelector_DefaultOptions()
     {
         var options = new CoresetSelectorOptions();
@@ -322,7 +322,7 @@ public class DataQualityTests
         Assert.Null(options.Seed);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CoresetSelector_SelectsSubset()
     {
         var selector = new CoresetSelector(new CoresetSelectorOptions
@@ -346,7 +346,7 @@ public class DataQualityTests
         Assert.Equal(selected.Count, selected.Distinct().Count()); // No duplicates
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CoresetSelector_GreedySelectsRepresentative()
     {
         var selector = new CoresetSelector(new CoresetSelectorOptions
@@ -368,7 +368,7 @@ public class DataQualityTests
         Assert.True(selected.Count >= 2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DataPruner_DefaultOptions()
     {
         var options = new DataPrunerOptions();
@@ -377,7 +377,7 @@ public class DataQualityTests
         Assert.Equal(5, options.MinEpochsForScoring);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DataPruner_PrunesHighConfidence()
     {
         var pruner = new DataPruner(new DataPrunerOptions { PruneRatio = 0.4 });
@@ -391,7 +391,7 @@ public class DataQualityTests
         Assert.Contains(4, pruned);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DataPruner_PrunesByForgetting()
     {
         var pruner = new DataPruner(new DataPrunerOptions { PruneRatio = 0.4 });
@@ -405,7 +405,7 @@ public class DataQualityTests
         Assert.Contains(3, pruned);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DatasetDistiller_DefaultOptions()
     {
         var options = new DatasetDistillerOptions();
@@ -414,7 +414,7 @@ public class DataQualityTests
         Assert.Equal(1000, options.NumSteps);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DatasetDistiller_DistillsDataset()
     {
         var distiller = new DatasetDistiller(new DatasetDistillerOptions
@@ -439,7 +439,7 @@ public class DataQualityTests
         Assert.Equal(2, distLabels.Count(l => l == 1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CurriculumDataScheduler_DefaultOptions()
     {
         var options = new CurriculumDataSchedulerOptions();
@@ -449,7 +449,7 @@ public class DataQualityTests
         Assert.Equal(10, options.FullDataEpoch);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CurriculumDataScheduler_LinearPacing()
     {
         var scheduler = new CurriculumDataScheduler(new CurriculumDataSchedulerOptions
@@ -468,7 +468,7 @@ public class DataQualityTests
         Assert.Equal(1.0, frac10, 2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CurriculumDataScheduler_GetAvailableIndices()
     {
         var scheduler = new CurriculumDataScheduler(new CurriculumDataSchedulerOptions
@@ -489,7 +489,7 @@ public class DataQualityTests
         Assert.Equal(5, epoch5.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActiveLearningQueryStrategy_DefaultOptions()
     {
         var options = new ActiveLearningQueryStrategyOptions();
@@ -498,7 +498,7 @@ public class DataQualityTests
         Assert.Equal(10, options.NumMcDropoutPasses);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActiveLearningQueryStrategy_UncertaintySampling()
     {
         var strategy = new ActiveLearningQueryStrategy(new ActiveLearningQueryStrategyOptions
@@ -523,7 +523,7 @@ public class DataQualityTests
         Assert.Contains(3, selected);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActiveLearningQueryStrategy_MarginSampling()
     {
         var strategy = new ActiveLearningQueryStrategy(new ActiveLearningQueryStrategyOptions
@@ -545,7 +545,7 @@ public class DataQualityTests
         Assert.Equal(1, selected[0]); // Smallest margin
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActiveLearningQueryStrategy_BALDQuery()
     {
         var strategy = new ActiveLearningQueryStrategy(new ActiveLearningQueryStrategyOptions

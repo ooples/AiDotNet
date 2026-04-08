@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
     /// </summary>
     public class ResNetSearchSpaceTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
@@ -20,7 +20,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.NotNull(searchSpace.Operations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_Operations_ContainsResNetOperations()
         {
             // Arrange
@@ -38,7 +38,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("grouped_conv3x3", searchSpace.Operations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_Operations_HasNineOperations()
         {
             // Arrange
@@ -48,7 +48,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(9, searchSpace.Operations.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_MaxNodes_IsSixteen()
         {
             // Arrange
@@ -58,7 +58,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(16, searchSpace.MaxNodes);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_InputChannels_IsThree()
         {
             // Arrange
@@ -68,7 +68,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(3, searchSpace.InputChannels);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_OutputChannels_IsOneThousand()
         {
             // Arrange
@@ -78,7 +78,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(1000, searchSpace.OutputChannels);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_BottleneckRatio_DefaultIsFour()
         {
             // Arrange
@@ -88,7 +88,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(4, searchSpace.BottleneckRatio);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_GroupCount_DefaultIsThirtyTwo()
         {
             // Arrange
@@ -98,7 +98,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(32, searchSpace.GroupCount);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_BlockDepths_ContainsExpectedValues()
         {
             // Arrange
@@ -114,7 +114,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(8, searchSpace.BlockDepths);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_BottleneckRatio_CanBeModified()
         {
             // Arrange
@@ -127,7 +127,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(2, searchSpace.BottleneckRatio);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_GroupCount_CanBeModified()
         {
             // Arrange
@@ -140,7 +140,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(64, searchSpace.GroupCount);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_BlockDepths_CanBeModified()
         {
             // Arrange
@@ -154,7 +154,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(1, searchSpace.BlockDepths);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_Float_WorksCorrectly()
         {
             // Arrange & Act
@@ -166,7 +166,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(9, searchSpace.Operations.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_InheritsFromSearchSpaceBase()
         {
             // Arrange & Act
@@ -176,7 +176,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.IsAssignableFrom<SearchSpaceBase<double>>(searchSpace);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_Operations_IncludesResidualBlocks()
         {
             // Arrange
@@ -187,7 +187,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(2, residualBlocks.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_Operations_IncludesBasicBlock()
         {
             // Arrange
@@ -197,7 +197,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("residual_block_basic", searchSpace.Operations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_Operations_IncludesBottleneckBlock()
         {
             // Arrange
@@ -207,7 +207,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("residual_block_bottleneck", searchSpace.Operations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_Operations_IncludesGroupedConvolution()
         {
             // Arrange
@@ -217,7 +217,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("grouped_conv3x3", searchSpace.Operations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResNetSearchSpace_Operations_IncludesPoolingOperations()
         {
             // Arrange

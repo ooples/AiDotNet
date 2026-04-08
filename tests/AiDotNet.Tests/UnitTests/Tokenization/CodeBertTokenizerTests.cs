@@ -27,13 +27,13 @@ public class CodeBertTokenizerTests
         _tokenizer = new CodeBertTokenizer(_baseTokenizer.Vocabulary);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithVocabulary_Succeeds()
     {
         Assert.NotNull(_tokenizer);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EncodeCodeAndNL_WithCodeOnly_ReturnsTokens()
     {
         // Arrange
@@ -47,7 +47,7 @@ public class CodeBertTokenizerTests
         Assert.NotEmpty(result.Tokens);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EncodeCodeAndNL_WithCodeAndNaturalLanguage_CombinesBoth()
     {
         // Arrange
@@ -62,7 +62,7 @@ public class CodeBertTokenizerTests
         Assert.NotEmpty(result.TokenTypeIds);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EncodeCodeAndNL_AddsBertSpecialTokens()
     {
         // Arrange
@@ -76,7 +76,7 @@ public class CodeBertTokenizerTests
         Assert.Contains("[SEP]", result.Tokens);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EncodeCodeAndNL_WithPadding_PadsToMaxLength()
     {
         // Arrange
@@ -94,7 +94,7 @@ public class CodeBertTokenizerTests
         Assert.Equal(50, result.TokenIds.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EncodeCodeAndNL_WithTruncation_TruncatesToMaxLength()
     {
         // Arrange
@@ -112,7 +112,7 @@ public class CodeBertTokenizerTests
         Assert.True(result.TokenIds.Count <= 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Decode_ReturnsDecodedText()
     {
         // Arrange
@@ -126,7 +126,7 @@ public class CodeBertTokenizerTests
         Assert.NotEmpty(decoded);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EncodeCodeAndNL_AttentionMask_HasCorrectLength()
     {
         // Arrange
@@ -139,7 +139,7 @@ public class CodeBertTokenizerTests
         Assert.Equal(result.TokenIds.Count, result.AttentionMask.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Tokenizer_Property_ReturnsUnderlyingTokenizer()
     {
         Assert.NotNull(_tokenizer.Tokenizer);

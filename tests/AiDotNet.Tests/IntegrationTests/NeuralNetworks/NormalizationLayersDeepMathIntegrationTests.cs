@@ -17,7 +17,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     // BatchNormalizationLayer - Initialization
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_Init_GammaIsOnes()
     {
         // gamma initialized to 1.0 for each feature
@@ -28,7 +28,7 @@ public class NormalizationLayersDeepMathIntegrationTests
             Assert.Equal(1.0, gamma[i], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_Init_BetaIsZeros()
     {
         // beta initialized to 0.0 for each feature
@@ -39,7 +39,7 @@ public class NormalizationLayersDeepMathIntegrationTests
             Assert.Equal(0.0, beta[i], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_Init_RunningMeanIsZeros()
     {
         var bn = new BatchNormalizationLayer<double>(3);
@@ -49,7 +49,7 @@ public class NormalizationLayersDeepMathIntegrationTests
             Assert.Equal(0.0, runningMean[i], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_Init_RunningVarianceIsOnes()
     {
         var bn = new BatchNormalizationLayer<double>(3);
@@ -59,7 +59,7 @@ public class NormalizationLayersDeepMathIntegrationTests
             Assert.Equal(1.0, runningVar[i], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_Init_Epsilon_DefaultIsLargeEpsilon()
     {
         var bn = new BatchNormalizationLayer<double>(2);
@@ -67,7 +67,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(1e-5, epsilon, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_Init_Momentum_DefaultIs09()
     {
         var bn = new BatchNormalizationLayer<double>(2);
@@ -79,7 +79,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     // BatchNormalizationLayer - ParameterCount and Packing
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_ParameterCount_IsTwiceFeatureSize()
     {
         // ParameterCount = gamma.Length + beta.Length = 2 * numFeatures
@@ -87,7 +87,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(10, bn.ParameterCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_GetParameters_GammaThenBeta()
     {
         // Parameters vector: [gamma_0, ..., gamma_n, beta_0, ..., beta_n]
@@ -109,7 +109,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(7.0, retrieved[5], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_SetParameters_UpdatesGammaAndBeta()
     {
         var bn = new BatchNormalizationLayer<double>(2);
@@ -126,7 +126,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(-2.0, beta[1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_SetParameters_WrongLength_Throws()
     {
         var bn = new BatchNormalizationLayer<double>(3);
@@ -138,7 +138,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     // BatchNormalizationLayer - Inference Mode Forward Pass (Hand-Computed)
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_Inference_DefaultParams_ApproximatelyIdentity()
     {
         // With default init: gamma=1, beta=0, runningMean=0, runningVar=1, eps=1e-5
@@ -158,7 +158,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(-2.0 * scale, output[1, 1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_Inference_CustomGammaBeta_HandComputed()
     {
         // numFeatures=2, gamma=[2, 3], beta=[5, -1]
@@ -188,7 +188,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(4.0 * scale1 + (-1.0), output[1, 1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_Inference_HighVariance_OutputDamped()
     {
         // With high runningVar, the output should be damped toward beta
@@ -208,7 +208,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(20.0 * halfScale, output[0, 1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_Inference_PreservesOutputShape()
     {
         // Input [3, 4] should produce output [3, 4]
@@ -223,7 +223,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(4, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_Inference_1DInput_PreservesRank()
     {
         // 1D input should be auto-reshaped to [1, N] and output reshaped back to [N]
@@ -241,7 +241,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     // BatchNormalizationLayer - ZeroInitGamma
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_ZeroInitGamma_SetsGammaToZero()
     {
         var bn = new BatchNormalizationLayer<double>(3);
@@ -252,7 +252,7 @@ public class NormalizationLayersDeepMathIntegrationTests
             Assert.Equal(0.0, gamma[i], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_ZeroInitGamma_InferenceOutputIsBeta()
     {
         // With gamma=0, scale=0, shift = beta - 0 = beta
@@ -277,7 +277,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     // BatchNormalizationLayer - Training Mode (Running Stats Update)
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_Training_RunningMeanUpdates_ExponentialMovingAverage()
     {
         // After one training forward pass:
@@ -298,7 +298,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(0.6, runningMean[1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_Training_RunningVarianceUpdates_ExponentialMovingAverage()
     {
         // After one training forward pass:
@@ -320,7 +320,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(1.3, runningVar[1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_Training_TwoForwardPasses_RunningMeanAccumulates()
     {
         // First pass: runningMean = 0.9*0 + 0.1*batchMean1
@@ -349,7 +349,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     // BatchNormalizationLayer - Custom Epsilon
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_CustomEpsilon_AffectsScale()
     {
         // With large epsilon, scale = gamma / sqrt(runningVar + eps)
@@ -368,7 +368,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     // LayerNormalizationLayer - Deep Forward Pass Math
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayerNorm_Forward_ExactValues_HandComputed()
     {
         // LayerNorm: for each sample, normalize across features
@@ -392,7 +392,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal((5.0 - mean) / std, output[0, 2], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayerNorm_Forward_BatchOf2_IndependentNormalization()
     {
         // Each sample normalized independently
@@ -416,7 +416,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal((20.0 - mean1) / std1, output[1, 1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayerNorm_Forward_WithCustomGammaBeta_HandComputed()
     {
         // gamma=[2, 3], beta=[1, -1]
@@ -438,14 +438,14 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(3.0 * norm1 + (-1.0), output[0, 1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayerNorm_ParameterCount_IsTwiceFeatureSize()
     {
         var ln = new LayerNormalizationLayer<double>(7);
         Assert.Equal(14, ln.ParameterCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayerNorm_GetSetParameters_RoundTrips()
     {
         var ln = new LayerNormalizationLayer<double>(3);
@@ -458,7 +458,7 @@ public class NormalizationLayersDeepMathIntegrationTests
             Assert.Equal(paramVec[i], retrieved[i], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayerNorm_UniformInput_NormalizedOutputIsZero()
     {
         // All features identical => mean = value, var = 0
@@ -473,7 +473,7 @@ public class NormalizationLayersDeepMathIntegrationTests
             Assert.Equal(0.0, output[0, j], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayerNorm_OutputMean_ApproximatelyZero()
     {
         // After LN with gamma=1, beta=0, the output mean should be ~0
@@ -489,7 +489,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(0.0, mean, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayerNorm_OutputVariance_ApproximatelyOne()
     {
         // After LN with gamma=1, beta=0, the output variance should be ~1
@@ -517,7 +517,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     // DropoutLayer - Scale Factor Computation
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dropout_ScaleFactor_Rate02_Is125()
     {
         // scale = 1 / (1 - 0.2) = 1 / 0.8 = 1.25
@@ -534,7 +534,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(3.0, output[0, 2], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dropout_ScaleFactor_Rate05_Is20()
     {
         // scale = 1 / (1 - 0.5) = 2.0
@@ -548,14 +548,14 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(-5.0, output[0, 1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dropout_InvalidRate_Throws()
     {
         Assert.Throws<ArgumentException>(() => new DropoutLayer<double>(1.0));
         Assert.Throws<ArgumentException>(() => new DropoutLayer<double>(-0.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dropout_NoTrainableParameters()
     {
         var dropout = new DropoutLayer<double>(0.3);
@@ -563,21 +563,21 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(0, parameters.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dropout_SetParametersEmpty_Succeeds()
     {
         var dropout = new DropoutLayer<double>(0.3);
         dropout.SetParameters(new Vector<double>(0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dropout_SetParametersNonEmpty_Throws()
     {
         var dropout = new DropoutLayer<double>(0.3);
         Assert.Throws<ArgumentException>(() => dropout.SetParameters(new Vector<double>(new double[] { 1.0 })));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dropout_Training_OutputHasZeros()
     {
         // In training mode, some outputs should be 0 (dropped)
@@ -617,7 +617,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     // EmbeddingLayer - Parameter Count
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Embedding_ParameterCount_IsVocabTimesEmbedDim()
     {
         // ParameterCount = vocabSize * embeddingDim
@@ -625,14 +625,14 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(100 * 32, emb.ParameterCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Embedding_ParameterCount_SmallVocab()
     {
         var emb = new EmbeddingLayer<double>(5, 3);
         Assert.Equal(15, emb.ParameterCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Embedding_GetSetParameters_RoundTrips()
     {
         var emb = new EmbeddingLayer<double>(3, 2);
@@ -646,7 +646,7 @@ public class NormalizationLayersDeepMathIntegrationTests
             Assert.Equal(paramVec[i], retrieved[i], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Embedding_Lookup_ReturnsCorrectRow()
     {
         // Create embedding with known weights
@@ -668,7 +668,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(4.0, output[0, 1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Embedding_Lookup_MultipleIndices()
     {
         // vocab=4, dim=2
@@ -714,7 +714,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     // BatchNormalizationLayer - Numerical Edge Cases
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_Inference_ZeroInput_HandComputed()
     {
         // All-zero input with default params
@@ -729,7 +729,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(0.0, output[0, 1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_Inference_NegativeInput_HandComputed()
     {
         // Negative input with gamma=1, beta=0
@@ -745,7 +745,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(-7.0 * scale, output[0, 1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_Inference_LargeBatch_PerFeatureConsistency()
     {
         // All samples in a batch with same feature value should get same output
@@ -774,7 +774,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     // BatchNormalizationLayer - Custom Momentum
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNorm_CustomMomentum_RunningStats()
     {
         // momentum=0.5: runningMean = 0.5*old + 0.5*batch
@@ -799,7 +799,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     // Dropout + BatchNorm Composition
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dropout_ThenBatchNorm_InferenceIsClean()
     {
         // In inference mode, dropout is identity, so BN should work normally

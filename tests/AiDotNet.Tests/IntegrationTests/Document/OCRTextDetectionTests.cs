@@ -35,7 +35,7 @@ public class OCRTextDetectionTests
 
     #region CRAFT Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CRAFT_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -43,7 +43,7 @@ public class OCRTextDetectionTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CRAFT_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -55,7 +55,7 @@ public class OCRTextDetectionTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CRAFT_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -65,7 +65,7 @@ public class OCRTextDetectionTests
         Assert.NotNull(meta.AdditionalInfo);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CRAFT_GetModelSummary_ContainsModelName()
     {
         var arch = CreateArchitecture();
@@ -78,7 +78,7 @@ public class OCRTextDetectionTests
 
     #region DBNet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DBNet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -86,7 +86,7 @@ public class OCRTextDetectionTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DBNet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -98,7 +98,7 @@ public class OCRTextDetectionTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DBNet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -111,7 +111,7 @@ public class OCRTextDetectionTests
 
     #region EAST Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EAST_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -119,7 +119,7 @@ public class OCRTextDetectionTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EAST_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -131,7 +131,7 @@ public class OCRTextDetectionTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EAST_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -144,7 +144,7 @@ public class OCRTextDetectionTests
 
     #region PSENet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PSENet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -152,7 +152,7 @@ public class OCRTextDetectionTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PSENet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -164,7 +164,7 @@ public class OCRTextDetectionTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PSENet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -177,7 +177,7 @@ public class OCRTextDetectionTests
 
     #region Cross-Model Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllTextDetectors_SupportedDocumentTypes_NotNone()
     {
         var arch = CreateArchitecture();

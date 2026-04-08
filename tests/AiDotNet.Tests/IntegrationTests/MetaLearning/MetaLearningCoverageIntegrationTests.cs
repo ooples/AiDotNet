@@ -161,7 +161,7 @@ public class MetaLearningCoverageIntegrationTests
         return (T)method!.Invoke(instance, args)!;
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TaskBatch_And_TaskWrapper_ExposeMetadata()
     {
         var taskA = CreateVectorTask(1, supportRows: 2, queryRows: 2, featureCount: 2, numWays: 2);
@@ -208,7 +208,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.Same(taskA.QuerySetY, wrapper.QuerySetY);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetaLearnerBase_AccessorsAndFallback_AreCovered()
     {
         var model = new LinearVectorModel(2);
@@ -240,7 +240,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.Equal(model.ParameterCount, gradients.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Options_Clone_CoversSpecializedOptions()
     {
         var vectorModel = new LinearVectorModel(2);
@@ -385,7 +385,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.IsType<TADAMOptions<double, Matrix<double>, Tensor<double>>>(tadamOptions.Clone());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatchingNetworksModel_UsesCosineSimilarity()
     {
         var model = new TensorEmbeddingModel(2, 2);
@@ -410,7 +410,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.NotNull(modelWrapper.GetModelMetadata());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatchingNetworksModel_UsesEuclideanDistance()
     {
         var model = new TensorEmbeddingModel(2, 2);
@@ -435,7 +435,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.NotNull(modelWrapper.GetModelMetadata());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProtoNets_AttentionScaling_And_PrototypicalModel_CosineDistance()
     {
         var model = new TensorEmbeddingModel(2, 2);
@@ -465,7 +465,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.NotNull(protoModel.GetModelMetadata());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProtoNets_Mahalanobis_And_TensorToMatrix_Flattens()
     {
         var model = new TensorEmbeddingModel(2, 2);
@@ -514,7 +514,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.Equal(4, modelMatrix.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ANIL_Adapt_WithL2Penalty_And_ModelAccess()
     {
         var model = new LinearVectorModel(2);
@@ -541,7 +541,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.NotNull(anilModel.GetModelMetadata());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BOIL_SecondOrder_And_ModelAccess()
     {
         var model = new LinearVectorModel(2);
@@ -581,7 +581,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.Equal(2, clone.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LEO_MetaTrain_Accumulates_And_ModelAccess()
     {
         var model = new LinearVectorModel(2);
@@ -612,7 +612,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.NotNull(leoModel.GetModelMetadata());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CNAP_NormalizesFastWeights_And_Resizes()
     {
         var model = new LinearVectorModel(2);
@@ -642,7 +642,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.Equal(5, resized.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GNNMeta_Attention_And_LearnedSimilarity()
     {
         var model = new LinearVectorModel(2);
@@ -669,7 +669,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.False(double.IsNaN(loss));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAML_SecondOrder_BuildsAdaptationSteps()
     {
         var model = new SecondOrderMatrixModel(2);
@@ -689,7 +689,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.False(double.IsNaN(loss));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetaSGD_AdaptedModel_OptimizerSetters()
     {
         var model = new LinearVectorModel(2);
@@ -731,7 +731,7 @@ public class MetaLearningCoverageIntegrationTests
         optimizer.SetMomentum(0, 0.1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetaOptNet_LogisticRegression_UsesTemperature()
     {
         var model = new LinearVectorModel(2);
@@ -762,7 +762,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.True(parameters.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetaOptNet_Svm_ModelProperties()
     {
         var model = new LinearVectorModel(2);
@@ -792,7 +792,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.NotNull(metaModel.GetModelMetadata());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RelationNetwork_ModelAndModuleCoverage()
     {
         var module = new RelationModule<double>(2);
@@ -855,7 +855,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.NotNull(relationModel.GetModelMetadata());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TADAM_ModelAndRegularizationCoverage()
     {
         var model = new TensorEmbeddingModel(2, 2);
@@ -886,7 +886,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.NotNull(tadamModel.GetModelMetadata());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MANN_ModelAndMemoryCoverage()
     {
         var model = new LinearVectorModel(2);
@@ -938,7 +938,7 @@ public class MetaLearningCoverageIntegrationTests
         Assert.NotNull(mannModel.GetModelMetadata());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NTM_LstmController_And_MemoryCoverage()
     {
         var model = new TensorEmbeddingModel(2, 2);

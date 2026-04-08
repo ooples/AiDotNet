@@ -47,7 +47,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Basic Transaction Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_Begin_SetsStateToActive()
         {
             // Arrange
@@ -62,7 +62,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotEqual(-1, txn.TransactionId);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_BeginTwice_ThrowsException()
         {
             // Arrange
@@ -74,7 +74,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Throws<InvalidOperationException>(() => txn.Begin());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_AddNodeBeforeBegin_ThrowsException()
         {
             // Arrange
@@ -90,7 +90,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Commit Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_Commit_AppliesAllOperations()
         {
             // Arrange
@@ -115,7 +115,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(store.GetNode("bob"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_CommitWithRemoveOperations_WorksCorrectly()
         {
             // Arrange
@@ -141,7 +141,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Null(store.GetNode("bob"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_CommitBeforeBegin_ThrowsException()
         {
             // Arrange
@@ -152,7 +152,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Throws<InvalidOperationException>(() => txn.Commit());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_CommitAfterCommit_ThrowsException()
         {
             // Arrange
@@ -170,7 +170,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Rollback Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_Rollback_DiscardsAllOperations()
         {
             // Arrange
@@ -192,7 +192,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Null(store.GetNode("bob"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_RollbackBeforeBegin_ThrowsException()
         {
             // Arrange
@@ -203,7 +203,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Throws<InvalidOperationException>(() => txn.Rollback());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_RollbackAfterCommit_ThrowsException()
         {
             // Arrange
@@ -221,7 +221,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region WAL Integration Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_WithWAL_LogsOperationsBeforeCommit()
         {
             // Arrange
@@ -245,7 +245,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             wal.Dispose();
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_WithWAL_RollbackDoesNotLogCheckpoint()
         {
             // Arrange
@@ -268,7 +268,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             wal.Dispose();
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_WithWAL_SupportsMultipleOperations()
         {
             // Arrange
@@ -299,7 +299,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region FileGraphStore Integration Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_WithFileStore_CommitPersistsData()
         {
             // Arrange
@@ -317,7 +317,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, store.NodeCount);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_WithFileStoreAndWAL_FullACIDSupport()
         {
             // Arrange
@@ -345,7 +345,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             wal.Dispose();
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_WithFileStoreAndWAL_RollbackPreventsPersistence()
         {
             // Arrange
@@ -371,7 +371,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Dispose Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_Dispose_AutoRollbacksActiveTransaction()
         {
             // Arrange
@@ -388,7 +388,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(0, store.NodeCount);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_Dispose_DoesNotAffectCommittedTransaction()
         {
             // Arrange
@@ -406,7 +406,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1, store.NodeCount);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_UsingStatement_AutoRollbacksOnException()
         {
             // Arrange
@@ -433,7 +433,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Error Handling Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_Commit_FailsIfStoreThrows()
         {
             // Arrange
@@ -450,7 +450,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(TransactionState.Failed, txn.State);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_FailedTransaction_CanBeRolledBack()
         {
             // Arrange
@@ -484,7 +484,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region ACID Property Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_Atomicity_AllOrNothing()
         {
             // Arrange
@@ -518,7 +518,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Null(store.GetNode("bob"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_Consistency_GraphRemainsValid()
         {
             // Arrange
@@ -544,7 +544,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(aliceEdges);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_Durability_WithWALSurvivesCrash()
         {
             // Arrange
@@ -582,7 +582,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Complex Scenario Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_MultipleSequentialTransactions_WorkCorrectly()
         {
             // Arrange
@@ -615,7 +615,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1, store.EdgeCount);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_MixedSuccessAndRollback_MaintainsConsistency()
         {
             // Arrange
@@ -652,7 +652,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(store.GetNode("charlie"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Transaction_LargeTransaction_HandlesMultipleOperations()
         {
             // Arrange

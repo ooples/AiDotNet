@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class ThreeDDiffusionTestBase : LatentDiffusionTestBase
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Output_ShouldBeNonEmpty()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -20,7 +20,7 @@ public abstract class ThreeDDiffusionTestBase : LatentDiffusionTestBase
         Assert.True(output.Length > 0, "3D diffusion model produced empty output — no geometry generated.");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VertexPositions_ShouldBeBounded()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

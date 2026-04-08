@@ -50,7 +50,7 @@ public sealed class ProgramSynthesisDtoCoverageTests
         Assert.Equal(expectedTask, result.Task);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ProgramSynthesis_PublicDtos_AreConstructible_AndPropertiesAreAccessible()
     {
         var assembly = typeof(CodeTaskRequestBase).Assembly;

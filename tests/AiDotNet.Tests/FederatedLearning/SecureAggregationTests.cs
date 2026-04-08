@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.FederatedLearning;
 
 public class SecureAggregationTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AggregateSumSecurely_CancelsPairwiseMasks()
     {
         var secureAggregation = new SecureAggregation<double>(parameterCount: 3, randomSeed: 123);
@@ -49,7 +49,7 @@ public class SecureAggregationTests
         Assert.Equal(0, secureAggregation.GetClientCount());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AggregateSecurely_ReturnsWeightedAverage_WhenClientsPreWeightUpdates()
     {
         var secureAggregation = new SecureAggregation<double>(parameterCount: 2, randomSeed: 42);
@@ -89,7 +89,7 @@ public class SecureAggregationTests
         Assert.Equal(expected1, parameters[1], precision: 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GeneratePairwiseSecrets_ThrowsForInvalidClientLists()
     {
         var secureAggregation = new SecureAggregation<double>(parameterCount: 1, randomSeed: 123);
@@ -98,7 +98,7 @@ public class SecureAggregationTests
         Assert.Throws<ArgumentException>(() => secureAggregation.GeneratePairwiseSecrets(new List<int> { 1 }));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MaskUpdate_ThrowsForInvalidInputs()
     {
         var secureAggregation = new SecureAggregation<double>(parameterCount: 2, randomSeed: 7);
@@ -112,7 +112,7 @@ public class SecureAggregationTests
         Assert.Throws<ArgumentException>(() => secureAggregation.MaskUpdate(1, new Dictionary<string, double[]> { ["w"] = new[] { 1.0, 2.0, 3.0 } }));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AggregateSecurely_ThrowsWhenWeightsMissingOrInvalid()
     {
         var secureAggregation = new SecureAggregation<double>(parameterCount: 1, randomSeed: 11);
@@ -132,7 +132,7 @@ public class SecureAggregationTests
         Assert.Throws<ArgumentException>(() => secureAggregation.AggregateSecurely(maskedUpdates, clientWeights: new Dictionary<int, double> { [1] = -1.0, [2] = 0.0 }));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Dispose_MakesInstanceUnusable()
     {
         var secureAggregation = new SecureAggregation<double>(parameterCount: 1, randomSeed: 1);

@@ -10,7 +10,7 @@ public class DDIMSchedulerTests
 {
     #region Construction Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithValidConfig_CreatesScheduler()
     {
         // Arrange
@@ -24,7 +24,7 @@ public class DDIMSchedulerTests
         Assert.Equal(1000, scheduler.TrainTimesteps);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithNullConfig_ThrowsArgumentNullException()
     {
         // Arrange & Act & Assert
@@ -35,7 +35,7 @@ public class DDIMSchedulerTests
 
     #region SetTimesteps Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SetTimesteps_WithValidSteps_ProducesDescendingSequence()
     {
         // Arrange
@@ -86,7 +86,7 @@ public class DDIMSchedulerTests
         Assert.Throws<ArgumentOutOfRangeException>(() => scheduler.SetTimesteps(invalidSteps));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SetTimesteps_FirstTimestepIsNearTrainTimesteps()
     {
         // Arrange
@@ -101,7 +101,7 @@ public class DDIMSchedulerTests
             $"First timestep should be close to max, was {scheduler.Timesteps[0]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SetTimesteps_LastTimestepIsNearZero()
     {
         // Arrange
@@ -120,7 +120,7 @@ public class DDIMSchedulerTests
 
     #region Step Tests - Deterministic (eta=0)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_DeterministicWithEtaZero_ReturnsFiniteValues()
     {
         // Arrange
@@ -144,7 +144,7 @@ public class DDIMSchedulerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_DeterministicWithEtaZero_IsDeterministic()
     {
         // Arrange
@@ -171,7 +171,7 @@ public class DDIMSchedulerTests
 
     #region Step Tests - Stochastic (eta > 0)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_StochasticWithEtaPositive_DiffersFromDeterministic()
     {
         // Arrange
@@ -201,7 +201,7 @@ public class DDIMSchedulerTests
         Assert.True(anyDiff, "Stochastic step should differ from deterministic step");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_WithNoiseProvided_UsesProvidedNoise()
     {
         // Arrange
@@ -236,7 +236,7 @@ public class DDIMSchedulerTests
 
     #region Step Tests - Clipping
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_WithClipSampleEnabled_ClipsToRange()
     {
         // Arrange
@@ -265,7 +265,7 @@ public class DDIMSchedulerTests
 
     #region Step Tests - Validation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_WithNullModelOutput_ThrowsArgumentNullException()
     {
         // Arrange
@@ -278,7 +278,7 @@ public class DDIMSchedulerTests
             scheduler.Step(null!, scheduler.Timesteps[0], sample, 0.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_WithNullSample_ThrowsArgumentNullException()
     {
         // Arrange
@@ -291,7 +291,7 @@ public class DDIMSchedulerTests
             scheduler.Step(modelOutput, scheduler.Timesteps[0], null!, 0.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_WithMismatchedLengths_ThrowsArgumentException()
     {
         // Arrange
@@ -305,7 +305,7 @@ public class DDIMSchedulerTests
             scheduler.Step(modelOutput, scheduler.Timesteps[0], sample, 0.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_WithInvalidTimestep_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
@@ -324,7 +324,7 @@ public class DDIMSchedulerTests
 
     #region AddNoise Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AddNoise_WithValidInputs_ReturnsNoisyVector()
     {
         // Arrange
@@ -349,7 +349,7 @@ public class DDIMSchedulerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AddNoise_AtTimestepZero_ReturnsOriginalWithMinimalChange()
     {
         // Arrange
@@ -370,7 +370,7 @@ public class DDIMSchedulerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AddNoise_AtHighTimestep_AddsMoreNoise()
     {
         // Arrange
@@ -400,7 +400,7 @@ public class DDIMSchedulerTests
 
     #region GetAlphaCumulativeProduct Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetAlphaCumulativeProduct_ReturnsDecreasingValues()
     {
         // Arrange
@@ -418,7 +418,7 @@ public class DDIMSchedulerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetAlphaCumulativeProduct_AtTimestepZero_IsNearOne()
     {
         // Arrange
@@ -436,7 +436,7 @@ public class DDIMSchedulerTests
 
     #region State Management Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetState_ReturnsNonEmptyDictionary()
     {
         // Arrange
@@ -452,7 +452,7 @@ public class DDIMSchedulerTests
         Assert.True(state.ContainsKey("train_timesteps"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LoadState_RestoresTimesteps()
     {
         // Arrange
@@ -474,7 +474,7 @@ public class DDIMSchedulerTests
 
     #region Integration Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullDenoisingLoop_ProducesFiniteResults()
     {
         // Arrange

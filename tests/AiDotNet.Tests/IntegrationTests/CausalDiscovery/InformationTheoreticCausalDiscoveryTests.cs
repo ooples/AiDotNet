@@ -27,7 +27,7 @@ public class InformationTheoreticCausalDiscoveryTests
 
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransferEntropy_FindsCausalStructure()
     {
         var algo = new TransferEntropyAlgorithm<double>();
@@ -36,7 +36,7 @@ public class InformationTheoreticCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KraskovMI_FindsCausalStructure()
     {
         var algo = new KraskovMIAlgorithm<double>();
@@ -45,7 +45,7 @@ public class InformationTheoreticCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OCSE_FindsCausalStructure()
     {
         var algo = new OCSEAlgorithm<double>();

@@ -37,7 +37,7 @@ public class CalculatorVerifierTests
         Assert.Equal(shouldBeValid, result.IsValid);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task VerifyAsync_WithMultiStepMath_ValidatesCorrectly()
     {
         // Arrange
@@ -60,7 +60,7 @@ public class CalculatorVerifierTests
         Assert.Contains("verified", result.Message.ToLowerInvariant());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task VerifyAsync_WithIncorrectCalculation_DetectsError()
     {
         // Arrange
@@ -97,7 +97,7 @@ public class CalculatorVerifierTests
         Assert.True(result.IsValid);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task VerifyAsync_WithNoMathematicalContent_ReturnsNotApplicable()
     {
         // Arrange
@@ -118,7 +118,7 @@ public class CalculatorVerifierTests
         Assert.Contains("no mathematical", result.Message.ToLowerInvariant());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task VerifyAsync_WithDecimalNumbers_HandlesCorrectly()
     {
         // Arrange
@@ -131,7 +131,7 @@ public class CalculatorVerifierTests
         Assert.True(result.IsValid);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task VerifyAsync_WithParentheses_RespectsOrderOfOperations()
     {
         // Arrange
@@ -144,14 +144,14 @@ public class CalculatorVerifierTests
         Assert.True(result.IsValid);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifierName_ReturnsCorrectName()
     {
         // Assert
         Assert.Equal("Calculator Verifier", _verifier.VerifierName);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Description_ContainsRelevantKeywords()
     {
         // Assert

@@ -182,7 +182,7 @@ public class SchurDecompositionIntegrationTests
             "Schur matrix should be quasi-upper triangular");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SchurDecomposition_SymmetricMatrix_HasDiagonalSchurMatrix()
     {
         // Arrange - Symmetric matrices have real eigenvalues, so Schur form is diagonal
@@ -212,7 +212,7 @@ public class SchurDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SchurDecomposition_IdentityMatrix_PreservesIdentity()
     {
         // Arrange
@@ -227,7 +227,7 @@ public class SchurDecompositionIntegrationTests
             $"Schur of identity should be identity. Max difference: {maxDiff}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SchurDecomposition_DiagonalMatrix_PreservesDiagonal()
     {
         // Arrange
@@ -292,7 +292,7 @@ public class SchurDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SchurDecomposition_LargeMatrix_CorrectDecomposition()
     {
         // Arrange

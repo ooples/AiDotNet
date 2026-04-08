@@ -20,7 +20,7 @@ public class MultimodalSafetyIntegrationTests
 {
     #region TextImageAlignmentChecker Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TextImageAlignment_MisleadingLabels_DetectsIssue()
     {
         var checker = new TextImageAlignmentChecker<double>();
@@ -30,7 +30,7 @@ public class MultimodalSafetyIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TextImageAlignment_SafeDescription_NoFindings()
     {
         var checker = new TextImageAlignmentChecker<double>();
@@ -40,7 +40,7 @@ public class MultimodalSafetyIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TextImageAlignment_ConflictingDescriptors_Detects()
     {
         var checker = new TextImageAlignmentChecker<double>();
@@ -50,7 +50,7 @@ public class MultimodalSafetyIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TextImageAlignment_EmptyText_NoFindings()
     {
         var checker = new TextImageAlignmentChecker<double>();
@@ -63,7 +63,7 @@ public class MultimodalSafetyIntegrationTests
 
     #region CrossModalConsistencyChecker Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossModal_OverridePatterns_Detects()
     {
         var checker = new CrossModalConsistencyChecker<double>();
@@ -74,7 +74,7 @@ public class MultimodalSafetyIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.PromptInjection);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossModal_SafeText_NoFindings()
     {
         var checker = new CrossModalConsistencyChecker<double>();
@@ -84,7 +84,7 @@ public class MultimodalSafetyIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossModal_Mismatch_DetectsManipulation()
     {
         var checker = new CrossModalConsistencyChecker<double>();
@@ -109,7 +109,7 @@ public class MultimodalSafetyIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.Manipulated);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossModal_ConsistentFindings_NoManipulationFlag()
     {
         var checker = new CrossModalConsistencyChecker<double>();
@@ -148,7 +148,7 @@ public class MultimodalSafetyIntegrationTests
         Assert.NotNull(manipulationFindings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossModal_EmptyFindings_NoManipulation()
     {
         var checker = new CrossModalConsistencyChecker<double>();
@@ -162,7 +162,7 @@ public class MultimodalSafetyIntegrationTests
 
     #region MultimodalGuardrail Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultimodalGuardrail_DefaultModules_ProcessesTextImage()
     {
         var guardrail = new MultimodalGuardrail<double>();
@@ -173,7 +173,7 @@ public class MultimodalSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultimodalGuardrail_WithTextModules_ProcessesTextImage()
     {
         var textModules = new ITextSafetyModule<double>[]
@@ -189,7 +189,7 @@ public class MultimodalSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultimodalGuardrail_SafeContent_MinimalFindings()
     {
         var guardrail = new MultimodalGuardrail<double>();
@@ -199,7 +199,7 @@ public class MultimodalSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultimodalGuardrail_ProcessesImage()
     {
         var guardrail = new MultimodalGuardrail<double>();
@@ -213,7 +213,7 @@ public class MultimodalSafetyIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllMultimodalModules_ProcessText_NoExceptions()
     {
         var text = "A description of an image showing a peaceful scene.";

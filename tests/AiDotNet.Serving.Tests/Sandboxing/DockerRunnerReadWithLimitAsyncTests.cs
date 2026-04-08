@@ -7,7 +7,7 @@ namespace AiDotNet.Serving.Tests.Sandboxing;
 
 public sealed class DockerRunnerReadWithLimitAsyncTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ReadWithLimitAsync_ReturnsEmptyAndTruncated_WhenMaxCharsIsZeroAndStreamHasData()
     {
         var (output, truncated) = await InvokeReadWithLimitAsync("hello", maxChars: 0);
@@ -16,7 +16,7 @@ public sealed class DockerRunnerReadWithLimitAsyncTests
         Assert.True(truncated);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ReadWithLimitAsync_Truncates_WhenOutputExceedsLimit()
     {
         var (output, truncated) = await InvokeReadWithLimitAsync("hello world", maxChars: 5);
@@ -25,7 +25,7 @@ public sealed class DockerRunnerReadWithLimitAsyncTests
         Assert.True(truncated);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ReadWithLimitAsync_DoesNotTruncate_WhenOutputWithinLimit()
     {
         var (output, truncated) = await InvokeReadWithLimitAsync("hi", maxChars: 10);

@@ -72,7 +72,7 @@ public class GroupKFoldCrossValidatorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithGroups_CreatesValidator()
     {
         // Arrange
@@ -85,7 +85,7 @@ public class GroupKFoldCrossValidatorIntegrationTests
         Assert.NotNull(validator);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithGroupsAndOptions_CreatesValidator()
     {
         // Arrange
@@ -107,7 +107,7 @@ public class GroupKFoldCrossValidatorIntegrationTests
 
     #region Group Preservation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_SamplesFromSameGroupStayTogether()
     {
         // Arrange - 3 groups with 4 samples each
@@ -148,7 +148,7 @@ public class GroupKFoldCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_GroupNeverSplitAcrossTrainAndValidation()
     {
         // Arrange - 5 groups with varying sizes
@@ -194,7 +194,7 @@ public class GroupKFoldCrossValidatorIntegrationTests
 
     #region No Data Leakage Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_NoOverlapBetweenTrainAndValidation()
     {
         // Arrange
@@ -226,7 +226,7 @@ public class GroupKFoldCrossValidatorIntegrationTests
 
     #region Fold Count Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_ReturnsCorrectNumberOfFolds()
     {
         // Arrange
@@ -249,7 +249,7 @@ public class GroupKFoldCrossValidatorIntegrationTests
 
     #region Result Structure Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_ReturnsValidFoldResults()
     {
         // Arrange
@@ -282,7 +282,7 @@ public class GroupKFoldCrossValidatorIntegrationTests
 
     #region Group Distribution Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_EachGroupUsedExactlyOnceForValidation()
     {
         // Arrange - Equal number of groups and folds
@@ -322,7 +322,7 @@ public class GroupKFoldCrossValidatorIntegrationTests
 
     #region Uneven Group Sizes Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_HandlesUnevenGroupSizes()
     {
         // Arrange - Groups with different sizes

@@ -13,7 +13,7 @@ public class InformationCriteriaIntegrationTests
 
     #region AIC Alternative Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AICAlternative_StandardExample_ReturnsExactValue()
     {
         // AIC_alt = n*ln(RSS/n) + 2*k
@@ -28,7 +28,7 @@ public class InformationCriteriaIntegrationTests
         Assert.Equal(97.629, result, 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AICAlternative_SmallSample_ReturnsExactValue()
     {
         // n=20, k=2, RSS=50
@@ -42,7 +42,7 @@ public class InformationCriteriaIntegrationTests
         Assert.Equal(22.326, result, 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AICAlternative_LowRSS_ReturnsNegativeValue()
     {
         // n=100, k=2, RSS=10
@@ -56,7 +56,7 @@ public class InformationCriteriaIntegrationTests
         Assert.Equal(-226.26, result, 0.1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AICAlternative_HighK_IncreasesAIC()
     {
         int n = 100;
@@ -70,7 +70,7 @@ public class InformationCriteriaIntegrationTests
         Assert.True(aicK5 < aicK10, "More parameters should increase AIC");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AICAlternative_LowerRSS_LowerAIC()
     {
         int n = 100;
@@ -82,14 +82,14 @@ public class InformationCriteriaIntegrationTests
         Assert.True(aicLowRSS < aicHighRSS, "Lower RSS should give lower AIC");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AICAlternative_ZeroRSS_ReturnsZero()
     {
         var result = StatisticsHelper<double>.CalculateAICAlternative(100, 3, 0.0);
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AICAlternative_ZeroSampleSize_ReturnsZero()
     {
         var result = StatisticsHelper<double>.CalculateAICAlternative(0, 3, 250.0);
@@ -100,7 +100,7 @@ public class InformationCriteriaIntegrationTests
 
     #region AIC Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AIC_StandardExample_ReturnsExactValue()
     {
         // AIC = 2*k + n*(ln(2π*RSS/n) + 1)
@@ -116,7 +116,7 @@ public class InformationCriteriaIntegrationTests
         Assert.Equal(381.46, result, 0.1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AIC_SmallSample_ReturnsExactValue()
     {
         // n=20, k=2, RSS=50
@@ -130,7 +130,7 @@ public class InformationCriteriaIntegrationTests
         Assert.Equal(79.08, result, 0.1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AIC_HighK_IncreasesAIC()
     {
         int n = 100;
@@ -144,7 +144,7 @@ public class InformationCriteriaIntegrationTests
         Assert.True(aicK5 < aicK10, "More parameters should increase AIC");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AIC_LowerRSS_LowerAIC()
     {
         int n = 100;
@@ -156,14 +156,14 @@ public class InformationCriteriaIntegrationTests
         Assert.True(aicLowRSS < aicHighRSS, "Lower RSS should give lower AIC");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AIC_ZeroRSS_ReturnsZero()
     {
         var result = StatisticsHelper<double>.CalculateAIC(100, 3, 0.0);
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AIC_ZeroSampleSize_ReturnsZero()
     {
         var result = StatisticsHelper<double>.CalculateAIC(0, 3, 250.0);
@@ -174,7 +174,7 @@ public class InformationCriteriaIntegrationTests
 
     #region BIC Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BIC_StandardExample_ReturnsExactValue()
     {
         // BIC = n*ln(RSS/n) + k*ln(n)
@@ -189,7 +189,7 @@ public class InformationCriteriaIntegrationTests
         Assert.Equal(105.44, result, 0.1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BIC_SmallSample_ReturnsExactValue()
     {
         // n=20, k=2, RSS=50
@@ -203,7 +203,7 @@ public class InformationCriteriaIntegrationTests
         Assert.Equal(24.32, result, 0.1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BIC_HighK_IncreasesBIC()
     {
         int n = 100;
@@ -217,7 +217,7 @@ public class InformationCriteriaIntegrationTests
         Assert.True(bicK5 < bicK10, "More parameters should increase BIC");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BIC_LowerRSS_LowerBIC()
     {
         int n = 100;
@@ -229,21 +229,21 @@ public class InformationCriteriaIntegrationTests
         Assert.True(bicLowRSS < bicHighRSS, "Lower RSS should give lower BIC");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BIC_ZeroRSS_ReturnsZero()
     {
         var result = StatisticsHelper<double>.CalculateBIC(100, 3, 0.0);
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BIC_ZeroSampleSize_ReturnsZero()
     {
         var result = StatisticsHelper<double>.CalculateBIC(0, 3, 250.0);
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BIC_LargerSample_StrongerPenalty()
     {
         // BIC penalty increases with sample size: k*ln(n)
@@ -267,7 +267,7 @@ public class InformationCriteriaIntegrationTests
 
     #region AIC vs BIC Comparison
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AIC_vs_BIC_BICPenalizesMoreForLargeSamples()
     {
         // For large n, BIC penalty (k*ln(n)) > AIC penalty (2*k) when n > e² ≈ 7.39
@@ -290,7 +290,7 @@ public class InformationCriteriaIntegrationTests
         Assert.True(bicPenalty > aicAltPenalty, "BIC penalty should be larger than AIC for n=100");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AIC_vs_BIC_SameRanking_ForSimpleCases()
     {
         int n = 100;
@@ -311,21 +311,21 @@ public class InformationCriteriaIntegrationTests
 
     #region Float Type Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AICAlternative_FloatType_ReturnsCorrectValue()
     {
         var result = StatisticsHelper<float>.CalculateAICAlternative(100, 3, 250.0f);
         Assert.Equal(97.63f, result, 0.1f);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AIC_FloatType_ReturnsCorrectValue()
     {
         var result = StatisticsHelper<float>.CalculateAIC(100, 3, 250.0f);
         Assert.Equal(381.46f, result, 0.5f);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BIC_FloatType_ReturnsCorrectValue()
     {
         var result = StatisticsHelper<float>.CalculateBIC(100, 3, 250.0f);

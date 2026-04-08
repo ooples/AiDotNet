@@ -11,7 +11,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 {
     public class AdamWOptimizerTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithDefaultOptions_InitializesCorrectly()
         {
             // Arrange & Act
@@ -32,7 +32,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(0.01, options.WeightDecay);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithCustomOptions_UsesProvidedOptions()
         {
             // Arrange
@@ -58,7 +58,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(0.05, options.WeightDecay);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void UpdateParameters_Vector_WithPositiveGradient_DecreasesParameters()
         {
             // Arrange
@@ -82,7 +82,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] < parameters[2]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void UpdateParameters_Vector_WithNegativeGradient_IncreasesParameters()
         {
             // Arrange
@@ -106,7 +106,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] > parameters[2]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void UpdateParameters_Vector_WithWeightDecay_AppliesDecoupledDecay()
         {
             // Arrange
@@ -132,7 +132,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] < parameters[2]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void UpdateParameters_Matrix_WorksCorrectly()
         {
             // Arrange
@@ -166,7 +166,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[1, 1] > parameters[1, 1]); // Negative gradient
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void UpdateParameters_ConsecutiveCalls_BuildsMomentum()
         {
             // Arrange
@@ -196,7 +196,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(differences.Count == 5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AdamW_DifferentFromAdam_DueToDecoupledWeightDecay()
         {
             // This test verifies the key difference between AdamW and Adam:
@@ -225,7 +225,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(parameters[0] - updated[0] > 0.05); // Significant decrease
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Reset_ClearsOptimizerState()
         {
             // Arrange
@@ -254,7 +254,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.NotNull(updatedAfterReset);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Serialize_Deserialize_PreservesState()
         {
             // Arrange
@@ -289,7 +289,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(options.WeightDecay, deserializedOptions.WeightDecay);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void UpdateParameters_WithAMSGrad_UsesMaxSecondMoment()
         {
             // Arrange
@@ -313,7 +313,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.NotNull(afterSmallGrad);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void UpdateParameters_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -337,7 +337,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(updatedParams[2] < parameters[2]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetOptions_ReturnsCurrentOptions()
         {
             // Arrange
@@ -361,7 +361,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(0.02, retrievedOptions.WeightDecay);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void UpdateParameters_DifferentBeta1Values_ProducesDifferentResults()
         {
             // Arrange

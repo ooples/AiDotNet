@@ -18,7 +18,7 @@ public class ImageSafetyIntegrationTests
 {
     #region CLIPImageSafetyClassifier Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CLIP_SmallImage_ProcessesWithoutError()
     {
         var classifier = new CLIPImageSafetyClassifier<double>();
@@ -28,7 +28,7 @@ public class ImageSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CLIP_MediumImage_ProcessesWithoutError()
     {
         var classifier = new CLIPImageSafetyClassifier<double>();
@@ -38,7 +38,7 @@ public class ImageSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CLIP_CustomThresholds_Work()
     {
         var classifier = new CLIPImageSafetyClassifier<double>(
@@ -53,7 +53,7 @@ public class ImageSafetyIntegrationTests
 
     #region ViTImageSafetyClassifier Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ViT_StandardImage_ProcessesWithoutError()
     {
         var classifier = new ViTImageSafetyClassifier<double>();
@@ -63,7 +63,7 @@ public class ImageSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ViT_SmallPatchSize_ProcessesWithoutError()
     {
         var classifier = new ViTImageSafetyClassifier<double>(patchSize: 8);
@@ -73,7 +73,7 @@ public class ImageSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ViT_CustomThreshold_Works()
     {
         var classifier = new ViTImageSafetyClassifier<double>(threshold: 0.3);
@@ -87,7 +87,7 @@ public class ImageSafetyIntegrationTests
 
     #region SceneGraphSafetyClassifier Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SceneGraph_StandardImage_ProcessesWithoutError()
     {
         var classifier = new SceneGraphSafetyClassifier<double>();
@@ -97,7 +97,7 @@ public class ImageSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SceneGraph_CustomGrid_Works()
     {
         var classifier = new SceneGraphSafetyClassifier<double>(threshold: 0.4, gridSize: 4);
@@ -111,7 +111,7 @@ public class ImageSafetyIntegrationTests
 
     #region EnsembleImageSafetyClassifier Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Ensemble_StandardImage_ProcessesWithoutError()
     {
         var classifier = new EnsembleImageSafetyClassifier<double>();
@@ -121,7 +121,7 @@ public class ImageSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Ensemble_LargerImage_ProcessesWithoutError()
     {
         var classifier = new EnsembleImageSafetyClassifier<double>();
@@ -135,7 +135,7 @@ public class ImageSafetyIntegrationTests
 
     #region FrequencyDeepfakeDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FrequencyDeepfake_StandardImage_ProcessesWithoutError()
     {
         var detector = new FrequencyDeepfakeDetector<double>();
@@ -145,7 +145,7 @@ public class ImageSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FrequencyDeepfake_SmallImage_HandlesGracefully()
     {
         var detector = new FrequencyDeepfakeDetector<double>();
@@ -159,7 +159,7 @@ public class ImageSafetyIntegrationTests
 
     #region ConsistencyDeepfakeDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConsistencyDeepfake_StandardImage_ProcessesWithoutError()
     {
         var detector = new ConsistencyDeepfakeDetector<double>();
@@ -169,7 +169,7 @@ public class ImageSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConsistencyDeepfake_UniformImage_ProcessesWithoutError()
     {
         var detector = new ConsistencyDeepfakeDetector<double>();
@@ -185,7 +185,7 @@ public class ImageSafetyIntegrationTests
 
     #region ProvenanceDeepfakeDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProvenanceDeepfake_StandardImage_ProcessesWithoutError()
     {
         var detector = new ProvenanceDeepfakeDetector<double>();
@@ -195,7 +195,7 @@ public class ImageSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProvenanceDeepfake_DifferentSizes_HandleGracefully()
     {
         var detector = new ProvenanceDeepfakeDetector<double>();
@@ -212,7 +212,7 @@ public class ImageSafetyIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllClassifiers_SameImage_ProduceResults()
     {
         var tensor = CreateRandomImageTensor(3, 32, 32);
@@ -223,7 +223,7 @@ public class ImageSafetyIntegrationTests
         Assert.NotNull(new EnsembleImageSafetyClassifier<double>().EvaluateImage(tensor));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllDeepfakeDetectors_SameImage_ProduceResults()
     {
         var tensor = CreateRandomImageTensor(3, 32, 32, scale: 255.0);

@@ -25,7 +25,7 @@ public class AiModelBuilderPredictIntegrationTests
 
     #region Core Bug Fix Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_DefaultOptimizer_PredictDoesNotThrowDimensionMismatch()
     {
         // Arrange: Create a dataset with multiple features where the default NormalOptimizer
@@ -61,7 +61,7 @@ public class AiModelBuilderPredictIntegrationTests
         Assert.Equal(3, predictions.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_SelectedFeatureIndices_AreStoredInOptimizationResult()
     {
         // Arrange: Build a model using the default optimizer which performs feature selection
@@ -86,7 +86,7 @@ public class AiModelBuilderPredictIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_PredictSingleRow_WorksWithFeatureSelection()
     {
         // Arrange: Train model with feature selection, then predict on a single row
@@ -114,7 +114,7 @@ public class AiModelBuilderPredictIntegrationTests
 
     #region Multiple Regression Model Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_MultipleRegression_EndToEndPrediction()
     {
         // Arrange: Simple linear relationship y = 2*x1 + 3*x2 + noise
@@ -156,7 +156,7 @@ public class AiModelBuilderPredictIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_RidgeRegression_EndToEndPrediction()
     {
         // Arrange
@@ -190,7 +190,7 @@ public class AiModelBuilderPredictIntegrationTests
 
     #region Feature Selection Consistency Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_PredictTwice_ReturnsSameResults()
     {
         // Arrange: Verify prediction is deterministic
@@ -221,7 +221,7 @@ public class AiModelBuilderPredictIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithManyFeatures_PredictHandlesFeatureSelection()
     {
         // Arrange: Create dataset with many features to test feature selection handling
@@ -259,7 +259,7 @@ public class AiModelBuilderPredictIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithExplicitOptimizer_PredictWorks()
     {
         // Arrange: Explicitly pass NormalOptimizer to confirm it works the same as default
@@ -287,7 +287,7 @@ public class AiModelBuilderPredictIntegrationTests
         Assert.Equal(2, predictions.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_LargeDataset_PredictDoesNotThrow()
     {
         // Arrange: Larger dataset to ensure robustness
@@ -313,7 +313,7 @@ public class AiModelBuilderPredictIntegrationTests
         Assert.Equal(10, predictions.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task BuildAsync_DirectModelPredict_WithoutBuilder_StillWorks()
     {
         // Arrange: Verify that direct model.Train() + model.Predict() still works
@@ -346,7 +346,7 @@ public class AiModelBuilderPredictIntegrationTests
 
     #region OptimizationResult Deep Copy Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationResult_DeepCopy_PreservesSelectedFeatureIndices()
     {
         // Arrange
@@ -367,7 +367,7 @@ public class AiModelBuilderPredictIntegrationTests
         Assert.Equal(3, copy.SelectedFeatureIndices.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationResult_WithParameters_PreservesSelectedFeatureIndices()
     {
         // Arrange
@@ -392,7 +392,7 @@ public class AiModelBuilderPredictIntegrationTests
 
     #region Tensor Feature Selection Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AiModelResult_Predict_AppliesTensorFeatureSelection()
     {
         // Arrange: Create a neural network model with SelectedFeatureIndices set.
@@ -451,7 +451,7 @@ public class AiModelBuilderPredictIntegrationTests
         Assert.Equal(outputSize, prediction.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AiModelResult_Predict_AppliesPermutedFeatureSelection()
     {
         // Arrange: Create a neural network and verify that a full-length permutation

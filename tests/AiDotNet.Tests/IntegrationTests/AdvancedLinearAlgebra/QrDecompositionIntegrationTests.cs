@@ -206,7 +206,7 @@ public class QrDecompositionIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QrDecomposition_2x2Matrix_CorrectDecomposition()
     {
         // Arrange
@@ -225,7 +225,7 @@ public class QrDecompositionIntegrationTests
             $"2x2 decomposition failed. Max difference: {maxDiff}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QrDecomposition_TallMatrix_ValidDecomposition()
     {
         // Arrange - More rows than columns
@@ -242,7 +242,7 @@ public class QrDecompositionIntegrationTests
             $"Tall matrix decomposition failed. Max difference: {maxDiff}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QrDecomposition_IdentityMatrix_Q_Is_Identity()
     {
         // Arrange
@@ -266,7 +266,7 @@ public class QrDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QrDecomposition_Householder_AccurateOnIllConditionedMatrix()
     {
         // Arrange - Create a Hilbert-like matrix that can cause numerical issues
@@ -295,7 +295,7 @@ public class QrDecompositionIntegrationTests
             "Q should remain orthogonal even for ill-conditioned matrices");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QrDecomposition_LargeMatrix_CorrectDecomposition()
     {
         // Arrange
@@ -316,7 +316,7 @@ public class QrDecompositionIntegrationTests
 
     #region Orthogonality Preservation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QrDecomposition_Q_Columns_AreUnitVectors()
     {
         // Arrange
@@ -340,7 +340,7 @@ public class QrDecompositionIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QrDecomposition_Q_Columns_AreMutuallyOrthogonal()
     {
         // Arrange

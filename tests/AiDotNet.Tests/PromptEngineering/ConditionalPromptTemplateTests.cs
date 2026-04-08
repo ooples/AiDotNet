@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.PromptEngineering;
 
 public class ConditionalPromptTemplateTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithTemplate_CreatesTemplate()
     {
         var template = new ConditionalPromptTemplate("Hello {name}");
@@ -14,7 +14,7 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("name", template.InputVariables);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_WithIfCondition_WhenTrue_IncludesContent()
     {
         var template = new ConditionalPromptTemplate(
@@ -29,7 +29,7 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("John", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_WithIfCondition_WhenFalse_ExcludesContent()
     {
         var template = new ConditionalPromptTemplate(
@@ -43,7 +43,7 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("World", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_WithIfCondition_WhenEmpty_ExcludesContent()
     {
         var template = new ConditionalPromptTemplate(
@@ -58,7 +58,7 @@ public class ConditionalPromptTemplateTests
         Assert.DoesNotContain("{name}", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_WithIfCondition_WhenWhitespace_ExcludesContent()
     {
         var template = new ConditionalPromptTemplate(
@@ -73,7 +73,7 @@ public class ConditionalPromptTemplateTests
         Assert.DoesNotContain("{name}", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_WithUnlessCondition_WhenFalse_IncludesContent()
     {
         var template = new ConditionalPromptTemplate(
@@ -85,7 +85,7 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("Free tier", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_WithUnlessCondition_WhenTrue_ExcludesContent()
     {
         var template = new ConditionalPromptTemplate(
@@ -100,7 +100,7 @@ public class ConditionalPromptTemplateTests
         Assert.DoesNotContain("Free tier", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_WithEqualsCondition_WhenMatches_IncludesContent()
     {
         var template = new ConditionalPromptTemplate(
@@ -115,7 +115,7 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("User is active", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_WithEqualsCondition_WhenNotMatches_ExcludesContent()
     {
         var template = new ConditionalPromptTemplate(
@@ -130,7 +130,7 @@ public class ConditionalPromptTemplateTests
         Assert.DoesNotContain("User is active", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_WithEqualsCondition_CaseInsensitive()
     {
         var template = new ConditionalPromptTemplate(
@@ -145,7 +145,7 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("User is active", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_WithMultipleConditions_ProcessesAll()
     {
         var template = new ConditionalPromptTemplate(
@@ -162,7 +162,7 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("Email: john@example.com", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_WithNestedVariables_ReplacesCorrectly()
     {
         var template = new ConditionalPromptTemplate(
@@ -179,7 +179,7 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("Context: Greeting", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Validate_WithRequiredVariable_ReturnsTrue()
     {
         var template = new ConditionalPromptTemplate("Hello {name}");
@@ -193,7 +193,7 @@ public class ConditionalPromptTemplateTests
         Assert.True(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Validate_WithMissingRequiredVariable_ReturnsFalse()
     {
         var template = new ConditionalPromptTemplate("Hello {name}");
@@ -204,7 +204,7 @@ public class ConditionalPromptTemplateTests
         Assert.False(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Validate_WithConditionalVariable_NotRequired()
     {
         var template = new ConditionalPromptTemplate(
@@ -216,7 +216,7 @@ public class ConditionalPromptTemplateTests
         Assert.True(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Validate_WithNullVariables_ReturnsFalse()
     {
         var template = new ConditionalPromptTemplate("Hello {name}");
@@ -226,7 +226,7 @@ public class ConditionalPromptTemplateTests
         Assert.False(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InputVariables_IncludesConditionalVariables()
     {
         var template = new ConditionalPromptTemplate(
@@ -236,7 +236,7 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("premium", template.InputVariables);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InputVariables_IncludesEqualsVariables()
     {
         var template = new ConditionalPromptTemplate(
@@ -245,7 +245,7 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("status", template.InputVariables);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_CleansUpExtraWhitespace()
     {
         var template = new ConditionalPromptTemplate(
@@ -257,7 +257,7 @@ public class ConditionalPromptTemplateTests
         Assert.DoesNotContain("\n\n\n", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_MultilineConditional_WorksCorrectly()
     {
         var template = new ConditionalPromptTemplate(
@@ -273,7 +273,7 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("Line 2", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_WithMixedConditions_ProcessesInOrder()
     {
         var template = new ConditionalPromptTemplate(
@@ -291,7 +291,7 @@ public class ConditionalPromptTemplateTests
         Assert.Contains("Member", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_ComplexRealWorldExample()
     {
         var template = new ConditionalPromptTemplate(@"

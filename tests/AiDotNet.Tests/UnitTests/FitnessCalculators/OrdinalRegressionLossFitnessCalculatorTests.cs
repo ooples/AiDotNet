@@ -11,7 +11,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
 public class OrdinalRegressionLossFitnessCalculatorTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithPerfectPredictions_ReturnsMinimumLoss()
     {
         // Arrange
@@ -33,7 +33,7 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithOffByOne_ReturnsModerateLoss()
     {
         // Arrange
@@ -52,7 +52,7 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result < 5.0); // Should be moderate loss
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithLargeErrors_ReturnsHighLoss()
     {
         // Arrange
@@ -70,7 +70,7 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result > 1.0); // Large errors should result in higher loss
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithThreeClasses_WorksCorrectly()
     {
         // Arrange
@@ -88,7 +88,7 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithoutNumberOfClasses_AutoDetects()
     {
         // Arrange
@@ -106,7 +106,7 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
@@ -116,7 +116,7 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
@@ -129,7 +129,7 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
@@ -142,7 +142,7 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
@@ -162,7 +162,7 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result >= 0.0f);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
     {
         // Arrange
@@ -172,7 +172,7 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -183,7 +183,7 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -194,7 +194,7 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithTwoClasses_WorksCorrectly()
     {
         // Arrange
@@ -212,7 +212,7 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_ConsistentOrdering_SmallerLoss()
     {
         // Arrange
@@ -240,7 +240,7 @@ public class OrdinalRegressionLossFitnessCalculatorTests
         Assert.True(result1 < result2);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithTenClasses_HandlesCorrectly()
     {
         // Arrange

@@ -15,7 +15,7 @@ namespace AiDotNet.Tests.IntegrationTests.Regression;
 /// </summary>
 public class AiModelBuilderPreprocessingPredictTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BuildWithPreprocessing_PreprocessingInfoIsFitted()
     {
         // Arrange: Create data with very different feature scales.
@@ -73,7 +73,7 @@ public class AiModelBuilderPreprocessingPredictTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BuildWithPreprocessing_PredictAppliesInverseTransform()
     {
         // Arrange: Train on known linear data y = 2*x + 3 with preprocessing.
@@ -116,7 +116,7 @@ public class AiModelBuilderPreprocessingPredictTests
         Assert.InRange(predictions[0], 15.0, 35.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BuildWithCustomPipeline_PredictProducesFiniteOutput()
     {
         // Arrange: Use pipeline with SimpleImputer + StandardScaler.
@@ -178,7 +178,7 @@ public class AiModelBuilderPreprocessingPredictTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BuildWithoutPreprocessing_PredictSkipsTransform()
     {
         // Arrange: Train WITHOUT ConfigurePreprocessing

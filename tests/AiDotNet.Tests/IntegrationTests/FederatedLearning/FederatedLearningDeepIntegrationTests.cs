@@ -18,7 +18,7 @@ public class FederatedLearningDeepIntegrationTests
 {
     #region FedAvg - Weighted Average Exact Math
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvg_TwoClients_EqualWeights_HandCalculated()
     {
         // Client 0: layer "dense" = [2.0, 4.0], weight = 100
@@ -41,7 +41,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(6.0, result["dense"][1], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvg_TwoClients_UnequalWeights_HandCalculated()
     {
         // Client 0: layer "w" = [0.8], weight = 300
@@ -62,7 +62,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(0.66, result["w"][0], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvg_ThreeClients_HandCalculated()
     {
         // Client A: 1000 samples, params = [1.0, 2.0]
@@ -90,7 +90,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(expected1, result["layer1"][1], 8);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvg_MultipleLayersAggregated_Independently()
     {
         // Verify each layer is aggregated independently
@@ -120,7 +120,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(15.0, result["bias"][0], 10);     // (10+20)/2
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvg_SingleClient_ReturnsExactCopy()
     {
         var strategy = new FedAvgAggregationStrategy<double>();
@@ -137,7 +137,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(1.41, result["dense"][2], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvg_EmptyModels_Throws()
     {
         var strategy = new FedAvgAggregationStrategy<double>();
@@ -147,7 +147,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Throws<ArgumentException>(() => strategy.Aggregate(empty, weights));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvg_MissingWeight_Throws()
     {
         var strategy = new FedAvgAggregationStrategy<double>();
@@ -160,7 +160,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Throws<ArgumentException>(() => strategy.Aggregate(clientModels, weights));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvg_StrategyName_IsFedAvg()
     {
         var strategy = new FedAvgAggregationStrategy<double>();
@@ -171,7 +171,7 @@ public class FederatedLearningDeepIntegrationTests
 
     #region FedProx - Proximal Weighted Average
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedProx_AggregationResult_MatchesFedAvg()
     {
         // FedProx aggregation uses the same weighted average as FedAvg
@@ -193,7 +193,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(avgResult["w"][1], proxResult["w"][1], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedProx_StrategyName_IsFedProx()
     {
         var strategy = new FedProxAggregationStrategy<double>();
@@ -204,7 +204,7 @@ public class FederatedLearningDeepIntegrationTests
 
     #region Gaussian Differential Privacy - Noise Calibration
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDP_NoiseScale_MatchesFormula()
     {
         // σ = (Δ/ε) × sqrt(2 × ln(1.25/δ))
@@ -237,7 +237,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.True(rmsNoise > 0.5, $"RMS noise = {rmsNoise}, should be significantly > 0 for ε=1.0");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDP_GradientClipping_ClampsL2Norm()
     {
         // If L2 norm > clipNorm, parameters are scaled down
@@ -265,7 +265,7 @@ public class FederatedLearningDeepIntegrationTests
             $"L2 norm after clipping + small noise = {l2Clipped}, expected ~1.0");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDP_NormBelowClip_NoClipping()
     {
         // If L2 norm < clipNorm, no clipping occurs
@@ -285,7 +285,7 @@ public class FederatedLearningDeepIntegrationTests
             $"Value should be close to 0.1 (no clipping), got {noisy["w"][0]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDP_PrivacyBudget_AccumulatesCorrectly()
     {
         var dp = new GaussianDifferentialPrivacy<double>(clipNorm: 1.0, randomSeed: 42);
@@ -300,7 +300,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(0.8, dp.GetPrivacyBudgetConsumed(), 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDP_ResetBudget_SetsToZero()
     {
         var dp = new GaussianDifferentialPrivacy<double>(clipNorm: 1.0, randomSeed: 42);
@@ -313,7 +313,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(0.0, dp.GetPrivacyBudgetConsumed(), 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDP_Seeded_Reproducible()
     {
         var dp1 = new GaussianDifferentialPrivacy<double>(clipNorm: 1.0, randomSeed: 42);
@@ -332,7 +332,7 @@ public class FederatedLearningDeepIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDP_InvalidParameters_Throws()
     {
         var dp = new GaussianDifferentialPrivacy<double>(clipNorm: 1.0, randomSeed: 42);
@@ -345,14 +345,14 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Throws<ArgumentException>(() => dp.ApplyPrivacy(model, epsilon: 1.0, delta: -0.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDP_InvalidClipNorm_Throws()
     {
         Assert.Throws<ArgumentException>(() => new GaussianDifferentialPrivacy<double>(clipNorm: 0));
         Assert.Throws<ArgumentException>(() => new GaussianDifferentialPrivacy<double>(clipNorm: -1.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDP_EmptyModel_Throws()
     {
         var dp = new GaussianDifferentialPrivacy<double>(clipNorm: 1.0, randomSeed: 42);
@@ -361,7 +361,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Throws<ArgumentException>(() => dp.ApplyPrivacy(empty, epsilon: 1.0, delta: 1e-5));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDP_SmallerEpsilon_MoreNoise()
     {
         // Smaller epsilon → more privacy → more noise
@@ -385,7 +385,7 @@ public class FederatedLearningDeepIntegrationTests
             $"Small ε noise ({noise_small}) should be greater than large ε noise ({noise_large})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDP_MechanismName_ContainsClipNorm()
     {
         var dp = new GaussianDifferentialPrivacy<double>(clipNorm: 2.5);
@@ -399,7 +399,7 @@ public class FederatedLearningDeepIntegrationTests
 
     #region FedAvg Numerical Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvg_WeightedAverage_WeightsSumToOne()
     {
         // The normalized weights should sum to 1, producing a proper weighted average
@@ -419,7 +419,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(5.0, result["w"][0], 8);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvg_ResultIsBetweenMinAndMax()
     {
         // The weighted average must always be between the minimum and maximum client values
@@ -438,7 +438,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.True(result["w"][0] <= 10.0, $"Result {result["w"][0]} should be <= 10.0");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvg_LayerLengthMismatch_Throws()
     {
         var strategy = new FedAvgAggregationStrategy<double>();
@@ -472,7 +472,7 @@ public class FederatedLearningDeepIntegrationTests
 
     #region MedianFullModel - Coordinate-Wise Median
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_ThreeClients_OddCount_TakesMiddleValue()
     {
         // Client 0: [1.0, 9.0, 5.0]
@@ -499,7 +499,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(4.0, resultParams[2], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_TwoClients_EvenCount_AveragesMiddleTwo()
     {
         // Client 0: [2.0, 10.0]
@@ -522,7 +522,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(7.0, resultParams[1], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_FourClients_EvenCount_AveragesMiddleTwo()
     {
         // Client 0: [1.0]
@@ -546,7 +546,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(4.0, resultParams[0], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_IgnoresWeights_UnweightedByDesign()
     {
         // Median should NOT be affected by client weights — it's unweighted
@@ -569,7 +569,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(20.0, resultParams[0], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_FiveClients_OutlierResistant()
     {
         // Client 0: [1.0]  (normal)
@@ -596,7 +596,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(3.0, resultParams[0], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_SingleClient_ReturnsExactParams()
     {
         var strategy = new MedianFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>();
@@ -613,7 +613,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(2.72, resultParams[1], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_EmptyClients_Throws()
     {
         var strategy = new MedianFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>();
@@ -623,14 +623,14 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Throws<ArgumentException>(() => strategy.Aggregate(empty, weights));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_StrategyName_IsMedian()
     {
         var strategy = new MedianFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>();
         Assert.Equal("Median", strategy.GetStrategyName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_AllIdenticalParams_ReturnsExact()
     {
         // When all clients have identical parameters, median = that value
@@ -654,7 +654,7 @@ public class FederatedLearningDeepIntegrationTests
 
     #region TrimmedMeanFullModel - Coordinate-Wise Trimmed Mean
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrimmedMean_FiveClients_Trim20Pct_DropsOneFromEachEnd()
     {
         // trim_fraction=0.2, n=5 → trim = floor(0.2*5) = 1
@@ -682,7 +682,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(3.0, resultParams[0], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrimmedMean_TenClients_Trim20Pct_DropsTwoFromEachEnd()
     {
         // trim_fraction=0.2, n=10 → trim = floor(0.2*10) = 2
@@ -704,7 +704,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(4.5, resultParams[0], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrimmedMean_ZeroTrimFraction_IsFullAverage()
     {
         // trim_fraction=0.0 → no trimming → simple average
@@ -726,7 +726,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(3.0, resultParams[0], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrimmedMean_IgnoresWeights_UnweightedByDesign()
     {
         // TrimmedMean is unweighted — weights parameter is ignored
@@ -747,7 +747,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(((IParameterizable<double, Matrix<double>, Vector<double>>)result1).GetParameters()[0], ((IParameterizable<double, Matrix<double>, Vector<double>>)result2).GetParameters()[0], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrimmedMean_OutlierResistant_ComparedToFullAverage()
     {
         // Full average of [1, 2, 3, 4, 1000] = 1010/5 = 202.0
@@ -776,7 +776,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.True(Math.Abs(trimResult[0] - 3.0) < Math.Abs(fullResult[0] - 3.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrimmedMean_MultipleParams_EachTrimmedIndependently()
     {
         // Two parameters, 5 clients, trim=0.2 (drop 1 each end per param)
@@ -800,7 +800,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(30.0, resultParams[1], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrimmedMean_SingleClient_ReturnsExactParams()
     {
         // trim_fraction=0.2, n=1 → trim = floor(0.2*1) = 0, kept=1
@@ -818,7 +818,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(3.14, resultParams[0], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrimmedMean_InvalidTrimFraction_Throws()
     {
         // trim_fraction must be in [0.0, 0.5)
@@ -830,7 +830,7 @@ public class FederatedLearningDeepIntegrationTests
             new TrimmedMeanFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(trimFraction: -0.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrimmedMean_TrimTooLargeForClientCount_Throws()
     {
         // trim_fraction=0.4, n=2 → trim = floor(0.4*2) = 0, kept = 2-0 = 2 → OK
@@ -859,7 +859,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(2.0, resultParams[0], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrimmedMean_EmptyClients_Throws()
     {
         var strategy = new TrimmedMeanFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(trimFraction: 0.2);
@@ -869,14 +869,14 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Throws<ArgumentException>(() => strategy.Aggregate(empty, weights));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrimmedMean_StrategyName_IsTrimmedMean()
     {
         var strategy = new TrimmedMeanFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>();
         Assert.Equal("TrimmedMean", strategy.GetStrategyName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrimmedMean_ParameterLengthMismatch_Throws()
     {
         var strategy = new TrimmedMeanFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>(trimFraction: 0.2);
@@ -890,7 +890,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Throws<ArgumentException>(() => strategy.Aggregate(clients, weights));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_ParameterLengthMismatch_Throws()
     {
         var strategy = new MedianFullModelAggregationStrategy<double, Matrix<double>, Vector<double>>();
@@ -908,7 +908,7 @@ public class FederatedLearningDeepIntegrationTests
 
     #region Cross-Strategy Comparison: Median vs TrimmedMean vs FedAvg
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllStrategies_IdenticalClients_AllReturnSameResult()
     {
         // When all clients are identical, all strategies should return the same value
@@ -943,7 +943,7 @@ public class FederatedLearningDeepIntegrationTests
         Assert.Equal(5.0, trimmedResult[0], 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_Vs_TrimmedMean_HighTrimConverges()
     {
         // With 5 clients and trim=0.4: trim=floor(2)=2, kept=1 → only middle value

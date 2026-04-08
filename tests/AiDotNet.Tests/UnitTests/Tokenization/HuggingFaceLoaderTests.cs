@@ -36,7 +36,7 @@ public class HuggingFaceLoaderTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadFromDirectory_WithValidBpeFiles_LoadsTokenizer()
     {
         // Arrange
@@ -50,7 +50,7 @@ public class HuggingFaceLoaderTests : IDisposable
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadFromDirectory_WithVocabJson_LoadsVocabulary()
     {
         // Arrange
@@ -64,7 +64,7 @@ public class HuggingFaceLoaderTests : IDisposable
         Assert.True(tokenizer.Vocabulary.ContainsToken("hello"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadFromDirectory_MissingDirectory_ThrowsException()
     {
         // Arrange
@@ -75,7 +75,7 @@ public class HuggingFaceLoaderTests : IDisposable
             HuggingFaceTokenizerLoader.LoadFromDirectory(nonExistentPath));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadFromDirectory_MissingConfigFile_ThrowsException()
     {
         // Arrange - empty directory with no tokenizer files
@@ -85,7 +85,7 @@ public class HuggingFaceLoaderTests : IDisposable
             HuggingFaceTokenizerLoader.LoadFromDirectory(_tempDir));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SaveToDirectory_CreatesVocabFile()
     {
         // Arrange
@@ -101,7 +101,7 @@ public class HuggingFaceLoaderTests : IDisposable
         Assert.True(File.Exists(Path.Combine(outputDir, "tokenizer_config.json")));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SaveToDirectory_ConfigContainsSpecialTokens()
     {
         // Arrange - Use BERT special tokens to test BERT-style token saving
@@ -123,7 +123,7 @@ public class HuggingFaceLoaderTests : IDisposable
         Assert.Equal("[PAD]", config.PadToken);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadAndSave_Roundtrip_PreservesVocabulary()
     {
         // Arrange
@@ -139,7 +139,7 @@ public class HuggingFaceLoaderTests : IDisposable
         Assert.Equal(loaded.VocabularySize, reloaded.VocabularySize);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadFromTokenizerJson_WithBpeModel_LoadsCorrectly()
     {
         // Arrange
@@ -153,7 +153,7 @@ public class HuggingFaceLoaderTests : IDisposable
         Assert.NotNull(tokenizer);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadFromTokenizerJson_WithWordPieceModel_LoadsCorrectly()
     {
         // Arrange
@@ -167,7 +167,7 @@ public class HuggingFaceLoaderTests : IDisposable
         Assert.NotNull(tokenizer);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadFromTokenizerJson_WithUnigramModel_LoadsCorrectly()
     {
         // Arrange
@@ -181,7 +181,7 @@ public class HuggingFaceLoaderTests : IDisposable
         Assert.NotNull(tokenizer);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadFromTokenizerJson_ExtractsSpecialTokens()
     {
         // Arrange

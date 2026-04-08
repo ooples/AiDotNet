@@ -10,7 +10,7 @@ public class ChronosFoundationModelTests
 {
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithDefaultOptions_CreatesValidModel()
     {
         var model = new ChronosFoundationModel<double>();
@@ -18,7 +18,7 @@ public class ChronosFoundationModelTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithCustomOptions_CreatesValidModel()
     {
         var options = new ChronosOptions<double>
@@ -37,7 +37,7 @@ public class ChronosFoundationModelTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithVocabularySizeLessThan2_ThrowsArgumentException()
     {
         var options = new ChronosOptions<double>
@@ -48,7 +48,7 @@ public class ChronosFoundationModelTests
         Assert.Throws<ArgumentException>(() => new ChronosFoundationModel<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroEmbeddingDim_ThrowsArgumentException()
     {
         var options = new ChronosOptions<double>
@@ -59,7 +59,7 @@ public class ChronosFoundationModelTests
         Assert.Throws<ArgumentException>(() => new ChronosFoundationModel<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithNegativeEmbeddingDim_ThrowsArgumentException()
     {
         var options = new ChronosOptions<double>
@@ -70,7 +70,7 @@ public class ChronosFoundationModelTests
         Assert.Throws<ArgumentException>(() => new ChronosFoundationModel<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroNumHeads_ThrowsArgumentException()
     {
         var options = new ChronosOptions<double>
@@ -81,7 +81,7 @@ public class ChronosFoundationModelTests
         Assert.Throws<ArgumentException>(() => new ChronosFoundationModel<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithEmbeddingDimNotDivisibleByNumHeads_ThrowsArgumentException()
     {
         var options = new ChronosOptions<double>
@@ -93,7 +93,7 @@ public class ChronosFoundationModelTests
         Assert.Throws<ArgumentException>(() => new ChronosFoundationModel<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroNumLayers_ThrowsArgumentException()
     {
         var options = new ChronosOptions<double>
@@ -104,7 +104,7 @@ public class ChronosFoundationModelTests
         Assert.Throws<ArgumentException>(() => new ChronosFoundationModel<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroContextLength_ThrowsArgumentException()
     {
         var options = new ChronosOptions<double>
@@ -115,7 +115,7 @@ public class ChronosFoundationModelTests
         Assert.Throws<ArgumentException>(() => new ChronosFoundationModel<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroForecastHorizon_ThrowsArgumentException()
     {
         var options = new ChronosOptions<double>
@@ -130,7 +130,7 @@ public class ChronosFoundationModelTests
 
     #region Training Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Train_WithValidData_CompletesWithoutError()
     {
         var options = new ChronosOptions<double>
@@ -152,7 +152,7 @@ public class ChronosFoundationModelTests
         Assert.Null(exception);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Train_WithMinimalData_CompletesWithoutError()
     {
         var options = new ChronosOptions<double>
@@ -178,7 +178,7 @@ public class ChronosFoundationModelTests
 
     #region Prediction Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PredictSingle_AfterTraining_ReturnsFiniteValue()
     {
         var options = new ChronosOptions<double>
@@ -208,7 +208,7 @@ public class ChronosFoundationModelTests
         Assert.False(double.IsInfinity(prediction), "Prediction is Infinity");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PredictSingle_ReturnsFiniteValues()
     {
         var options = new ChronosOptions<double>
@@ -238,7 +238,7 @@ public class ChronosFoundationModelTests
         Assert.False(double.IsInfinity(prediction), "Prediction contains Infinity");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Predict_WithMatrix_ReturnsValidPredictions()
     {
         var options = new ChronosOptions<double>
@@ -272,7 +272,7 @@ public class ChronosFoundationModelTests
 
     #region Serialization Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Serialize_AndDeserialize_PreservesModel()
     {
         var options = new ChronosOptions<double>
@@ -313,7 +313,7 @@ public class ChronosFoundationModelTests
 
     #region Float Type Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithFloatType_CreatesValidModel()
     {
         var options = new ChronosOptions<float>

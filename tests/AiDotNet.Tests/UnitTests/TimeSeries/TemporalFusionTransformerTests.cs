@@ -11,7 +11,7 @@ public class TemporalFusionTransformerTests
 {
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithDefaultOptions_CreatesValidModel()
     {
         var model = new TemporalFusionTransformer<double>();
@@ -19,7 +19,7 @@ public class TemporalFusionTransformerTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithCustomOptions_CreatesValidModel()
     {
         var options = new TemporalFusionTransformerOptions<double>
@@ -39,7 +39,7 @@ public class TemporalFusionTransformerTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroLookbackWindow_ThrowsArgumentException()
     {
         var options = new TemporalFusionTransformerOptions<double>
@@ -50,7 +50,7 @@ public class TemporalFusionTransformerTests
         Assert.Throws<ArgumentException>(() => new TemporalFusionTransformer<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroForecastHorizon_ThrowsArgumentException()
     {
         var options = new TemporalFusionTransformerOptions<double>
@@ -61,7 +61,7 @@ public class TemporalFusionTransformerTests
         Assert.Throws<ArgumentException>(() => new TemporalFusionTransformer<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroHiddenSize_ThrowsArgumentException()
     {
         var options = new TemporalFusionTransformerOptions<double>
@@ -72,7 +72,7 @@ public class TemporalFusionTransformerTests
         Assert.Throws<ArgumentException>(() => new TemporalFusionTransformer<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroAttentionHeads_ThrowsArgumentException()
     {
         var options = new TemporalFusionTransformerOptions<double>
@@ -83,7 +83,7 @@ public class TemporalFusionTransformerTests
         Assert.Throws<ArgumentException>(() => new TemporalFusionTransformer<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithHiddenSizeNotDivisibleByHeads_ThrowsArgumentException()
     {
         var options = new TemporalFusionTransformerOptions<double>
@@ -95,7 +95,7 @@ public class TemporalFusionTransformerTests
         Assert.Throws<ArgumentException>(() => new TemporalFusionTransformer<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithEmptyQuantileLevels_ThrowsArgumentException()
     {
         var options = new TemporalFusionTransformerOptions<double>
@@ -106,7 +106,7 @@ public class TemporalFusionTransformerTests
         Assert.Throws<ArgumentException>(() => new TemporalFusionTransformer<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithInvalidQuantileLevel_ThrowsArgumentException()
     {
         var options = new TemporalFusionTransformerOptions<double>
@@ -121,7 +121,7 @@ public class TemporalFusionTransformerTests
 
     #region Training Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Train_WithValidData_CompletesWithoutError()
     {
         var options = new TemporalFusionTransformerOptions<double>
@@ -144,7 +144,7 @@ public class TemporalFusionTransformerTests
         Assert.Null(exception);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Train_WithMinimalData_CompletesWithoutError()
     {
         var options = new TemporalFusionTransformerOptions<double>
@@ -171,7 +171,7 @@ public class TemporalFusionTransformerTests
 
     #region Prediction Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PredictSingle_AfterTraining_ReturnsValidPrediction()
     {
         var options = new TemporalFusionTransformerOptions<double>
@@ -202,7 +202,7 @@ public class TemporalFusionTransformerTests
         Assert.False(double.IsInfinity(prediction), "Prediction is Infinity");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PredictSingle_ReturnsFiniteValues()
     {
         var options = new TemporalFusionTransformerOptions<double>
@@ -233,7 +233,7 @@ public class TemporalFusionTransformerTests
         Assert.False(double.IsInfinity(prediction), "Prediction contains Infinity");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Predict_WithMatrix_ReturnsValidPredictions()
     {
         var options = new TemporalFusionTransformerOptions<double>
@@ -268,7 +268,7 @@ public class TemporalFusionTransformerTests
 
     #region Serialization Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Serialize_AndDeserialize_PreservesModel()
     {
         var options = new TemporalFusionTransformerOptions<double>
@@ -310,7 +310,7 @@ public class TemporalFusionTransformerTests
 
     #region Float Type Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithFloatType_CreatesValidModel()
     {
         var options = new TemporalFusionTransformerOptions<float>

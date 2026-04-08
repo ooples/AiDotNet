@@ -131,7 +131,7 @@ public class GLMRegressionIntegrationTests
 
     #region PoissonRegression Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonRegression_Train_CountData_MakesPositivePredictions()
     {
         // Arrange
@@ -155,7 +155,7 @@ public class GLMRegressionIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonRegression_Train_IncreasingTrend_CapturesTrend()
     {
         // Arrange
@@ -185,7 +185,7 @@ public class GLMRegressionIntegrationTests
         Assert.True(avgSecondHalf > avgFirstHalf, "Predictions should increase with increasing X");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonRegression_Coefficients_AreAccessible()
     {
         // Arrange
@@ -200,7 +200,7 @@ public class GLMRegressionIntegrationTests
         Assert.Equal(1, poisson.Coefficients.Length); // One feature
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
@@ -228,7 +228,7 @@ public class GLMRegressionIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonRegression_GetModelType_ReturnsPoissonRegression()
     {
         // Arrange
@@ -247,7 +247,7 @@ public class GLMRegressionIntegrationTests
 
     #region NegativeBinomialRegression Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NegativeBinomialRegression_Train_OverdispersedData_MakesPositivePredictions()
     {
         // Arrange
@@ -271,7 +271,7 @@ public class GLMRegressionIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NegativeBinomialRegression_Train_CapturesOverdispersion()
     {
         // Arrange
@@ -291,7 +291,7 @@ public class GLMRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NegativeBinomialRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
@@ -319,7 +319,7 @@ public class GLMRegressionIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NegativeBinomialRegression_GetModelType_ReturnsNegativeBinomialRegression()
     {
         // Arrange
@@ -334,7 +334,7 @@ public class GLMRegressionIntegrationTests
 
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NegativeBinomialRegression_Coefficients_AreAccessible()
     {
         // Arrange
@@ -353,7 +353,7 @@ public class GLMRegressionIntegrationTests
 
     #region GeneralizedAdditiveModel Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GeneralizedAdditiveModel_Train_NonLinearData_CapturesPattern()
     {
         // Arrange
@@ -373,7 +373,7 @@ public class GLMRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GeneralizedAdditiveModel_Train_MultipleFeatures_HandlesCorrectly()
     {
         // Arrange
@@ -393,7 +393,7 @@ public class GLMRegressionIntegrationTests
         Assert.Equal(y.Length, predictions.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GeneralizedAdditiveModel_GetModelMetadata_ReturnsCorrectInfo()
     {
         // Arrange
@@ -418,7 +418,7 @@ public class GLMRegressionIntegrationTests
         Assert.Equal(2, (int)metadata.AdditionalInfo["Degree"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GeneralizedAdditiveModel_FeatureImportances_AreCalculated()
     {
         // Arrange
@@ -441,7 +441,7 @@ public class GLMRegressionIntegrationTests
         Assert.Equal(2, importances.Length); // Two features
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GeneralizedAdditiveModel_DifferentSplineConfigurations_ProduceDifferentResults()
     {
         // Arrange
@@ -465,7 +465,7 @@ public class GLMRegressionIntegrationTests
         Assert.Equal(y.Length, predictionsMany.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GeneralizedAdditiveModel_SerializeDeserialize_PreservesModel()
     {
         // Arrange
@@ -497,7 +497,7 @@ public class GLMRegressionIntegrationTests
 
     #region Cross-Model Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllGLMModels_TrainAndPredict_CompletesWithoutException()
     {
         // Arrange
@@ -533,7 +533,7 @@ public class GLMRegressionIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonVsNegativeBinomial_SameData_BothProduceResults()
     {
         // Arrange
@@ -554,7 +554,7 @@ public class GLMRegressionIntegrationTests
         Assert.Equal(y.Length, nbrPredictions.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GLMModels_WithSmallData_HandlesEdgeCases()
     {
         // Arrange - minimal training data

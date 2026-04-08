@@ -15,7 +15,7 @@ public class PIIDetectionIntegrationTests
 {
     #region RegexPIIDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Regex_EmailAddress_DetectsPII()
     {
         var detector = new RegexPIIDetector<double>();
@@ -25,7 +25,7 @@ public class PIIDetectionIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.PIIExposure);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Regex_SSN_DetectsPII()
     {
         var detector = new RegexPIIDetector<double>();
@@ -35,7 +35,7 @@ public class PIIDetectionIntegrationTests
         Assert.Contains(findings, f => f.Category == SafetyCategory.PIIExposure);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Regex_PhoneNumber_DetectsPII()
     {
         var detector = new RegexPIIDetector<double>();
@@ -44,7 +44,7 @@ public class PIIDetectionIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Regex_CreditCard_DetectsPII()
     {
         var detector = new RegexPIIDetector<double>();
@@ -53,7 +53,7 @@ public class PIIDetectionIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Regex_IPAddress_DetectsPII()
     {
         var detector = new RegexPIIDetector<double>();
@@ -62,7 +62,7 @@ public class PIIDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Regex_SafeText_NoFindings()
     {
         var detector = new RegexPIIDetector<double>();
@@ -71,7 +71,7 @@ public class PIIDetectionIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Regex_MultiplePIITypes_DetectsAll()
     {
         var detector = new RegexPIIDetector<double>();
@@ -86,7 +86,7 @@ public class PIIDetectionIntegrationTests
 
     #region NERPIIDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NER_PersonName_DetectsPII()
     {
         var detector = new NERPIIDetector<double>();
@@ -95,7 +95,7 @@ public class PIIDetectionIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NER_SafeGenericText_NoFindings()
     {
         var detector = new NERPIIDetector<double>();
@@ -108,7 +108,7 @@ public class PIIDetectionIntegrationTests
 
     #region ContextAwarePIIDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContextAware_EmailWithContext_DetectsPII()
     {
         var detector = new ContextAwarePIIDetector<double>();
@@ -118,7 +118,7 @@ public class PIIDetectionIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContextAware_SafeText_NoFindings()
     {
         var detector = new ContextAwarePIIDetector<double>();
@@ -127,7 +127,7 @@ public class PIIDetectionIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContextAware_WithCustomInner_Works()
     {
         var inner = new RegexPIIDetector<double>();
@@ -141,7 +141,7 @@ public class PIIDetectionIntegrationTests
 
     #region CompositePIIDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Composite_MultipleTypes_DetectsAll()
     {
         var detector = new CompositePIIDetector<double>();
@@ -152,7 +152,7 @@ public class PIIDetectionIntegrationTests
             $"Should detect multiple PII types, found {findings.Count}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Composite_SafeText_NoFindings()
     {
         var detector = new CompositePIIDetector<double>();
@@ -162,7 +162,7 @@ public class PIIDetectionIntegrationTests
         Assert.Empty(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Composite_PassportNumber_DetectsPII()
     {
         var detector = new CompositePIIDetector<double>();
@@ -172,7 +172,7 @@ public class PIIDetectionIntegrationTests
         Assert.NotEmpty(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Composite_EmptyText_NoFindings()
     {
         var detector = new CompositePIIDetector<double>();
@@ -185,7 +185,7 @@ public class PIIDetectionIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllDetectors_SameInput_AllDetectPII()
     {
         var text = "Email me at user@test.com, my SSN is 123-45-6789.";
@@ -198,7 +198,7 @@ public class PIIDetectionIntegrationTests
         Assert.NotEmpty(contextAware.EvaluateText(text));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllDetectors_SameInput_CorrectCategory()
     {
         var text = "Send payment details to admin@company.org, SSN 111-22-3333.";

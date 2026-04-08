@@ -44,7 +44,7 @@ public class UniformEpisodicDataLoaderTests
 
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_ValidInputs_InitializesSuccessfully()
     {
         // Arrange
@@ -63,7 +63,7 @@ public class UniformEpisodicDataLoaderTests
         Assert.NotNull(loader);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_NullDatasetX_ThrowsArgumentNullException()
     {
         // Arrange
@@ -81,7 +81,7 @@ public class UniformEpisodicDataLoaderTests
         Assert.Contains("datasetX", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_NullDatasetY_ThrowsArgumentNullException()
     {
         // Arrange
@@ -99,7 +99,7 @@ public class UniformEpisodicDataLoaderTests
         Assert.Contains("datasetY", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_MismatchedDimensions_ThrowsArgumentException()
     {
         // Arrange
@@ -118,7 +118,7 @@ public class UniformEpisodicDataLoaderTests
         Assert.Contains("must match", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_NWayLessThan2_ThrowsArgumentException()
     {
         // Arrange
@@ -137,7 +137,7 @@ public class UniformEpisodicDataLoaderTests
         Assert.Contains("at least 2", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_KShotLessThan1_ThrowsArgumentException()
     {
         // Arrange
@@ -156,7 +156,7 @@ public class UniformEpisodicDataLoaderTests
         Assert.Contains("at least 1", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_QueryShotsLessThan1_ThrowsArgumentException()
     {
         // Arrange
@@ -175,7 +175,7 @@ public class UniformEpisodicDataLoaderTests
         Assert.Contains("at least 1", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_InsufficientClasses_ThrowsArgumentException()
     {
         // Arrange - Only 3 classes, but requesting 5-way
@@ -194,7 +194,7 @@ public class UniformEpisodicDataLoaderTests
         Assert.Contains("nWay=5", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_InsufficientExamplesPerClass_ThrowsArgumentException()
     {
         // Arrange - Only 5 examples per class, but need 3+10=13
@@ -212,7 +212,7 @@ public class UniformEpisodicDataLoaderTests
         Assert.Contains("insufficient examples", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithDefaultParameters_UsesIndustryStandards()
     {
         // Arrange - Create dataset with enough data for default 5-way 5-shot 15 queries
@@ -233,7 +233,7 @@ public class UniformEpisodicDataLoaderTests
         Assert.Equal(75, task.QuerySetY.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithPartialDefaultParameters_UsesCorrectValues()
     {
         // Arrange
@@ -252,7 +252,7 @@ public class UniformEpisodicDataLoaderTests
 
     #region GetNextTask Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetNextTask_VerifyTaskDimensions_MatchesExpectedShape()
     {
         // Arrange
@@ -284,7 +284,7 @@ public class UniformEpisodicDataLoaderTests
         Assert.Equal(nWay * queryShots, task.QuerySetY.Shape[0]); // 50 labels
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetNextTask_VerifyUniqueClasses_ExactlyNWayClasses()
     {
         // Arrange
@@ -322,7 +322,7 @@ public class UniformEpisodicDataLoaderTests
         Assert.Equal(expectedClasses, supportClasses);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetNextTask_VerifyNoOverlap_SupportAndQuerySetsAreDisjoint()
     {
         // Arrange
@@ -360,7 +360,7 @@ public class UniformEpisodicDataLoaderTests
         Assert.Empty(overlaps); // No overlaps should exist
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetNextTask_VerifyClassDistribution_EachClassHasCorrectCounts()
     {
         // Arrange
@@ -411,7 +411,7 @@ public class UniformEpisodicDataLoaderTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetNextTask_MultipleCalls_ProducesDifferentTasks()
     {
         // Arrange - Use enough classes to ensure different class sets are selected
@@ -459,7 +459,7 @@ public class UniformEpisodicDataLoaderTests
             "Multiple calls to GetNextTask should produce different tasks (different classes or different examples)");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetNextTask_WithSeed_ProducesReproducibleTasks()
     {
         // Arrange
@@ -506,7 +506,7 @@ public class UniformEpisodicDataLoaderTests
         Assert.Equal(nWay * queryShots, task.QuerySetY.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetNextTask_VerifyDataIntegrity_FeaturesMatchOriginalDataset()
     {
         // Arrange

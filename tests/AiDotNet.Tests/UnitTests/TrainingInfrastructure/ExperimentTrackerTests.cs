@@ -35,7 +35,7 @@ public class ExperimentTrackerTests : IDisposable
 
     #region Experiment CRUD Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateExperiment_WithValidName_ReturnsExperimentId()
     {
         // Arrange & Act
@@ -46,7 +46,7 @@ public class ExperimentTrackerTests : IDisposable
         Assert.NotEmpty(experimentId);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateExperiment_WithDescriptionAndTags_StoresMetadata()
     {
         // Arrange
@@ -70,7 +70,7 @@ public class ExperimentTrackerTests : IDisposable
         Assert.Equal("Test description", experiment.Description);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateExperiment_WithExistingName_ReturnsSameId()
     {
         // Arrange
@@ -83,21 +83,21 @@ public class ExperimentTrackerTests : IDisposable
         Assert.Equal(experimentId1, experimentId2);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateExperiment_WithNullName_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _tracker.CreateExperiment(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateExperiment_WithEmptyName_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _tracker.CreateExperiment(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetExperiment_WithValidId_ReturnsExperiment()
     {
         // Arrange
@@ -111,14 +111,14 @@ public class ExperimentTrackerTests : IDisposable
         Assert.Equal("get-test", experiment.Name);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetExperiment_WithInvalidId_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _tracker.GetExperiment("nonexistent-id"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DeleteExperiment_RemovesExperimentAndRuns()
     {
         // Arrange
@@ -133,7 +133,7 @@ public class ExperimentTrackerTests : IDisposable
         Assert.Throws<ArgumentException>(() => _tracker.GetExperiment(experimentId));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DeleteExperiment_WithInvalidId_ThrowsArgumentException()
     {
         // Act & Assert
@@ -144,7 +144,7 @@ public class ExperimentTrackerTests : IDisposable
 
     #region Run CRUD Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StartRun_WithValidExperimentId_ReturnsRun()
     {
         // Arrange
@@ -159,7 +159,7 @@ public class ExperimentTrackerTests : IDisposable
         Assert.NotEmpty(run.RunId);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StartRun_WithTags_StoresRunTags()
     {
         // Arrange
@@ -180,21 +180,21 @@ public class ExperimentTrackerTests : IDisposable
         Assert.Equal("rtx3080", run.Tags["gpu"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StartRun_WithInvalidExperimentId_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _tracker.StartRun("nonexistent-experiment"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StartRun_WithNullExperimentId_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _tracker.StartRun(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetRun_WithValidId_ReturnsRun()
     {
         // Arrange
@@ -209,14 +209,14 @@ public class ExperimentTrackerTests : IDisposable
         Assert.Equal(run.RunId, retrievedRun.RunId);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetRun_WithInvalidId_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _tracker.GetRun("nonexistent-run"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DeleteRun_RemovesRun()
     {
         // Arrange
@@ -230,7 +230,7 @@ public class ExperimentTrackerTests : IDisposable
         Assert.Throws<ArgumentException>(() => _tracker.GetRun(run.RunId));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DeleteRun_WithInvalidId_ThrowsArgumentException()
     {
         // Act & Assert
@@ -241,7 +241,7 @@ public class ExperimentTrackerTests : IDisposable
 
     #region List and Search Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ListExperiments_ReturnsAllExperiments()
     {
         // Arrange
@@ -256,7 +256,7 @@ public class ExperimentTrackerTests : IDisposable
         Assert.Equal(3, experiments.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ListExperiments_WithFilter_ReturnsMatchingExperiments()
     {
         // Arrange
@@ -272,7 +272,7 @@ public class ExperimentTrackerTests : IDisposable
         Assert.All(experiments, e => Assert.Contains("classification", e.Name));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ListRuns_ReturnsRunsForExperiment()
     {
         // Arrange
@@ -288,7 +288,7 @@ public class ExperimentTrackerTests : IDisposable
         Assert.Equal(3, runs.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ListRuns_WithFilter_ReturnsMatchingRuns()
     {
         // Arrange
@@ -304,14 +304,14 @@ public class ExperimentTrackerTests : IDisposable
         Assert.Equal(2, runs.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ListRuns_WithInvalidExperimentId_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _tracker.ListRuns("nonexistent-exp").ToList());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SearchRuns_FindsRunsAcrossExperiments()
     {
         // Arrange
@@ -329,7 +329,7 @@ public class ExperimentTrackerTests : IDisposable
         Assert.Equal(2, runs.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SearchRuns_WithMaxResults_LimitsResults()
     {
         // Arrange
@@ -350,7 +350,7 @@ public class ExperimentTrackerTests : IDisposable
 
     #region Run Logging Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Run_LogParameters_StoresParameters()
     {
         // Arrange
@@ -375,7 +375,7 @@ public class ExperimentTrackerTests : IDisposable
         Assert.Equal("adam", retrievedParams["optimizer"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Run_LogMetric_StoresMetric()
     {
         // Arrange
@@ -394,7 +394,7 @@ public class ExperimentTrackerTests : IDisposable
         Assert.True(metrics.ContainsKey("accuracy"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Run_EndRun_SetsStatusAndEndTime()
     {
         // Arrange
@@ -409,7 +409,7 @@ public class ExperimentTrackerTests : IDisposable
         Assert.Equal("Completed", run.Status);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Run_EndRunWithFailure_SetsFailedStatus()
     {
         // Arrange
@@ -427,7 +427,7 @@ public class ExperimentTrackerTests : IDisposable
 
     #region Persistence Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Tracker_PersistsExperimentsToDisk()
     {
         // Arrange
@@ -444,7 +444,7 @@ public class ExperimentTrackerTests : IDisposable
         Assert.Equal("Testing persistence", experiment.Description);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Tracker_PersistsRunsToDisk()
     {
         // Arrange
@@ -472,7 +472,7 @@ public class ExperimentTrackerTests : IDisposable
 
     #region Thread Safety Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateExperiment_FromMultipleThreads_IsThreadSafe()
     {
         // Arrange
@@ -493,7 +493,7 @@ public class ExperimentTrackerTests : IDisposable
         Assert.Equal(experimentCount, experiments.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StartRun_FromMultipleThreads_IsThreadSafe()
     {
         // Arrange

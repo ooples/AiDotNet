@@ -34,7 +34,7 @@ public class SurvivalAnalysisIntegrationTests
 
     #region KaplanMeierEstimator Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_Construction()
     {
         var km = new KaplanMeierEstimator<double>();
@@ -42,7 +42,7 @@ public class SurvivalAnalysisIntegrationTests
         Assert.False(km.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_FitSurvival_SetsTrainedState()
     {
         var km = new KaplanMeierEstimator<double>();
@@ -51,7 +51,7 @@ public class SurvivalAnalysisIntegrationTests
         Assert.True(km.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_SurvivalCurve_MonotoneDecreasing()
     {
         var km = new KaplanMeierEstimator<double>();
@@ -69,7 +69,7 @@ public class SurvivalAnalysisIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_SurvivalStartsAtOne()
     {
         var km = new KaplanMeierEstimator<double>();
@@ -82,7 +82,7 @@ public class SurvivalAnalysisIntegrationTests
         Assert.Equal(1.0, baseline[0], 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_PredictSurvival_ReturnsValidProbabilities()
     {
         var km = new KaplanMeierEstimator<double>();
@@ -105,7 +105,7 @@ public class SurvivalAnalysisIntegrationTests
                 "Survival probability should decrease over time");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_GetNumberAtRisk_DecreasesOverTime()
     {
         var km = new KaplanMeierEstimator<double>();
@@ -125,7 +125,7 @@ public class SurvivalAnalysisIntegrationTests
 
     #region NelsonAalenEstimator Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NelsonAalen_Construction()
     {
         var na = new NelsonAalenEstimator<double>();
@@ -133,7 +133,7 @@ public class SurvivalAnalysisIntegrationTests
         Assert.False(na.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NelsonAalen_FitSurvival_SetsTrainedState()
     {
         var na = new NelsonAalenEstimator<double>();
@@ -142,7 +142,7 @@ public class SurvivalAnalysisIntegrationTests
         Assert.True(na.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NelsonAalen_CumulativeHazard_MonotoneIncreasing()
     {
         var na = new NelsonAalenEstimator<double>();
@@ -160,7 +160,7 @@ public class SurvivalAnalysisIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NelsonAalen_VarianceEstimate_NonNegative()
     {
         var na = new NelsonAalenEstimator<double>();
@@ -179,7 +179,7 @@ public class SurvivalAnalysisIntegrationTests
 
     #region CoxProportionalHazards Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cox_Construction_WithDefaults()
     {
         var cox = new CoxProportionalHazards<double>();
@@ -187,7 +187,7 @@ public class SurvivalAnalysisIntegrationTests
         Assert.False(cox.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cox_FitSurvival_SetsTrainedState()
     {
         var cox = new CoxProportionalHazards<double>(maxIterations: 50);
@@ -196,7 +196,7 @@ public class SurvivalAnalysisIntegrationTests
         Assert.True(cox.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cox_PredictHazardRatio_ReturnsPositiveValues()
     {
         var cox = new CoxProportionalHazards<double>(maxIterations: 50);
@@ -211,7 +211,7 @@ public class SurvivalAnalysisIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cox_GetCoefficients_ReturnsCorrectCount()
     {
         var cox = new CoxProportionalHazards<double>(maxIterations: 50);
@@ -223,7 +223,7 @@ public class SurvivalAnalysisIntegrationTests
         Assert.Equal(features.Columns, coefficients.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cox_GetFeatureHazardRatios_MatchesExpCoefficients()
     {
         var cox = new CoxProportionalHazards<double>(maxIterations: 50);
@@ -245,7 +245,7 @@ public class SurvivalAnalysisIntegrationTests
 
     #region WeibullAFT Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeibullAFT_Construction()
     {
         var weibull = new WeibullAFT<double>();
@@ -253,7 +253,7 @@ public class SurvivalAnalysisIntegrationTests
         Assert.False(weibull.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeibullAFT_FitSurvival_SetsTrainedState()
     {
         var weibull = new WeibullAFT<double>(maxIterations: 50);
@@ -262,7 +262,7 @@ public class SurvivalAnalysisIntegrationTests
         Assert.True(weibull.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeibullAFT_Predict_ReturnsPositiveSurvivalTimes()
     {
         var weibull = new WeibullAFT<double>(maxIterations: 50);
@@ -281,7 +281,7 @@ public class SurvivalAnalysisIntegrationTests
 
     #region LogNormalAFT Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogNormalAFT_Construction()
     {
         var lognormal = new LogNormalAFT<double>();
@@ -289,7 +289,7 @@ public class SurvivalAnalysisIntegrationTests
         Assert.False(lognormal.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogNormalAFT_FitSurvival_SetsTrainedState()
     {
         var lognormal = new LogNormalAFT<double>(maxIterations: 50);
@@ -298,7 +298,7 @@ public class SurvivalAnalysisIntegrationTests
         Assert.True(lognormal.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogNormalAFT_Predict_ReturnsPositiveSurvivalTimes()
     {
         var lognormal = new LogNormalAFT<double>(maxIterations: 50);
@@ -317,7 +317,7 @@ public class SurvivalAnalysisIntegrationTests
 
     #region RandomSurvivalForest Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomSurvivalForest_Construction()
     {
         var rsf = new RandomSurvivalForest<double>(numTrees: 5, maxDepth: 3);
@@ -325,7 +325,7 @@ public class SurvivalAnalysisIntegrationTests
         Assert.False(rsf.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomSurvivalForest_FitSurvival_SetsTrainedState()
     {
         var rsf = new RandomSurvivalForest<double>(numTrees: 5, maxDepth: 3, seed: 42);
@@ -334,7 +334,7 @@ public class SurvivalAnalysisIntegrationTests
         Assert.True(rsf.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomSurvivalForest_Predict_ReturnsPositiveSurvivalTimes()
     {
         var rsf = new RandomSurvivalForest<double>(numTrees: 5, maxDepth: 3, seed: 42);
@@ -353,7 +353,7 @@ public class SurvivalAnalysisIntegrationTests
 
     #region Cross-Model Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllSurvivalModels_ThrowWhenNotFitted()
     {
         var models = new SurvivalModelBase<double>[]
@@ -375,7 +375,7 @@ public class SurvivalAnalysisIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SurvivalModels_ValidateBadData_Throws()
     {
         var km = new KaplanMeierEstimator<double>();

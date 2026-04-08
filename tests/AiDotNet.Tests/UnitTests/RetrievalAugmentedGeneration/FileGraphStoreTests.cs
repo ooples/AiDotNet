@@ -48,7 +48,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithValidPath_CreatesStoreAndDirectory()
         {
             // Arrange
@@ -63,21 +63,21 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(0, store.EdgeCount);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullPath_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new FileGraphStore<double>(null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithEmptyPath_ThrowsArgumentException()
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new FileGraphStore<double>(""));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_CreatesRequiredFiles()
         {
             // Arrange
@@ -99,7 +99,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region AddNode Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddNode_WithValidNode_IncreasesNodeCount()
         {
             // Arrange
@@ -114,7 +114,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1, store.NodeCount);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddNode_WithNullNode_ThrowsArgumentNullException()
         {
             // Arrange
@@ -125,7 +125,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Throws<ArgumentNullException>(() => store.AddNode(null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddNode_WithProperties_PersistsProperties()
         {
             // Arrange
@@ -154,7 +154,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region AddEdge Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddEdge_WithValidEdge_IncreasesEdgeCount()
         {
             // Arrange
@@ -173,7 +173,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1, store.EdgeCount);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddEdge_WithNullEdge_ThrowsArgumentNullException()
         {
             // Arrange
@@ -184,7 +184,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Throws<ArgumentNullException>(() => store.AddEdge(null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddEdge_WithNonexistentSourceNode_ThrowsInvalidOperationException()
         {
             // Arrange
@@ -203,7 +203,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GetNode Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetNode_WithExistingId_ReturnsNode()
         {
             // Arrange
@@ -221,7 +221,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("PERSON", retrieved.Label);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetNode_WithNonexistentId_ReturnsNull()
         {
             // Arrange
@@ -239,7 +239,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Persistence Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Persistence_NodesAndEdges_SurviveRestart()
         {
             // Arrange
@@ -287,7 +287,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Persistence_LabelIndices_RebuildCorrectly()
         {
             // Arrange
@@ -312,7 +312,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Persistence_EdgeIndices_RebuildCorrectly()
         {
             // Arrange
@@ -346,7 +346,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region RemoveNode Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RemoveNode_WithExistingNode_RemovesNodeAndReturnsTrue()
         {
             // Arrange
@@ -364,7 +364,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Null(store.GetNode("node1"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RemoveNode_RemovesAllConnectedEdges()
         {
             // Arrange
@@ -395,7 +395,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(store.GetEdge(edge2.Id));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RemoveNode_Persists_AfterReload()
         {
             // Arrange
@@ -422,7 +422,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Clear Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Clear_RemovesAllNodesAndEdges()
         {
             // Arrange
@@ -445,7 +445,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(store.GetAllEdges());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Clear_DeletesDataFiles()
         {
             // Arrange
@@ -469,7 +469,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Integration Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ComplexGraph_WithMultipleOperations_MaintainsConsistency()
         {
             // Arrange
@@ -524,7 +524,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void LargeGraph_WithHundredsOfNodes_PerformsCorrectly()
         {
             // Arrange
@@ -575,7 +575,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region KnowledgeGraph Integration Test
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void KnowledgeGraph_WithFileGraphStore_PersistsCorrectly()
         {
             // Arrange

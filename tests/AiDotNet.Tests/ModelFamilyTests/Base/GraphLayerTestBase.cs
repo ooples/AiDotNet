@@ -46,7 +46,7 @@ public abstract class GraphLayerTestBase
     // INVARIANT 1: Forward produces finite output
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void Forward_ShouldProduceFiniteOutput()
     {
         var layer = CreateAndSetup();
@@ -66,7 +66,7 @@ public abstract class GraphLayerTestBase
     // INVARIANT 2: Forward is deterministic
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void Forward_ShouldBeDeterministic()
     {
         var layer = CreateAndSetup();
@@ -86,7 +86,7 @@ public abstract class GraphLayerTestBase
     // INVARIANT 3: Different inputs produce different outputs
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void Forward_DifferentInputs_ShouldProduceDifferentOutputs()
     {
         var layer = CreateAndSetup();
@@ -122,7 +122,7 @@ public abstract class GraphLayerTestBase
     // INVARIANT 5: Parameter count consistency
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void Parameters_CountShouldMatchVector()
     {
         var layer = CreateAndSetup();
@@ -140,7 +140,7 @@ public abstract class GraphLayerTestBase
     // INVARIANT 6: ResetState doesn't break the layer
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void ResetState_ShouldNotBreakForward()
     {
         var layer = CreateAndSetup();

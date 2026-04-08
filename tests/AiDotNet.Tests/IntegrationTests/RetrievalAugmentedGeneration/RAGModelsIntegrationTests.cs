@@ -15,7 +15,7 @@ public class RAGModelsIntegrationTests
 
     #region Document
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Document_DefaultConstructor_HasDefaults()
     {
         var doc = new Document<double>();
@@ -27,7 +27,7 @@ public class RAGModelsIntegrationTests
         Assert.Null(doc.Embedding);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Document_IdContentConstructor_SetsValues()
     {
         var doc = new Document<double>("doc1", "Hello world");
@@ -35,7 +35,7 @@ public class RAGModelsIntegrationTests
         Assert.Equal("Hello world", doc.Content);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Document_FullConstructor_SetsMetadata()
     {
         var metadata = new Dictionary<string, object> { { "author", "John" }, { "year", 2024 } };
@@ -46,7 +46,7 @@ public class RAGModelsIntegrationTests
         Assert.Equal(2024, doc.Metadata["year"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Document_RelevanceScore_CanBeSet()
     {
         var doc = new Document<double>("doc3", "Test");
@@ -56,7 +56,7 @@ public class RAGModelsIntegrationTests
         Assert.True(doc.HasRelevanceScore);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Document_Embedding_CanBeSet()
     {
         var doc = new Document<double>("doc4", "Test");
@@ -70,7 +70,7 @@ public class RAGModelsIntegrationTests
 
     #region VectorDocument
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorDocument_DefaultConstructor_HasDefaults()
     {
         var vDoc = new VectorDocument<double>();
@@ -78,7 +78,7 @@ public class RAGModelsIntegrationTests
         Assert.NotNull(vDoc.Embedding);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorDocument_Constructor_SetsDocumentAndEmbedding()
     {
         var doc = new Document<double>("vd1", "Vector doc content");
@@ -95,7 +95,7 @@ public class RAGModelsIntegrationTests
 
     #region GroundedAnswer
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GroundedAnswer_DefaultConstructor_HasDefaults()
     {
         var answer = new GroundedAnswer<double>();
@@ -108,7 +108,7 @@ public class RAGModelsIntegrationTests
         Assert.Equal(0.0, answer.ConfidenceScore, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GroundedAnswer_AnswerAndSources_Constructor()
     {
         var docs = new List<Document<double>>
@@ -122,7 +122,7 @@ public class RAGModelsIntegrationTests
         Assert.Equal(2, answer.SourceDocuments.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GroundedAnswer_FullConstructor_SetsAllProperties()
     {
         var docs = new List<Document<double>> { new Document<double>("s1", "Source") }.AsReadOnly();
@@ -142,7 +142,7 @@ public class RAGModelsIntegrationTests
 
     #region ThoughtNode
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThoughtNode_DefaultProperties()
     {
         var node = new ThoughtNode<double>();
@@ -156,7 +156,7 @@ public class RAGModelsIntegrationTests
         Assert.Null(node.Parent);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThoughtNode_TreeStructure()
     {
         var root = new ThoughtNode<double> { Thought = "Root", Depth = 0 };
@@ -171,7 +171,7 @@ public class RAGModelsIntegrationTests
         Assert.Equal(1, child1.Depth);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThoughtNode_WithRetrievedDocuments()
     {
         var node = new ThoughtNode<double> { Thought = "Research", EvaluationScore = 0.8 };
@@ -185,7 +185,7 @@ public class RAGModelsIntegrationTests
 
     #region ToolInvocation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolInvocation_DefaultProperties()
     {
         var tool = new ToolInvocation();
@@ -195,7 +195,7 @@ public class RAGModelsIntegrationTests
         Assert.False(tool.Success);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToolInvocation_SetProperties()
     {
         var tool = new ToolInvocation

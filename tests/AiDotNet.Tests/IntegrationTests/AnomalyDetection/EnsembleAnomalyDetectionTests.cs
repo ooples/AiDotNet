@@ -62,14 +62,14 @@ public class EnsembleAnomalyDetectionTests
 
     #region AveragingDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Averaging_Construction_NotFittedByDefault()
     {
         var detector = new AveragingDetector<double>();
         Assert.False(detector.IsFitted);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Averaging_OutlierGetsHighestScore()
     {
         var detector = new AveragingDetector<double>();
@@ -81,7 +81,7 @@ public class EnsembleAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Averaging_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new AveragingDetector<double>();
@@ -95,7 +95,7 @@ public class EnsembleAnomalyDetectionTests
 
     #region MaximumDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Maximum_OutlierGetsHighestScore()
     {
         var detector = new MaximumDetector<double>();
@@ -106,7 +106,7 @@ public class EnsembleAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Maximum_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new MaximumDetector<double>();
@@ -120,7 +120,7 @@ public class EnsembleAnomalyDetectionTests
 
     #region FeatureBaggingDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FeatureBagging_OutlierGetsHighestScore()
     {
         var detector = new FeatureBaggingDetector<double>();
@@ -131,7 +131,7 @@ public class EnsembleAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FeatureBagging_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new FeatureBaggingDetector<double>();
@@ -145,7 +145,7 @@ public class EnsembleAnomalyDetectionTests
 
     #region RandomSubspaceDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomSubspace_OutlierGetsHighestScore()
     {
         var detector = new RandomSubspaceDetector<double>();
@@ -156,7 +156,7 @@ public class EnsembleAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomSubspace_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new RandomSubspaceDetector<double>();
@@ -170,7 +170,7 @@ public class EnsembleAnomalyDetectionTests
 
     #region LSCPDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LSCP_OutlierGetsHighestScore()
     {
         var detector = new LSCPDetector<double>();
@@ -181,7 +181,7 @@ public class EnsembleAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LSCP_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new LSCPDetector<double>();
@@ -195,7 +195,7 @@ public class EnsembleAnomalyDetectionTests
 
     #region SUODDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SUOD_OutlierGetsHighestScore()
     {
         var detector = new SUODDetector<double>();
@@ -206,7 +206,7 @@ public class EnsembleAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SUOD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new SUODDetector<double>();
@@ -220,7 +220,7 @@ public class EnsembleAnomalyDetectionTests
 
     #region XGBODDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void XGBOD_OutlierGetsHighestScore()
     {
         var detector = new XGBODDetector<double>();
@@ -231,7 +231,7 @@ public class EnsembleAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void XGBOD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new XGBODDetector<double>();
@@ -245,7 +245,7 @@ public class EnsembleAnomalyDetectionTests
 
     #region Cross-Detector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllEnsembleDetectors_PredictBeforeFit_Throws()
     {
         var detectors = new AnomalyDetectorBase<double>[]

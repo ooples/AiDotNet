@@ -15,7 +15,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // LU Decomposition Properties
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LUMath_Factorization_LU_EqualA()
     {
         // A = L * U where L is lower triangular with 1s on diagonal, U is upper triangular
@@ -37,7 +37,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
                 Assert.Equal(a[i, j], lu[i, j], 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LUMath_LowerTriangular_OnesOnDiagonal()
     {
         // L in LU decomposition has 1s on the diagonal
@@ -57,7 +57,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // QR Decomposition Properties
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QRMath_Q_Orthogonal()
     {
         // Q^T * Q = I for orthogonal Q
@@ -74,7 +74,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(1.0, qtq[1, 1], 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QRMath_Q_PreservesNorm()
     {
         // ||Qx|| = ||x|| for orthogonal Q
@@ -90,7 +90,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(normX, normQx, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QRMath_R_UpperTriangular()
     {
         // R should be upper triangular with positive diagonal
@@ -108,7 +108,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // SVD Properties
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SVDMath_SingularValues_NonNegative()
     {
         // Singular values are always non-negative
@@ -119,7 +119,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SVDMath_SingularValues_Descending()
     {
         // By convention, singular values are in descending order
@@ -141,7 +141,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(expectedCount, count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SVDMath_FrobeniusNorm_FromSingularValues()
     {
         // ||A||_F = sqrt(sum(sigma_i^2))
@@ -164,7 +164,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // Cholesky Decomposition Properties
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CholeskyMath_LLT_EqualsA()
     {
         // A = L * L^T for symmetric positive definite A
@@ -180,7 +180,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(5.0, result[1, 1], 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CholeskyMath_RequiresPositiveDefinite()
     {
         // A matrix is positive definite if all eigenvalues > 0
@@ -198,7 +198,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // Eigenvalue Decomposition Properties
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EigenMath_CharacteristicPolynomial_2x2()
     {
         // For A = [[a, b], [c, d]], eigenvalues solve: lambda^2 - (a+d)*lambda + (ad-bc) = 0
@@ -219,7 +219,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(det, lambda1 * lambda2, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EigenMath_SymmetricMatrix_RealEigenvalues()
     {
         // Symmetric matrices always have real eigenvalues
@@ -231,7 +231,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
             "Symmetric matrix should have non-negative discriminant (real eigenvalues)");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EigenMath_Trace_IsSumOfEigenvalues()
     {
         double[] eigenvalues = { 5.0, 3.0, 1.0 };
@@ -239,7 +239,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(9.0, trace, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EigenMath_Determinant_IsProductOfEigenvalues()
     {
         double[] eigenvalues = { 5.0, 3.0, 2.0 };
@@ -251,7 +251,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // Matrix Norms
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NormMath_FrobeniusNorm()
     {
         // ||A||_F = sqrt(sum(a_ij^2))
@@ -260,7 +260,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(30), frobNorm, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NormMath_InfinityNorm()
     {
         // ||A||_inf = max row sum of absolute values
@@ -271,7 +271,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(7.0, infNorm, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NormMath_OneNorm()
     {
         // ||A||_1 = max column sum of absolute values
@@ -286,7 +286,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // Sparse Matrix Math: COO Format
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SparseMath_COO_NonZeroCount()
     {
         // COO format stores (row, col, value) triples
@@ -334,7 +334,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // Sparse Matrix Math: SpMV (Sparse Matrix-Vector Multiply)
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SparseMath_SpMV_CorrectResult()
     {
         // Sparse matrix:
@@ -378,7 +378,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(expectedCategory, category);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StabilityMath_ConditionNumber_IdentityMatrix()
     {
         // Identity matrix has condition number = 1 (best possible)
@@ -392,7 +392,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
     // Determinant Properties
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeterminantMath_2x2_Formula()
     {
         // det([[a, b], [c, d]]) = ad - bc
@@ -401,7 +401,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(-14.0, det, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeterminantMath_3x3_SarrusRule()
     {
         // det of 3x3 matrix using Sarrus' rule
@@ -412,7 +412,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(27.0, det, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeterminantMath_ProductRule()
     {
         // det(A * B) = det(A) * det(B)
@@ -422,7 +422,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(15.0, detAB, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeterminantMath_InverseRule()
     {
         // det(A^-1) = 1 / det(A)
@@ -431,7 +431,7 @@ public class AdvancedLinearAlgebraDeepMathIntegrationTests
         Assert.Equal(0.25, detAInv, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeterminantMath_TransposeRule()
     {
         // det(A^T) = det(A)

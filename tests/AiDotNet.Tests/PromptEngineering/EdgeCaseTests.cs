@@ -13,81 +13,81 @@ public class EdgeCaseTests
 {
     #region Null and Empty String Handling
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SimplePromptTemplate_NullTemplate_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => new SimplePromptTemplate(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SimplePromptTemplate_EmptyTemplate_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new SimplePromptTemplate(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SimplePromptTemplate_WhitespaceTemplate_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new SimplePromptTemplate("   "));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SimplePromptTemplate_Format_NullVariables_ThrowsArgumentNullException()
     {
         var template = new SimplePromptTemplate("Hello {name}");
         Assert.Throws<ArgumentNullException>(() => template.Format(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ChainOfThoughtTemplate_NullTask_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => new ChainOfThoughtTemplate(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ChainOfThoughtTemplate_EmptyTask_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new ChainOfThoughtTemplate(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StructuredOutputTemplate_NullTemplate_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => new StructuredOutputTemplate(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StructuredOutputTemplate_EmptyTemplate_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new StructuredOutputTemplate(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RolePlayingTemplate_NullRole_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => new RolePlayingTemplate(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RolePlayingTemplate_EmptyRole_ThrowsArgumentException()
     {
         // Empty string as template throws exception
         Assert.Throws<ArgumentException>(() => new RolePlayingTemplate(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InstructionFollowingTemplate_NullTemplate_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => new InstructionFollowingTemplate(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ConditionalPromptTemplate_NullTemplate_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => new ConditionalPromptTemplate(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CompositePromptTemplate_NullTemplates_CreatesEmptyComposite()
     {
         // CompositePromptTemplate handles null by creating empty list
@@ -96,7 +96,7 @@ public class EdgeCaseTests
         Assert.NotNull(composite);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CompositePromptTemplate_EmptyTemplates_CreatesEmptyComposite()
     {
         // CompositePromptTemplate allows empty array
@@ -108,7 +108,7 @@ public class EdgeCaseTests
 
     #region Special Character Handling
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SimplePromptTemplate_SpecialCharactersInTemplate_HandledCorrectly()
     {
         var template = new SimplePromptTemplate("Test with special chars: @#$%^&*()");
@@ -117,7 +117,7 @@ public class EdgeCaseTests
         Assert.Contains("@#$%^&*()", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SimplePromptTemplate_UnicodeInTemplate_HandledCorrectly()
     {
         var template = new SimplePromptTemplate("Unicode test: \u00e9\u00e8\u00ea \u4e2d\u6587");
@@ -127,7 +127,7 @@ public class EdgeCaseTests
         Assert.Contains("\u4e2d\u6587", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SimplePromptTemplate_NewlinesInTemplate_PreservedCorrectly()
     {
         var template = new SimplePromptTemplate("Line 1\nLine 2\r\nLine 3");
@@ -138,7 +138,7 @@ public class EdgeCaseTests
         Assert.Contains("Line 3", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SimplePromptTemplate_TabsInTemplate_PreservedCorrectly()
     {
         var template = new SimplePromptTemplate("Column1\tColumn2\tColumn3");
@@ -147,7 +147,7 @@ public class EdgeCaseTests
         Assert.Contains("\t", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SimplePromptTemplate_BracesInValue_NotInterpretedAsVariable()
     {
         var template = new SimplePromptTemplate("Code: {code}");
@@ -160,7 +160,7 @@ public class EdgeCaseTests
         Assert.Contains("function() { return true; }", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ConditionalPromptTemplate_NestedBraces_HandledCorrectly()
     {
         var template = new ConditionalPromptTemplate("Data: {{#if show}}{value}{{/if}}");
@@ -178,21 +178,21 @@ public class EdgeCaseTests
 
     #region Boundary Conditions
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ContextWindowManager_ZeroMaxTokens_AllowsCreation()
     {
         var manager = new ContextWindowManager(0);
         Assert.Equal(0, manager.MaxTokens);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ContextWindowManager_VeryLargeMaxTokens_AllowsCreation()
     {
         var manager = new ContextWindowManager(int.MaxValue);
         Assert.Equal(int.MaxValue, manager.MaxTokens);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ContextWindowManager_NegativeReserved_TreatedAsZero()
     {
         var manager = new ContextWindowManager(1000);
@@ -202,7 +202,7 @@ public class EdgeCaseTests
         Assert.True(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ContextWindowManager_VeryLongText_Truncates()
     {
         var manager = new ContextWindowManager(100, text => text.Length);
@@ -213,7 +213,7 @@ public class EdgeCaseTests
         Assert.True(truncated.Length <= 100);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ContextWindowManager_SplitIntoChunks_SingleCharPerChunk()
     {
         var manager = new ContextWindowManager(1, text => text.Length);
@@ -224,7 +224,7 @@ public class EdgeCaseTests
         Assert.Equal(3, chunks.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SimplePromptTemplate_VeryLongVariableValue_HandledCorrectly()
     {
         var template = new SimplePromptTemplate("Data: {data}");
@@ -236,7 +236,7 @@ public class EdgeCaseTests
         Assert.Contains(longValue, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SimplePromptTemplate_ManyVariables_AllSubstituted()
     {
         var templateParts = new List<string>();
@@ -261,7 +261,7 @@ public class EdgeCaseTests
 
     #region Missing Variable Handling
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SimplePromptTemplate_MissingVariable_ThrowsArgumentException()
     {
         var template = new SimplePromptTemplate("Hello {name}, welcome to {place}");
@@ -274,7 +274,7 @@ public class EdgeCaseTests
         Assert.Throws<ArgumentException>(() => template.Format(variables));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SimplePromptTemplate_ExtraVariables_Ignored()
     {
         var template = new SimplePromptTemplate("Hello {name}");
@@ -290,7 +290,7 @@ public class EdgeCaseTests
         Assert.DoesNotContain("ignored", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ConditionalPromptTemplate_MissingConditionalVariable_SectionRemoved()
     {
         var template = new ConditionalPromptTemplate("Base {{#if optional}}Optional: {optional}{{/if}}");
@@ -302,7 +302,7 @@ public class EdgeCaseTests
         Assert.DoesNotContain("Optional:", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ConditionalPromptTemplate_EmptyConditionalVariable_SectionRemoved()
     {
         var template = new ConditionalPromptTemplate("Base {{#if optional}}Optional: {optional}{{/if}}");
@@ -317,7 +317,7 @@ public class EdgeCaseTests
         Assert.DoesNotContain("Optional:", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ConditionalPromptTemplate_WhitespaceConditionalVariable_SectionRemoved()
     {
         var template = new ConditionalPromptTemplate("Base {{#if optional}}Optional: {optional}{{/if}}");
@@ -336,7 +336,7 @@ public class EdgeCaseTests
 
     #region Validation Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SimplePromptTemplate_Validate_NullVariables_ReturnsFalse()
     {
         var template = new SimplePromptTemplate("Hello {name}");
@@ -346,7 +346,7 @@ public class EdgeCaseTests
         Assert.False(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SimplePromptTemplate_Validate_EmptyVariables_WithNoPlaceholders_ReturnsTrue()
     {
         var template = new SimplePromptTemplate("Hello World");
@@ -356,7 +356,7 @@ public class EdgeCaseTests
         Assert.True(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SimplePromptTemplate_Validate_NullVariableValue_ReturnsFalse()
     {
         var template = new SimplePromptTemplate("Hello {name}");
@@ -374,7 +374,7 @@ public class EdgeCaseTests
 
     #region Regex Timeout Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ConditionalPromptTemplate_NestedConditions_DoesNotHang()
     {
         // Test that complex nested patterns don't cause regex catastrophic backtracking
@@ -394,7 +394,7 @@ public class EdgeCaseTests
         Assert.Contains("test", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ConditionalPromptTemplate_ManyConditions_CompletesInReasonableTime()
     {
         var sb = new System.Text.StringBuilder();

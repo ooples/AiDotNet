@@ -11,7 +11,7 @@ public class SchedulerConfigTests
 {
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithDefaultValues_SetsCorrectDefaults()
     {
         // Arrange & Act
@@ -29,7 +29,7 @@ public class SchedulerConfigTests
         Assert.False(config.ClipSample);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithCustomValues_SetsAllProperties()
     {
         // Arrange & Act
@@ -64,7 +64,7 @@ public class SchedulerConfigTests
                 betaEnd: 0.02));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithZeroBetaStart_DoesNotThrow()
     {
         // Arrange & Act - The implementation doesn't validate beta values
@@ -78,7 +78,7 @@ public class SchedulerConfigTests
         Assert.Equal(0.0, config.BetaStart);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithBetaEndLessThanBetaStart_DoesNotThrow()
     {
         // Arrange & Act - The implementation doesn't validate beta ordering
@@ -96,7 +96,7 @@ public class SchedulerConfigTests
 
     #region Factory Method Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateDefault_ReturnsStandardDDPMConfig()
     {
         // Arrange & Act
@@ -110,7 +110,7 @@ public class SchedulerConfigTests
         Assert.Equal(DiffusionPredictionType.Epsilon, config.PredictionType);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateStableDiffusion_ReturnsStableDiffusionConfig()
     {
         // Arrange & Act
@@ -128,7 +128,7 @@ public class SchedulerConfigTests
 
     #region Generic Type Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithFloatType_WorksCorrectly()
     {
         // Arrange & Act

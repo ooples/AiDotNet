@@ -130,7 +130,7 @@ public class SyntheticTabularGeneratorIntegrationTests
 
     #region GAN Generators (NeuralNetworkBase)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CTGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -156,7 +156,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "CTGAN");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CopulaGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -181,7 +181,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "CopulaGAN");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DPCTGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -210,7 +210,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "DPCTGAN");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CTABGANPlusGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -238,7 +238,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "CTABGANPlus");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PATEGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -265,7 +265,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "PATEGAN");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TableGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -291,7 +291,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "TableGAN");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OCTGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -314,7 +314,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "OCTGAN");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CausalGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -336,7 +336,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "CausalGAN");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MisGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -359,7 +359,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "MisGAN");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MedSynthGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -390,7 +390,7 @@ public class SyntheticTabularGeneratorIntegrationTests
 
     #region VAE Generators
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TVAEGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -418,7 +418,7 @@ public class SyntheticTabularGeneratorIntegrationTests
 
     #region Diffusion Models
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TabDDPMGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -440,7 +440,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "TabDDPM");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TabSynGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -466,7 +466,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "TabSyn");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TabFlowGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -489,7 +489,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "TabFlow");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AutoDiffTabGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -511,7 +511,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "AutoDiffTab");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FinDiffGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -537,7 +537,7 @@ public class SyntheticTabularGeneratorIntegrationTests
 
     #region Transformer / Sequence Models
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void REaLTabFormerGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -562,7 +562,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "REaLTabFormer");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TabTransformerGenGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -586,7 +586,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "TabTransformerGen");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TabLLMGenGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -615,7 +615,7 @@ public class SyntheticTabularGeneratorIntegrationTests
 
     #region Graph-Based Models
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GOGGLEGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -643,7 +643,7 @@ public class SyntheticTabularGeneratorIntegrationTests
 
     #region Temporal Models
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -669,7 +669,7 @@ public class SyntheticTabularGeneratorIntegrationTests
 
     #region Statistical / Non-Deep Models (SyntheticTabularGeneratorBase)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SMOTENCGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateImbalancedData();
@@ -698,7 +698,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AIMGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -717,7 +717,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "AIM");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BayesianNetworkSynthGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -735,7 +735,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "BayesianNetworkSynth");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CopulaSynthGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -755,7 +755,7 @@ public class SyntheticTabularGeneratorIntegrationTests
 
     #region Cross-Cutting Concerns
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllGenerators_GenerateBeforeFit_ThrowsInvalidOperationException()
     {
         // Test that unfitted generators throw when Generate is called
@@ -772,7 +772,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         Assert.Throws<InvalidOperationException>(() => copula.Generate(10));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CTGANGenerator_FitWithEmptyData_ThrowsArgumentException()
     {
         var emptyData = new Matrix<double>(0, 0);
@@ -784,7 +784,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         Assert.ThrowsAny<ArgumentException>(() => generator.Fit(emptyData, columns, 1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CTGANGenerator_GenerateZeroSamples_ThrowsArgumentException()
     {
         var (data, columns) = CreateTestData();
@@ -805,7 +805,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         Assert.ThrowsAny<ArgumentException>(() => generator.Generate(0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CTGANGenerator_ColumnMetadata_MatchesAfterFit()
     {
         var (data, columns) = CreateTestData();
@@ -833,7 +833,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         Assert.True(generator.Columns[4].IsCategorical);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task CTGANGenerator_FitAsync_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -856,7 +856,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "CTGAN_Async");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task CTGANGenerator_FitAsync_SupportsCancellation()
     {
         var (data, columns) = CreateTestData();
@@ -880,7 +880,7 @@ public class SyntheticTabularGeneratorIntegrationTests
             () => generator.FitAsync(data, columns, 100, cts.Token));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DPCTGANGenerator_PrivacyBudgetExhaustion_StopsTraining()
     {
         var (data, columns) = CreateTestData();
@@ -907,7 +907,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         Assert.True(generator.CumulativeEpsilon > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SMOTENCGenerator_WithNoMinority_UsesAllData()
     {
         // All rows are class 0, no minority class 1

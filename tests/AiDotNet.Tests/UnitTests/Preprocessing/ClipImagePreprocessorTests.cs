@@ -19,7 +19,7 @@ public class ClipImagePreprocessorTests
         _preprocessor = new ClipImagePreprocessor<float>();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithDefaultParameters_SetsImageSizeTo224()
     {
         // Act
@@ -29,7 +29,7 @@ public class ClipImagePreprocessorTests
         Assert.Equal(224, preprocessor.ImageSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithCustomImageSize_UsesCustomSize()
     {
         // Act
@@ -39,7 +39,7 @@ public class ClipImagePreprocessorTests
         Assert.Equal(336, preprocessor.ImageSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroImageSize_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
@@ -47,7 +47,7 @@ public class ClipImagePreprocessorTests
             new ClipImagePreprocessor<float>(imageSize: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithNegativeImageSize_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
@@ -55,7 +55,7 @@ public class ClipImagePreprocessorTests
             new ClipImagePreprocessor<float>(imageSize: -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithInvalidMeanLength_ThrowsArgumentException()
     {
         // Arrange
@@ -66,7 +66,7 @@ public class ClipImagePreprocessorTests
             new ClipImagePreprocessor<float>(mean: invalidMean));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithInvalidStdLength_ThrowsArgumentException()
     {
         // Arrange
@@ -77,7 +77,7 @@ public class ClipImagePreprocessorTests
             new ClipImagePreprocessor<float>(std: invalidStd));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Preprocess_NullImage_ThrowsArgumentNullException()
     {
         // Act & Assert
@@ -85,7 +85,7 @@ public class ClipImagePreprocessorTests
             _preprocessor.Preprocess(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Preprocess_GrayscaleImage_ExpandsTo3Channels()
     {
         // Arrange - 2D grayscale image [H, W]
@@ -101,7 +101,7 @@ public class ClipImagePreprocessorTests
         Assert.Equal(224, result.Shape[2]); // Width
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Preprocess_HWCImage_ConvertsToChannelsFirst()
     {
         // Arrange - [H, W, C] format (100x100x3)
@@ -118,7 +118,7 @@ public class ClipImagePreprocessorTests
         Assert.Equal(224, result.Shape[2]); // Width
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Preprocess_CHWImage_MaintainsChannelsFirst()
     {
         // Arrange - [C, H, W] format (3x100x100)
@@ -134,7 +134,7 @@ public class ClipImagePreprocessorTests
         Assert.Equal(224, result.Shape[2]); // Width
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Preprocess_AlreadyCorrectSize_MaintainsSize()
     {
         // Arrange - Already 224x224
@@ -149,7 +149,7 @@ public class ClipImagePreprocessorTests
         Assert.Equal(224, result.Shape[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Preprocess_LargerImage_ResizesDown()
     {
         // Arrange - Larger image (512x512)
@@ -164,7 +164,7 @@ public class ClipImagePreprocessorTests
         Assert.Equal(224, result.Shape[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Preprocess_SmallerImage_ResizesUp()
     {
         // Arrange - Smaller image (50x50)
@@ -179,7 +179,7 @@ public class ClipImagePreprocessorTests
         Assert.Equal(224, result.Shape[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Preprocess_NormalizesPixelValues()
     {
         // Arrange - Image with values 0-255
@@ -196,7 +196,7 @@ public class ClipImagePreprocessorTests
         Assert.True(Math.Abs(centerValue) < 2.0f, $"Normalized value {centerValue} should be reasonable");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Preprocess_ValuesInRange0To1_DoesNotRescale()
     {
         // Arrange - Image with values already 0-1
@@ -213,7 +213,7 @@ public class ClipImagePreprocessorTests
         Assert.True(Math.Abs(centerValue) < 3.0f, $"Normalized value should be reasonable");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Preprocess_BatchImage_ExtractsFirstImage()
     {
         // Arrange - Batch of images [N, C, H, W]
@@ -230,7 +230,7 @@ public class ClipImagePreprocessorTests
         Assert.Equal(224, result.Shape[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Preprocess_SingleChannelImage_ExpandsToThreeChannels()
     {
         // Arrange - Single channel [1, H, W]
@@ -244,7 +244,7 @@ public class ClipImagePreprocessorTests
         Assert.Equal(3, result.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Preprocess_FourChannelImage_TakesFirstThreeChannels()
     {
         // Arrange - RGBA image [4, H, W]
@@ -258,7 +258,7 @@ public class ClipImagePreprocessorTests
         Assert.Equal(3, result.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Preprocess_InvalidDimensions_ThrowsArgumentException()
     {
         // Arrange - 5D tensor (invalid)
@@ -269,7 +269,7 @@ public class ClipImagePreprocessorTests
             _preprocessor.Preprocess(invalid));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PreprocessBatch_ProcessesMultipleImages()
     {
         // Arrange
@@ -293,7 +293,7 @@ public class ClipImagePreprocessorTests
         });
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PreprocessBatch_NullImages_ThrowsArgumentNullException()
     {
         // Act & Assert
@@ -301,7 +301,7 @@ public class ClipImagePreprocessorTests
             _preprocessor.PreprocessBatch(null!).ToList());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PreprocessBatch_EmptyList_ReturnsEmptyResults()
     {
         // Arrange
@@ -314,7 +314,7 @@ public class ClipImagePreprocessorTests
         Assert.Empty(results);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Preprocess_WithCustomNormalization_UsesCustomValues()
     {
         // Arrange
@@ -332,7 +332,7 @@ public class ClipImagePreprocessorTests
         Assert.True(Math.Abs(centerValue) < 0.1f, $"Expected ~0, got {centerValue}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Preprocess_ProducesConsistentResults()
     {
         // Arrange - Same image, same seed

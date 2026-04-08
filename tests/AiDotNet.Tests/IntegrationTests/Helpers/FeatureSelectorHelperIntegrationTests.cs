@@ -11,7 +11,7 @@ public class FeatureSelectorHelperIntegrationTests
 {
     #region ExtractFeatureVector Tests - Matrix
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExtractFeatureVector_Matrix_ExtractsCorrectColumn()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -36,7 +36,7 @@ public class FeatureSelectorHelperIntegrationTests
         Assert.Equal(40, featureVector[3]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExtractFeatureVector_Matrix_FirstColumn_ReturnsCorrectValues()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -59,7 +59,7 @@ public class FeatureSelectorHelperIntegrationTests
         Assert.Equal(25, featureVector[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExtractFeatureVector_Matrix_LastColumn_ReturnsCorrectValues()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -80,7 +80,7 @@ public class FeatureSelectorHelperIntegrationTests
         Assert.Equal(6, featureVector[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExtractFeatureVector_Float_Matrix_ReturnsCorrectValues()
     {
         var matrix = new Matrix<float>(new float[,]
@@ -104,7 +104,7 @@ public class FeatureSelectorHelperIntegrationTests
 
     #region ExtractFeatureVector Tests - Tensor 2D
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExtractFeatureVector_Tensor2D_ExtractsCorrectColumn()
     {
         var tensor = new Tensor<double>(new[] { 3, 4 });
@@ -132,7 +132,7 @@ public class FeatureSelectorHelperIntegrationTests
 
     #region ExtractFeatureVector Tests - Tensor 3D with Mean Strategy
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExtractFeatureVector_Tensor3D_MeanStrategy_CalculatesAverage()
     {
         var tensor = new Tensor<double>(new[] { 2, 2, 3 });
@@ -161,7 +161,7 @@ public class FeatureSelectorHelperIntegrationTests
 
     #region ExtractFeatureVector Tests - Tensor 3D with Max Strategy
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExtractFeatureVector_Tensor3D_MaxStrategy_FindsMaximum()
     {
         var tensor = new Tensor<double>(new[] { 2, 2, 3 });
@@ -188,7 +188,7 @@ public class FeatureSelectorHelperIntegrationTests
 
     #region ExtractFeatureVector Tests - Tensor 3D with Flatten Strategy
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExtractFeatureVector_Tensor3D_FlattenStrategy_GetsFirstElement()
     {
         var tensor = new Tensor<double>(new[] { 2, 2, 3 });
@@ -215,7 +215,7 @@ public class FeatureSelectorHelperIntegrationTests
 
     #region CreateFeatureSubset Tests - Matrix
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateFeatureSubset_Matrix_SingleFeature_ReturnsCorrectSubset()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -236,7 +236,7 @@ public class FeatureSelectorHelperIntegrationTests
         Assert.Equal(10, subset[2, 0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateFeatureSubset_Matrix_MultipleFeatures_ReturnsCorrectSubset()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -257,7 +257,7 @@ public class FeatureSelectorHelperIntegrationTests
         Assert.Equal(7, subset[1, 1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateFeatureSubset_Matrix_ReorderedFeatures_ReordersColumns()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -274,7 +274,7 @@ public class FeatureSelectorHelperIntegrationTests
         Assert.Equal(2, subset[0, 2]);  // Originally column 1
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateFeatureSubset_Float_Matrix_ReturnsCorrectSubset()
     {
         var matrix = new Matrix<float>(new float[,]
@@ -293,7 +293,7 @@ public class FeatureSelectorHelperIntegrationTests
 
     #region CreateFeatureSubset Tests - Tensor
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateFeatureSubset_Tensor2D_SingleFeature_ReturnsCorrectSubset()
     {
         var tensor = new Tensor<double>(new[] { 3, 4 });
@@ -312,7 +312,7 @@ public class FeatureSelectorHelperIntegrationTests
         Assert.Equal(22, subset[2, 0]);  // Row 2, original column 2
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateFeatureSubset_Tensor2D_MultipleFeatures_ReturnsCorrectSubset()
     {
         var tensor = new Tensor<double>(new[] { 2, 4 });
@@ -335,7 +335,7 @@ public class FeatureSelectorHelperIntegrationTests
 
     #region CreateFilteredData Tests - Matrix
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateFilteredData_Matrix_SingleFeature_ReturnsCorrectFiltered()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -354,7 +354,7 @@ public class FeatureSelectorHelperIntegrationTests
         Assert.Equal(5, filtered[1, 0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateFilteredData_Matrix_MultipleFeatures_ReturnsCorrectFiltered()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -377,7 +377,7 @@ public class FeatureSelectorHelperIntegrationTests
         Assert.Equal(50, filtered[0, 2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateFilteredData_Matrix_AllFeatures_ReturnsSameData()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -398,7 +398,7 @@ public class FeatureSelectorHelperIntegrationTests
 
     #region CreateFilteredData Tests - Tensor
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateFilteredData_Tensor2D_ReturnsCorrectFiltered()
     {
         var tensor = new Tensor<double>(new[] { 2, 4 });
@@ -417,7 +417,7 @@ public class FeatureSelectorHelperIntegrationTests
         Assert.Equal(7, filtered[1, 1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateFilteredData_Tensor3D_ReturnsCorrectFiltered()
     {
         var tensor = new Tensor<double>(new[] { 2, 3, 2 });
@@ -440,7 +440,7 @@ public class FeatureSelectorHelperIntegrationTests
 
     #region CopyFeature Tests - Tensor 2D
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CopyFeature_Tensor2D_CopiesCorrectValue()
     {
         var source = new Tensor<double>(new[] { 3, 4 });
@@ -453,7 +453,7 @@ public class FeatureSelectorHelperIntegrationTests
         Assert.Equal(42.0, destination[1, 0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CopyFeature_Tensor2D_MultipleCopies_CopiesAllValues()
     {
         var source = new Tensor<double>(new[] { 2, 3 });
@@ -478,7 +478,7 @@ public class FeatureSelectorHelperIntegrationTests
 
     #region CopyFeature Tests - Tensor 3D
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CopyFeature_Tensor3D_CopiesAllElements()
     {
         var source = new Tensor<double>(new[] { 2, 3, 4 });
@@ -499,7 +499,7 @@ public class FeatureSelectorHelperIntegrationTests
 
     #region CopyFeature Tests - Tensor 4D
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CopyFeature_Tensor4D_CopiesAllElements()
     {
         var source = new Tensor<double>(new[] { 2, 3, 2, 2 });
@@ -523,7 +523,7 @@ public class FeatureSelectorHelperIntegrationTests
 
     #region Unsupported Type Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExtractFeatureVector_UnsupportedType_ThrowsInvalidOperationException()
     {
         Assert.Throws<InvalidOperationException>(() =>
@@ -535,7 +535,7 @@ public class FeatureSelectorHelperIntegrationTests
                 new Dictionary<int, double>()));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateFeatureSubset_UnsupportedType_ThrowsInvalidOperationException()
     {
         Assert.Throws<InvalidOperationException>(() =>
@@ -544,7 +544,7 @@ public class FeatureSelectorHelperIntegrationTests
                 new List<int> { 0 }));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateFilteredData_UnsupportedType_ThrowsInvalidOperationException()
     {
         Assert.Throws<InvalidOperationException>(() =>
@@ -557,7 +557,7 @@ public class FeatureSelectorHelperIntegrationTests
 
     #region Edge Cases Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateFeatureSubset_EmptyFeatureList_ThrowsArgumentException()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -573,7 +573,7 @@ public class FeatureSelectorHelperIntegrationTests
                 new List<int>()));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateFilteredData_EmptyFeatureList_ThrowsArgumentException()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -593,7 +593,7 @@ public class FeatureSelectorHelperIntegrationTests
 
     #region Large Dataset Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateFilteredData_LargeMatrix_PerformsCorrectly()
     {
         int rows = 1000;
@@ -617,7 +617,7 @@ public class FeatureSelectorHelperIntegrationTests
         Assert.Equal(10, filtered[0, 1]);  // First row, feature 10
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExtractFeatureVector_LargeMatrix_PerformsCorrectly()
     {
         int rows = 1000;
@@ -644,7 +644,7 @@ public class FeatureSelectorHelperIntegrationTests
 
     #region WeightedSum Strategy Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExtractFeatureVector_Tensor3D_WeightedSum_CalculatesCorrectSum()
     {
         var tensor = new Tensor<double>(new[] { 1, 1, 3 });
@@ -671,7 +671,7 @@ public class FeatureSelectorHelperIntegrationTests
         Assert.Equal(140, featureVector[0], 5);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExtractFeatureVector_WeightedSum_NoWeights_ThrowsException()
     {
         var tensor = new Tensor<double>(new[] { 1, 1, 3 });

@@ -15,7 +15,7 @@ namespace AiDotNet.Tests.IntegrationTests.Regression;
 /// </summary>
 public class AiModelResultDeepCopyTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeepCopy_PredictionsMatchOriginal()
     {
         // Arrange: Train model, deep copy, verify both produce identical predictions
@@ -46,7 +46,7 @@ public class AiModelResultDeepCopyTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeepCopy_MutatingCopyDoesNotAffectOriginal()
     {
         // Arrange: Train model, deep copy
@@ -83,7 +83,7 @@ public class AiModelResultDeepCopyTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeepCopy_PreservesPreprocessingInfo()
     {
         // Arrange: Train with preprocessing, deep copy, verify preprocessing works on copy

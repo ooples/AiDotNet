@@ -26,7 +26,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 features: features);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithDefaultOptions_CreatesInstance()
         {
             // Act
@@ -36,7 +36,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithCustomOptions_CreatesInstance()
         {
             // Arrange
@@ -54,7 +54,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithoutModel_ThrowsException()
         {
             // Arrange
@@ -68,7 +68,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Contains("Model is null", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithCustomThresholds_WithoutModel_ThrowsException()
         {
             // Arrange

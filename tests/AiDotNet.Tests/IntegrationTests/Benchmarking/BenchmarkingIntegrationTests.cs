@@ -13,7 +13,7 @@ public class BenchmarkingIntegrationTests
 {
     #region BenchmarkSuiteRegistry Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkSuiteRegistry_GetAvailableSuites_ReturnsAllRegisteredSuites()
     {
         // Act
@@ -33,7 +33,7 @@ public class BenchmarkingIntegrationTests
         Assert.Contains(suites, s => s.Suite == BenchmarkSuite.LEAF);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkSuiteRegistry_GetAvailableSuites_SuitesAreOrderedByKindThenName()
     {
         // Act
@@ -61,7 +61,7 @@ public class BenchmarkingIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkSuiteRegistry_GetAvailableSuites_AllDescriptorsHaveRequiredFields()
     {
         // Act
@@ -143,7 +143,7 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(expectedName, name);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkSuiteRegistry_GetSuiteKind_WithInvalidSuite_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
@@ -153,7 +153,7 @@ public class BenchmarkingIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => BenchmarkSuiteRegistry.GetSuiteKind(invalidSuite));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkSuiteRegistry_GetDisplayName_WithInvalidSuite_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
@@ -167,7 +167,7 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkReport Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkReport_TotalDuration_CalculatesCorrectly()
     {
         // Arrange
@@ -186,7 +186,7 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(TimeSpan.FromMinutes(5), duration);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkReport_OverallStatus_WithNoSuites_ReturnsSkipped()
     {
         // Arrange
@@ -200,7 +200,7 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(BenchmarkExecutionStatus.Skipped, status);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkReport_OverallStatus_WithAllSucceeded_ReturnsSucceeded()
     {
         // Arrange
@@ -220,7 +220,7 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(BenchmarkExecutionStatus.Succeeded, status);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkReport_OverallStatus_WithOneFailed_ReturnsFailed()
     {
         // Arrange
@@ -240,7 +240,7 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(BenchmarkExecutionStatus.Failed, status);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkReport_OverallStatus_WithAllSkipped_ReturnsSkipped()
     {
         // Arrange
@@ -260,7 +260,7 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(BenchmarkExecutionStatus.Skipped, status);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkReport_OverallStatus_WithMixedSuccessAndSkipped_ReturnsSucceeded()
     {
         // Arrange
@@ -284,7 +284,7 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkSuiteReport Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkSuiteReport_Duration_CalculatesCorrectly()
     {
         // Arrange
@@ -302,7 +302,7 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(TimeSpan.FromSeconds(30), duration);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkSuiteReport_DefaultValues_AreCorrect()
     {
         // Act
@@ -316,7 +316,7 @@ public class BenchmarkingIntegrationTests
         Assert.Null(report.DataSelection);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkSuiteReport_WithMetrics_StoresMetricsCorrectly()
     {
         // Arrange
@@ -335,7 +335,7 @@ public class BenchmarkingIntegrationTests
         Assert.Contains(report.Metrics, m => m.Metric == BenchmarkMetric.TotalEvaluated && Math.Abs(m.Value - 100) < 0.001);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkSuiteReport_WithCategoryAccuracies_StoresCategoriesCorrectly()
     {
         // Arrange
@@ -353,7 +353,7 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(2, report.CategoryAccuracies.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkSuiteReport_WithDataSelection_StoresDataSelectionCorrectly()
     {
         // Arrange
@@ -409,7 +409,7 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkSuiteDescriptor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkSuiteDescriptor_DefaultValues_AreCorrect()
     {
         // Act
@@ -420,7 +420,7 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(string.Empty, descriptor.Description);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkSuiteDescriptor_AllDescriptorsInRegistry_HaveValidProperties()
     {
         // Act
@@ -447,7 +447,7 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkCategoryResult Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkCategoryResult_DefaultValues_AreCorrect()
     {
         // Act
@@ -473,7 +473,7 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(accuracy, result.Accuracy, precision: 5);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkCategoryResult_AccuracyBoundaries_HandlesEdgeCases()
     {
         // Arrange & Act
@@ -489,7 +489,7 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkDataSelectionSummary Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkDataSelectionSummary_DefaultValues_AreCorrect()
     {
         // Act
@@ -505,7 +505,7 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(0, summary.MaxSamplesPerUser);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkDataSelectionSummary_AllProperties_CanBeSet()
     {
         // Arrange & Act
@@ -534,7 +534,7 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkSuite Enum Coverage Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkSuite_AllReasoningSuites_AreRegistered()
     {
         // Arrange
@@ -568,7 +568,7 @@ public class BenchmarkingIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkSuite_AllDatasetSuites_AreRegistered()
     {
         // Arrange
@@ -597,7 +597,7 @@ public class BenchmarkingIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkSuite_TotalRegisteredCount_MatchesExpected()
     {
         // Act
@@ -611,7 +611,7 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkMetric Enum Coverage Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkMetric_AllValues_AreValid()
     {
         // Act
@@ -634,7 +634,7 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkExecutionStatus Enum Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkExecutionStatus_AllValues_AreValid()
     {
         // Act
@@ -652,7 +652,7 @@ public class BenchmarkingIntegrationTests
 
     #region BenchmarkSuiteKind Enum Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkSuiteKind_AllValues_AreValid()
     {
         // Act
@@ -670,7 +670,7 @@ public class BenchmarkingIntegrationTests
 
     #region Integration Scenarios
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkReport_CompleteScenario_AllPropertiesWork()
     {
         // Arrange - Create a complete benchmark report scenario
@@ -733,7 +733,7 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(0.85, accuracyMetric.Value, precision: 2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkReport_FailureScenario_HandlesFailuresCorrectly()
     {
         // Arrange

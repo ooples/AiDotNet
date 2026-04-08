@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.IntegrationTests.Data;
 
 public class VisionBenchmarkTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EuroSatLoader_LoadsSyntheticData()
     {
         string tempDir = CreateTempDirectory();
@@ -71,7 +71,7 @@ public class VisionBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ChestXray14Loader_LoadsSyntheticCsvData()
     {
         string tempDir = CreateTempDirectory();
@@ -135,7 +135,7 @@ public class VisionBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task PascalVocLoader_LoadsSyntheticXmlAnnotations()
     {
         string tempDir = CreateTempDirectory();
@@ -220,7 +220,7 @@ public class VisionBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SkinLesionLoader_LoadsSyntheticData()
     {
         string tempDir = CreateTempDirectory();
@@ -272,7 +272,7 @@ public class VisionBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ImageNet1kLoader_DefaultOptions()
     {
         var loader = new ImageNet1kDataLoader<double>();
@@ -281,7 +281,7 @@ public class VisionBenchmarkTests
         Assert.Equal(224 * 224 * 3, loader.FeatureCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Places365Loader_DefaultOptions()
     {
         var loader = new Places365DataLoader<double>();
@@ -290,7 +290,7 @@ public class VisionBenchmarkTests
         Assert.Equal(256 * 256 * 3, loader.FeatureCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CocoDetectionLoader_DefaultOptions()
     {
         var options = new CocoDetectionDataLoaderOptions { MaxDetections = 50 };
@@ -299,7 +299,7 @@ public class VisionBenchmarkTests
         Assert.Equal(50 * 5, loader.OutputDimension);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RetinalFundusLoader_DefaultOptions()
     {
         var loader = new RetinalFundusDataLoader<double>();
@@ -307,7 +307,7 @@ public class VisionBenchmarkTests
         Assert.Equal(5, loader.OutputDimension);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FMoWLoader_DefaultOptions()
     {
         var loader = new FMoWDataLoader<double>();
@@ -315,7 +315,7 @@ public class VisionBenchmarkTests
         Assert.Equal(62, loader.OutputDimension);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BigEarthNetLoader_DefaultOptions()
     {
         var loader = new BigEarthNetDataLoader<double>();
@@ -323,7 +323,7 @@ public class VisionBenchmarkTests
         Assert.Equal(19, loader.OutputDimension); // Default 19-class scheme
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BigEarthNetLoader_43ClassScheme()
     {
         var options = new BigEarthNetDataLoaderOptions { Use19ClassScheme = false };
@@ -331,7 +331,7 @@ public class VisionBenchmarkTests
         Assert.Equal(43, loader.OutputDimension);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EuroSatLoader_SplitReturnsThreeSets()
     {
         string tempDir = CreateTempDirectory();

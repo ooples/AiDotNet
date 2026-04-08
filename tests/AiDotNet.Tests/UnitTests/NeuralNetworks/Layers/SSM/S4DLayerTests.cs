@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class S4DLayerTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ValidParameters_CreatesLayer()
     {
         int seqLen = 16;
@@ -24,7 +24,7 @@ public class S4DLayerTests
         Assert.Equal(modelDim * expandFactor, layer.InnerDimension);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_DefaultParameters_UsesCorrectDefaults()
     {
         var layer = new S4DLayer<float>(16);
@@ -34,21 +34,21 @@ public class S4DLayerTests
         Assert.Equal(256, layer.InnerDimension); // 256 * 1 (expandFactor=1)
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ThrowsWhenModelDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new S4DLayer<float>(16, modelDimension: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ThrowsWhenStateDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new S4DLayer<float>(16, modelDimension: 64, stateDimension: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ThrowsWhenExpandFactorNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -91,7 +91,7 @@ public class S4DLayerTests
 
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetParameters_SetParameters_RoundTrip()
     {
         int seqLen = 4;
@@ -114,7 +114,7 @@ public class S4DLayerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SetParameters_ThrowsOnWrongLength()
     {
         var layer = new S4DLayer<float>(4, 32, 8);
@@ -123,7 +123,7 @@ public class S4DLayerTests
         Assert.Throws<ArgumentException>(() => layer.SetParameters(wrongParams));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResetState_ClearsInternalState()
     {
         var layer = new S4DLayer<float>(4, 32, 8);
@@ -146,7 +146,7 @@ public class S4DLayerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Forward_DeterministicWithSameParameters()
     {
         int seqLen = 4;
@@ -172,14 +172,14 @@ public class S4DLayerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SupportsTraining_ReturnsFalse_UntilFullBackwardImplemented()
     {
         var layer = new S4DLayer<float>(4, 32, 8);
         Assert.False(layer.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetMetadata_ContainsExpectedKeys()
     {
         var layer = new S4DLayer<float>(8, 64, 16, expandFactor: 2);
@@ -194,7 +194,7 @@ public class S4DLayerTests
         Assert.Equal("128", metadata["InnerDimension"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Forward_Double_ProducesValidOutput()
     {
         int seqLen = 4;

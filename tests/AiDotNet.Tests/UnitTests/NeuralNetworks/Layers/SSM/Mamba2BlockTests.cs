@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class Mamba2BlockTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ValidParameters_CreatesBlock()
     {
         int seqLen = 16;
@@ -31,7 +31,7 @@ public class Mamba2BlockTests
         Assert.Equal(chunkSize, block.ChunkSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_DefaultParameters_UsesCorrectDefaults()
     {
         var block = new Mamba2Block<float>(16);
@@ -45,49 +45,49 @@ public class Mamba2BlockTests
         Assert.Equal(64, block.ChunkSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ThrowsWhenModelDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new Mamba2Block<float>(16, modelDimension: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ThrowsWhenStateDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new Mamba2Block<float>(16, modelDimension: 64, stateDimension: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ThrowsWhenNumHeadsNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new Mamba2Block<float>(16, modelDimension: 64, numHeads: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ThrowsWhenExpandFactorNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new Mamba2Block<float>(16, modelDimension: 64, expandFactor: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ThrowsWhenConvKernelNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new Mamba2Block<float>(16, modelDimension: 64, convKernelSize: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ThrowsWhenChunkSizeNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new Mamba2Block<float>(16, modelDimension: 64, chunkSize: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ThrowsWhenInnerDimNotDivisibleByHeads()
     {
         // modelDim=64, expandFactor=2 -> innerDim=128, numHeads=3 -> 128%3!=0
@@ -130,7 +130,7 @@ public class Mamba2BlockTests
 
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetParameters_SetParameters_RoundTrip()
     {
         int seqLen = 4;
@@ -153,7 +153,7 @@ public class Mamba2BlockTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SetParameters_ThrowsOnWrongLength()
     {
         var block = new Mamba2Block<float>(4, 32, 8, numHeads: 4);
@@ -162,7 +162,7 @@ public class Mamba2BlockTests
         Assert.Throws<ArgumentException>(() => block.SetParameters(wrongParams));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResetState_ClearsInternalState()
     {
         var block = new Mamba2Block<float>(4, 32, 8, numHeads: 4);
@@ -185,7 +185,7 @@ public class Mamba2BlockTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Forward_DeterministicWithSameParameters()
     {
         int seqLen = 4;
@@ -211,14 +211,14 @@ public class Mamba2BlockTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SupportsTraining_ReturnsTrue()
     {
         var block = new Mamba2Block<float>(4, 32, 8, numHeads: 4);
         Assert.True(block.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetMetadata_ContainsExpectedKeys()
     {
         var block = new Mamba2Block<float>(8, 64, 16, numHeads: 8, expandFactor: 2, convKernelSize: 4, chunkSize: 32);
@@ -240,7 +240,7 @@ public class Mamba2BlockTests
         Assert.Equal("32", metadata["ChunkSize"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Forward_Double_ProducesValidOutput()
     {
         int seqLen = 4;

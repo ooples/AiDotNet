@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 /// </summary>
 public class ProgramTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_ValidParameters_CreatesInstance()
     {
         // Arrange
@@ -28,7 +28,7 @@ public class ProgramTests
         Assert.Equal(2, program.Complexity);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_DefaultConstructor_CreatesEmptyProgram()
     {
         // Act
@@ -43,7 +43,7 @@ public class ProgramTests
         Assert.Equal(0, program.Complexity);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Properties_SettersAndGetters_WorkCorrectly()
     {
         // Arrange
@@ -68,7 +68,7 @@ public class ProgramTests
         Assert.Equal(5.5, program.ExecutionTimeMs);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ToString_ReturnsFormattedString()
     {
         // Arrange
@@ -90,7 +90,7 @@ public class ProgramTests
         Assert.Contains("x = 5", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ErrorMessage_WhenSet_StoresCorrectly()
     {
         // Arrange

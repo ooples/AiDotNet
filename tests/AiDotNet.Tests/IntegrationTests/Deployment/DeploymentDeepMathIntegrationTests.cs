@@ -16,7 +16,7 @@ public class DeploymentDeepMathIntegrationTests
     // QuantizationConfig Default Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_Defaults_CorrectValues()
     {
         var config = new QuantizationConfig();
@@ -39,7 +39,7 @@ public class DeploymentDeepMathIntegrationTests
     // QuantizationConfig Factory Method Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForGPTQ_Default_Correct4BitPerGroupConfig()
     {
         var config = QuantizationConfig.ForGPTQ();
@@ -53,7 +53,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.True(config.UseSymmetricQuantization);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForGPTQ_CustomGroupSize_ReflectedInConfig()
     {
         var config = QuantizationConfig.ForGPTQ(groupSize: 64);
@@ -63,7 +63,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.Equal(QuantizationStrategy.GPTQ, config.Strategy);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForAWQ_Default_Correct4BitPerGroupConfig()
     {
         var config = QuantizationConfig.ForAWQ();
@@ -77,7 +77,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.True(config.UseSymmetricQuantization);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForAWQ_CustomGroupSize_ReflectedInConfig()
     {
         var config = QuantizationConfig.ForAWQ(groupSize: 256);
@@ -86,7 +86,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.Equal(QuantizationStrategy.AWQ, config.Strategy);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForSmoothQuant_QuantizesActivations()
     {
         var config = QuantizationConfig.ForSmoothQuant();
@@ -99,7 +99,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.Null(config.TargetBitWidth); // SmoothQuant uses default 8-bit
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForQAT_DefaultParams_EfficientQATMethod()
     {
         var config = QuantizationConfig.ForQAT();
@@ -113,7 +113,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.True(config.QuantizeActivations);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForQAT_Custom4Bit_CorrectBitWidth()
     {
         var config = QuantizationConfig.ForQAT(targetBitWidth: 4, method: QATMethod.ZeroQAT);
@@ -123,7 +123,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.True(config.UseQuantizationAwareTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForGPTQ_AndForAWQ_DifferOnlyInStrategy()
     {
         var gptq = QuantizationConfig.ForGPTQ();
@@ -141,7 +141,7 @@ public class DeploymentDeepMathIntegrationTests
     // CompressionConfig Default Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionConfig_Defaults_IndustryStandard()
     {
         var config = new CompressionConfig();
@@ -156,7 +156,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.Equal(2.0, config.MaxAccuracyLossPercent);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionConfig_256Clusters_Equals8BitEquivalent()
     {
         // 256 = 2^8 clusters = 8-bit quantization equivalent
@@ -165,7 +165,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.Equal(8.0, bitsEquivalent);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionConfig_16Clusters_Equals4BitEquivalent()
     {
         // 16 = 2^4 clusters = 4-bit equivalent (aggressive compression)
@@ -174,7 +174,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.Equal(4.0, bitsEquivalent);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionConfig_65536Clusters_Equals16BitEquivalent()
     {
         // 65536 = 2^16 clusters = 16-bit equivalent (light compression)
@@ -187,7 +187,7 @@ public class DeploymentDeepMathIntegrationTests
     // ABTestingConfig Default Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ABTestingConfig_Defaults_CorrectValues()
     {
         var config = new ABTestingConfig();
@@ -203,7 +203,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.Null(config.ControlVersion);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ABTestingConfig_TrafficSplitSumsToOne()
     {
         var config = new ABTestingConfig
@@ -219,7 +219,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.Equal(1.0, total, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ABTestingConfig_ThreeVersionSplit_SumsToOne()
     {
         var config = new ABTestingConfig
@@ -240,7 +240,7 @@ public class DeploymentDeepMathIntegrationTests
     // ABTest Default Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ABTest_Defaults_CorrectValues()
     {
         var test = new ABTest();
@@ -257,7 +257,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.Equal(0.01, test.MinimumImprovementThreshold);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ABTest_TreatmentPercentage_ControlIsComplement()
     {
         var test = new ABTest { TreatmentTrafficPercentage = 0.2 };
@@ -271,7 +271,7 @@ public class DeploymentDeepMathIntegrationTests
     // CacheConfig Default Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheConfig_Defaults_CorrectValues()
     {
         var config = new CacheConfig();
@@ -285,21 +285,21 @@ public class DeploymentDeepMathIntegrationTests
         Assert.True(config.TrackStatistics);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheConfig_DefaultTTL_EqualsOneHour()
     {
         var config = new CacheConfig();
         Assert.Equal(TimeSpan.FromHours(1), config.DefaultTTL);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheConfig_DefaultTTL_MatchesTimeToLiveSeconds()
     {
         var config = new CacheConfig();
         Assert.Equal(config.TimeToLiveSeconds, (int)config.DefaultTTL.TotalSeconds);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheConfig_SetDefaultTTL_UpdatesTimeToLiveSeconds()
     {
         var config = new CacheConfig();
@@ -309,7 +309,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.Equal(TimeSpan.FromMinutes(30), config.DefaultTTL);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheConfig_SetTimeToLiveSeconds_UpdatesDefaultTTL()
     {
         var config = new CacheConfig();
@@ -318,7 +318,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.Equal(TimeSpan.FromHours(2), config.DefaultTTL);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheConfig_TTLRoundTrip_Consistent()
     {
         var config = new CacheConfig();
@@ -334,7 +334,7 @@ public class DeploymentDeepMathIntegrationTests
     // TelemetryConfig Default & Alias Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TelemetryConfig_Defaults_AllTrackingEnabled()
     {
         var config = new TelemetryConfig();
@@ -352,7 +352,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.Empty(config.CustomTags);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TelemetryConfig_CollectLatency_IsAliasForTrackLatency()
     {
         var config = new TelemetryConfig();
@@ -369,7 +369,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.True(config.CollectLatency);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TelemetryConfig_CollectErrors_IsAliasForTrackErrors()
     {
         var config = new TelemetryConfig();
@@ -387,7 +387,7 @@ public class DeploymentDeepMathIntegrationTests
     // VersioningConfig Default & Alias Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VersioningConfig_Defaults_CorrectValues()
     {
         var config = new VersioningConfig();
@@ -401,7 +401,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.Empty(config.VersionMetadata);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VersioningConfig_MaxVersionsPerModel_IsAliasForMaxVersionHistory()
     {
         var config = new VersioningConfig();
@@ -419,7 +419,7 @@ public class DeploymentDeepMathIntegrationTests
     // ExportConfig Default Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExportConfig_Defaults_CorrectValues()
     {
         var config = new ExportConfig();
@@ -439,7 +439,7 @@ public class DeploymentDeepMathIntegrationTests
     // DeploymentConfiguration Factory Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeploymentConfiguration_Create_AllNulls_AllPropertiesNull()
     {
         var config = DeploymentConfiguration.Create(
@@ -462,7 +462,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.Null(config.Profiling);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeploymentConfiguration_Create_WithAllConfigs_PreservesReferences()
     {
         var quant = new QuantizationConfig();
@@ -496,7 +496,7 @@ public class DeploymentDeepMathIntegrationTests
     // Cross-Config Consistency Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_AllFactoryMethods_UseInt8Mode()
     {
         // All factory methods set Mode = Int8
@@ -506,7 +506,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.Equal(QuantizationMode.Int8, QuantizationConfig.ForQAT().Mode);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_AllFactoryMethods_UseSymmetricQuantization()
     {
         Assert.True(QuantizationConfig.ForGPTQ().UseSymmetricQuantization);
@@ -515,7 +515,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.True(QuantizationConfig.ForQAT().UseSymmetricQuantization);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_OnlySmoothQuantAndQAT_QuantizeActivations()
     {
         Assert.False(QuantizationConfig.ForGPTQ().QuantizeActivations);
@@ -524,7 +524,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.True(QuantizationConfig.ForQAT().QuantizeActivations);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_OnlyGPTQAndAWQ_UsePerGroupGranularity()
     {
         Assert.Equal(QuantizationGranularity.PerGroup, QuantizationConfig.ForGPTQ().Granularity);
@@ -536,7 +536,7 @@ public class DeploymentDeepMathIntegrationTests
     // Compression Bit-Width Calculations
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionConfig_ClusterCount_CompressionRatio()
     {
         // Full precision (float32 = 32 bits per weight)
@@ -556,7 +556,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.Equal(2.0, ratio65536);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionConfig_MoreClusters_LessCompression()
     {
         // As cluster count increases, bits per weight increases, compression ratio decreases
@@ -576,7 +576,7 @@ public class DeploymentDeepMathIntegrationTests
     // CacheConfig Memory Calculations
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheConfig_MaxSizeMB_InBytesConversion()
     {
         var config = new CacheConfig();
@@ -586,7 +586,7 @@ public class DeploymentDeepMathIntegrationTests
         Assert.Equal(104_857_600.0, bytes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheConfig_TTLZero_MeansNoExpiry()
     {
         var config = new CacheConfig { TimeToLiveSeconds = 0 };
@@ -598,7 +598,7 @@ public class DeploymentDeepMathIntegrationTests
     // ABTest Math: Statistical Significance
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ABTest_MinSampleSize_StatisticalPower()
     {
         var config = new ABTestingConfig();

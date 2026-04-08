@@ -10,7 +10,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
     {
         #region Constructor Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithDefaultParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -20,7 +20,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(analyzer);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithCustomParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -36,7 +36,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Analyze Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Analyze_WithNullWeights_ThrowsException()
         {
             // Arrange
@@ -46,7 +46,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentException>(() => analyzer.Analyze(null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Analyze_WithEmptyWeights_ThrowsException()
         {
             // Arrange
@@ -57,7 +57,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentException>(() => analyzer.Analyze(weights));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Analyze_WithValidWeights_ReturnsAnalysisResult()
         {
             // Arrange
@@ -72,7 +72,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(6, result.TotalWeights);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Analyze_WithHighSparsity_RecommendsPruning()
         {
             // Arrange
@@ -90,7 +90,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(result.NearZeroWeights >= 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Analyze_CalculatesMeanMagnitude()
         {
             // Arrange
@@ -104,7 +104,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(3.0, result.MeanMagnitude, 6);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Analyze_CalculatesMinMaxMagnitude()
         {
             // Arrange
@@ -119,7 +119,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(10.0, result.MaxMagnitude);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Analyze_CalculatesStandardDeviation()
         {
             // Arrange
@@ -133,7 +133,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(result.StdDevMagnitude > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Analyze_CalculatesEntropy()
         {
             // Arrange
@@ -147,7 +147,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(result.Entropy >= 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Analyze_WithConvolutionalFlag_UsesConservativeSettings()
         {
             // Arrange
@@ -166,7 +166,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(resultFC);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Analyze_SetsRecommendationReasoning()
         {
             // Arrange
@@ -180,7 +180,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.False(string.IsNullOrEmpty(result.RecommendationReasoning));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Analyze_SetsRecommendedParameters()
         {
             // Arrange
@@ -194,7 +194,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(result.RecommendedParameters);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Analyze_SetsEstimatedCompressionRatio()
         {
             // Arrange
@@ -208,7 +208,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(result.EstimatedCompressionRatio > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Analyze_WithUniformWeights_CalculatesLowEntropy()
         {
             // Arrange
@@ -227,7 +227,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region GenerateReport Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GenerateReport_ReturnsFormattedString()
         {
             // Arrange
@@ -245,7 +245,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Contains("Recommendation", report);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GenerateReport_ContainsTotalWeights()
         {
             // Arrange
@@ -260,7 +260,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Contains("Total Weights:", report);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GenerateReport_ContainsRecommendedTechnique()
         {
             // Arrange
@@ -279,7 +279,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Type-Specific Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Analyze_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -298,7 +298,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Edge Case Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Analyze_WithSingleWeight_ReturnsValidResult()
         {
             // Arrange
@@ -313,7 +313,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(1, result.TotalWeights);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Analyze_WithLargeArray_CompletesSuccessfully()
         {
             // Arrange
@@ -334,7 +334,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(result.UniqueValues > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Analyze_WithNegativeWeights_HandlesCorrectly()
         {
             // Arrange

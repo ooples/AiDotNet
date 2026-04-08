@@ -9,7 +9,7 @@ public class ClassificationMetricsIntegrationTests
 {
     private const double Tolerance = 1e-9;
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CalculateAccuracy_Binary_WithProbabilities_UsesThresholding()
     {
         // Arrange
@@ -23,7 +23,7 @@ public class ClassificationMetricsIntegrationTests
         Assert.Equal(1.0, accuracy, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CalculatePrecisionRecallF1_Binary_WithProbabilities_UsesThresholding()
     {
         // Arrange
@@ -39,7 +39,7 @@ public class ClassificationMetricsIntegrationTests
         Assert.Equal(0.5, f1, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CalculateMacroPrecisionRecallF1_MultiClass_ReturnsMacroAverages()
     {
         // Arrange

@@ -11,7 +11,7 @@ public class PrototypesIntegrationTests
 {
     #region PrototypeVector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Constructor_CreatesVectorWithCorrectLength()
     {
         // Arrange & Act
@@ -21,7 +21,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(10, vector.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Constructor_WithArray_CopiesValues()
     {
         // Arrange
@@ -38,7 +38,7 @@ public class PrototypesIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Indexer_GetsAndSetsValues()
     {
         // Arrange
@@ -53,7 +53,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(50.0, vector[4]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Indexer_ThrowsOnOutOfBounds()
     {
         // Arrange
@@ -64,7 +64,7 @@ public class PrototypesIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => _ = vector[-1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Zeros_CreatesZeroVector()
     {
         // Act
@@ -78,7 +78,7 @@ public class PrototypesIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Ones_CreatesOnesVector()
     {
         // Act
@@ -92,7 +92,7 @@ public class PrototypesIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_FromArray_CreatesVectorFromArray()
     {
         // Arrange
@@ -108,7 +108,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(3.5f, vector[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Add_VectorPlusVector()
     {
         // Arrange
@@ -124,7 +124,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(9.0, result[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Add_VectorPlusScalarVector()
     {
         // Arrange
@@ -140,7 +140,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(13.0, result[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Subtract_VectorMinusVector()
     {
         // Arrange
@@ -156,7 +156,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(27.0, result[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Multiply_VectorTimesVector()
     {
         // Arrange
@@ -172,7 +172,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(28.0, result[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Multiply_VectorTimesScalar()
     {
         // Arrange
@@ -187,7 +187,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(6.0, result[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Divide_VectorDivideVector()
     {
         // Arrange
@@ -203,7 +203,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(6.0, result[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Divide_VectorDivideScalar()
     {
         // Arrange
@@ -218,7 +218,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(3.0, result[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Sqrt_ComputesSquareRoot()
     {
         // Arrange
@@ -233,7 +233,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(4.0, result[2], 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Power_RaisesToPower()
     {
         // Arrange
@@ -248,7 +248,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(16.0, result[2], 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_ToString_ReturnsFormattedString()
     {
         // Arrange
@@ -263,7 +263,7 @@ public class PrototypesIntegrationTests
         Assert.Contains("]", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_LengthMismatch_ThrowsOnAdd()
     {
         // Arrange
@@ -274,7 +274,7 @@ public class PrototypesIntegrationTests
         Assert.Throws<ArgumentException>(() => a.Add(b));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_LengthMismatch_ThrowsOnSubtract()
     {
         // Arrange
@@ -285,7 +285,7 @@ public class PrototypesIntegrationTests
         Assert.Throws<ArgumentException>(() => a.Subtract(b));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_LengthMismatch_ThrowsOnMultiply()
     {
         // Arrange
@@ -296,7 +296,7 @@ public class PrototypesIntegrationTests
         Assert.Throws<ArgumentException>(() => a.Multiply(b));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_LengthMismatch_ThrowsOnDivide()
     {
         // Arrange
@@ -307,7 +307,7 @@ public class PrototypesIntegrationTests
         Assert.Throws<ArgumentException>(() => a.Divide(b));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_WorksWithFloat()
     {
         // Arrange
@@ -323,7 +323,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(2.0f, product[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_WorksWithDecimal()
     {
         // Arrange
@@ -339,7 +339,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(9.0m, sum[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_ChainedOperations()
     {
         // Arrange
@@ -359,7 +359,7 @@ public class PrototypesIntegrationTests
 
     #region PrototypeAdamOptimizer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeAdamOptimizer_Constructor_DefaultParameters()
     {
         // Act
@@ -369,7 +369,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(0, optimizer.TimeStep);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeAdamOptimizer_Constructor_CustomParameters()
     {
         // Act
@@ -383,7 +383,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(0, optimizer.TimeStep);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeAdamOptimizer_UpdateParameters_IncrementsTimeStep()
     {
         // Arrange
@@ -398,7 +398,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(1, optimizer.TimeStep);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeAdamOptimizer_UpdateParameters_ModifiesParameters()
     {
         // Arrange
@@ -423,7 +423,7 @@ public class PrototypesIntegrationTests
         Assert.True(different, "Parameters should be modified by optimizer");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeAdamOptimizer_UpdateParameters_ThrowsOnNullParameters()
     {
         // Arrange
@@ -434,7 +434,7 @@ public class PrototypesIntegrationTests
         Assert.Throws<ArgumentNullException>(() => optimizer.UpdateParameters(null!, gradient));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeAdamOptimizer_UpdateParameters_ThrowsOnNullGradient()
     {
         // Arrange
@@ -445,7 +445,7 @@ public class PrototypesIntegrationTests
         Assert.Throws<ArgumentNullException>(() => optimizer.UpdateParameters(parameters, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeAdamOptimizer_UpdateParameters_ThrowsOnLengthMismatch()
     {
         // Arrange
@@ -457,7 +457,7 @@ public class PrototypesIntegrationTests
         Assert.Throws<ArgumentException>(() => optimizer.UpdateParameters(parameters, gradient));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeAdamOptimizer_Reset_ClearsState()
     {
         // Arrange
@@ -473,7 +473,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(0, optimizer.TimeStep);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeAdamOptimizer_ToString_ReturnsConfiguration()
     {
         // Arrange
@@ -489,7 +489,7 @@ public class PrototypesIntegrationTests
         Assert.Contains("beta2=", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeAdamOptimizer_ConvergesToZero()
     {
         // Arrange: optimize x^2 where gradient is 2*x
@@ -511,7 +511,7 @@ public class PrototypesIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeAdamOptimizer_MultipleUpdates_AccumulatesMoments()
     {
         // Arrange
@@ -529,7 +529,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(10, optimizer.TimeStep);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeAdamOptimizer_WorksWithFloat()
     {
         // Arrange
@@ -549,7 +549,7 @@ public class PrototypesIntegrationTests
 
     #region SimpleLinearRegression Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_Constructor_InitializesWeights()
     {
         // Act
@@ -561,7 +561,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(3, weights.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_Predict_SingleSample()
     {
         // Arrange
@@ -575,7 +575,7 @@ public class PrototypesIntegrationTests
         Assert.True(!double.IsNaN(prediction));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_PredictBatch_MultipleSamples()
     {
         // Arrange
@@ -594,7 +594,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(3, predictions.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_Train_ReducesMSE()
     {
         // Arrange: simple linear relationship y = 2*x + 1
@@ -617,7 +617,7 @@ public class PrototypesIntegrationTests
         Assert.True(finalMSE < initialMSE, $"MSE did not decrease: {initialMSE} -> {finalMSE}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_ComputeMSE_CorrectValue()
     {
         // Arrange
@@ -632,7 +632,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(1.0, mse, 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_ComputeR2Score_PerfectFit()
     {
         // Arrange
@@ -647,7 +647,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(1.0, r2, 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_GetBias_ReturnsBiasValue()
     {
         // Arrange
@@ -660,7 +660,7 @@ public class PrototypesIntegrationTests
         Assert.True(!double.IsNaN(bias) && !double.IsInfinity(bias));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_LearnsSyntheticData()
     {
         // Arrange: y = 3*x1 + 2*x2 + 1
@@ -691,7 +691,7 @@ public class PrototypesIntegrationTests
         Assert.True(r2 > 0.95, $"R2 score should be > 0.95, got {r2}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_WorksWithFloat()
     {
         // Arrange
@@ -712,7 +712,7 @@ public class PrototypesIntegrationTests
 
     #region SimpleNeuralNetwork Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleNeuralNetwork_Constructor_InitializesNetwork()
     {
         // Act
@@ -726,7 +726,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(17, parameters.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleNeuralNetwork_Constructor_WithSeed_IsDeterministic()
     {
         // Act
@@ -742,7 +742,7 @@ public class PrototypesIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleNeuralNetwork_Forward_ReturnsOutput()
     {
         // Arrange
@@ -757,7 +757,7 @@ public class PrototypesIntegrationTests
         Assert.True(!double.IsNaN(output[0]));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleNeuralNetwork_ComputeLoss_ReturnsMSE()
     {
         // Arrange
@@ -772,7 +772,7 @@ public class PrototypesIntegrationTests
         Assert.Equal(0.25, loss, 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleNeuralNetwork_ComputeLossGradient_ReturnsGradient()
     {
         // Arrange
@@ -789,7 +789,7 @@ public class PrototypesIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleNeuralNetwork_SetParameters_UpdatesNetwork()
     {
         // Arrange
@@ -808,7 +808,7 @@ public class PrototypesIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleNeuralNetwork_WorksWithFloat()
     {
         // Arrange
@@ -823,7 +823,7 @@ public class PrototypesIntegrationTests
         Assert.True(!float.IsNaN(output[0]));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleNeuralNetwork_ReLU_AppliedInForward()
     {
         // Arrange: create network where we can verify ReLU is applied
@@ -867,7 +867,7 @@ public class PrototypesIntegrationTests
     #region Cross-Component Integration Tests
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Integration_LinearRegression_EndToEnd()
     {
         // Arrange
@@ -889,7 +889,7 @@ public class PrototypesIntegrationTests
         Assert.True(mse < 0.01, $"MSE should be < 0.01, got {mse}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Integration_VectorOperations_LargeScale()
     {
         // Arrange

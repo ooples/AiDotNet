@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.PromptEngineering;
 
 public class StructuredOutputTemplateTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithJsonFormat_CreatesTemplate()
     {
         var template = new StructuredOutputTemplate(StructuredOutputTemplate.OutputFormat.Json);
@@ -14,7 +14,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("JSON", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithXmlFormat_CreatesTemplate()
     {
         var template = new StructuredOutputTemplate(StructuredOutputTemplate.OutputFormat.Xml);
@@ -23,7 +23,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("XML", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithCsvFormat_CreatesTemplate()
     {
         var template = new StructuredOutputTemplate(StructuredOutputTemplate.OutputFormat.Csv);
@@ -32,7 +32,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("CSV", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithMarkdownFormat_CreatesTemplate()
     {
         var template = new StructuredOutputTemplate(StructuredOutputTemplate.OutputFormat.Markdown);
@@ -41,7 +41,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("Markdown", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithYamlFormat_CreatesTemplate()
     {
         var template = new StructuredOutputTemplate(StructuredOutputTemplate.OutputFormat.Yaml);
@@ -50,7 +50,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("YAML", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithSchema_IncludesSchema()
     {
         var schema = @"{ ""name"": ""string"", ""age"": ""number"" }";
@@ -61,7 +61,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("age", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithExample_IncludesExample()
     {
         var example = @"{ ""name"": ""John"", ""age"": 30 }";
@@ -71,7 +71,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("John", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithCustomTemplate_UsesCustomTemplate()
     {
         var customTemplate = "Custom output format: {task}";
@@ -80,7 +80,7 @@ public class StructuredOutputTemplateTests
         Assert.Equal(customTemplate, template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void WithTask_SetsTask()
     {
         var template = new StructuredOutputTemplate(StructuredOutputTemplate.OutputFormat.Json)
@@ -90,7 +90,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("Extract user information", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_ReplacesVariables()
     {
         var template = new StructuredOutputTemplate(StructuredOutputTemplate.OutputFormat.Json);
@@ -104,7 +104,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("Parse this data", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Json_StaticMethod_CreatesJsonTemplate()
     {
         var template = StructuredOutputTemplate.Json();
@@ -113,7 +113,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("JSON", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Json_WithSchema_IncludesSchema()
     {
         var schema = @"{ ""id"": ""number"" }";
@@ -123,7 +123,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("id", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Xml_StaticMethod_CreatesXmlTemplate()
     {
         var template = StructuredOutputTemplate.Xml("root");
@@ -132,7 +132,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("root", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Csv_StaticMethod_CreatesCsvTemplate()
     {
         var template = StructuredOutputTemplate.Csv("name", "age", "email");
@@ -143,7 +143,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("email", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Markdown_StaticMethod_CreatesMarkdownTemplate()
     {
         var template = StructuredOutputTemplate.Markdown();
@@ -152,7 +152,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("Markdown", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Yaml_StaticMethod_CreatesYamlTemplate()
     {
         var template = StructuredOutputTemplate.Yaml();
@@ -161,7 +161,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("YAML", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Builder_CreatesTemplateWithFormat()
     {
         var template = StructuredOutputTemplate.Builder()
@@ -172,7 +172,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("JSON", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Builder_WithSchema_IncludesSchema()
     {
         var template = StructuredOutputTemplate.Builder()
@@ -184,7 +184,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("field", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Builder_WithExample_IncludesExample()
     {
         var template = StructuredOutputTemplate.Builder()
@@ -196,7 +196,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("sample", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Builder_WithTask_IncludesTask()
     {
         var template = StructuredOutputTemplate.Builder()
@@ -208,7 +208,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("Convert to JSON", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Builder_AddField_GeneratesSchema()
     {
         var template = StructuredOutputTemplate.Builder()
@@ -222,7 +222,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("score", template.Template);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Template_ContainsFormatInstructions()
     {
         var template = new StructuredOutputTemplate(StructuredOutputTemplate.OutputFormat.Json);
@@ -230,7 +230,7 @@ public class StructuredOutputTemplateTests
         Assert.Contains("valid", template.Template.ToLower());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Template_ContainsImportantSection()
     {
         var template = new StructuredOutputTemplate(StructuredOutputTemplate.OutputFormat.Json);

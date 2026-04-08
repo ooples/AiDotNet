@@ -5,7 +5,7 @@ namespace AiDotNet.Serving.Tests.Persistence;
 
 public sealed class ServingDbContextFactoryTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateDbContext_CreatesContext()
     {
         var factory = new ServingDbContextFactory();

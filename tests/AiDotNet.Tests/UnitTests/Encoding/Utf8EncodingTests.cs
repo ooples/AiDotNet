@@ -31,7 +31,7 @@ public class Utf8EncodingTests
     /// Ensures no UTF-8 replacement characters exist in source files.
     /// The replacement character (U+FFFD) indicates encoding corruption.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SourceFiles_ShouldNotContainReplacementCharacter()
     {
         var rootDir = GetRepositoryRoot();

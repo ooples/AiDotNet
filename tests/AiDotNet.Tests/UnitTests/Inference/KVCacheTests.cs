@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.UnitTests.Inference;
 
 public class KVCacheTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void KVCache_AppendAcrossLayers_MaintainsIndependentLengths()
     {
         var config = new KVCacheConfig
@@ -57,7 +57,7 @@ public class KVCacheTests
         Assert.Equal(4f, layer0KeysAfter[new[] { 0, 0, 1, 1 }]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void KVCache_Float16Storage_RoundTripsValues()
     {
         var config = new KVCacheConfig
@@ -92,7 +92,7 @@ public class KVCacheTests
         Assert.Equal(8f, cachedValues[new[] { 0, 0, 1, 1 }]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void KVCache_Int8Storage_RoundTripsApproximately()
     {
         var config = new KVCacheConfig

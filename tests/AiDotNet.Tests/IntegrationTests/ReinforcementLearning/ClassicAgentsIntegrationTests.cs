@@ -26,7 +26,7 @@ public class ClassicAgentsIntegrationTests
     private const double LearningRate = 0.1;
     private const double DiscountFactor = 0.9;
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BanditAgents_RunBasicWorkflow()
     {
         ExerciseAgent(
@@ -86,7 +86,7 @@ public class ClassicAgentsIntegrationTests
             done: true);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TabularAgents_RunBasicWorkflow()
     {
         ExerciseAgent(
@@ -302,7 +302,7 @@ public class ClassicAgentsIntegrationTests
             done: true);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MonteCarloAgents_RunBasicWorkflow()
     {
         ExerciseAgent(
@@ -389,7 +389,7 @@ public class ClassicAgentsIntegrationTests
             done: true);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdvancedClassicAgents_RunBasicWorkflow()
     {
         ExerciseAgent(
@@ -475,7 +475,7 @@ public class ClassicAgentsIntegrationTests
             done: true);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DynamicProgrammingAgents_RunBasicWorkflow()
     {
         ExerciseAgent(

@@ -19,7 +19,7 @@ public class AutoMLDeepMathIntegrationTests
     // Architecture: Construction
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Architecture_Defaults_EmptyOperations()
     {
         var arch = new Architecture<double>();
@@ -28,7 +28,7 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Empty(arch.NodeChannels);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Architecture_AddOperation_UpdatesNodeCount()
     {
         var arch = new Architecture<double>();
@@ -37,7 +37,7 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Equal(2, arch.NodeCount); // max(1, 0) + 1 = 2
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Architecture_AddMultipleOperations_NodeCountTracksMax()
     {
         var arch = new Architecture<double>();
@@ -49,7 +49,7 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Equal(4, arch.NodeCount); // max(3, 1) + 1 = 4
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Architecture_GetDescription_ContainsNodeInfo()
     {
         var arch = new Architecture<double>();
@@ -62,7 +62,7 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Contains("batch_norm", desc);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Architecture_GetDescription_EmptyArchitecture()
     {
         var arch = new Architecture<double>();
@@ -74,7 +74,7 @@ public class AutoMLDeepMathIntegrationTests
     // Architecture: NodeChannels
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Architecture_NodeChannels_SetAndGet()
     {
         var arch = new Architecture<double>();
@@ -91,7 +91,7 @@ public class AutoMLDeepMathIntegrationTests
     // Architecture: JSON Serialization
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Architecture_ToJson_RoundTrip()
     {
         var arch = new Architecture<double>();
@@ -109,7 +109,7 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Equal("relu", restored.Operations[1].Operation);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Architecture_ToJson_IndentedByDefault()
     {
         var arch = new Architecture<double>();
@@ -119,7 +119,7 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Contains("\n", json); // Indented has newlines
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Architecture_ToJson_CompactWhenNotIndented()
     {
         var arch = new Architecture<double>();
@@ -129,13 +129,13 @@ public class AutoMLDeepMathIntegrationTests
         Assert.DoesNotContain("\n", json);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Architecture_FromJson_NullThrows()
     {
         Assert.Throws<ArgumentNullException>(() => Architecture<double>.FromJson(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Architecture_FromJson_EmptyThrows()
     {
         Assert.Throws<ArgumentNullException>(() => Architecture<double>.FromJson(string.Empty));
@@ -145,7 +145,7 @@ public class AutoMLDeepMathIntegrationTests
     // Architecture: Binary Serialization
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Architecture_ToBytes_RoundTrip()
     {
         var arch = new Architecture<double>();
@@ -163,19 +163,19 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Equal(16, restored.NodeChannels[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Architecture_FromBytes_NullThrows()
     {
         Assert.Throws<ArgumentNullException>(() => Architecture<double>.FromBytes(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Architecture_FromBytes_EmptyThrows()
     {
         Assert.Throws<ArgumentNullException>(() => Architecture<double>.FromBytes(Array.Empty<byte>()));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Architecture_ToBytes_CompactThanJson()
     {
         var arch = new Architecture<double>();
@@ -196,7 +196,7 @@ public class AutoMLDeepMathIntegrationTests
     // TrialResult: Defaults
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrialResult_Defaults()
     {
         var result = new TrialResult();
@@ -211,7 +211,7 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Null(result.ErrorMessage);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrialResult_SetProperties()
     {
         var result = new TrialResult
@@ -235,7 +235,7 @@ public class AutoMLDeepMathIntegrationTests
     // TrialResult: Clone
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrialResult_Clone_DeepCopiesParameters()
     {
         var original = new TrialResult
@@ -260,7 +260,7 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Equal(0.01, original.Parameters["lr"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrialResult_Clone_PreservesAllFields()
     {
         var original = new TrialResult
@@ -287,7 +287,7 @@ public class AutoMLDeepMathIntegrationTests
     // TrialResult: CloneRedacted
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrialResult_CloneRedacted_ClearsParameters()
     {
         var original = new TrialResult
@@ -313,7 +313,7 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Null(redacted.Metadata); // Metadata nulled
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrialResult_CloneRedacted_PreservesPublicFields()
     {
         var original = new TrialResult
@@ -336,7 +336,7 @@ public class AutoMLDeepMathIntegrationTests
     // ParameterRange: Defaults
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterRange_Defaults()
     {
         var range = new ParameterRange();
@@ -349,7 +349,7 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Null(range.DefaultValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterRange_SetProperties()
     {
         var range = new ParameterRange
@@ -374,7 +374,7 @@ public class AutoMLDeepMathIntegrationTests
     // ParameterRange: Clone
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterRange_Clone_DeepCopy()
     {
         var original = new ParameterRange
@@ -434,7 +434,7 @@ public class AutoMLDeepMathIntegrationTests
     // SearchConstraint: Defaults
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SearchConstraint_Defaults()
     {
         var constraint = new SearchConstraint();
@@ -450,7 +450,7 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Empty(constraint.Metadata);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SearchConstraint_SetProperties()
     {
         var constraint = new SearchConstraint
@@ -472,7 +472,7 @@ public class AutoMLDeepMathIntegrationTests
     // SearchConstraint: Clone
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SearchConstraint_Clone_DeepCopy()
     {
         var original = new SearchConstraint
@@ -500,7 +500,7 @@ public class AutoMLDeepMathIntegrationTests
     // ConstraintType Enum
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConstraintType_HasFiveValues()
     {
         var values = (((ConstraintType[])Enum.GetValues(typeof(ConstraintType))));
@@ -522,7 +522,7 @@ public class AutoMLDeepMathIntegrationTests
     // CompressionTrial: Defaults
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionTrial_Defaults()
     {
         var trial = new CompressionTrial<double>();
@@ -533,7 +533,7 @@ public class AutoMLDeepMathIntegrationTests
         Assert.Null(trial.ErrorMessage);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompressionTrial_SetProperties()
     {
         var trial = new CompressionTrial<double>

@@ -16,7 +16,7 @@ public class InferenceKVCacheIntegrationTests
 
     #region Basic Construction and Configuration
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KVCache_DefaultConfig_HasExpectedProperties()
     {
         var cache = new KVCache<double>(numLayers: 4, numHeads: 8, headDim: 32, maxSeqLen: 128);
@@ -27,7 +27,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.Equal(0, cache.CacheMisses);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KVCacheConfig_ForGPT2_MatchesKnownArchitecture()
     {
         var config = KVCacheConfig.ForModel("gpt2");
@@ -38,7 +38,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.Equal(1024, config.MaxSequenceLength);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KVCacheConfig_ForLlama7B_MatchesKnownArchitecture()
     {
         var config = KVCacheConfig.ForModel("llama-7b");
@@ -50,7 +50,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.Equal(CacheDataType.Float16, config.DataType);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KVCacheConfig_EstimateMemory_CalculatesCorrectly()
     {
         var config = new KVCacheConfig
@@ -70,7 +70,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.Equal(expected, config.EstimateMemoryBytes());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KVCacheConfig_EstimateMemory_FP16_HalvesSize()
     {
         var configF32 = new KVCacheConfig
@@ -93,7 +93,7 @@ public class InferenceKVCacheIntegrationTests
 
     #region Append and Retrieve
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Append_SingleToken_IncreasesLength()
     {
         var cache = new KVCache<double>(numLayers: 1, numHeads: 2, headDim: 4, maxSeqLen: 16);
@@ -107,7 +107,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.Equal(1, cache.CacheMisses);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Append_MultipleTokens_AccumulatesLength()
     {
         var cache = new KVCache<double>(numLayers: 1, numHeads: 2, headDim: 4, maxSeqLen: 32);
@@ -127,7 +127,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.Equal(5, cache.CurrentLength);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Append_ReturnsFullCachedSequence()
     {
         var cache = new KVCache<double>(numLayers: 1, numHeads: 2, headDim: 4, maxSeqLen: 16);
@@ -148,7 +148,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.Equal(new[] { 1, 2, 2, 4 }, allValues2.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Append_PreservesPreviouslyCachedValues()
     {
         var cache = new KVCache<double>(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 8);
@@ -180,7 +180,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.Equal(8.0, allValues[new[] { 0, 0, 1, 1 }], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Append_MultipleLayers_IndependentCaches()
     {
         var cache = new KVCache<double>(numLayers: 3, numHeads: 2, headDim: 4, maxSeqLen: 16);
@@ -207,7 +207,7 @@ public class InferenceKVCacheIntegrationTests
 
     #region Overflow and Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Append_ExceedsMaxLength_ThrowsInvalidOperation()
     {
         var cache = new KVCache<double>(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 4);
@@ -224,7 +224,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.Throws<InvalidOperationException>(() => cache.Append(0, kExtra, vExtra));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Append_InvalidLayerIndex_ThrowsArgumentOutOfRange()
     {
         var cache = new KVCache<double>(numLayers: 2, numHeads: 1, headDim: 2, maxSeqLen: 8);
@@ -235,7 +235,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => cache.Append(2, k, v));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Append_MismatchedShapes_ThrowsArgumentException()
     {
         var cache = new KVCache<double>(numLayers: 1, numHeads: 2, headDim: 4, maxSeqLen: 8);
@@ -246,7 +246,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.Throws<ArgumentException>(() => cache.Append(0, keys, values));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Append_WrongNumHeads_ThrowsArgumentException()
     {
         var cache = new KVCache<double>(numLayers: 1, numHeads: 4, headDim: 8, maxSeqLen: 16);
@@ -261,7 +261,7 @@ public class InferenceKVCacheIntegrationTests
 
     #region Truncate
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Truncate_ReducesCacheLength()
     {
         var cache = new KVCache<double>(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 16);
@@ -275,7 +275,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.Equal(3, cache.CurrentLength);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Truncate_LargerThanCurrent_DoesNotExpand()
     {
         var cache = new KVCache<double>(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 16);
@@ -288,7 +288,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.Equal(3, cache.CurrentLength);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Truncate_ToZero_ClearsLength()
     {
         var cache = new KVCache<double>(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 16);
@@ -301,7 +301,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.Equal(0, cache.CurrentLength);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Truncate_NegativeLength_Throws()
     {
         var cache = new KVCache<double>(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 16);
@@ -313,7 +313,7 @@ public class InferenceKVCacheIntegrationTests
 
     #region Clear
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clear_ResetsAllState()
     {
         var cache = new KVCache<double>(numLayers: 2, numHeads: 2, headDim: 4, maxSeqLen: 16);
@@ -333,7 +333,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.Equal(0, cache.Evictions);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clear_SpecificBatch_OnlyResetsThatBatch()
     {
         var config = new KVCacheConfig
@@ -363,7 +363,7 @@ public class InferenceKVCacheIntegrationTests
 
     #region Sliding Window
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SlidingWindow_EvictsOldTokens()
     {
         var config = new KVCacheConfig
@@ -398,7 +398,7 @@ public class InferenceKVCacheIntegrationTests
 
     #region Statistics
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Statistics_TracksCacheHitsAndMisses()
     {
         var cache = new KVCache<double>(numLayers: 1, numHeads: 1, headDim: 2, maxSeqLen: 16);
@@ -414,7 +414,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.True(cache.CacheHits > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetStatistics_ReturnsComprehensiveInfo()
     {
         var cache = new KVCache<double>(numLayers: 1, numHeads: 2, headDim: 4, maxSeqLen: 16);
@@ -431,7 +431,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.True(stats.ContainsKey("CurrentMemoryMB"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetCurrentMemoryUsage_IsPositiveAfterAppend()
     {
         var cache = new KVCache<double>(numLayers: 1, numHeads: 2, headDim: 4, maxSeqLen: 16);
@@ -447,7 +447,7 @@ public class InferenceKVCacheIntegrationTests
 
     #region CopyBatchState
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CopyBatchState_DuplicatesCorrectly()
     {
         var config = new KVCacheConfig
@@ -487,7 +487,7 @@ public class InferenceKVCacheIntegrationTests
 
     #region PreAllocate Config
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PreAllocate_True_AllocatesMemoryImmediately()
     {
         var config = new KVCacheConfig
@@ -504,7 +504,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.True(cache.GetCurrentMemoryUsage() > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PreAllocate_False_DelaysAllocation()
     {
         var config = new KVCacheConfig
@@ -532,7 +532,7 @@ public class InferenceKVCacheIntegrationTests
 
     #region Autoregressive Simulation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AutoregressiveGeneration_SimulateTokenByToken()
     {
         // Simulate generating 10 tokens one at a time
@@ -555,7 +555,7 @@ public class InferenceKVCacheIntegrationTests
         Assert.Equal(10, cache.CurrentLength);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AutoregressiveGeneration_PrefillThenDecode()
     {
         // First: prefill with prompt (multiple tokens at once)

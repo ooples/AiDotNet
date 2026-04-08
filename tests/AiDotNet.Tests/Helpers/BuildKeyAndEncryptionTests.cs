@@ -15,7 +15,7 @@ public class BuildKeyAndEncryptionTests
 {
     // ─── BuildKeyProvider tests ───
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BuildKeyProvider_GetBuildKey_ReturnsValidResult()
     {
         // GetBuildKey returns either a 32-byte key (official/local build with key)
@@ -26,14 +26,14 @@ public class BuildKeyAndEncryptionTests
             $"Build key should be 0 bytes (dev) or 32 bytes (official), got {key.Length}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BuildKeyProvider_IsOfficialBuild_MatchesKeyPresence()
     {
         var key = BuildKeyProvider.GetBuildKey();
         Assert.Equal(key.Length > 0, BuildKeyProvider.IsOfficialBuild);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BuildKeyProvider_GetBuildKey_ReturnsConsistentResults()
     {
         var key1 = BuildKeyProvider.GetBuildKey();
@@ -44,7 +44,7 @@ public class BuildKeyAndEncryptionTests
         Assert.Equal(key1, key2);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BuildKeyProvider_GetBuildKey_ReturnsDefensiveCopy()
     {
         var key1 = BuildKeyProvider.GetBuildKey();
@@ -70,14 +70,14 @@ public class BuildKeyAndEncryptionTests
 
     // ─── AssemblyIntegrityChecker tests ───
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AssemblyIntegrityChecker_DevBuild_PassesIntegrity()
     {
         // Dev builds with no integrity hash should always pass
         Assert.True(AssemblyIntegrityChecker.VerifyIntegrity());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AssemblyIntegrityChecker_VerifyIntegrity_IsConsistent()
     {
         var result1 = AssemblyIntegrityChecker.VerifyIntegrity();
@@ -88,7 +88,7 @@ public class BuildKeyAndEncryptionTests
 #if !NET471
     // ─── ModelPayloadEncryption basic tests ───
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Encrypt_Decrypt_RoundTrip_WithLicenseKey()
     {
         var payload = Encoding.UTF8.GetBytes("test model weights payload data here");
@@ -116,7 +116,7 @@ public class BuildKeyAndEncryptionTests
         Assert.Equal(payload, decrypted);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Decrypt_WithWrongKey_ThrowsCryptographicException()
     {
         var payload = Encoding.UTF8.GetBytes("secret model data");
@@ -131,7 +131,7 @@ public class BuildKeyAndEncryptionTests
                 encrypted.Ciphertext, wrongKey, encrypted.Salt, encrypted.Nonce, encrypted.Tag, aad));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Decrypt_WithWrongAad_ThrowsCryptographicException()
     {
         var payload = Encoding.UTF8.GetBytes("secret model data");
@@ -146,28 +146,28 @@ public class BuildKeyAndEncryptionTests
                 encrypted.Ciphertext, licenseKey, encrypted.Salt, encrypted.Nonce, encrypted.Tag, wrongAad));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Encrypt_WithNullPayload_ThrowsArgumentNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ModelPayloadEncryption.Encrypt(null!, "key", "aad"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Encrypt_WithEmptyLicenseKey_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             ModelPayloadEncryption.Encrypt(new byte[10], "", "aad"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Decrypt_WithNullCiphertext_ThrowsArgumentNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ModelPayloadEncryption.Decrypt(null!, "key", new byte[16], new byte[12], new byte[16], "aad"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Decrypt_WithNullSalt_ThrowsArgumentNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
@@ -176,7 +176,7 @@ public class BuildKeyAndEncryptionTests
 
     // ─── EncryptSigned fork-incompatibility tests ───
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EncryptSigned_DecryptSigned_RoundTrip_InDevBuild()
     {
         // In dev builds (no build key), EncryptSigned/DecryptSigned should still work
@@ -192,7 +192,7 @@ public class BuildKeyAndEncryptionTests
         Assert.Equal(payload, decrypted);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EncryptSigned_CannotDecryptWithPlainDecrypt()
     {
         // EncryptSigned incorporates build key into derivation.
@@ -211,7 +211,7 @@ public class BuildKeyAndEncryptionTests
                 encrypted.Ciphertext, licenseKey, encrypted.Salt, encrypted.Nonce, encrypted.Tag, aad));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PlainEncrypt_CannotDecryptWithSignedDecrypt()
     {
         // Conversely, plain-encrypted data cannot be decrypted with SignedDecrypt
@@ -226,7 +226,7 @@ public class BuildKeyAndEncryptionTests
                 encrypted.Ciphertext, licenseKey, encrypted.Salt, encrypted.Nonce, encrypted.Tag, aad));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EncryptSigned_WithDecryptionToken_ProducesDifferentCiphertext()
     {
         var payload = Encoding.UTF8.GetBytes("model data with token test");
@@ -252,7 +252,7 @@ public class BuildKeyAndEncryptionTests
         Assert.Equal(payload, decrypted);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DifferentBuildKeys_ProduceDifferentDerivedKeys()
     {
         // Demonstrate the principle: HMAC-SHA256(baseKey, buildKeyA) != HMAC-SHA256(baseKey, buildKeyB)
@@ -282,7 +282,7 @@ public class BuildKeyAndEncryptionTests
         Assert.False(derivedB.AsSpan().SequenceEqual(derivedEmpty));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IntegrityHash_SelfConsistency_HMAC()
     {
         // Verify the CI/CD integrity hash formula: HMAC-SHA256(buildKey, buildKey)
@@ -299,7 +299,7 @@ public class BuildKeyAndEncryptionTests
         Assert.True(hash1.AsSpan().SequenceEqual(hash2));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ModelPayloadEncryption_RoundTrip_ProducesIdenticalPayload()
     {
         // Exercise the real production encryption path via ModelPayloadEncryption
@@ -323,7 +323,7 @@ public class BuildKeyAndEncryptionTests
 
     // ─── BuildAad tests ───
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BuildAad_ProducesDeterministicOutput()
     {
         var aad1 = ModelPayloadEncryption.BuildAad("MyModel", [10, 5], [1]);
@@ -331,7 +331,7 @@ public class BuildKeyAndEncryptionTests
         Assert.Equal(aad1, aad2);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BuildAad_DifferentModels_ProduceDifferentOutput()
     {
         var aad1 = ModelPayloadEncryption.BuildAad("ModelA", [10], [1]);
@@ -339,7 +339,7 @@ public class BuildKeyAndEncryptionTests
         Assert.NotEqual(aad1, aad2);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BuildAad_DifferentShapes_ProduceDifferentOutput()
     {
         var aad1 = ModelPayloadEncryption.BuildAad("Model", [10], [1]);
@@ -347,7 +347,7 @@ public class BuildKeyAndEncryptionTests
         Assert.NotEqual(aad1, aad2);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BuildAad_NullTypeName_DoesNotThrow()
     {
         var aad = ModelPayloadEncryption.BuildAad(null!, [10], [1]);
@@ -356,7 +356,7 @@ public class BuildKeyAndEncryptionTests
         Assert.Equal("|10|1", aad);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BuildAad_EmptyShapes_ProducesValidOutput()
     {
         var aad = ModelPayloadEncryption.BuildAad("Model", [], []);

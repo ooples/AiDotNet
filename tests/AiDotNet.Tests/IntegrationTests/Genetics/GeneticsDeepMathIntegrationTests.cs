@@ -19,7 +19,7 @@ public class GeneticsDeepMathIntegrationTests
 
     #region BinaryIndividual - Bit Shifting Math
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryIndividual_GetValueAsInt_LittleEndianBitOrder_VerifyFormula()
     {
         // The formula is: value |= (1 << i) for each bit i that is 1
@@ -51,7 +51,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.Equal(13, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryIndividual_GetValueAsInt_SingleBitAtEachPosition()
     {
         // Verify each bit position maps to correct power of 2
@@ -71,7 +71,7 @@ public class GeneticsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryIndividual_GetValueAsNormalizedDouble_ExactFormula()
     {
         // Formula: GetValueAsInt() / (2^n - 1) where n = gene count
@@ -89,7 +89,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.Equal(expected, normalized, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryIndividual_GetValueAsNormalizedDouble_HalfValue()
     {
         // For 8 bits: value 128 would be normalized to 128/255
@@ -107,7 +107,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.Equal(expected, normalized, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryIndividual_GetValueMapped_ExactFormula()
     {
         // Formula: min + (GetValueAsNormalizedDouble() * (max - min))
@@ -138,7 +138,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.Equal(expectedMid, mappedMid, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryIndividual_GetValueAsInt_IntOverflowAt31Bits()
     {
         // With 31 bits all set, value should be 2^31 - 1 = int.MaxValue / 2
@@ -156,7 +156,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.Equal(expected, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryGene_Constructor_ClampsNonBinaryValues()
     {
         // BinaryGene constructor: Value = value > 0 ? 1 : 0
@@ -171,7 +171,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.Equal(1, geneLarge.Value); // 100 > 0 is true => 1
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryIndividual_GetValueAsNormalizedDouble_SingleBit()
     {
         // Edge case: single bit. Max = 2^1 - 1 = 1
@@ -188,7 +188,7 @@ public class GeneticsDeepMathIntegrationTests
 
     #region PermutationIndividual - OrderCrossover Math
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OrderCrossover_ChildInheritsSubstringFromParent()
     {
         // OX: child1 inherits substring [start..end] from parent1
@@ -227,7 +227,7 @@ public class GeneticsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OrderCrossover_IdenticalParents_ProducesIdenticalChildren()
     {
         // If both parents have the same permutation, children must be identical
@@ -250,7 +250,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.Equal(expected, perm2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OrderCrossover_LargePermutation_AlwaysValid()
     {
         // Stress test: large permutation (100 elements)
@@ -280,7 +280,7 @@ public class GeneticsDeepMathIntegrationTests
 
     #region PermutationIndividual - SwapMutation Math
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SwapMutation_ExactlyTwoPositionsSwapped()
     {
         // SwapMutation swaps two random positions
@@ -310,7 +310,7 @@ public class GeneticsDeepMathIntegrationTests
             $"Swap mutation should change 0 or 2 positions, but changed {diffCount}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SwapMutation_PreservesAllElements()
     {
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -335,7 +335,7 @@ public class GeneticsDeepMathIntegrationTests
 
     #region PermutationIndividual - InversionMutation Math
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InversionMutation_ReversesSubsequence()
     {
         // InversionMutation reverses a contiguous subsequence
@@ -384,7 +384,7 @@ public class GeneticsDeepMathIntegrationTests
         // If no diff, pos1 == pos2 was chosen (single-element "reversal")
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InversionMutation_KnownSubsequence_VerifyReversal()
     {
         // Create permutation [0,1,2,3,4,5,6,7]
@@ -424,7 +424,7 @@ public class GeneticsDeepMathIntegrationTests
 
     #region RealValuedIndividual - 1/5 Success Rule Math
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UpdateStepSizes_ExactOneFifthRule_HighSuccess()
     {
         // 1/5 success rule: c = 0.817
@@ -453,7 +453,7 @@ public class GeneticsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UpdateStepSizes_ExactOneFifthRule_LowSuccess()
     {
         // If successRatio <= 0.2 => adjustmentFactor = c
@@ -480,7 +480,7 @@ public class GeneticsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UpdateStepSizes_BoundaryAt02_Decreases()
     {
         // Code: successRatio > 0.2 ? 1.0/c : c
@@ -500,7 +500,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.Equal(expectedStep, updatedGene.StepSize, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UpdateStepSizes_RepeatedApplications_ConvergesCorrectly()
     {
         // Applying 1/5 rule repeatedly: each application multiplies by factor
@@ -534,7 +534,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.Equal(expectedStep, actualStep, 1e-8);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UpdateStepSizes_HighThenLow_ReturnsToOriginal()
     {
         // One increase (multiply by 1/c) followed by one decrease (multiply by c)
@@ -551,7 +551,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.Equal(originalStep, finalStep, 1e-12);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UpdateStepSizes_PreservesGeneValues()
     {
         // UpdateStepSizes should only modify StepSize, not Value
@@ -577,7 +577,7 @@ public class GeneticsDeepMathIntegrationTests
 
     #region MultiObjectiveRealIndividual - Pareto Dominance Math
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dominates_BetterInAllObjectives_ReturnsTrue()
     {
         // Pareto dominance: A dominates B iff A is no worse in all objectives
@@ -595,7 +595,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.False(b.Dominates(a));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dominates_EqualInAllObjectives_ReturnsFalse()
     {
         // Equal in all objectives: neither dominates
@@ -610,7 +610,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.False(b.Dominates(a));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dominates_BetterInOneEqualInOther_ReturnsTrue()
     {
         // Better in one, equal in another => dominates
@@ -625,7 +625,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.False(b.Dominates(a));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dominates_Tradeoff_NeitherDominates()
     {
         // A is better in obj1 but worse in obj2 => trade-off, no dominance
@@ -640,7 +640,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.False(b.Dominates(a));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dominates_ThreeObjectives_CorrectBehavior()
     {
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -661,7 +661,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.False(d.Dominates(c));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dominates_DominanceIsTransitive()
     {
         // If A dominates B and B dominates C, then A must dominate C
@@ -679,7 +679,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.True(a.Dominates(c)); // Transitivity
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dominates_DominanceIsAntisymmetric()
     {
         // If A dominates B, then B cannot dominate A
@@ -698,7 +698,7 @@ public class GeneticsDeepMathIntegrationTests
 
     #region Clone Independence Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryIndividual_Clone_MutatingCloneDoesNotAffectOriginal()
     {
         var genes = new List<BinaryGene> { new(1), new(0), new(1), new(0) };
@@ -718,7 +718,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.Equal(5, originalValue); // 1 + 4 = 5
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PermutationIndividual_Clone_MutatingCloneDoesNotAffectOriginal()
     {
         var genes = new List<PermutationGene>();
@@ -738,7 +738,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.Equal(originalPerm, afterPerm);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RealValuedIndividual_Clone_MutatingCloneDoesNotAffectOriginal()
     {
         var genes = new List<RealGene>
@@ -762,7 +762,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.Equal(0.3, originalGenes[2].StepSize, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiObjectiveRealIndividual_Clone_PreservesAllState()
     {
         var rand = RandomHelper.CreateSeededRandom(42);
@@ -799,7 +799,7 @@ public class GeneticsDeepMathIntegrationTests
 
     #region Gene Equality and HashCode Contracts
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RealGene_Equality_UsesTolerance()
     {
         // RealGene.Equals uses Math.Abs(a-b) < 1e-10
@@ -813,7 +813,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.False(a.Equals(d)); // 1e-9 > 1e-10
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RealGene_Equality_ChecksBothValueAndStepSize()
     {
         var a = new RealGene(1.0, 0.1);
@@ -822,7 +822,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.False(a.Equals(b));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryGene_Equality_ExactMatch()
     {
         var a = new BinaryGene(0);
@@ -834,7 +834,7 @@ public class GeneticsDeepMathIntegrationTests
         Assert.Equal(a.GetHashCode(), b.GetHashCode());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PermutationGene_Equality_ExactMatch()
     {
         var a = new PermutationGene(5);
@@ -850,7 +850,7 @@ public class GeneticsDeepMathIntegrationTests
 
     #region Fisher-Yates Shuffle Correctness
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PermutationIndividual_Constructor_ProducesValidPermutation()
     {
         // Fisher-Yates: for i from n-1 to 1: swap(i, random(0..i))
@@ -868,7 +868,7 @@ public class GeneticsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PermutationIndividual_DifferentSeeds_ProduceDifferentPermutations()
     {
         // Different seeds should produce different permutations
@@ -890,7 +890,7 @@ public class GeneticsDeepMathIntegrationTests
 
     #region RealValuedIndividual Initialization Math
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RealValuedIndividual_Constructor_UniformDistributionInRange()
     {
         // Each gene value = minValue + (maxValue - minValue) * random.NextDouble()
@@ -911,7 +911,7 @@ public class GeneticsDeepMathIntegrationTests
             $"Mean {mean} should be close to expected {expectedMean}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RealValuedIndividual_DefaultStepSize_Is01()
     {
         // RealGene default step size is 0.1
@@ -930,7 +930,7 @@ public class GeneticsDeepMathIntegrationTests
 
     #region BinaryIndividual - Monotonicity Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryIndividual_GetValueMapped_IsMonotonic()
     {
         // As binary value increases, mapped value should also increase
@@ -955,7 +955,7 @@ public class GeneticsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryIndividual_GetValueMapped_LinearRelationship()
     {
         // The mapping is linear: mapped = min + normalized * (max - min)

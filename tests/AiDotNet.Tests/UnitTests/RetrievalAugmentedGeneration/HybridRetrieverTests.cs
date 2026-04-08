@@ -142,7 +142,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange
@@ -157,7 +157,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(5, retriever.DefaultTopK);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithCustomTopK_SetsCorrectly()
         {
             // Arrange
@@ -171,7 +171,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(10, retriever.DefaultTopK);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithCustomWeights_CreatesInstance()
         {
             // Arrange
@@ -187,7 +187,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(retriever);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_NullDenseRetriever_ThrowsArgumentNullException()
         {
             // Arrange
@@ -198,7 +198,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new HybridRetriever<double>(null!, sparseRetriever));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_NullSparseRetriever_ThrowsArgumentNullException()
         {
             // Arrange
@@ -209,7 +209,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new HybridRetriever<double>(denseRetriever, null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_ZeroTopK_ThrowsArgumentException()
         {
             // Arrange
@@ -221,7 +221,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new HybridRetriever<double>(denseRetriever, sparseRetriever, defaultTopK: 0));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_NegativeTopK_ThrowsArgumentException()
         {
             // Arrange
@@ -237,7 +237,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Retrieve Method Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_EmptyRetrievers_ReturnsEmptyResults()
         {
             // Arrange
@@ -252,7 +252,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_OnlyDenseResults_ReturnsWeightedDenseResults()
         {
             // Arrange
@@ -274,7 +274,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[0].RelevanceScore > results[1].RelevanceScore);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_OnlySparseResults_ReturnsWeightedSparseResults()
         {
             // Arrange
@@ -295,7 +295,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Sparse weight is 0.3, so scores should be 0.8 * 0.3 = 0.24 and 0.6 * 0.3 = 0.18
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_OverlappingResults_CombinesScores()
         {
             // Arrange
@@ -321,7 +321,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(doc1.RelevanceScore > 0.8); // Combined should be higher than either alone
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_DisjointResults_ReturnsAllDocuments()
         {
             // Arrange
@@ -341,7 +341,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains(results, r => r.Id == "doc2");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithTopK_ReturnsLimitedResults()
         {
             // Arrange
@@ -362,7 +362,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results.Count <= 3);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ResultsOrderedByScore()
         {
             // Arrange
@@ -388,7 +388,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_NullQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -401,7 +401,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve(null!).ToList());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_EmptyQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -414,7 +414,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("").ToList());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WhitespaceQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -431,7 +431,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Weight Combination Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_EqualWeights_ProducesEqualContribution()
         {
             // Arrange
@@ -453,7 +453,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1.0, results[0].RelevanceScore, 3);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_HigherDenseWeight_FavorsDenseResults()
         {
             // Arrange - Dense has lower raw score but should win with higher weight
@@ -476,7 +476,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ZeroDenseWeight_OnlyUsesSparseScore()
         {
             // Arrange
@@ -498,7 +498,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(0.5, results[0].RelevanceScore, 3);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ZeroSparseWeight_OnlyUsesDenseScore()
         {
             // Arrange
@@ -524,7 +524,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Metadata Filtering Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithMetadataFilter_FiltersResults()
         {
             // Arrange
@@ -546,7 +546,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 r.Metadata.TryGetValue("category", out var cat) && Equals(cat, "nature")));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_NoMatchingMetadata_ReturnsEmpty()
         {
             // Arrange
@@ -565,7 +565,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_EmptyMetadataFilter_ReturnsAllMatches()
         {
             // Arrange
@@ -584,7 +584,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_NullMetadataFilter_ThrowsArgumentNullException()
         {
             // Arrange
@@ -601,7 +601,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_DocumentWithoutScore_NotIncluded()
         {
             // Arrange - Create a custom mock where some docs don't have scores
@@ -627,7 +627,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.All(results, r => Assert.True(r.HasRelevanceScore));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_TopKGreaterThanResults_ReturnsAllAvailable()
         {
             // Arrange
@@ -645,7 +645,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -658,7 +658,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("test", topK: 0).ToList());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_NegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -671,7 +671,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("test", topK: -1).ToList());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_RepeatedCalls_ProduceSameResults()
         {
             // Arrange
@@ -697,7 +697,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_LargeNumberOfDocuments_HandlesCorrectly()
         {
             // Arrange
@@ -725,7 +725,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_SameDocumentDifferentContent_UsesFirstEncountered()
         {
             // Arrange - Same doc ID with different content in dense vs sparse
@@ -757,7 +757,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Default Values Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_DefaultWeights_Uses70Dense30Sparse()
         {
             // Arrange
@@ -777,7 +777,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1.0, results[0].RelevanceScore, 3);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithDefaultTopK_UsesFive()
         {
             // Arrange

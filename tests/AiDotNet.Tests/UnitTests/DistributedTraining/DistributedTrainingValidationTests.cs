@@ -18,14 +18,14 @@ public class DistributedTrainingValidationTests
 
     #region ShardingConfiguration Validation Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ShardingConfiguration_Constructor_ThrowsOnNullBackend()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new ShardingConfiguration<double>(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ShardingConfiguration_Constructor_ThrowsOnZeroLearningRate()
     {
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
@@ -34,7 +34,7 @@ public class DistributedTrainingValidationTests
             new ShardingConfiguration<double>(backend, learningRate: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ShardingConfiguration_Constructor_ThrowsOnNegativeLearningRate()
     {
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
@@ -43,7 +43,7 @@ public class DistributedTrainingValidationTests
             new ShardingConfiguration<double>(backend, learningRate: -0.01));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ShardingConfiguration_Constructor_AcceptsValidLearningRate()
     {
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 2);
@@ -54,21 +54,21 @@ public class DistributedTrainingValidationTests
         Assert.Same(backend, config.CommunicationBackend);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ShardingConfiguration_CreateDefault_ThrowsOnNullBackend()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ShardingConfiguration<double>.CreateDefault(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ShardingConfiguration_CreateForHighBandwidth_ThrowsOnNullBackend()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ShardingConfiguration<double>.CreateForHighBandwidth(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ShardingConfiguration_CreateForLowBandwidth_ThrowsOnNullBackend()
     {
         Assert.Throws<ArgumentNullException>(() =>
@@ -79,7 +79,7 @@ public class DistributedTrainingValidationTests
 
     #region PipelineParallelModel Validation Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PipelineParallelModel_Constructor_ThrowsOnZeroMicroBatchSize()
     {
         var model = CreateMockModel();
@@ -93,7 +93,7 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PipelineParallelModel_Constructor_ThrowsOnNegativeMicroBatchSize()
     {
         var model = CreateMockModel();
@@ -107,7 +107,7 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PipelineParallelModel_Constructor_AcceptsMinimumMicroBatchSize()
     {
         var model = CreateMockModel();
@@ -123,7 +123,7 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PipelineParallelModel_Constructor_AcceptsLargeMicroBatchSize()
     {
         var model = CreateMockModel();
@@ -143,7 +143,7 @@ public class DistributedTrainingValidationTests
 
     #region HybridShardedModel Validation Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HybridShardedModel_Constructor_ThrowsOnZeroPipelineParallelSize()
     {
         var model = CreateMockModel();
@@ -158,7 +158,7 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HybridShardedModel_Constructor_ThrowsOnNegativePipelineParallelSize()
     {
         var model = CreateMockModel();
@@ -173,7 +173,7 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HybridShardedModel_Constructor_ThrowsOnZeroTensorParallelSize()
     {
         var model = CreateMockModel();
@@ -188,7 +188,7 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HybridShardedModel_Constructor_ThrowsOnNegativeTensorParallelSize()
     {
         var model = CreateMockModel();
@@ -203,7 +203,7 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HybridShardedModel_Constructor_AcceptsMinimumValidSizes()
     {
         var model = CreateMockModel();
@@ -219,7 +219,7 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HybridShardedModel_Constructor_ThrowsWhenSizesDontMatchWorldSize()
     {
         var model = CreateMockModel();
@@ -235,7 +235,7 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HybridShardedModel_Constructor_AcceptsMatchingWorldSize()
     {
         var model = CreateMockModel();
@@ -256,49 +256,49 @@ public class DistributedTrainingValidationTests
 
     #region InMemoryCommunicationBackend Validation Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InMemoryCommunicationBackend_Constructor_ThrowsOnNegativeRank()
     {
         Assert.Throws<ArgumentException>(() =>
             new InMemoryCommunicationBackend<double>(rank: -1, worldSize: 4));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InMemoryCommunicationBackend_Constructor_ThrowsOnRankExceedsWorldSize()
     {
         Assert.Throws<ArgumentException>(() =>
             new InMemoryCommunicationBackend<double>(rank: 4, worldSize: 4));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InMemoryCommunicationBackend_Constructor_ThrowsOnZeroWorldSize()
     {
         Assert.Throws<ArgumentException>(() =>
             new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InMemoryCommunicationBackend_Constructor_ThrowsOnNegativeWorldSize()
     {
         Assert.Throws<ArgumentException>(() =>
             new InMemoryCommunicationBackend<double>(rank: 0, worldSize: -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InMemoryCommunicationBackend_Constructor_ThrowsOnEmptyEnvironmentId()
     {
         Assert.Throws<ArgumentException>(() =>
             new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 4, environmentId: ""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InMemoryCommunicationBackend_Constructor_ThrowsOnWhitespaceEnvironmentId()
     {
         Assert.Throws<ArgumentException>(() =>
             new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 4, environmentId: "   "));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InMemoryCommunicationBackend_Constructor_AcceptsValidParameters()
     {
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 4);
@@ -307,7 +307,7 @@ public class DistributedTrainingValidationTests
         Assert.Equal(4, backend.WorldSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InMemoryCommunicationBackend_Constructor_AcceptsCustomEnvironmentId()
     {
         var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 4, environmentId: "test-env-1");
@@ -322,7 +322,7 @@ public class DistributedTrainingValidationTests
 
     #region Pipeline Schedule Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GPipeSchedule_GetSchedule_ProducesCorrectPhases()
     {
         var schedule = new GPipeSchedule<double>();
@@ -350,7 +350,7 @@ public class DistributedTrainingValidationTests
             "GPipe should have all forwards before all backwards.");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OneForwardOneBackward_GetSchedule_InterleavesFB()
     {
         var schedule = new OneForwardOneBackwardSchedule<double>();
@@ -384,7 +384,7 @@ public class DistributedTrainingValidationTests
         Assert.True(foundSteadyState, "1F1B should have a steady-state phase with alternating F/B.");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ZeroBubbleH1_GetSchedule_SplitsBackward()
     {
         var schedule = new ZeroBubbleH1Schedule<double>();
@@ -402,7 +402,7 @@ public class DistributedTrainingValidationTests
         Assert.False(hasRegularBackward, "ZB-H1 should not emit combined Backward operations.");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ZeroBubbleH2_GetSchedule_SplitsBackward()
     {
         var schedule = new ZeroBubbleH2Schedule<double>();
@@ -417,7 +417,7 @@ public class DistributedTrainingValidationTests
         Assert.True(hasBackwardWeight, "ZB-H2 should emit BackwardWeight operations.");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ZeroBubbleV_GetSchedule_UsesTwoVirtualStages()
     {
         var schedule = new ZeroBubbleVSchedule<double>();
@@ -436,7 +436,7 @@ public class DistributedTrainingValidationTests
         Assert.True(hasVStage1, "ZB-V should have operations for virtual stage 1.");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Interleaved1F1B_GetSchedule_DepthFirstOrder()
     {
         var schedule = new Interleaved1F1BSchedule<double>(virtualStagesPerRank: 2);
@@ -453,14 +453,14 @@ public class DistributedTrainingValidationTests
             "Interleaved 1F1B should use both virtual stages.");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Interleaved1F1B_Constructor_ThrowsOnSingleVirtualStage()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new Interleaved1F1BSchedule<double>(virtualStagesPerRank: 1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoopedBFS_GetSchedule_BreadthFirstOrder()
     {
         var schedule = new LoopedBFSSchedule<double>(virtualStagesPerRank: 2);
@@ -487,7 +487,7 @@ public class DistributedTrainingValidationTests
             "Looped BFS should process all vStage 0 operations before vStage 1.");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoopedBFS_Constructor_ThrowsOnSingleVirtualStage()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -551,7 +551,7 @@ public class DistributedTrainingValidationTests
         Assert.Equal(0.0, fraction);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ZeroBubbleH2_EstimateBubbleFraction_ZeroWhenEnoughMicroBatches()
     {
         var schedule = new ZeroBubbleH2Schedule<double>();
@@ -560,7 +560,7 @@ public class DistributedTrainingValidationTests
         Assert.Equal(0.0, fraction);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ZeroBubbleV_EstimateBubbleFraction_ZeroWhenEnoughMicroBatches()
     {
         var schedule = new ZeroBubbleVSchedule<double>();
@@ -573,21 +573,21 @@ public class DistributedTrainingValidationTests
 
     #region LoadBalancedPartitionStrategy Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadBalancedPartitionStrategy_Constructor_ThrowsWhenFirstBoundaryNonZero()
     {
         Assert.Throws<ArgumentException>(() =>
             new LoadBalancedPartitionStrategy<double>(new[] { 5, 100, 300 }));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadBalancedPartitionStrategy_Constructor_ThrowsOnNonIncreasing()
     {
         Assert.Throws<ArgumentException>(() =>
             new LoadBalancedPartitionStrategy<double>(new[] { 0, 100, 50 }));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadBalancedPartitionStrategy_ComputePartition_CoversAllParameters()
     {
         var strategy = new LoadBalancedPartitionStrategy<double>(new[] { 0, 100, 300 });
@@ -604,7 +604,7 @@ public class DistributedTrainingValidationTests
         Assert.Equal(partitions[0].StartIndex + partitions[0].Size, partitions[1].StartIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadBalancedPartitionStrategy_AutoDetect_ProducesValidPartitions()
     {
         var strategy = new LoadBalancedPartitionStrategy<double>(estimatedLayerSize: 100);
@@ -620,7 +620,7 @@ public class DistributedTrainingValidationTests
 
     #region ActivationCheckpointConfig Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ActivationCheckpointConfig_DefaultRecomputeStrategy_IsNone()
     {
         var config = new ActivationCheckpointConfig();
@@ -628,7 +628,7 @@ public class DistributedTrainingValidationTests
         Assert.Equal(RecomputeStrategy.None, config.RecomputeStrategy);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ActivationCheckpointConfig_CheckpointEveryNLayers_ThrowsOnZero()
     {
         var config = new ActivationCheckpointConfig();
@@ -637,7 +637,7 @@ public class DistributedTrainingValidationTests
             config.CheckpointEveryNLayers = 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ActivationCheckpointConfig_MaxActivationsInMemory_ThrowsOnNegative()
     {
         var config = new ActivationCheckpointConfig();
@@ -646,7 +646,7 @@ public class DistributedTrainingValidationTests
             config.MaxActivationsInMemory = -1);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PipelineParallelModel_Constructor_AcceptsCheckpointingWithNoneStrategy()
     {
         var model = CreateMockModel();
@@ -667,7 +667,7 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PipelineParallelModel_Constructor_ThrowsOnCheckpointingWithSelectiveStrategy()
     {
         var model = CreateMockModel();
@@ -691,7 +691,7 @@ public class DistributedTrainingValidationTests
 
     #region PipelineParallelModel Metadata Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PipelineParallelModel_GetModelMetadata_IncludesScheduleInfo()
     {
         var model = CreateMockModel();
@@ -710,7 +710,7 @@ public class DistributedTrainingValidationTests
         backend.Shutdown();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PipelineParallelModel_DefaultSchedule_IsGPipe()
     {
         var model = CreateMockModel();

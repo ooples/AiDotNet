@@ -11,7 +11,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
 {
     public class VoyageAIEmbeddingModelTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -21,28 +21,28 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(16000, model.MaxTokens);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullApiKey_ThrowsArgumentNullException()
         {
             Assert.Throws<ArgumentNullException>(() =>
                 new VoyageAIEmbeddingModel<double>(null, "voyage-model-path.onnx", "document", 1024));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullModel_ThrowsArgumentNullException()
         {
             Assert.Throws<ArgumentNullException>(() =>
                 new VoyageAIEmbeddingModel<double>("test-api-key", null, "document", 1024));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullInputType_ThrowsArgumentNullException()
         {
             Assert.Throws<ArgumentNullException>(() =>
                 new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", null, 1024));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithValidText_ThrowsFileNotFoundForMissingModel()
         {
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -50,7 +50,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("This is a test sentence."));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithSameTextTwice_ThrowsFileNotFoundForMissingModel()
         {
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -58,7 +58,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Hello world"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithSingleText_ThrowsFileNotFoundForMissingModel()
         {
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -66,7 +66,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Hello world"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_ReturnsNormalizedVector_ThrowsFileNotFoundForMissingModel()
         {
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -74,7 +74,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Test normalization"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithNullText_ThrowsArgumentException()
         {
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -82,7 +82,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(null));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithEmptyText_ThrowsArgumentException()
         {
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -90,7 +90,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(string.Empty));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithWhitespaceText_ThrowsArgumentException()
         {
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -98,7 +98,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed("   "));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithValidTexts_ThrowsFileNotFoundForMissingModel()
         {
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -107,7 +107,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
         {
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -115,7 +115,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentNullException>(() => model.EmbedBatch(null));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
         {
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -124,7 +124,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_ProducesSameEmbeddingsAsIndividualCalls_ThrowsFileNotFoundForMissingModel()
         {
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -133,7 +133,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithFloatType_ThrowsFileNotFoundForMissingModel()
         {
             var model = new VoyageAIEmbeddingModel<float>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -141,7 +141,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Test with float type"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithCustomDimension_ThrowsFileNotFoundForMissingModel()
         {
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 512);
@@ -149,7 +149,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Testing custom dimension"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_Deterministic_MultipleInstances_ThrowsFileNotFoundForMissingModel()
         {
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -157,7 +157,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Determinism test"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_AllRowsAreNormalized_ThrowsFileNotFoundForMissingModel()
         {
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -166,7 +166,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithLongText_ThrowsFileNotFoundForMissingModel()
         {
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -175,7 +175,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed(longText));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithDifferentInputTypes_CreatesInstances()
         {
             var documentModel = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -185,7 +185,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.NotNull(queryModel);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MaxTokens_ReturnsCorrectValue()
         {
             var model = new VoyageAIEmbeddingModel<double>("test-api-key", "voyage-model-path.onnx", "document", 1024);
@@ -197,7 +197,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         // These test the EmbeddingModelBase behavior (dimension, normalization, batch consistency)
         // without requiring an actual ONNX model file.
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MockEmbed_WithValidText_ReturnsVectorOfCorrectDimension()
         {
             using var model = new MockEmbeddingModel(1024);
@@ -208,7 +208,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1024, embedding.Length);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MockEmbed_ReturnsNormalizedVector()
         {
             using var model = new MockEmbeddingModel(512);
@@ -222,7 +222,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1.0, magnitude, 5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MockEmbed_WithSameText_ReturnsSameEmbedding()
         {
             using var model = new MockEmbeddingModel(384);
@@ -234,7 +234,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
                 Assert.Equal(embedding1[i], embedding2[i], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MockEmbed_WithDifferentTexts_ReturnsDifferentEmbeddings()
         {
             using var model = new MockEmbeddingModel(384);
@@ -254,7 +254,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.True(hasDifference, "Embeddings for different texts should be different");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MockEmbedBatch_ReturnsCorrectDimensions()
         {
             using var model = new MockEmbeddingModel(256);
@@ -266,7 +266,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(256, embeddings.Columns);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MockEmbedBatch_ProducesSameAsIndividualCalls()
         {
             using var model = new MockEmbeddingModel(384);

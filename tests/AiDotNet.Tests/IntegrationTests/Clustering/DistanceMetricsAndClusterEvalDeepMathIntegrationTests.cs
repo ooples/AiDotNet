@@ -18,7 +18,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
 
     #region Euclidean Distance
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Euclidean_HandCalculated_3D()
     {
         // d((1,2,3),(4,6,3)) = sqrt((4-1)^2 + (6-2)^2 + (3-3)^2) = sqrt(9+16+0) = 5
@@ -30,7 +30,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(5.0, dist, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Euclidean_HandCalculated_2D()
     {
         // d((0,0),(3,4)) = sqrt(9+16) = 5
@@ -42,7 +42,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(5.0, dist, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Euclidean_IdenticalVectors_IsZero()
     {
         var euclidean = new EuclideanDistance<double>();
@@ -52,7 +52,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(0.0, dist, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Euclidean_Symmetric()
     {
         // d(a,b) = d(b,a)
@@ -65,7 +65,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(distAB, distBA, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Euclidean_TriangleInequality()
     {
         // d(a,c) <= d(a,b) + d(b,c)
@@ -82,7 +82,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
             $"Triangle inequality violated: d(a,c)={dAC} > d(a,b)+d(b,c)={dAB + dBC}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Euclidean_NonNegative()
     {
         var euclidean = new EuclideanDistance<double>();
@@ -93,7 +93,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.True(dist >= 0, $"Distance should be non-negative, got {dist}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Euclidean_Squared_IsSquareOfDistance()
     {
         var euclidean = new EuclideanDistance<double>();
@@ -105,7 +105,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(dist * dist, distSquared, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Euclidean_UnitVector_Equals1()
     {
         // d(origin, unit vector) = 1
@@ -117,7 +117,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(1.0, dist, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Euclidean_MismatchedLengths_Throws()
     {
         var euclidean = new EuclideanDistance<double>();
@@ -131,7 +131,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
 
     #region Manhattan Distance
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Manhattan_HandCalculated_2D()
     {
         // d((0,0),(3,4)) = |3| + |4| = 7
@@ -143,7 +143,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(7.0, dist, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Manhattan_HandCalculated_3D()
     {
         // d((1,2,3),(4,6,1)) = |3| + |4| + |2| = 9
@@ -155,7 +155,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(9.0, dist, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Manhattan_IdenticalVectors_IsZero()
     {
         var manhattan = new ManhattanDistance<double>();
@@ -165,7 +165,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(0.0, dist, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Manhattan_Symmetric()
     {
         var manhattan = new ManhattanDistance<double>();
@@ -175,7 +175,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(manhattan.Compute(a, b), manhattan.Compute(b, a), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Manhattan_TriangleInequality()
     {
         var manhattan = new ManhattanDistance<double>();
@@ -190,7 +190,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.True(dAC <= dAB + dBC + Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Manhattan_GreaterThanOrEqualEuclidean()
     {
         // Manhattan >= Euclidean always (by Cauchy-Schwarz inequality)
@@ -210,7 +210,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
 
     #region Chebyshev Distance
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Chebyshev_HandCalculated_2D()
     {
         // d((0,0),(3,4)) = max(|3|, |4|) = 4
@@ -222,7 +222,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(4.0, dist, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Chebyshev_HandCalculated_3D()
     {
         // d((1,2,3),(4,6,1)) = max(|3|, |4|, |2|) = 4
@@ -234,7 +234,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(4.0, dist, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Chebyshev_IdenticalVectors_IsZero()
     {
         var chebyshev = new ChebyshevDistance<double>();
@@ -243,7 +243,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(0.0, chebyshev.Compute(a, a), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Chebyshev_LessThanOrEqualManhattan()
     {
         // Chebyshev <= Manhattan always
@@ -259,7 +259,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
             $"Chebyshev ({dCheb}) should be <= Manhattan ({dMan})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Chebyshev_LessThanOrEqualEuclidean()
     {
         // Chebyshev <= Euclidean always
@@ -275,7 +275,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
             $"Chebyshev ({dCheb}) should be <= Euclidean ({dEuc})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Chebyshev_EmptyVectors_IsZero()
     {
         var chebyshev = new ChebyshevDistance<double>();
@@ -289,7 +289,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
 
     #region Cosine Distance
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cosine_IdenticalVectors_IsZero()
     {
         var cosine = new CosineDistance<double>();
@@ -299,7 +299,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(0.0, dist, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cosine_OrthogonalVectors_IsOne()
     {
         // cos(90 degrees) = 0, distance = 1 - 0 = 1
@@ -311,7 +311,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(1.0, dist, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cosine_OppositeVectors_IsTwo()
     {
         // cos(180 degrees) = -1, distance = 1 - (-1) = 2
@@ -323,7 +323,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(2.0, dist, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cosine_ParallelVectors_IsZero()
     {
         // Vectors in same direction: distance = 0
@@ -335,7 +335,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(0.0, dist, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cosine_ScaleInvariant()
     {
         // d(a, b) = d(c*a, b) for any c > 0
@@ -350,7 +350,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(dist1, dist2, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cosine_HandCalculated_45Degrees()
     {
         // a=(1,0), b=(1,1): cos = 1/sqrt(2), distance = 1 - 1/sqrt(2)
@@ -363,7 +363,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(expected, dist, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cosine_Bounded_ZeroToTwo()
     {
         var cosine = new CosineDistance<double>();
@@ -375,7 +375,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
             $"Cosine distance {dist} should be in [0, 2]");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cosine_ZeroVector_ReturnsOne()
     {
         var cosine = new CosineDistance<double>();
@@ -386,7 +386,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(1.0, dist, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cosine_Similarity_PlusDistance_IsOne()
     {
         var cosine = new CosineDistance<double>();
@@ -403,7 +403,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
 
     #region Minkowski Distance
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Minkowski_P1_EqualsManhattan()
     {
         var minkowski = new MinkowskiDistance<double>(1.0);
@@ -417,7 +417,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(dManhattan, dMinkowski, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Minkowski_P2_EqualsEuclidean()
     {
         var minkowski = new MinkowskiDistance<double>(2.0);
@@ -431,7 +431,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(dEuclidean, dMinkowski, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Minkowski_HighP_ApproachesChebyshev()
     {
         // As p -> inf, Minkowski -> Chebyshev
@@ -446,7 +446,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(dChebyshev, dMinkowski, 0.1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Minkowski_HandCalculated_P3()
     {
         // d_3((0,0),(3,4)) = (3^3 + 4^3)^(1/3) = (27+64)^(1/3) = 91^(1/3)
@@ -459,13 +459,13 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(expected, dist, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Minkowski_InvalidP_Throws()
     {
         Assert.Throws<ArgumentException>(() => new MinkowskiDistance<double>(0.5));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Minkowski_IdenticalVectors_IsZero()
     {
         var minkowski = new MinkowskiDistance<double>(3.0);
@@ -474,7 +474,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(0.0, minkowski.Compute(a, a), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Minkowski_Symmetric()
     {
         var minkowski = new MinkowskiDistance<double>(3.0);
@@ -484,7 +484,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(minkowski.Compute(a, b), minkowski.Compute(b, a), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Minkowski_IncreasingP_DecreasingDistance()
     {
         // For any vectors, d_p1 >= d_p2 when p1 < p2 (not always true for raw Minkowski,
@@ -509,7 +509,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
 
     #region Pairwise Distance Computation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Euclidean_Pairwise_SymmetricMatrix()
     {
         var euclidean = new EuclideanDistance<double>();
@@ -535,7 +535,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(5.0, pairwise[0, 1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Euclidean_ComputeToAll_CorrectDistances()
     {
         var euclidean = new EuclideanDistance<double>();
@@ -558,7 +558,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
 
     #region Metric Ordering Invariants
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllDistances_CorrectOrdering()
     {
         // For any point pair: Chebyshev <= Euclidean <= Manhattan
@@ -590,7 +590,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
 
     #region Silhouette Score
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Silhouette_PerfectClusters_NearOne()
     {
         // Two well-separated clusters: points at (0,0),(1,0) in cluster 0
@@ -611,7 +611,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.True(score > 0.8, $"Silhouette score {score} should be > 0.8 for well-separated clusters");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Silhouette_SingleCluster_ReturnsZero()
     {
         var silhouette = new SilhouetteScore<double>();
@@ -627,7 +627,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(0.0, score, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Silhouette_Bounded_Minus1To1()
     {
         var silhouette = new SilhouetteScore<double>();
@@ -646,7 +646,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
             $"Silhouette score {score} should be in [-1, 1]");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Silhouette_HandCalculated_SimpleCase()
     {
         // 4 points on 1D line: 0, 1, 5, 6
@@ -676,7 +676,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(expected, score, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Silhouette_SinglePoint_ReturnsZero()
     {
         var silhouette = new SilhouetteScore<double>();
@@ -690,7 +690,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(0.0, score, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Silhouette_PerSampleScores_AverageEqualsOverall()
     {
         var silhouette = new SilhouetteScore<double>();
@@ -714,7 +714,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
 
     #region Davies-Bouldin Index
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaviesBouldin_PerfectClusters_LowScore()
     {
         // Well-separated clusters should have low DB index
@@ -735,7 +735,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.True(score < 0.5, $"DB index {score} should be < 0.5 for well-separated clusters");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaviesBouldin_SingleCluster_ReturnsZero()
     {
         var db = new DaviesBouldinIndex<double>();
@@ -751,7 +751,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(0.0, score, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaviesBouldin_NonNegative()
     {
         var db = new DaviesBouldinIndex<double>();
@@ -768,7 +768,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.True(score >= -Tolerance, $"DB index {score} should be non-negative");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaviesBouldin_HandCalculated_Simple()
     {
         // Cluster 0: (0, 0), (2, 0) -> centroid (1, 0), scatter = mean(|1-0|, |1-2|) = mean(1, 1) = 1
@@ -791,7 +791,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.Equal(0.2, score, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaviesBouldin_OverlappingClusters_HigherScore()
     {
         var db = new DaviesBouldinIndex<double>();
@@ -827,7 +827,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
 
     #region Cross-Metric Consistency
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GoodClustering_HighSilhouette_LowDaviesBouldin()
     {
         // Well-separated clusters should give high silhouette and low DB
@@ -852,7 +852,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.True(dbScore < 0.1, $"DB index {dbScore} should be < 0.1 for well-separated clusters");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BadClustering_LowSilhouette_HighDaviesBouldin()
     {
         // Poorly separated clusters should give lower silhouette and higher DB
@@ -894,7 +894,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
 
     #region Distance Metric with Non-Euclidean Clustering
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Silhouette_WithManhattanDistance()
     {
         var manhattan = new ManhattanDistance<double>();
@@ -913,7 +913,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         Assert.True(score > 0.7, $"Manhattan silhouette {score} should be > 0.7");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaviesBouldin_WithManhattanDistance()
     {
         var manhattan = new ManhattanDistance<double>();

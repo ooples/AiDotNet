@@ -49,7 +49,7 @@ public class BayesianMetaTests
         return false;
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PACOH_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -69,7 +69,7 @@ public class BayesianMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetaPACOH_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -89,7 +89,7 @@ public class BayesianMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BMAML_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -109,7 +109,7 @@ public class BayesianMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BayProNet_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -129,7 +129,7 @@ public class BayesianMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlexPACBayes_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -149,7 +149,7 @@ public class BayesianMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BMAML_MultiStep_StableLoss()
     {
         var model = new LinearVectorModel(3);

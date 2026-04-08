@@ -10,7 +10,7 @@ namespace AiDotNetTests.UnitTests.Regularization
 {
     public class L1RegularizationTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithDefaultOptions_UsesDefaultStrength()
         {
             // Arrange & Act
@@ -22,7 +22,7 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.Equal(1.0, regularization.GetOptions().L1Ratio);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithCustomOptions_UsesCustomStrength()
         {
             // Arrange
@@ -40,7 +40,7 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.Equal(0.05, regularization.GetOptions().Strength);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Regularize_VectorGradient_AddsL1Penalty()
         {
             // Arrange
@@ -67,7 +67,7 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.Equal(3.1, result[2], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Regularize_VectorGradient_WithZeroCoefficients_DoesNotAddPenalty()
         {
             // Arrange
@@ -91,7 +91,7 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.Equal(3.0, result[2], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Regularize_Vector_AppliesSoftThresholding()
         {
             // Arrange
@@ -119,7 +119,7 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.Equal(0.0, result[3], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Regularize_Vector_ProducesSparseSolution()
         {
             // Arrange
@@ -143,7 +143,7 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.Equal(1.0, result[3], 10);  // 2.0 - 1.0 = 1.0
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Regularize_Matrix_AppliesSoftThresholding()
         {
             // Arrange
@@ -170,7 +170,7 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.Equal(0.0, result[1, 1], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Regularize_TensorGradient_WorksCorrectly()
         {
             // Arrange
@@ -204,7 +204,7 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.True(result[0, 1] < 2.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Regularize_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -226,7 +226,7 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.Equal(0.0f, result[2], 5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Regularize_WithHighStrength_ProducesMoreSparsity()
         {
             // Arrange
@@ -252,7 +252,7 @@ namespace AiDotNetTests.UnitTests.Regularization
             Assert.True(zerosHigh > zerosLow);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Regularize_Vector_PreservesSign()
         {
             // Arrange

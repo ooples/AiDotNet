@@ -28,13 +28,13 @@ public class LicensingTelemetryCollectorTests : IDisposable
         _collector.Dispose();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IsEnabled_DefaultTrue_WhenConstructedEnabled()
     {
         Assert.True(_collector.IsEnabled);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Disable_StopsQueuing()
     {
         _collector.Disable();
@@ -43,7 +43,7 @@ public class LicensingTelemetryCollectorTests : IDisposable
         Assert.Equal(0, _collector.QueueCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Enable_ResumesQueuing()
     {
         _collector.Disable();
@@ -55,35 +55,35 @@ public class LicensingTelemetryCollectorTests : IDisposable
         Assert.Equal(1, _collector.QueueCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RecordTrialOperation_QueuesEvent()
     {
         _collector.RecordTrialOperation(3, 7, 1);
         Assert.Equal(1, _collector.QueueCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RecordTrialExpired_QueuesEvent()
     {
         _collector.RecordTrialExpired("OperationLimitReached", 10, 5);
         Assert.Equal(1, _collector.QueueCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RecordLicensedOperation_QueuesEvent()
     {
         _collector.RecordLicensedOperation("save");
         Assert.Equal(1, _collector.QueueCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RecordLicensingError_QueuesEvent()
     {
         _collector.RecordLicensingError("tampered_file");
         Assert.Equal(1, _collector.QueueCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task FlushAsync_SendsEvents_ClearsQueue()
     {
         _collector.RecordTrialOperation(1, 9, 0);
@@ -97,7 +97,7 @@ public class LicensingTelemetryCollectorTests : IDisposable
         Assert.Equal(1, _handler.RequestCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task FlushAsync_EmptyQueue_Returns0()
     {
         int flushed = await _collector.FlushAsync();
@@ -105,7 +105,7 @@ public class LicensingTelemetryCollectorTests : IDisposable
         Assert.Equal(0, _handler.RequestCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task FlushAsync_HttpFailure_Returns0_DoesNotThrow()
     {
         _handler.ResponseStatusCode = HttpStatusCode.InternalServerError;
@@ -118,7 +118,7 @@ public class LicensingTelemetryCollectorTests : IDisposable
         Assert.Equal(0, flushed);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task FlushAsync_SendsCorrectHeaders()
     {
         _collector.RecordTrialOperation(1, 9, 0);
@@ -130,7 +130,7 @@ public class LicensingTelemetryCollectorTests : IDisposable
         Assert.True(_handler.LastRequest.Headers.Contains("Prefer"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task FlushAsync_SendsJsonBody()
     {
         _collector.RecordTrialOperation(1, 9, 0);
@@ -141,7 +141,7 @@ public class LicensingTelemetryCollectorTests : IDisposable
         Assert.Contains("operation_count", _handler.LastRequestBody);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Flush_Synchronous_Works()
     {
         _collector.RecordTrialOperation(1, 9, 0);
@@ -151,7 +151,7 @@ public class LicensingTelemetryCollectorTests : IDisposable
         Assert.Equal(0, _collector.QueueCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MultipleEventTypes_AllQueued()
     {
         _collector.RecordTrialOperation(1, 9, 0);
@@ -162,7 +162,7 @@ public class LicensingTelemetryCollectorTests : IDisposable
         Assert.Equal(4, _collector.QueueCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task FlushAsync_NoEndpoint_DoesNotThrow()
     {
         _collector.EndpointUrl = "";
@@ -173,7 +173,7 @@ public class LicensingTelemetryCollectorTests : IDisposable
         Assert.Equal(0, _collector.QueueCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task FlushAsync_NoAnonKey_DoesNotThrow()
     {
         _collector.AnonKey = "";
@@ -183,7 +183,7 @@ public class LicensingTelemetryCollectorTests : IDisposable
         Assert.Equal(0, _collector.QueueCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Disposed_DoesNotQueueEvents()
     {
         _collector.Dispose();

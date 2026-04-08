@@ -19,7 +19,7 @@ public class LinearRegressionIntegrationTests
 
     #region SimpleRegression Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_Train_PerfectLinearData_RecoversTrueCoefficients()
     {
         // Arrange: y = 2x + 3 (slope=2, intercept=3)
@@ -36,7 +36,7 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(3.0, regression.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_Train_WithoutIntercept_RecoversSlopeOnly()
     {
         // Arrange: y = 3x (no intercept)
@@ -53,7 +53,7 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(0.0, regression.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_Predict_ReturnsCorrectValues()
     {
         // Arrange
@@ -73,7 +73,7 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(23.0, predictions[2], Tolerance); // 2*10 + 3
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_Train_NoisyData_FitsTrend()
     {
         // Arrange: y ~ 2x + 3 with noise
@@ -92,7 +92,7 @@ public class LinearRegressionIntegrationTests
             $"Intercept should be close to 3.0, got {regression.Intercept}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_Train_MultipleColumns_ThrowsException()
     {
         // Arrange
@@ -108,7 +108,7 @@ public class LinearRegressionIntegrationTests
 
     #region MultipleRegression Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_Train_PerfectLinearData_RecoversTrueCoefficients()
     {
         // Arrange: y = 2*x1 + 3*x2 + 5 (coefficients: 2, 3; intercept: 5)
@@ -133,7 +133,7 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(5.0, regression.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_Train_WithoutIntercept_RecoversCoefficientsOnly()
     {
         // Arrange: y = 2*x1 + 3*x2 (no intercept)
@@ -158,7 +158,7 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(0.0, regression.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_Predict_ReturnsCorrectValues()
     {
         // Arrange
@@ -184,7 +184,7 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(18.0, predictions[1], Tolerance); // 2*5 + 3*1 + 5
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_Train_ManyFeatures_HandlesCorrectly()
     {
         // Arrange: 10 features
@@ -232,7 +232,7 @@ public class LinearRegressionIntegrationTests
 
     #region RidgeRegression Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_Train_WithRegularization_ShrinkCoefficients()
     {
         // Arrange
@@ -268,7 +268,7 @@ public class LinearRegressionIntegrationTests
             $"High regularization should shrink coefficients: norm with reg ({normHighReg}) should be < norm without ({normNoReg})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_Train_ZeroAlpha_MatchesOLS()
     {
         // Arrange
@@ -298,7 +298,7 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(ols.Intercept, ridge.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_Predict_ReturnsCorrectValues()
     {
         // Arrange
@@ -324,7 +324,7 @@ public class LinearRegressionIntegrationTests
             $"Prediction should be between 20 and 30, got {predictions[0]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_GetModelMetadata_IncludesAlpha()
     {
         // Arrange
@@ -346,7 +346,7 @@ public class LinearRegressionIntegrationTests
 
     #region LassoRegression Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LassoRegression_Train_WithHighRegularization_ProducesSparseCoefficients()
     {
         // Arrange
@@ -376,7 +376,7 @@ public class LinearRegressionIntegrationTests
             $"First coefficient ({coef1Abs}) should be larger than second ({coef2Abs})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LassoRegression_Train_LowRegularization_RecoversTrueCoefficients()
     {
         // Arrange
@@ -406,7 +406,7 @@ public class LinearRegressionIntegrationTests
 
     #region ElasticNetRegression Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNetRegression_Train_L1RatioZero_BehavesLikeRidge()
     {
         // Arrange - L1Ratio = 0 means pure L2 (Ridge)
@@ -441,7 +441,7 @@ public class LinearRegressionIntegrationTests
             $"First coefficients should be similar: ElasticNet={elastic.Coefficients[0]}, Ridge={ridge.Coefficients[0]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNetRegression_Train_L1RatioOne_BehavesLikeLasso()
     {
         // Arrange - L1Ratio = 1 means pure L1 (Lasso)
@@ -481,7 +481,7 @@ public class LinearRegressionIntegrationTests
             $"First coefficients should be similar: ElasticNet={elastic.Coefficients[0]}, Lasso={lasso.Coefficients[0]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNetRegression_Train_MixedRatio_CombinesBothPenalties()
     {
         // Arrange
@@ -516,7 +516,7 @@ public class LinearRegressionIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_Train_TwoPoints_FindsExactLine()
     {
         // Arrange
@@ -533,7 +533,7 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(5.0, regression.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_Train_LargeValues_HandlesCorrectly()
     {
         // Arrange
@@ -556,7 +556,7 @@ public class LinearRegressionIntegrationTests
             $"First coefficient should be close to 2.0, got {regression.Coefficients[0]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_Train_SmallValues_HandlesCorrectly()
     {
         // Arrange
@@ -579,7 +579,7 @@ public class LinearRegressionIntegrationTests
         Assert.True(!double.IsInfinity(regression.Coefficients[0]), "Coefficient should not be Infinity");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_Train_IllConditionedMatrix_HandlesWithRegularization()
     {
         // Arrange - create nearly collinear features
@@ -607,7 +607,7 @@ public class LinearRegressionIntegrationTests
 
     #region Serialization Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_SerializeDeserialize_PreservesModel()
     {
         // Arrange
@@ -627,7 +627,7 @@ public class LinearRegressionIntegrationTests
         Assert.Equal(regression.Intercept, newRegression.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_Clone_CreatesIndependentCopy()
     {
         // Arrange

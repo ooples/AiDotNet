@@ -19,7 +19,7 @@ public class RAGRerankerMathIntegrationTests
 
     #region Reciprocal Rank Fusion - Golden Reference Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RRF_SingleList_GoldenReference_ScoresCorrect()
     {
         // Given 3 documents in a single list with k=60:
@@ -48,7 +48,7 @@ public class RAGRerankerMathIntegrationTests
         Assert.Equal(expectedScore2, Convert.ToDouble(result[2].RelevanceScore), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RRF_FuseRankings_TwoLists_DocumentInBoth_GoldenReference()
     {
         // Doc "shared" appears in both lists:
@@ -98,7 +98,7 @@ public class RAGRerankerMathIntegrationTests
         Assert.Equal("other1", result[2].Id);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RRF_FuseRankings_ThreeLists_GoldenReference()
     {
         // Three lists with k=60:
@@ -145,7 +145,7 @@ public class RAGRerankerMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RRF_CustomK_GoldenReference()
     {
         // With k=1 (small k emphasizes top ranks more):
@@ -171,14 +171,14 @@ public class RAGRerankerMathIntegrationTests
         Assert.Equal(1.0 / 3.0, Convert.ToDouble(result[1].RelevanceScore), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RRF_InvalidK_ThrowsArgumentOutOfRange()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new ReciprocalRankFusion<double>(k: 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new ReciprocalRankFusion<double>(k: -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RRF_FuseRankings_NullOrEmpty_ThrowsArgumentException()
     {
         var rrf = new ReciprocalRankFusion<double>();
@@ -187,7 +187,7 @@ public class RAGRerankerMathIntegrationTests
             rrf.FuseRankings(new List<List<Document<double>>>(), topK: 1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RRF_FuseRankings_TopKLimitsOutput()
     {
         var rrf = new ReciprocalRankFusion<double>(k: 60);
@@ -210,7 +210,7 @@ public class RAGRerankerMathIntegrationTests
         Assert.Equal("B", result[1].Id);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RRF_FuseRankings_InvalidTopK_Throws()
     {
         var rrf = new ReciprocalRankFusion<double>(k: 60);
@@ -226,7 +226,7 @@ public class RAGRerankerMathIntegrationTests
 
     #region DiversityReranker - Jaccard Similarity Golden References
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiversityReranker_JaccardSimilarity_GoldenReference()
     {
         // Text1: "the cat sat on the mat" → words: {the, cat, sat, on, mat} (5 unique)
@@ -261,7 +261,7 @@ public class RAGRerankerMathIntegrationTests
         Assert.Equal("doc2", result[2].Id);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiversityReranker_IdenticalDocuments_PenalizedHeavily()
     {
         // Two identical documents: Jaccard = 1.0
@@ -287,7 +287,7 @@ public class RAGRerankerMathIntegrationTests
         Assert.Equal("doc2", result[2].Id);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiversityReranker_LambdaOne_PureRelevance()
     {
         // Lambda=1.0 means only relevance matters, no diversity penalty
@@ -308,7 +308,7 @@ public class RAGRerankerMathIntegrationTests
         Assert.Equal("doc3", result[2].Id);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiversityReranker_LambdaZero_PureDiversity()
     {
         // Lambda=0.0 means only diversity matters
@@ -331,14 +331,14 @@ public class RAGRerankerMathIntegrationTests
         Assert.Equal("doc3", result[1].Id);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiversityReranker_InvalidLambda_Throws()
     {
         Assert.Throws<ArgumentException>(() => new DiversityReranker<double>(-0.1));
         Assert.Throws<ArgumentException>(() => new DiversityReranker<double>(1.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiversityReranker_FinalScores_AreRankBased()
     {
         // After diversity reranking, scores are set to (totalDocs - rank + 1) / totalDocs
@@ -361,7 +361,7 @@ public class RAGRerankerMathIntegrationTests
         Assert.Equal(1.0 / 3.0, Convert.ToDouble(result[2].RelevanceScore), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiversityReranker_SingleDocument_ReturnsAsIs()
     {
         var reranker = new DiversityReranker<double>(0.5);
@@ -377,7 +377,7 @@ public class RAGRerankerMathIntegrationTests
         Assert.Equal("doc1", result[0].Id);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiversityReranker_EmptyContent_JaccardIsZero()
     {
         // Empty content should produce Jaccard similarity of 0
@@ -405,7 +405,7 @@ public class RAGRerankerMathIntegrationTests
 
     #region MaximalMarginalRelevanceReranker - Cosine Similarity Golden References
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MMR_CosineSimilarity_GoldenReference()
     {
         // Vectors:
@@ -444,7 +444,7 @@ public class RAGRerankerMathIntegrationTests
         Assert.Equal("B", result[2].Id); // Identical to A, penalized
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MMR_LambdaOne_PureRelevanceOrdering()
     {
         // Lambda=1.0: MMR = 1.0*relevance - 0.0*similarity = pure relevance
@@ -473,7 +473,7 @@ public class RAGRerankerMathIntegrationTests
         Assert.Equal("C", result[2].Id);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MMR_FinalScores_ReflectMMRPosition()
     {
         // After MMR reranking, scores are set to 1.0 - (i / count)
@@ -504,7 +504,7 @@ public class RAGRerankerMathIntegrationTests
         Assert.Equal(1.0 - 2.0 / 3.0, Convert.ToDouble(result[2].RelevanceScore), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MMR_OrthogonalVectors_MaxDiversity()
     {
         // 4 orthogonal vectors: cosine similarity between any pair = 0
@@ -537,7 +537,7 @@ public class RAGRerankerMathIntegrationTests
         Assert.Equal("D", result[3].Id);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MMR_HighSimilarityCluster_PromotesDiverseDoc()
     {
         // 3 docs with very similar embeddings (close to [1,0]) and 1 diverse doc [0,1]
@@ -571,7 +571,7 @@ public class RAGRerankerMathIntegrationTests
         Assert.Equal("D", result[1].Id);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MMR_InvalidLambda_Throws()
     {
         var getEmb = (Document<double> doc) => new Vector<double>(new double[] { 1 });
@@ -579,14 +579,14 @@ public class RAGRerankerMathIntegrationTests
         Assert.Throws<ArgumentException>(() => new MaximalMarginalRelevanceReranker<double>(getEmb, lambda: 1.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MMR_NullEmbeddingFunc_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new MaximalMarginalRelevanceReranker<double>(null!, lambda: 0.5));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MMR_SingleDocument_ReturnsIt()
     {
         var embeddings = new Dictionary<string, Vector<double>>
@@ -612,7 +612,7 @@ public class RAGRerankerMathIntegrationTests
 
     #region Reranker Base Validation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Reranker_EmptyQuery_ThrowsArgumentException()
     {
         var reranker = new DiversityReranker<double>(0.5);
@@ -622,7 +622,7 @@ public class RAGRerankerMathIntegrationTests
         Assert.Throws<ArgumentException>(() => reranker.Rerank("  ", docs));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Reranker_NullDocuments_ThrowsArgumentNullException()
     {
         var reranker = new DiversityReranker<double>(0.5);
@@ -630,7 +630,7 @@ public class RAGRerankerMathIntegrationTests
         Assert.Throws<ArgumentNullException>(() => reranker.Rerank("query", null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Reranker_TopK_ReturnsLimitedResults()
     {
         var reranker = new DiversityReranker<double>(0.5);
@@ -649,7 +649,7 @@ public class RAGRerankerMathIntegrationTests
         Assert.Equal(3, result.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Reranker_InvalidTopK_ThrowsArgumentException()
     {
         var reranker = new DiversityReranker<double>(0.5);

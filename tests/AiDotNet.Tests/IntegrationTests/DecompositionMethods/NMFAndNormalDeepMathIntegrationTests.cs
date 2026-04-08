@@ -23,7 +23,7 @@ public class NMFAndNormalDeepMathIntegrationTests
 
     #region NMF Decomposition
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NMF_WH_ApproximatesA()
     {
         // NMF: V ~= W * H for non-negative matrix
@@ -51,7 +51,7 @@ public class NMFAndNormalDeepMathIntegrationTests
         Assert.True(avgError < NmfTolerance, $"Average NMF reconstruction error {avgError} should be < {NmfTolerance}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NMF_W_IsNonNegative()
     {
         var V = new Matrix<double>(new double[,] {
@@ -66,7 +66,7 @@ public class NMFAndNormalDeepMathIntegrationTests
                     $"W[{i},{j}] = {nmf.W[i, j]} should be non-negative");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NMF_H_IsNonNegative()
     {
         var V = new Matrix<double>(new double[,] {
@@ -81,7 +81,7 @@ public class NMFAndNormalDeepMathIntegrationTests
                     $"H[{i},{j}] = {nmf.H[i, j]} should be non-negative");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NMF_Dimensions_AreCorrect()
     {
         // V is m x n, W is m x k, H is k x n
@@ -102,7 +102,7 @@ public class NMFAndNormalDeepMathIntegrationTests
         Assert.Equal(n, nmf.H.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NMF_MoreComponents_BetterApproximation()
     {
         var V = new Matrix<double>(new double[,] {
@@ -131,7 +131,7 @@ public class NMFAndNormalDeepMathIntegrationTests
             $"3-component error ({error3}) should be <= 1-component error ({error1})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NMF_IdentityLikeMatrix_ReconstructsWell()
     {
         // All-positive scaled identity should be reconstructed well
@@ -147,7 +147,7 @@ public class NMFAndNormalDeepMathIntegrationTests
                 Assert.Equal(V[i, j], WH[i, j], NmfTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NMF_NegativeMatrix_ThrowsException()
     {
         var V = new Matrix<double>(new double[,] {
@@ -164,7 +164,7 @@ public class NMFAndNormalDeepMathIntegrationTests
 
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Normal_Invert_TimesA_Equals_Identity()
     {
         var A = CreateSPD3x3();
@@ -185,7 +185,7 @@ public class NMFAndNormalDeepMathIntegrationTests
     #region Deep Solve Tests - Hand-Calculated Solutions
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Invert_HandCalculated_2x2_AllMethods()
     {
         // A = [[2,1],[1,3]], det = 5
@@ -215,7 +215,7 @@ public class NMFAndNormalDeepMathIntegrationTests
 
     #region Decomposition Properties on Larger Matrix
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LU_4x4_PA_Equals_LU()
     {
         var A = new Matrix<double>(new double[,] {
@@ -238,7 +238,7 @@ public class NMFAndNormalDeepMathIntegrationTests
                 Assert.Equal(PA[i, j], LU[i, j], LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SVD_4x4_A_Equals_USVt()
     {
         var A = new Matrix<double>(new double[,] {
@@ -266,7 +266,7 @@ public class NMFAndNormalDeepMathIntegrationTests
         Assert.Equal(1.0, svd.S[3], LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Eigen_4x4_Diagonal_ExactEigenvalues()
     {
         var A = new Matrix<double>(new double[,] {
@@ -288,7 +288,7 @@ public class NMFAndNormalDeepMathIntegrationTests
         Assert.Equal(4.0, eigenvals[3], LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cholesky_4x4_SPD_LLt_Equals_A()
     {
         // 4x4 SPD matrix
@@ -310,7 +310,7 @@ public class NMFAndNormalDeepMathIntegrationTests
 
     #region Determinant-Like Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Eigen_ProductOfEigenvalues_EqualsDetViaLU()
     {
         // det(A) = product of eigenvalues
@@ -335,7 +335,7 @@ public class NMFAndNormalDeepMathIntegrationTests
         Assert.Equal(eigProduct, detLU, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SVD_ProductOfSingularValues_EqualsAbsDet()
     {
         // |det(A)| = product of singular values
@@ -360,7 +360,7 @@ public class NMFAndNormalDeepMathIntegrationTests
 
     #region Condition Number
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SVD_ConditionNumber_RatioOfExtremes()
     {
         // Condition number = max(S) / min(S)
@@ -376,7 +376,7 @@ public class NMFAndNormalDeepMathIntegrationTests
         Assert.True(!double.IsInfinity(conditionNumber), "Condition number should be finite for non-singular matrix");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SVD_Identity_ConditionNumber_IsOne()
     {
         var I = Matrix<double>.CreateIdentity(3);

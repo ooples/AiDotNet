@@ -7,7 +7,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
 {
     public class StandardScalerTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void StandardScaler_FitTransform_CentersAndScalesData()
         {
             // Arrange
@@ -29,7 +29,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(col1Sum) < 0.0001, "Column 1 sum should be close to 0");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void StandardScaler_InverseTransform_ReturnsOriginalData()
         {
             // Arrange
@@ -51,7 +51,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(inversed[2, 0] - 3.0) < 0.0001);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void StandardScaler_WithoutCentering_OnlyScales()
         {
             // Arrange
@@ -72,7 +72,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(mean) > 0.1, "Mean should not be zero when centering is disabled");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void StandardScaler_WithSpecificColumns_OnlyScalesSelectedColumns()
         {
             // Arrange
@@ -93,7 +93,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Equal(300.0, result[2, 1]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void StandardScaler_ThrowsWhenTransformCalledBeforeFit()
         {
             // Arrange
@@ -107,7 +107,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
 
     public class MinMaxScalerTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MinMaxScaler_FitTransform_ScalesToDefaultRange()
         {
             // Arrange
@@ -128,7 +128,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(result[2, 0] - 1.0) < 0.0001, "Max should be 1");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MinMaxScaler_CustomRange_ScalesToSpecifiedRange()
         {
             // Arrange
@@ -149,7 +149,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(result[2, 0] - 1.0) < 0.0001, "Max should be 1");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MinMaxScaler_InverseTransform_ReturnsOriginalData()
         {
             // Arrange
@@ -170,7 +170,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(inversed[2, 1] - 60.0) < 0.0001);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MinMaxScaler_ConstantColumn_HandlesGracefully()
         {
             // Arrange - all values are the same (constant column)
@@ -191,7 +191,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(result[2, 0] - 0.5) < 0.0001);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MinMaxScaler_InvalidRange_ThrowsException()
         {
             // Act & Assert - min >= max should throw
@@ -202,7 +202,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
 
     public class RobustScalerTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RobustScaler_FitTransform_UsesMedianAndIQR()
         {
             // Arrange - data with outliers
@@ -229,7 +229,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(median[0] < 10.0, "Median should be robust to outlier");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RobustScaler_InverseTransform_ReturnsOriginalData()
         {
             // Arrange
@@ -252,7 +252,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(inversed[2, 1] - 6.0) < 0.0001);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RobustScaler_CustomQuantileRange_UsesSpecifiedRange()
         {
             // Arrange
@@ -276,7 +276,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(iqr[0] > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RobustScaler_WithoutScaling_OnlyCenters()
         {
             // Arrange
@@ -297,7 +297,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(result[2, 0] - 2.0) < 0.0001);    // 5 - 3 = 2
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RobustScaler_InvalidQuantileRange_ThrowsException()
         {
             // Act & Assert
@@ -309,7 +309,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
 
     public class MaxAbsScalerTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MaxAbsScaler_FitTransform_ScalesByMaxAbsoluteValue()
         {
             // Arrange
@@ -330,7 +330,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(result[2, 0] - 1.0) < 0.0001);    // 20 / 20
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MaxAbsScaler_NegativeMaxAbs_ScalesCorrectly()
         {
             // Arrange - largest absolute value is negative
@@ -350,7 +350,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(result[1, 0] - 0.05) < 0.0001);  // 5 / 100
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MaxAbsScaler_InverseTransform_ReturnsOriginalData()
         {
             // Arrange
@@ -371,7 +371,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(inversed[2, 1] - (-60.0)) < 0.0001);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MaxAbsScaler_PreservesZeros()
         {
             // Arrange - sparse-like data with zeros
@@ -393,7 +393,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Equal(0.0, result[2, 1]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MaxAbsScaler_AllZerosColumn_HandlesGracefully()
         {
             // Arrange - column with all zeros
@@ -417,7 +417,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
 
     public class ScalerCommonBehaviorTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AllScalers_SupportsInverseTransform()
         {
             // Assert - all scalers should support inverse transform
@@ -427,7 +427,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(new MaxAbsScaler<double>().SupportsInverseTransform);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AllScalers_IsFittedProperty_WorksCorrectly()
         {
             // Arrange
@@ -456,7 +456,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(maxAbsScaler.IsFitted);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AllScalers_GetFeatureNamesOut_ReturnsInputNames()
         {
             // Arrange

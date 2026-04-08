@@ -46,7 +46,7 @@ public class GeometryDeepMathIntegrationTests
     //  CHAMFER DISTANCE
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChamferDistance_IdenticalClouds_ReturnsZero()
     {
         var cloud = MakeCloud(new double[,] { { 0, 0, 0 }, { 1, 0, 0 }, { 0, 1, 0 } });
@@ -54,7 +54,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(0.0, cd, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChamferDistance_SinglePointPair_HandComputed()
     {
         // Source: (0,0,0), Target: (3,4,0)
@@ -66,7 +66,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(5.0, cd, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChamferDistance_Squared_HandComputed()
     {
         // Source: (0,0,0), Target: (3,4,0)
@@ -78,7 +78,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(25.0, cd, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChamferDistance_AsymmetricClouds_HandComputed()
     {
         // Source: (0,0,0), (2,0,0)
@@ -92,7 +92,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(1.0, cd, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChamferDistance_IsSymmetric()
     {
         var a = MakeCloud(new double[,] { { 0, 0, 0 }, { 1, 1, 1 } });
@@ -106,7 +106,7 @@ public class GeometryDeepMathIntegrationTests
     //  HAUSDORFF DISTANCE
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HausdorffDistance_IdenticalClouds_ReturnsZero()
     {
         var cloud = MakeCloud(new double[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -114,7 +114,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(0.0, hd, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HausdorffDistance_SinglePointPair_EqualsEuclidean()
     {
         var a = MakeCloud(new double[,] { { 0, 0, 0 } });
@@ -124,7 +124,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(3.0, hd, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HausdorffDistance_HandComputed_MaxOfMinDistances()
     {
         // A: (0,0,0), (10,0,0)
@@ -138,7 +138,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(9.0, hd, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HausdorffDistance_IsSymmetric()
     {
         var a = MakeCloud(new double[,] { { 0, 0, 0 }, { 10, 0, 0 } });
@@ -148,7 +148,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(hdAB, hdBA, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HausdorffDistance_GreaterOrEqualChamferDistance()
     {
         var a = MakeCloud(new double[,] { { 0, 0, 0 }, { 5, 0, 0 }, { 10, 0, 0 } });
@@ -162,7 +162,7 @@ public class GeometryDeepMathIntegrationTests
     //  F-SCORE
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FScore_PerfectMatch_ReturnsOne()
     {
         var cloud = MakeCloud(new double[,] { { 0, 0, 0 }, { 1, 0, 0 }, { 0, 1, 0 } });
@@ -172,7 +172,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(1.0, fScore, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FScore_NoOverlap_ReturnsZero()
     {
         var pred = MakeCloud(new double[,] { { 0, 0, 0 } });
@@ -183,7 +183,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(0.0, fScore, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FScore_PartialMatch_HandComputed()
     {
         // Pred: (0,0,0), (10,0,0)   GT: (0,0,0), (5,0,0)
@@ -199,7 +199,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(0.5, fScore, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FScore_HarmonicMean_Formula()
     {
         // With larger threshold, more matches
@@ -218,7 +218,7 @@ public class GeometryDeepMathIntegrationTests
     //  POINT CLOUD NORMALIZATION - Center
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Center_CentroidIsZero()
     {
         var cloud = MakeCloud(new double[,] { { 2, 4, 6 }, { 4, 6, 8 }, { 6, 2, 4 } });
@@ -237,7 +237,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(0.0, sumZ / centered.NumPoints, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Center_PreservesRelativeDistances()
     {
         var cloud = MakeCloud(new double[,] { { 1, 0, 0 }, { 4, 0, 0 } });
@@ -248,7 +248,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(3.0, dx, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Center_HandComputed()
     {
         // Points: (1,2,3), (3,4,5)
@@ -269,7 +269,7 @@ public class GeometryDeepMathIntegrationTests
     //  POINT CLOUD NORMALIZATION - ScaleToUnitSphere
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScaleToUnitSphere_MaxDistanceIsOne()
     {
         var cloud = MakeCloud(new double[,] { { 10, 0, 0 }, { 0, 10, 0 }, { 0, 0, 10 }, { 0, 0, 0 } });
@@ -287,7 +287,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(1.0, maxDist, 1e-8);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScaleToUnitSphere_AllPointsInsideSphere()
     {
         var cloud = MakeCloud(new double[,]
@@ -311,7 +311,7 @@ public class GeometryDeepMathIntegrationTests
     //  POINT CLOUD NORMALIZATION - ScaleToUnitCube
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScaleToUnitCube_AllPointsInRange()
     {
         var cloud = MakeCloud(new double[,]
@@ -331,7 +331,7 @@ public class GeometryDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScaleToUnitCube_MaxRangeSpansFullUnit()
     {
         // Points along x-axis from 0 to 10
@@ -353,7 +353,7 @@ public class GeometryDeepMathIntegrationTests
     //  POINT CLOUD NORMALIZATION - NormalizeColors
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NormalizeColors_ScalesCorrectly()
     {
         // 6-feature cloud: xyz + rgb
@@ -378,7 +378,7 @@ public class GeometryDeepMathIntegrationTests
     //  VOXELIZATION
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VoxelizePointCloud_SinglePoint_SingleVoxelOccupied()
     {
         var cloud = MakeCloud(new double[,] { { 0, 0, 0 } });
@@ -398,7 +398,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(1, occupied);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VoxelizePointCloud_CornerPoints_OccupyDistinctVoxels()
     {
         // Two widely separated points should occupy different voxels
@@ -418,7 +418,7 @@ public class GeometryDeepMathIntegrationTests
     //  VOXEL GRID IoU
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IoU_IdenticalGrids_ReturnsOne()
     {
         var voxels = new double[2 * 2 * 2];
@@ -433,7 +433,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(1.0, iou, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IoU_DisjointGrids_ReturnsZero()
     {
         var voxels1 = new double[2 * 2 * 2];
@@ -453,7 +453,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(0.0, iou, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IoU_HandComputed_HalfOverlap()
     {
         // Grid1: {(0,0,0), (1,0,0)} occupied
@@ -484,7 +484,7 @@ public class GeometryDeepMathIntegrationTests
     //  MORPHOLOGICAL OPERATIONS
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dilate_ExpandsOccupiedRegion()
     {
         // 3x3x3 grid with center (1,1,1) occupied
@@ -507,7 +507,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(27, occupied); // All voxels within radius 1 of center
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Erode_ShrinksOccupiedRegion()
     {
         // 3x3x3 fully occupied grid
@@ -532,7 +532,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.True(eroded.Voxels[1, 1, 1] > 0.5);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DilateErode_OnCenter_RecoversCenter()
     {
         // Start with only center occupied in 5x5x5
@@ -554,7 +554,7 @@ public class GeometryDeepMathIntegrationTests
     //  VOXEL GRID DATA
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VoxelGrid_ComputeBounds_HandComputed()
     {
         var voxels = new double[8]; // 2x2x2
@@ -574,7 +574,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(4.0, max[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VoxelGrid_GetVoxelCenter_HandComputed()
     {
         var voxels = new double[8]; // 2x2x2
@@ -596,7 +596,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(3.0, center11[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VoxelGrid_ToPointCloud_CorrectCount()
     {
         var voxels = new double[8];
@@ -616,7 +616,7 @@ public class GeometryDeepMathIntegrationTests
     //  POINT CLOUD SAMPLING - Uniform
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniformSample_ReturnsRequestedCount()
     {
         var points = new double[10, 3];
@@ -631,7 +631,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(5, sampled.NumPoints);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniformSample_RequestMoreThanAvailable_ReturnsAll()
     {
         var cloud = MakeCloud(new double[,] { { 0, 0, 0 }, { 1, 1, 1 } });
@@ -639,7 +639,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(2, sampled.NumPoints);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniformSample_AllPointsFromOriginal()
     {
         var points = new double[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 }, { 10, 11, 12 } };
@@ -668,7 +668,7 @@ public class GeometryDeepMathIntegrationTests
     //  POINT CLOUD SAMPLING - Farthest Point Sampling
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FPS_ReturnsRequestedCount()
     {
         var points = new double[10, 3];
@@ -678,7 +678,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(4, sampled.NumPoints);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FPS_MaximizesMinimumDistance()
     {
         // Line of points 0,1,...,9 on x-axis
@@ -705,7 +705,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.True(minDist >= 3.0, $"FPS min dist = {minDist}, expected >= 3");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FPS_NoDuplicates()
     {
         var points = new double[20, 3];
@@ -730,7 +730,7 @@ public class GeometryDeepMathIntegrationTests
     //  POINT CLOUD SAMPLING - Poisson Disk
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonDiskSample_MinDistanceRespected()
     {
         var points = new double[100, 3];
@@ -763,7 +763,7 @@ public class GeometryDeepMathIntegrationTests
     //  POINT CLOUD SAMPLING - Voxel Grid
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VoxelGridSample_ReducesPointCount()
     {
         // Dense cluster of points should merge into fewer
@@ -782,7 +782,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.True(sampled.NumPoints >= 1, "Should have at least one point");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VoxelGridSample_AveragesPoints()
     {
         // Two points in same voxel => average
@@ -800,7 +800,7 @@ public class GeometryDeepMathIntegrationTests
     //  MESH OPERATIONS - Face Normals
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeFaceNormals_XYPlaneTriangle_NormalAlongZ()
     {
         // Triangle in XY plane: v0=(0,0,0), v1=(1,0,0), v2=(0,1,0)
@@ -817,7 +817,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(1.0, normals[0, 2], Tolerance); // nz
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeFaceNormals_XZPlaneTriangle_NormalAlongY()
     {
         // Triangle in XZ plane: v0=(0,0,0), v1=(1,0,0), v2=(0,0,1)
@@ -835,7 +835,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(0.0, normals[0, 2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeFaceNormals_UnitLength()
     {
         // Arbitrary triangle
@@ -852,7 +852,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(1.0, length, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeVertexNormals_SharedVertex_AveragesAdjacentFaces()
     {
         // Two triangles sharing vertex 0 at origin:
@@ -877,7 +877,7 @@ public class GeometryDeepMathIntegrationTests
     //  MESH VOXELIZATION
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VoxelizeMeshSurface_SingleTriangle_OccupiesVoxels()
     {
         var mesh = MakeTriangleMesh(
@@ -899,7 +899,7 @@ public class GeometryDeepMathIntegrationTests
     //  EDGE CASES
     // ═══════════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChamferDistance_EmptySource_ReturnsZero()
     {
         var empty = MakeCloud(new double[0, 3]);
@@ -908,7 +908,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(0.0, cd, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HausdorffDistance_EmptySource_ReturnsZero()
     {
         var empty = MakeCloud(new double[0, 3]);
@@ -917,7 +917,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(0.0, hd, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Center_SinglePoint_CenteredAtOrigin()
     {
         var cloud = MakeCloud(new double[,] { { 5, 10, 15 } });
@@ -927,7 +927,7 @@ public class GeometryDeepMathIntegrationTests
         Assert.Equal(0.0, centered.Points[0, 2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniformSample_PreservesLabels()
     {
         var points = new double[,] { { 0, 0, 0 }, { 1, 0, 0 }, { 2, 0, 0 }, { 3, 0, 0 } };
@@ -946,7 +946,7 @@ public class GeometryDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VoxelGrid_InvalidDimensions_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -958,7 +958,7 @@ public class GeometryDeepMathIntegrationTests
         });
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FPS_PreservesLabels()
     {
         var points = new double[,] { { 0, 0, 0 }, { 5, 0, 0 }, { 10, 0, 0 }, { 15, 0, 0 } };

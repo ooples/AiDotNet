@@ -19,7 +19,7 @@ public class HyperparameterAutoApplyIntegrationTests
 {
     #region Full Pipeline: Parse -> Registry -> Apply to Real Models
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_DecisionTree_JsonResponse_AppliesMaxDepthAndMinSamples()
     {
         // Arrange: Simulate an LLM response with JSON hyperparameters
@@ -53,7 +53,7 @@ These values should prevent overfitting while capturing the key patterns.";
         Assert.Empty(result.Failed);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_GradientBoosting_MarkdownResponse_AppliesTreeAndBoostingParams()
     {
         // Arrange: Simulate an LLM response with markdown bold hyperparameters
@@ -84,7 +84,7 @@ These values should prevent overfitting while capturing the key patterns.";
         Assert.Empty(result.Skipped);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_RandomForest_ColonResponse_AppliesParameters()
     {
         // Arrange: Simulate an LLM response with colon-separated hyperparameters
@@ -110,7 +110,7 @@ min_samples_split: 10";
         Assert.Equal(10, options.MinSamplesSplit);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_KNN_AppliesKParameter()
     {
         // Arrange
@@ -134,7 +134,7 @@ min_samples_split: 10";
         Assert.Equal(123, options.Seed);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_SVR_AppliesCAndEpsilon()
     {
         // Arrange
@@ -162,7 +162,7 @@ min_samples_split: 10";
 
     #region IConfigurableModel: Verify GetOptions Returns Live Options
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetOptions_DecisionTree_ReturnsMutableOptions()
     {
         // Arrange
@@ -183,7 +183,7 @@ min_samples_split: 10";
         Assert.Equal(20, options.MaxDepth); // Original options should reflect the change
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetOptions_GradientBoosting_WithExplicitOptions_ReturnsDerivedType()
     {
         // Arrange: Pass explicit options so base and derived both have the same object
@@ -206,7 +206,7 @@ min_samples_split: 10";
         Assert.Equal(0.1, gbOptions.LearningRate);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetOptions_RandomForest_WithExplicitOptions_ReturnsDerivedType()
     {
         var options = new RandomForestRegressionOptions
@@ -224,7 +224,7 @@ min_samples_split: 10";
         Assert.Equal(200, rfOptions.NumberOfTrees);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetOptions_KNN_WithExplicitOptions_ReturnsDerivedType()
     {
         var options = new KNearestNeighborsOptions { K = 3 };
@@ -241,7 +241,7 @@ min_samples_split: 10";
 
     #region GetOptions Bug Detection: Null Options Constructor
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetOptions_GradientBoosting_WithNullOptions_ReturnsModelOptions()
     {
         // Verify GetOptions() returns a valid ModelOptions when constructed with null options.
@@ -258,7 +258,7 @@ min_samples_split: 10";
         Assert.Equal(42, returnedOptions.Seed);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetOptions_KNN_WithNullOptions_ReturnsModelOptions()
     {
         // Verify GetOptions() returns a valid ModelOptions when constructed with null options.
@@ -278,7 +278,7 @@ min_samples_split: 10";
 
     #region Validation Warnings Through Full Pipeline
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_OutOfRangeValues_GeneratesWarningsButStillApplies()
     {
         var llmResponse = @"```json
@@ -308,7 +308,7 @@ min_samples_split: 10";
 
     #region Mixed Known and Unknown Parameters Through Pipeline
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_MixedParameters_ReportsAppliedAndSkipped()
     {
         var llmResponse = @"```json
@@ -344,7 +344,7 @@ min_samples_split: 10";
 
     #region Type Conversion Through Pipeline
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_StringValuesFromParser_ConvertedToCorrectTypes()
     {
         // Colon-separated parsing extracts values as typed via InferTypedValue
@@ -371,7 +371,7 @@ n_estimators: 150";
         Assert.Equal(150, options.NumberOfTrees);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_DoubleValuesForIntProperties_ConvertedCorrectly()
     {
         // JSON parser may return doubles for integer values when they have decimal points
@@ -393,7 +393,7 @@ n_estimators: 150";
         Assert.Equal(200, options.NumberOfTrees);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_IntValuesForDoubleProperties_ConvertedCorrectly()
     {
         // LLM might say learning_rate: 1 (int) when the property expects double
@@ -419,7 +419,7 @@ n_estimators: 150";
 
     #region Seed Application Across Model Families
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_SeedApplied_AcrossModelFamilies()
     {
         var llmResponse = @"```json
@@ -459,7 +459,7 @@ n_estimators: 150";
 
     #region Result Summary Reporting
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_ResultSummary_ContainsAllSections()
     {
         var llmResponse = @"```json
@@ -496,7 +496,7 @@ n_estimators: 150";
 
     #region Registry-to-Options Property Name Verification
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Registry_RandomForest_AllRegisteredAliases_MapToRealProperties()
     {
         // Verify that every alias registered for RandomForest actually maps to a real property
@@ -526,7 +526,7 @@ n_estimators: 150";
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Registry_GradientBoosting_AllRegisteredAliases_MapToRealProperties()
     {
         var registry = new HyperparameterRegistry();
@@ -554,7 +554,7 @@ n_estimators: 150";
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Registry_KNN_AllRegisteredAliases_MapToRealProperties()
     {
         var registry = new HyperparameterRegistry();
@@ -578,7 +578,7 @@ n_estimators: 150";
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Registry_SVR_AllRegisteredAliases_MapToRealProperties()
     {
         var registry = new HyperparameterRegistry();
@@ -607,7 +607,7 @@ n_estimators: 150";
 
     #region Realistic LLM Response Formats
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_VerboseLLMResponse_ExtractsParametersCorrectly()
     {
         // Simulate a realistic verbose LLM response with surrounding prose
@@ -657,7 +657,7 @@ performance and adjusting if needed.";
         Assert.Empty(result.Failed);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_MarkdownOnlyResponse_ExtractsParametersCorrectly()
     {
         var llmResponse = @"Here are my tuning recommendations:
@@ -688,21 +688,21 @@ I chose these values because your dataset has 50,000 rows and 30 features.";
 
     #region AgentAssistanceOptions Integration
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AgentAssistanceOptions_EnableAutoApply_DefaultsToFalse()
     {
         var options = new AgentAssistanceOptions();
         Assert.False(options.EnableAutoApplyHyperparameters);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AgentAssistanceOptions_ComprehensivePreset_EnablesAutoApply()
     {
         var options = AgentAssistanceOptions.Comprehensive;
         Assert.True(options.EnableAutoApplyHyperparameters);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AgentAssistanceOptions_Clone_PreservesAutoApplySetting()
     {
         var original = new AgentAssistanceOptions { EnableAutoApplyHyperparameters = true };
@@ -715,7 +715,7 @@ I chose these values because your dataset has 50,000 rows and 30 features.";
 
     #region AgentRecommendation Integration
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AgentRecommendation_StoresHyperparameterResult()
     {
         var recommendation = new AgentRecommendation<double, double[], double>
@@ -746,7 +746,7 @@ I chose these values because your dataset has 50,000 rows and 30 features.";
 
     #region Edge Cases: Empty and No-Op Scenarios
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_EmptyLLMResponse_NoChangesToModel()
     {
         var options = new RandomForestRegressionOptions { NumberOfTrees = 100, MaxDepth = 10 };
@@ -764,7 +764,7 @@ I chose these values because your dataset has 50,000 rows and 30 features.";
         Assert.Equal(10, options.MaxDepth);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_ProseOnlyResponse_NoChangesToModel()
     {
         var llmResponse = "The model looks good as configured. I don't recommend any changes to the hyperparameters at this time.";
@@ -786,7 +786,7 @@ I chose these values because your dataset has 50,000 rows and 30 features.";
 
     #region Scientific Notation and Special Values
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_ScientificNotation_ParsedCorrectly()
     {
         var llmResponse = @"```json

@@ -32,7 +32,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(value, gene.Value);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryGene_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -46,7 +46,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(original.Value, clone.Value);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryGene_Clone_MutationDoesNotAffectOriginal()
     {
         // Arrange
@@ -61,7 +61,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(1, mutatedClone.Value); // Mutated value is flipped
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryGene_Flip_CorrectlyInvertsValue()
     {
         // Arrange
@@ -95,7 +95,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(value, gene.Value, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RealGene_DefaultStepSize_IsPositive()
     {
         // Arrange & Act
@@ -119,7 +119,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(stepSize, gene.StepSize, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RealGene_Clone_CopiesValueAndStepSize()
     {
         // Arrange
@@ -134,7 +134,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(original.StepSize, clone.StepSize, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RealGene_Mutation_StepSizeAffectsMagnitude()
     {
         // Arrange - Test that step size is used in mutation
@@ -154,7 +154,7 @@ public class GeneTypesIntegrationTests
             $"Mutation with step size 0.1 should typically stay within bounds. Got: {mutatedValue}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RealGene_StepSizeAdaptation_OneFifthRule()
     {
         // Arrange - Test the 1/5 success rule adaptation
@@ -200,7 +200,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(index, gene.Index);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PermutationGene_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -214,7 +214,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(original.Index, clone.Index);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PermutationGene_ValidPermutation_HasUniqueIndices()
     {
         // Arrange - Create a valid permutation of 10 elements
@@ -235,7 +235,7 @@ public class GeneTypesIntegrationTests
             "All indices should be in valid range");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PermutationGene_SwapMutation_PreservesValidPermutation()
     {
         // Arrange
@@ -254,7 +254,7 @@ public class GeneTypesIntegrationTests
             "All indices should be in valid range after swap mutation");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PermutationGene_InversionMutation_PreservesValidPermutation()
     {
         // Arrange
@@ -273,7 +273,7 @@ public class GeneTypesIntegrationTests
             "All indices should be in valid range after inversion mutation");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PermutationGene_OrderCrossover_ProducesValidOffspring()
     {
         // Arrange
@@ -301,7 +301,7 @@ public class GeneTypesIntegrationTests
 
     #region NodeGene Tests (Genetic Programming)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NodeGene_Function_HasCorrectType()
     {
         // Arrange & Act
@@ -314,7 +314,7 @@ public class GeneTypesIntegrationTests
         Assert.Empty(functionNode.Children);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NodeGene_Terminal_HasCorrectType()
     {
         // Arrange & Act
@@ -325,7 +325,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal("x", terminalNode.Value);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NodeGene_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -344,7 +344,7 @@ public class GeneTypesIntegrationTests
         Assert.NotSame(original.Children[0], clone.Children[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NodeGene_Clone_DeepClonesChildren()
     {
         // Arrange - Create a tree: + (x, * (y, 2))
@@ -366,7 +366,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal("y", clone.Children[1].Children[0].Value);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NodeGene_Equals_ReturnsTrueForIdenticalTrees()
     {
         // Arrange
@@ -382,7 +382,7 @@ public class GeneTypesIntegrationTests
         Assert.True(node1.Equals(node2));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NodeGene_Equals_ReturnsFalseForDifferentTrees()
     {
         // Arrange
@@ -414,7 +414,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(value, gene.Value, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelParameterGene_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -429,7 +429,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(original.Value, clone.Value, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelParameterGene_OrderByIndex_MaintainsCorrectOrder()
     {
         // Arrange
@@ -457,7 +457,7 @@ public class GeneTypesIntegrationTests
 
     #region BinaryIndividual Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryIndividual_GetValueAsInt_CorrectBinaryToIntConversion()
     {
         // Arrange - Create individual representing binary (little-endian: bit 0 is LSB)
@@ -478,7 +478,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(10, value);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryIndividual_GetValueAsNormalizedDouble_ReturnsValueBetweenZeroAndOne()
     {
         // Arrange
@@ -493,7 +493,7 @@ public class GeneTypesIntegrationTests
             $"Normalized value should be in [0,1], got: {normalized}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryIndividual_GetValueMapped_MapsToCorrectRange()
     {
         // Arrange - All 1s = max value
@@ -512,7 +512,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(max, mapped, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryIndividual_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -534,7 +534,7 @@ public class GeneTypesIntegrationTests
 
     #region RealValuedIndividual Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RealValuedIndividual_Constructor_InitializesWithinRange()
     {
         // Arrange
@@ -553,7 +553,7 @@ public class GeneTypesIntegrationTests
             "All values should be within specified range");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RealValuedIndividual_UpdateStepSizes_HighSuccessIncreasesStepSize()
     {
         // Arrange
@@ -575,7 +575,7 @@ public class GeneTypesIntegrationTests
             "High success rate should increase step size");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RealValuedIndividual_UpdateStepSizes_LowSuccessDecreasesStepSize()
     {
         // Arrange
@@ -597,7 +597,7 @@ public class GeneTypesIntegrationTests
             "Low success rate should decrease step size");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RealValuedIndividual_Clone_PreservesFitness()
     {
         // Arrange
@@ -617,7 +617,7 @@ public class GeneTypesIntegrationTests
 
     #region PermutationIndividual Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PermutationIndividual_FisherYatesShuffle_ProducesUniformDistribution()
     {
         // Arrange - Create many permutations and verify distribution
@@ -652,7 +652,7 @@ public class GeneTypesIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PermutationIndividual_OrderCrossover_InheritsSubsequenceFromParent1()
     {
         // Arrange - Create specific permutations for predictable testing
@@ -683,7 +683,7 @@ public class GeneTypesIntegrationTests
 
     #region TreeIndividual Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TreeIndividual_Create_WithRandomGeneration()
     {
         // Arrange
@@ -698,7 +698,7 @@ public class GeneTypesIntegrationTests
         Assert.True(tree.GetDepth() >= 0, "Tree should have non-negative depth");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TreeIndividual_Evaluate_ConstantReturnsValue()
     {
         // Arrange - Create a simple terminal node tree
@@ -713,7 +713,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TreeIndividual_Evaluate_VariableReturnsValue()
     {
         // Arrange
@@ -728,7 +728,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(3.5, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TreeIndividual_Evaluate_AdditionWorks()
     {
         // Arrange - Tree: x + 2.0
@@ -745,7 +745,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(5.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TreeIndividual_Evaluate_MultiplicationWorks()
     {
         // Arrange - Tree: x * 3.0
@@ -762,7 +762,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(12.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TreeIndividual_Evaluate_ProtectedDivisionHandlesZero()
     {
         // Arrange - Tree: x / 0
@@ -779,7 +779,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TreeIndividual_GetDepth_CalculatesCorrectly()
     {
         // Arrange - Tree: + (x, * (y, 2))
@@ -798,7 +798,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(2, depth);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TreeIndividual_GetExpression_ReturnsCorrectString()
     {
         // Arrange - Tree: x + 2.0
@@ -814,7 +814,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal("(x + 2.0)", expr);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TreeIndividual_Clone_CreatesDeepCopy()
     {
         // Arrange
@@ -834,7 +834,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(original.GetExpression(), clone.GetExpression());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TreeIndividual_PointMutation_ChangesNode()
     {
         // Arrange
@@ -859,7 +859,7 @@ public class GeneTypesIntegrationTests
 
     #region MultiObjectiveRealIndividual Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiObjectiveRealIndividual_Constructor_InitializesCorrectly()
     {
         // Arrange
@@ -873,7 +873,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(dimensions, individual.GetGenes().Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiObjectiveRealIndividual_SetAndGetObjectiveValues()
     {
         // Arrange
@@ -894,7 +894,7 @@ public class GeneTypesIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiObjectiveRealIndividual_RankAndCrowdingDistance()
     {
         // Arrange
@@ -910,7 +910,7 @@ public class GeneTypesIntegrationTests
         Assert.Equal(1.5, individual.GetCrowdingDistance(), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiObjectiveRealIndividual_Dominance_CorrectlyIdentified()
     {
         // Arrange - Create two individuals for dominance comparison
@@ -932,7 +932,7 @@ public class GeneTypesIntegrationTests
         Assert.False(individual2DominatesIndividual1, "Individual with higher objective values should not dominate");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiObjectiveRealIndividual_Clone_PreservesFitness()
     {
         // Arrange

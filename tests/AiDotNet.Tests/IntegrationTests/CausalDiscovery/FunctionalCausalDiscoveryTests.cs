@@ -27,7 +27,7 @@ public class FunctionalCausalDiscoveryTests
 
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ANM_FindsCausalStructure()
     {
         var algo = new ANMAlgorithm<double>();
@@ -36,7 +36,7 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CAM_FindsCausalStructure()
     {
         var algo = new CAMAlgorithm<double>();
@@ -45,7 +45,7 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CAMUV_FindsCausalStructure()
     {
         var algo = new CAMUVAlgorithm<double>();
@@ -54,7 +54,7 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DirectLiNGAM_FindsCausalStructure()
     {
         var algo = new DirectLiNGAMAlgorithm<double>();
@@ -63,7 +63,7 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ICALiNGAM_FindsCausalStructure()
     {
         var algo = new ICALiNGAMAlgorithm<double>();
@@ -72,7 +72,7 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VARLiNGAM_FindsCausalStructure()
     {
         var algo = new VARLiNGAMAlgorithm<double>();
@@ -81,7 +81,7 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PNL_FindsCausalStructure()
     {
         var algo = new PNLAlgorithm<double>();
@@ -90,7 +90,7 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IGCI_FindsCausalStructure()
     {
         var algo = new IGCIAlgorithm<double>();
@@ -99,7 +99,7 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RCD_FindsCausalStructure()
     {
         var algo = new RCDAlgorithm<double>();
@@ -108,7 +108,7 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CCDr_FindsCausalStructure()
     {
         var algo = new CCDrAlgorithm<double>();

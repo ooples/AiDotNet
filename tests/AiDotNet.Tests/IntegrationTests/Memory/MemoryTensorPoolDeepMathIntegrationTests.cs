@@ -16,7 +16,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
     // Basic Rent/Return Lifecycle
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Rent_ReturnsCorrectShape()
     {
         using var pool = new TensorPool<double>();
@@ -30,7 +30,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(12, tensor.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Rent_ReturnsZeroedTensor()
     {
         using var pool = new TensorPool<double>();
@@ -42,7 +42,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
             Assert.Equal(0.0, tensor[i], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Return_ThenRent_ReusesMemory()
     {
         using var pool = new TensorPool<double>();
@@ -63,7 +63,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
             Assert.Equal(0.0, tensor2[i], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Return_ThenRent_PoolContainsEntry()
     {
         using var pool = new TensorPool<double>();
@@ -80,7 +80,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
     // Multiple Shape Buckets
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DifferentShapes_CreateSeparateBuckets()
     {
         using var pool = new TensorPool<double>();
@@ -98,7 +98,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(3, stats.TensorBuckets);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SameShape_ReusesSameBucket()
     {
         using var pool = new TensorPool<double>();
@@ -119,7 +119,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
     // Memory Accounting Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EmptyPool_ZeroMemory()
     {
         using var pool = new TensorPool<double>();
@@ -128,7 +128,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(0, pool.TotalPooledTensors);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AfterReturn_MemoryIncreases()
     {
         using var pool = new TensorPool<double>();
@@ -140,7 +140,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.True(pool.CurrentMemoryBytes > 0); // Returned = in pool
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AfterRent_FromPool_MemoryDecreases()
     {
         using var pool = new TensorPool<double>();
@@ -156,7 +156,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.True(pool.CurrentMemoryBytes < memoryAfterReturn);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MemoryAccounting_HandComputed()
     {
         // For double (8 bytes), a tensor of length 10:
@@ -170,7 +170,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(expectedSize, pool.CurrentMemoryBytes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MemoryAccounting_MultipleTensors_Additive()
     {
         using var pool = new TensorPool<double>();
@@ -189,7 +189,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
     // Pool Statistics Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Statistics_InitialState()
     {
         using var pool = new TensorPool<double>();
@@ -201,7 +201,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(0.0, stats.MemoryUtilizationPercent, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Statistics_MemoryUtilization_HandComputed()
     {
         // Pool max = 1 MB = 1048576 bytes
@@ -217,7 +217,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(expectedUtilization, stats.MemoryUtilizationPercent, 1e-4);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Statistics_MaxMemoryBytes_Correct()
     {
         using var pool = new TensorPool<double>(256);
@@ -230,7 +230,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
     // Pool Clear Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clear_ResetsAllCounters()
     {
         using var pool = new TensorPool<double>();
@@ -249,7 +249,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(0, pool.TotalPooledTensors);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clear_PoolStillUsable()
     {
         using var pool = new TensorPool<double>();
@@ -268,7 +268,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
     // PooledTensor Auto-Return Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RentPooled_DisposingReturnsToPool()
     {
         using var pool = new TensorPool<double>();
@@ -283,7 +283,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.True(stats.PooledTensorCount >= 1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RentPooled_TensorIsZeroed()
     {
         using var pool = new TensorPool<double>();
@@ -297,7 +297,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
     // Memory Rent/Return Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RentMemory_ReturnsCorrectSize()
     {
         using var pool = new TensorPool<double>();
@@ -306,7 +306,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(100, memory.Memory.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RentMemory_IsZeroed()
     {
         using var pool = new TensorPool<double>();
@@ -321,49 +321,49 @@ public class MemoryTensorPoolDeepMathIntegrationTests
     // Boundary Conditions
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Rent_NullShape_Throws()
     {
         using var pool = new TensorPool<double>();
         Assert.Throws<ArgumentException>(() => pool.Rent(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Rent_EmptyShape_Throws()
     {
         using var pool = new TensorPool<double>();
         Assert.Throws<ArgumentException>(() => pool.Rent(Array.Empty<int>()));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Rent_ZeroDimension_Throws()
     {
         using var pool = new TensorPool<double>();
         Assert.Throws<ArgumentException>(() => pool.Rent(new[] { 3, 0, 4 }));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Rent_NegativeDimension_Throws()
     {
         using var pool = new TensorPool<double>();
         Assert.Throws<ArgumentException>(() => pool.Rent(new[] { -1 }));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RentMemory_ZeroCount_Throws()
     {
         using var pool = new TensorPool<double>();
         Assert.Throws<ArgumentOutOfRangeException>(() => pool.RentMemory(0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RentMemory_NegativeCount_Throws()
     {
         using var pool = new TensorPool<double>();
         Assert.Throws<ArgumentOutOfRangeException>(() => pool.RentMemory(-1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dispose_ThenRent_Throws()
     {
         var pool = new TensorPool<double>();
@@ -372,7 +372,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Throws<ObjectDisposedException>(() => pool.Rent(new[] { 5 }));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dispose_ThenReturn_Throws()
     {
         var pool = new TensorPool<double>();
@@ -382,7 +382,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Throws<ObjectDisposedException>(() => pool.Return(tensor));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dispose_ThenRentPooled_Throws()
     {
         var pool = new TensorPool<double>();
@@ -391,7 +391,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Throws<ObjectDisposedException>(() => pool.RentPooled(new[] { 5 }));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dispose_ThenRentMemory_Throws()
     {
         var pool = new TensorPool<double>();
@@ -404,7 +404,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
     // PoolingOptions Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoolingOptions_DefaultValues()
     {
         var options = new PoolingOptions();
@@ -417,7 +417,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.False(options.UseWeakReferences);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoolingOptions_MaxPoolSizeMB_ConvertsBidirectionally()
     {
         var options = new PoolingOptions();
@@ -429,7 +429,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(100, options.MaxPoolSizeMB);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DisabledPool_RentBypassesPool()
     {
         // When Enabled=false, Rent always allocates new tensors (never reuses)
@@ -451,7 +451,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(10, t2.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaxElementsToPool_LargeTensorBypasses()
     {
         var options = new PoolingOptions { MaxElementsToPool = 5 };
@@ -465,7 +465,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(0, pool.CurrentMemoryBytes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaxItemsPerBucket_LimitsPoolSize()
     {
         var options = new PoolingOptions { MaxItemsPerBucket = 2 };
@@ -487,7 +487,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
     // Pool Memory Limit Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaxPoolSize_PreventsOverflow()
     {
         // Pool with very small max size (1 KB)
@@ -508,7 +508,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
     // PoolStatistics Computation Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoolStatistics_UtilizationPercent_HandComputed()
     {
         var stats = new PoolStatistics
@@ -521,7 +521,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(50.0, stats.MemoryUtilizationPercent, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoolStatistics_UtilizationPercent_FullPool()
     {
         var stats = new PoolStatistics
@@ -533,7 +533,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(100.0, stats.MemoryUtilizationPercent, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoolStatistics_UtilizationPercent_EmptyPool()
     {
         var stats = new PoolStatistics
@@ -545,7 +545,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(0.0, stats.MemoryUtilizationPercent, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoolStatistics_UtilizationPercent_ZeroMax_ReturnsZero()
     {
         var stats = new PoolStatistics
@@ -558,7 +558,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(0.0, stats.MemoryUtilizationPercent, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoolStatistics_UtilizationPercent_Fractional()
     {
         var stats = new PoolStatistics
@@ -575,7 +575,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
     // Shape Consistency Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Rent_1DShape_Correct()
     {
         using var pool = new TensorPool<double>();
@@ -585,7 +585,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(7, tensor.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Rent_2DShape_Correct()
     {
         using var pool = new TensorPool<double>();
@@ -597,7 +597,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(15, tensor.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Rent_3DShape_Correct()
     {
         using var pool = new TensorPool<double>();
@@ -610,7 +610,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         Assert.Equal(24, tensor.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Rent_4DShape_Correct()
     {
         using var pool = new TensorPool<double>();
@@ -624,7 +624,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
     // Data Integrity After Reuse
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Reused_Tensor_NoGhostData()
     {
         using var pool = new TensorPool<double>();
@@ -642,7 +642,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
             Assert.Equal(0.0, t2[i], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Multiple_RentReturn_Cycles_DataIntegrity()
     {
         using var pool = new TensorPool<double>();
@@ -668,21 +668,21 @@ public class MemoryTensorPoolDeepMathIntegrationTests
     // Constructor Variants
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_Default_256MB()
     {
         using var pool = new TensorPool<double>();
         Assert.Equal(256L * 1024 * 1024, pool.MaxPoolSizeBytes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_CustomMB()
     {
         using var pool = new TensorPool<double>(128);
         Assert.Equal(128L * 1024 * 1024, pool.MaxPoolSizeBytes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_CustomOptions()
     {
         var options = new PoolingOptions { MaxPoolSizeMB = 64, MaxItemsPerBucket = 5 };
@@ -696,7 +696,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
     // Double Dispose Safety
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DoubleDispose_DoesNotThrow()
     {
         var pool = new TensorPool<double>();

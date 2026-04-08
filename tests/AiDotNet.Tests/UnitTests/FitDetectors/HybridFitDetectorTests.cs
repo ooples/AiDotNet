@@ -36,7 +36,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 features: features);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithRequiredDetectors_InitializesSuccessfully()
         {
             // Arrange
@@ -53,7 +53,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithCustomOptions_InitializesSuccessfully()
         {
             // Arrange
@@ -72,7 +72,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ReturnsValidResult()
         {
             // Arrange
@@ -92,7 +92,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(System.Enum.IsDefined(typeof(FitType), result.FitType));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ReturnsConfidenceLevel()
         {
             // Arrange
@@ -112,7 +112,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_CombinesRecommendationsFromBothDetectors()
         {
             // Arrange
@@ -134,7 +134,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.Recommendations.Count >= 1);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ProducesCombinedFitType()
         {
             // Arrange
@@ -155,7 +155,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(System.Enum.IsDefined(typeof(FitType), result.FitType));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ReturnsNonNullRecommendations()
         {
             // Arrange
@@ -175,7 +175,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result.Recommendations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_HandlesConsistentDetectorResults()
         {
             // Arrange
@@ -196,7 +196,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(System.Enum.IsDefined(typeof(FitType), result.FitType));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -269,7 +269,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(System.Enum.IsDefined(typeof(FitType), result.FitType));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_UsesResidualAnalyzerComponent()
         {
             // Arrange
@@ -295,7 +295,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(hybridResult.Recommendations.Count > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_UsesLearningCurveComponent()
         {
             // Arrange
@@ -321,7 +321,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(hybridResult.Recommendations.Count > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ProvidesComprehensiveAnalysis()
         {
             // Arrange
@@ -343,7 +343,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ProducesReproducibleResults()
         {
             // Arrange
@@ -365,7 +365,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Equal(result1.ConfidenceLevel, result2.ConfidenceLevel);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_RespectsComponentDetectorInputs()
         {
             // Arrange
@@ -396,7 +396,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(hybridResult.Recommendations.Count >= 1);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithSameOptions_ProducesSameResults()
         {
             // Arrange
@@ -426,7 +426,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Equal(result1.FitType, result2.FitType);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_HandlesUnstableFitType()
         {
             // Arrange
@@ -447,7 +447,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(System.Enum.IsDefined(typeof(FitType), result.FitType));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithConfidenceComparison()
         {
             // Arrange

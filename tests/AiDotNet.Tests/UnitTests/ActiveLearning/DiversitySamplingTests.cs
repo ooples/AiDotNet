@@ -32,7 +32,7 @@ public class DiversitySamplingTests
 
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_DefaultParameters_InitializesWithKCenterGreedy()
     {
         // Arrange & Act
@@ -74,7 +74,7 @@ public class DiversitySamplingTests
 
     #region Name Property Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Name_FarthestFirstEuclidean_ContainsMethodAndMetric()
     {
         // Arrange
@@ -86,7 +86,7 @@ public class DiversitySamplingTests
         Assert.Equal("DiversitySampling-FarthestFirst-Euclidean", sampler.Name);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Name_KCenterGreedyCosine_ContainsMethodAndMetric()
     {
         // Arrange
@@ -98,7 +98,7 @@ public class DiversitySamplingTests
         Assert.Equal("DiversitySampling-KCenterGreedy-Cosine", sampler.Name);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Name_DensityPeaksManhattan_ContainsMethodAndMetric()
     {
         // Arrange
@@ -114,7 +114,7 @@ public class DiversitySamplingTests
 
     #region UseBatchDiversity Property Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void UseBatchDiversity_DefaultValue_IsTrue()
     {
         // Arrange
@@ -125,7 +125,7 @@ public class DiversitySamplingTests
         Assert.True(sampler.UseBatchDiversity);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void UseBatchDiversity_SetToFalse_UpdatesCorrectly()
     {
         // Arrange
@@ -142,7 +142,7 @@ public class DiversitySamplingTests
 
     #region CoverageRadius Property Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CoverageRadius_BeforeSelection_IsZero()
     {
         // Arrange
@@ -152,7 +152,7 @@ public class DiversitySamplingTests
         Assert.Equal(0.0, sampler.CoverageRadius);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CoverageRadius_AfterSelection_IsNonNegative()
     {
         // Arrange
@@ -171,7 +171,7 @@ public class DiversitySamplingTests
 
     #region SelectSamples Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SelectSamples_NullPool_ThrowsArgumentNullException()
     {
         // Arrange
@@ -182,7 +182,7 @@ public class DiversitySamplingTests
         Assert.Throws<ArgumentNullException>(() => sampler.SelectSamples(model, null!, batchSize: 3));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SelectSamples_ValidInputs_ReturnsRequestedBatchSize()
     {
         // Arrange
@@ -197,7 +197,7 @@ public class DiversitySamplingTests
         Assert.Equal(5, selected.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SelectSamples_BatchSizeLargerThanPool_ReturnsAllSamples()
     {
         // Arrange
@@ -212,7 +212,7 @@ public class DiversitySamplingTests
         Assert.Equal(5, selected.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SelectSamples_ReturnsUniqueIndices()
     {
         // Arrange
@@ -267,7 +267,7 @@ public class DiversitySamplingTests
 
     #region ComputeInformativenessScores Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeInformativenessScores_NullPool_ThrowsArgumentNullException()
     {
         // Arrange
@@ -278,7 +278,7 @@ public class DiversitySamplingTests
         Assert.Throws<ArgumentNullException>(() => sampler.ComputeInformativenessScores(model, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeInformativenessScores_ValidInputs_ReturnsScorePerSample()
     {
         // Arrange
@@ -293,7 +293,7 @@ public class DiversitySamplingTests
         Assert.Equal(15, scores.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeInformativenessScores_ReturnsNonNegativeScores()
     {
         // Arrange
@@ -336,7 +336,7 @@ public class DiversitySamplingTests
 
     #region GetSelectionStatistics Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetSelectionStatistics_BeforeAnySelection_ReturnsZeroStatistics()
     {
         // Arrange
@@ -355,7 +355,7 @@ public class DiversitySamplingTests
         Assert.Equal(0.0, stats["CoverageRadius"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetSelectionStatistics_AfterSelection_ReturnsValidStatistics()
     {
         // Arrange
@@ -376,7 +376,7 @@ public class DiversitySamplingTests
 
     #region Distance Metric Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EuclideanDistance_SameSample_ReturnsZero()
     {
         // This tests indirectly through selection behavior
@@ -393,7 +393,7 @@ public class DiversitySamplingTests
         Assert.Equal(3, selected.Distinct().Count());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CosineDistance_NormalizedVectors_WorksCorrectly()
     {
         // Arrange
@@ -410,7 +410,7 @@ public class DiversitySamplingTests
         Assert.Equal(3, selected.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ManhattanDistance_WorksCorrectly()
     {
         // Arrange
@@ -431,7 +431,7 @@ public class DiversitySamplingTests
 
     #region Integration Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DiversitySampling_CompleteWorkflow_ExecutesCorrectly()
     {
         // Arrange
@@ -459,7 +459,7 @@ public class DiversitySamplingTests
         Assert.True(coverage2 >= 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DiversitySampling_DifferentMethods_ProduceDifferentSelections()
     {
         // Arrange
@@ -477,7 +477,7 @@ public class DiversitySamplingTests
         Assert.Equal(5, selectedDensity.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DiversitySampling_LargerBatch_ReducesCoverageRadius()
     {
         // Arrange

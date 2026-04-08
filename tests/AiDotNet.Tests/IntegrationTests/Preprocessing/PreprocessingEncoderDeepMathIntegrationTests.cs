@@ -30,7 +30,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With nComponents=4 and 1 input column (all columns processed),
     /// output should have exactly 4 columns (one per hash bucket).
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_SingleColumn_OutputHas_NComponents_Columns()
     {
         var encoder = new HashingEncoder<double>(nComponents: 4);
@@ -46,7 +46,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With nComponents=8 (default) and 2 input columns,
     /// output should have 8*2=16 columns when all columns are encoded.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_TwoColumns_OutputHas_2xNComponents_Columns()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8);
@@ -62,7 +62,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With columnIndices specifying only column 0, column 1 should pass through.
     /// Output = nComponents (for col 0) + 1 (pass-through for col 1).
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_PartialColumns_PassThrough()
     {
         var encoder = new HashingEncoder<double>(nComponents: 4, columnIndices: new[] { 0 });
@@ -86,7 +86,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// The same value in the same column should always hash to the same bucket.
     /// Two rows with identical values should produce identical hash encodings.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_SameValue_SameColumn_DeterministicBucket()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8, alternateSign: false);
@@ -106,7 +106,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// Each row's hash encoding should have exactly one non-zero element (with alternateSign=false)
     /// since each value hashes to exactly one bucket with count 1.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_SingleValue_ExactlyOneBucketNonZero()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8, alternateSign: false);
@@ -132,7 +132,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With 8 components, the probability of collision for 2 values is 1/8 = 12.5%.
     /// We test 10 distinct values and expect at least 2 different bucket assignments.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_DifferentValues_DifferentBuckets()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8, alternateSign: false);
@@ -167,7 +167,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With alternateSign=true, the non-zero value should be +1.0 or -1.0
     /// depending on the hash sign bit (MurmurHash3 output).
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_AlternateSign_ValueIsPlusOrMinusOne()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8, alternateSign: true);
@@ -194,7 +194,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With alternateSign=false, the non-zero value should always be +1.0.
     /// The sign is always positive.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_NoAlternateSign_ValueIsAlwaysPositive()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8, alternateSign: false);
@@ -220,7 +220,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With alternateSign=true, the MurmurHash3 should produce both positive and negative
     /// hashes for different inputs, resulting in both +1 and -1 values across many inputs.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_AlternateSign_ProducesBothSigns()
     {
         var encoder = new HashingEncoder<double>(nComponents: 16, alternateSign: true);
@@ -257,7 +257,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With two columns both encoding to the same bucket with alternateSign=false,
     /// the bucket value should be 2.0.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_MultipleColumns_CollisionSumsContributions()
     {
         // With nComponents=1, ALL values must hash to bucket 0 (only one bucket)
@@ -281,7 +281,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With alternateSign=false, each row's sum for a single encoded column should be 1.0
     /// (exactly one bucket gets value 1.0).
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_NoAlternateSign_RowSumEqualsOne()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8, alternateSign: false);
@@ -305,7 +305,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// With alternateSign=true, each row's absolute sum for a single encoded column should be 1.0
     /// (exactly one bucket gets |value| = 1.0).
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_AlternateSign_AbsRowSumEqualsOne()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8, alternateSign: true);
@@ -332,7 +332,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// <summary>
     /// GetFeatureNamesOut should produce correct names for encoded and pass-through columns.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_FeatureNames_EncodedColumns()
     {
         var encoder = new HashingEncoder<double>(nComponents: 3);
@@ -349,7 +349,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// <summary>
     /// With custom input feature names, those names are used as base.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_FeatureNames_CustomInputNames()
     {
         var encoder = new HashingEncoder<double>(nComponents: 2);
@@ -365,7 +365,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// <summary>
     /// Pass-through columns keep their original name (not hash-suffixed).
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_FeatureNames_PassThroughColumn()
     {
         var encoder = new HashingEncoder<double>(nComponents: 2, columnIndices: new[] { 0 });
@@ -386,7 +386,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// <summary>
     /// nComponents=1 means every value hashes to bucket 0.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_NComponents1_AllSameBucket()
     {
         var encoder = new HashingEncoder<double>(nComponents: 1, alternateSign: false);
@@ -405,7 +405,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// <summary>
     /// nComponents must be >= 1, constructor should throw for 0.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_NComponents0_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new HashingEncoder<double>(nComponents: 0));
@@ -414,7 +414,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// <summary>
     /// Transform before Fit should throw InvalidOperationException.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_TransformBeforeFit_ThrowsInvalidOperation()
     {
         var encoder = new HashingEncoder<double>(nComponents: 4);
@@ -426,7 +426,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// Inverse transform is not supported for hash encoding.
     /// SupportsInverseTransform should be false.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_SupportsInverseTransform_IsFalse()
     {
         var encoder = new HashingEncoder<double>();
@@ -436,7 +436,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// <summary>
     /// GetFeatureNamesOut before Fit should return empty array.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_FeatureNamesBeforeFit_ReturnsEmpty()
     {
         var encoder = new HashingEncoder<double>(nComponents: 4);
@@ -448,7 +448,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// Fitting and transforming with multiple rows should produce consistent results.
     /// The same value in the same column across different rows should hash identically.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_MultipleRows_ConsistentHashing()
     {
         var encoder = new HashingEncoder<double>(nComponents: 4, alternateSign: true);
@@ -481,7 +481,7 @@ public class PreprocessingEncoderDeepMathIntegrationTests
     /// because the column index is mixed into the hash.
     /// With many columns, we should see different bucket assignments.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashingEncoder_SameValueDifferentColumns_DifferentHashes()
     {
         var encoder = new HashingEncoder<double>(nComponents: 8, alternateSign: false);

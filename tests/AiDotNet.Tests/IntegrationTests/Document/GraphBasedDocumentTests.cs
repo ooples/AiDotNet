@@ -35,7 +35,7 @@ public class GraphBasedDocumentTests
 
     #region DocGCN Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DocGCN_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -43,7 +43,7 @@ public class GraphBasedDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DocGCN_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -55,7 +55,7 @@ public class GraphBasedDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DocGCN_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -68,7 +68,7 @@ public class GraphBasedDocumentTests
 
     #region PICK Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PICK_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -76,7 +76,7 @@ public class GraphBasedDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PICK_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -88,7 +88,7 @@ public class GraphBasedDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PICK_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -101,7 +101,7 @@ public class GraphBasedDocumentTests
 
     #region TRIE Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TRIE_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -109,7 +109,7 @@ public class GraphBasedDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TRIE_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -121,7 +121,7 @@ public class GraphBasedDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TRIE_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -134,7 +134,7 @@ public class GraphBasedDocumentTests
 
     #region LayoutGraph Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayoutGraph_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -142,7 +142,7 @@ public class GraphBasedDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayoutGraph_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -154,7 +154,7 @@ public class GraphBasedDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayoutGraph_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -167,7 +167,7 @@ public class GraphBasedDocumentTests
 
     #region Cross-Model Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllGraphBasedModels_SupportsTraining_InNativeMode()
     {
         var arch = CreateArchitecture();

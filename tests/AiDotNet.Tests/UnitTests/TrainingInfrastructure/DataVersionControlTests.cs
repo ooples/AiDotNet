@@ -50,7 +50,7 @@ public class DataVersionControlTests : IDisposable
 
     #region Dataset Version Creation Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateDatasetVersion_WithValidData_ReturnsVersionHash()
     {
         // Arrange
@@ -64,7 +64,7 @@ public class DataVersionControlTests : IDisposable
         Assert.NotEmpty(versionHash);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateDatasetVersion_WithDescription_StoresDescription()
     {
         // Arrange
@@ -82,7 +82,7 @@ public class DataVersionControlTests : IDisposable
         Assert.Equal("Test dataset for unit tests", version.Description);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateDatasetVersion_WithMetadata_StoresMetadata()
     {
         // Arrange
@@ -103,7 +103,7 @@ public class DataVersionControlTests : IDisposable
         Assert.NotNull(versionHash);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateDatasetVersion_WithNullName_ThrowsArgumentException()
     {
         // Arrange
@@ -113,14 +113,14 @@ public class DataVersionControlTests : IDisposable
         Assert.Throws<ArgumentException>(() => _versionControl.CreateDatasetVersion(null!, dataPath));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateDatasetVersion_WithEmptyPath_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _versionControl.CreateDatasetVersion("test-dataset", ""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateDatasetVersion_MultipleTimes_IncrementsVersion()
     {
         // Arrange
@@ -142,7 +142,7 @@ public class DataVersionControlTests : IDisposable
 
     #region Dataset Version Retrieval Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetDatasetVersion_WithValidName_ReturnsVersion()
     {
         // Arrange
@@ -158,7 +158,7 @@ public class DataVersionControlTests : IDisposable
         Assert.Equal(createdHash, version.Hash);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetDatasetVersion_WithVersionHash_ReturnsSpecificVersion()
     {
         // Arrange
@@ -176,14 +176,14 @@ public class DataVersionControlTests : IDisposable
         Assert.Equal(hash2, version2.Hash);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetDatasetVersion_WithInvalidName_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _versionControl.GetDatasetVersion("nonexistent-dataset"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetDatasetVersion_WithInvalidHash_ThrowsArgumentException()
     {
         // Arrange
@@ -194,7 +194,7 @@ public class DataVersionControlTests : IDisposable
         Assert.Throws<ArgumentException>(() => _versionControl.GetDatasetVersion("hash-test-dataset", "invalid-hash"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetDatasetVersion_WithNoHash_ReturnsLatest()
     {
         // Arrange
@@ -215,7 +215,7 @@ public class DataVersionControlTests : IDisposable
 
     #region Version Listing Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ListDatasetVersions_ReturnsAllVersions()
     {
         // Arrange
@@ -234,7 +234,7 @@ public class DataVersionControlTests : IDisposable
         Assert.Equal(3, versions.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ListDatasetVersions_OrdersByVersionDescending()
     {
         // Arrange
@@ -252,7 +252,7 @@ public class DataVersionControlTests : IDisposable
         Assert.Equal(1, versions.Last().Version);   // Oldest last
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ListDatasetVersions_WithInvalidName_ThrowsArgumentException()
     {
         // Act & Assert
@@ -263,7 +263,7 @@ public class DataVersionControlTests : IDisposable
 
     #region Run Linking Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LinkDatasetToRun_CreatesLink()
     {
         // Arrange
@@ -280,7 +280,7 @@ public class DataVersionControlTests : IDisposable
         Assert.Equal(versionHash, linkedVersion.Hash);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetDatasetForRun_WithNoLink_ThrowsArgumentException()
     {
         // Act & Assert
@@ -291,7 +291,7 @@ public class DataVersionControlTests : IDisposable
 
     #region Tagging Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TagDatasetVersion_CreatesTag()
     {
         // Arrange
@@ -307,7 +307,7 @@ public class DataVersionControlTests : IDisposable
         Assert.Equal(versionHash, taggedVersion.Hash);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetDatasetByTag_WithInvalidTag_ThrowsArgumentException()
     {
         // Arrange
@@ -322,7 +322,7 @@ public class DataVersionControlTests : IDisposable
 
     #region Comparison Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CompareDatasetVersions_ReturnsDifferences()
     {
         // Arrange
@@ -343,7 +343,7 @@ public class DataVersionControlTests : IDisposable
 
     #region Snapshot Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateDatasetSnapshot_CreatesMultiDatasetSnapshot()
     {
         // Arrange
@@ -367,7 +367,7 @@ public class DataVersionControlTests : IDisposable
         Assert.NotEmpty(snapshotId);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetDatasetSnapshot_ReturnsSnapshot()
     {
         // Arrange
@@ -389,7 +389,7 @@ public class DataVersionControlTests : IDisposable
         Assert.Equal("get-snapshot", snapshot.DatasetName);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetDatasetSnapshot_WithInvalidName_ThrowsArgumentException()
     {
         // Act & Assert
@@ -400,7 +400,7 @@ public class DataVersionControlTests : IDisposable
 
     #region Thread Safety Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateDatasetVersion_FromMultipleThreads_IsThreadSafe()
     {
         // Arrange

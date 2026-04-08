@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.IntegrationTests.Clustering;
 
 public class ClusteringAdditionalMetricsIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WcssAndBcss_ComputeExpectedValues()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 2, spacing: 10.0);
@@ -28,7 +28,7 @@ public class ClusteringAdditionalMetricsIntegrationTests
         Assert.Equal(200.0, bcssValue, 1e-6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PurityAndFMeasure_ReturnPerfectForIdenticalLabels()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 3);
@@ -51,7 +51,7 @@ public class ClusteringAdditionalMetricsIntegrationTests
         Assert.Equal(1.0, fmeasure.ComputeBCubed(dataset.Labels, dataset.Labels), 1e-6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EntropyAndVariationOfInformation_ReportExpectedRanges()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 3);
@@ -104,7 +104,7 @@ public class ClusteringAdditionalMetricsIntegrationTests
         Assert.True(viNormalizedValue >= 0.0 && viNormalizedValue <= 1.0 + 1e-6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ClusterMetrics_EvaluateAndToString_ReturnsValues()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 4);
@@ -131,7 +131,7 @@ public class ClusteringAdditionalMetricsIntegrationTests
         Assert.Contains("Clustering Evaluation Metrics", summary);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ClusterMetrics_EvaluateExternal_ReturnsExternalMetrics()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 3);
@@ -143,7 +143,7 @@ public class ClusteringAdditionalMetricsIntegrationTests
         Assert.Equal(1.0, scores.NormalizedMutualInformation.GetValueOrDefault(), 1e-6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExternalClusterMetricBase_UtilityMethods_ReturnExpectedValues()
     {
         var trueLabels = new Vector<double>(new[] { 0.0, 0.0, 1.0, 1.0 });

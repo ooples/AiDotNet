@@ -17,14 +17,14 @@ public class InitializationDeepMathIntegrationTests
     // EagerInitializationStrategy: Properties
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Eager_IsLazy_False()
     {
         var strategy = new EagerInitializationStrategy<double>();
         Assert.False(strategy.IsLazy);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Eager_LoadFromExternal_False()
     {
         var strategy = new EagerInitializationStrategy<double>();
@@ -35,14 +35,14 @@ public class InitializationDeepMathIntegrationTests
     // LazyInitializationStrategy: Properties
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Lazy_IsLazy_True()
     {
         var strategy = new LazyInitializationStrategy<double>();
         Assert.True(strategy.IsLazy);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Lazy_LoadFromExternal_False()
     {
         var strategy = new LazyInitializationStrategy<double>();
@@ -53,14 +53,14 @@ public class InitializationDeepMathIntegrationTests
     // ZeroInitializationStrategy: Properties
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Zero_IsLazy_False()
     {
         var strategy = new ZeroInitializationStrategy<double>();
         Assert.False(strategy.IsLazy);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Zero_LoadFromExternal_False()
     {
         var strategy = new ZeroInitializationStrategy<double>();
@@ -71,7 +71,7 @@ public class InitializationDeepMathIntegrationTests
     // ZeroInitializationStrategy: Weights and Biases
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Zero_InitializeWeights_AllZeros()
     {
         var strategy = new ZeroInitializationStrategy<double>();
@@ -84,7 +84,7 @@ public class InitializationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Zero_InitializeBiases_AllZeros()
     {
         var strategy = new ZeroInitializationStrategy<double>();
@@ -97,7 +97,7 @@ public class InitializationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Zero_LargeTensor_AllZeros()
     {
         var strategy = new ZeroInitializationStrategy<double>();
@@ -116,7 +116,7 @@ public class InitializationDeepMathIntegrationTests
     // EagerInitializationStrategy: Xavier Normal Distribution
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Eager_InitializeWeights_NonZero()
     {
         var strategy = new EagerInitializationStrategy<double>();
@@ -136,7 +136,7 @@ public class InitializationDeepMathIntegrationTests
         Assert.True(hasNonZero);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Eager_InitializeWeights_XavierNormal_MeanNearZero()
     {
         // Xavier Normal: W ~ N(0, sqrt(2/(fan_in + fan_out)))
@@ -156,7 +156,7 @@ public class InitializationDeepMathIntegrationTests
         Assert.True(Math.Abs(mean) < 0.05, $"Mean {mean} should be near zero");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Eager_InitializeWeights_XavierNormal_VarianceCorrect()
     {
         // Xavier Normal: variance = 2/(fan_in + fan_out)
@@ -182,7 +182,7 @@ public class InitializationDeepMathIntegrationTests
             $"Variance {variance} should be near {expectedVariance}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Eager_InitializeWeights_XavierNormal_TruncatedBound()
     {
         // Xavier Normal uses truncated normal: clips at [-2*stddev, 2*stddev]
@@ -201,7 +201,7 @@ public class InitializationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Eager_InitializeBiases_AllZeros()
     {
         var strategy = new EagerInitializationStrategy<double>();
@@ -218,7 +218,7 @@ public class InitializationDeepMathIntegrationTests
     // LazyInitializationStrategy: Same Math as Eager
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Lazy_InitializeWeights_NonZero()
     {
         var strategy = new LazyInitializationStrategy<double>();
@@ -237,7 +237,7 @@ public class InitializationDeepMathIntegrationTests
         Assert.True(hasNonZero);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Lazy_InitializeBiases_AllZeros()
     {
         var strategy = new LazyInitializationStrategy<double>();
@@ -250,7 +250,7 @@ public class InitializationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Lazy_InitializeWeights_XavierNormal_TruncatedBound()
     {
         var strategy = new LazyInitializationStrategy<double>();
@@ -271,7 +271,7 @@ public class InitializationDeepMathIntegrationTests
     // Xavier Uniform vs Normal: Different Distributions
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Eager_DifferentFanIn_DifferentScale()
     {
         var strategy = new EagerInitializationStrategy<double>();
@@ -298,7 +298,7 @@ public class InitializationDeepMathIntegrationTests
     // InitializationStrategies Factory
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Factory_Lazy_ReturnsLazyStrategy()
     {
         var strategy = InitializationStrategies<double>.Lazy;
@@ -307,7 +307,7 @@ public class InitializationDeepMathIntegrationTests
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Factory_Eager_ReturnsEagerStrategy()
     {
         var strategy = InitializationStrategies<double>.Eager;
@@ -316,7 +316,7 @@ public class InitializationDeepMathIntegrationTests
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Factory_Zero_ReturnsZeroStrategy()
     {
         var strategy = InitializationStrategies<double>.Zero;
@@ -325,7 +325,7 @@ public class InitializationDeepMathIntegrationTests
         Assert.False(strategy.LoadFromExternal);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Factory_Lazy_Singleton()
     {
         var s1 = InitializationStrategies<double>.Lazy;
@@ -333,7 +333,7 @@ public class InitializationDeepMathIntegrationTests
         Assert.Same(s1, s2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Factory_Eager_Singleton()
     {
         var s1 = InitializationStrategies<double>.Eager;
@@ -341,7 +341,7 @@ public class InitializationDeepMathIntegrationTests
         Assert.Same(s1, s2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Factory_Zero_Singleton()
     {
         var s1 = InitializationStrategies<double>.Zero;
@@ -349,7 +349,7 @@ public class InitializationDeepMathIntegrationTests
         Assert.Same(s1, s2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Factory_FromFile_ReturnsFromFileStrategy()
     {
         var strategy = InitializationStrategies<double>.FromFile("dummy_path.json");
@@ -361,7 +361,7 @@ public class InitializationDeepMathIntegrationTests
     // InitializationStrategyType Enum
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InitializationStrategyType_HasFourValues()
     {
         var values = (((InitializationStrategyType[])Enum.GetValues(typeof(InitializationStrategyType))));
@@ -382,7 +382,7 @@ public class InitializationDeepMathIntegrationTests
     // Float type support
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Eager_FloatType_WorksCorrectly()
     {
         var strategy = new EagerInitializationStrategy<float>();
@@ -401,7 +401,7 @@ public class InitializationDeepMathIntegrationTests
         Assert.True(hasNonZero);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Zero_FloatType_AllZeros()
     {
         var strategy = new ZeroInitializationStrategy<float>();
@@ -418,7 +418,7 @@ public class InitializationDeepMathIntegrationTests
     // Edge Cases
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Eager_SingleElement_Initializes()
     {
         var strategy = new EagerInitializationStrategy<double>();
@@ -430,7 +430,7 @@ public class InitializationDeepMathIntegrationTests
         Assert.True(Math.Abs(weights[0]) <= 2.0 + 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Eager_LargeTensor_AllInitialized()
     {
         var strategy = new EagerInitializationStrategy<double>();

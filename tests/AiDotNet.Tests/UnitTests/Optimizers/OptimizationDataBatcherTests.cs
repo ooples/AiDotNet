@@ -51,7 +51,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region Constructor Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithValidParameters_InitializesSuccessfully()
         {
             // Arrange
@@ -67,7 +67,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(32, batcher.BatchSize);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullInputData_ThrowsArgumentNullException()
         {
             // Arrange, Act & Assert
@@ -76,7 +76,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
                     null!, batchSize: 32));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithZeroBatchSize_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -88,7 +88,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
                     inputData, batchSize: 0));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNegativeBatchSize_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -104,7 +104,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region Property Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DataSize_ReturnsCorrectNumberOfSamples()
         {
             // Arrange
@@ -116,7 +116,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(150, batcher.DataSize);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void BatchSize_ReturnsConfiguredBatchSize()
         {
             // Arrange
@@ -149,7 +149,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region GetBatches Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetBatches_ReturnsCorrectNumberOfBatches()
         {
             // Arrange
@@ -164,7 +164,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(4, batches.Count); // 100 samples / 32 batch size = 4 batches (3 full + 1 partial)
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetBatches_WithDropLast_DropsIncompleteBatch()
         {
             // Arrange
@@ -183,7 +183,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetBatches_WithoutShuffle_ReturnsDataInOrder()
         {
             // Arrange
@@ -210,7 +210,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(new[] { 9 }, batches[3].Indices);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetBatches_WithShuffle_ReturnsShuffledData()
         {
             // Arrange
@@ -237,7 +237,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.True(anyDifferent, "Shuffled batches should differ from ordered batches");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetBatches_WithSameSeed_ProducesReproducibleResults()
         {
             // Arrange
@@ -259,7 +259,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetBatches_ReturnsCorrectBatchData()
         {
             // Arrange
@@ -281,7 +281,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(1.0, firstBatch.YBatch[1]); // Second sample label
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetBatches_AllIndicesAreCovered()
         {
             // Arrange
@@ -304,7 +304,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region GetBatchIndices Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetBatchIndices_ReturnsCorrectIndicesOnly()
         {
             // Arrange
@@ -323,7 +323,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(new[] { 9 }, batchIndices[3]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetBatchIndices_WithDropLast_DropsIncompleteBatch()
         {
             // Arrange
@@ -346,7 +346,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region Edge Case Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetBatches_WithBatchSizeLargerThanData_ReturnsSingleBatch()
         {
             // Arrange
@@ -362,7 +362,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(10, batches[0].Indices.Length);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetBatches_WithExactlyOneBatch_Works()
         {
             // Arrange
@@ -378,7 +378,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(32, batches[0].Indices.Length);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetBatches_WithSingleSample_Works()
         {
             // Arrange
@@ -398,7 +398,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region WithSampler Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void WithSampler_CreatesNewBatcherWithSampler()
         {
             // Arrange
@@ -418,7 +418,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region Extension Method Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CreateBatcher_ExtensionMethod_CreatesValidBatcher()
         {
             // Arrange
@@ -433,7 +433,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(32, batcher.BatchSize);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CreateBatcher_ExtensionMethod_WithAllOptions_Works()
         {
             // Arrange
@@ -455,7 +455,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region Vector Input Limitation Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithVectorInput_ThrowsArgumentException()
         {
             // Arrange - Vector<T> as input is not supported by InputHelper.GetBatchSize
@@ -483,7 +483,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
         #region Performance and Memory Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetBatches_IsLazilyEvaluated()
         {
             // Arrange
@@ -502,7 +502,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             Assert.Equal(32, firstBatch.Indices.Length);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetBatches_CanIterateMultipleTimes()
         {
             // Arrange

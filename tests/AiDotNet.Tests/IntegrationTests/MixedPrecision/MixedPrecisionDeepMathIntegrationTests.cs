@@ -18,7 +18,7 @@ public class MixedPrecisionDeepMathIntegrationTests
 
     #region Float8E4M3 - Basic Conversion Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_Zero_RoundTrips()
     {
         // E4M3 zero: sign=0, exp=0, mantissa=0 => byte 0x00
@@ -29,7 +29,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0, zero.RawValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_NegativeZero_PreserveSign()
     {
         // Negative zero: sign=1, exp=0, mantissa=0 => byte 0x80
@@ -39,7 +39,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0x80, negZero.RawValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_One_ExactEncoding()
     {
         // 1.0: sign=0, exp=7 (bias=7, so stored exp=7), mantissa=0
@@ -50,7 +50,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0x38, one.RawValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_Two_ExactEncoding()
     {
         // 2.0: sign=0, exp=8 (bias=7, so real exp=1), mantissa=0
@@ -61,7 +61,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0x40, two.RawValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_NegativeOne_ExactEncoding()
     {
         // -1.0: sign=1, exp=7, mantissa=0
@@ -71,7 +71,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0xB8, negOne.RawValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_OnePointFive_ExactEncoding()
     {
         // 1.5: sign=0, exp=7, mantissa=4 (1.100 in binary = 1.5)
@@ -82,7 +82,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0x3C, val.RawValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_MaxValue_Is448()
     {
         // E4M3 max finite value: exp=15, mantissa=6 (not 7 since 0x7F is NaN)
@@ -91,7 +91,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(448f, max.ToFloat());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_ClampToMax_LargeValueBecomesMaxFinite()
     {
         // Values above 448 should be clamped to 448
@@ -99,7 +99,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(448f, clamped.ToFloat());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_NaN_EncodedCorrectly()
     {
         // NaN: exp=15 (all 1s), mantissa=7 (all 1s) => byte 0x7F
@@ -109,7 +109,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.True(float.IsNaN(nan.ToFloat()));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_SmallestNormal_Is0Point125()
     {
         // Smallest normal: exp=1, mantissa=0
@@ -119,7 +119,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0.015625f, result, FloatTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_SubnormalValues_CorrectEncoding()
     {
         // Subnormal: exp=0, mantissa=m
@@ -130,7 +130,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0.001953125f, result, FloatTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_SubnormalLargest_CorrectValue()
     {
         // Largest subnormal: exp=0, mantissa=7
@@ -140,7 +140,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0.013671875f, result, FloatTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_BelowMinSubnormal_FlushesToZero()
     {
         // Values below smallest subnormal (2^-9 = 0.001953125) should flush to zero
@@ -152,7 +152,7 @@ public class MixedPrecisionDeepMathIntegrationTests
 
     #region Float8E4M3 - Conversion Accuracy Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_PowersOfTwo_ExactRoundTrip()
     {
         // Powers of 2 within range should be exact
@@ -165,7 +165,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_NegativePowersOfTwo_ExactRoundTrip()
     {
         float[] powers = { -0.125f, -0.25f, -0.5f, -1f, -2f, -4f, -8f, -16f, -128f };
@@ -177,7 +177,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_ThreePointFive_HandComputedBits()
     {
         // 3.5 = 1.75 * 2^1
@@ -188,7 +188,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0x46, val.RawValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_Equality_SameValue()
     {
         var a = Float8E4M3.FromFloat(1.5f);
@@ -197,7 +197,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(a, b);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_Comparison_Ordering()
     {
         var small = Float8E4M3.FromFloat(1.0f);
@@ -208,7 +208,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.True(large >= small);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_NegativeValueComparison()
     {
         var neg = Float8E4M3.FromFloat(-2.0f);
@@ -220,7 +220,7 @@ public class MixedPrecisionDeepMathIntegrationTests
 
     #region Float8E5M2 - Basic Conversion Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_Zero_RoundTrips()
     {
         var zero = Float8E5M2.FromFloat(0f);
@@ -230,7 +230,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0, zero.RawValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_NegativeZero_PreserveSign()
     {
         var negZero = Float8E5M2.FromFloat(-0f);
@@ -239,7 +239,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0x80, negZero.RawValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_One_ExactEncoding()
     {
         // 1.0: sign=0, exp=15 (bias=15, stored exp=15), mantissa=0
@@ -249,7 +249,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0x3C, one.RawValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_Two_ExactEncoding()
     {
         // 2.0: sign=0, exp=16, mantissa=0
@@ -259,7 +259,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0x40, two.RawValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_NegativeOne_ExactEncoding()
     {
         // -1.0: sign=1, exp=15, mantissa=0
@@ -269,7 +269,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0xBC, negOne.RawValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_OnePointFive_ExactEncoding()
     {
         // 1.5: sign=0, exp=15, mantissa=10 = 2
@@ -279,7 +279,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0x3E, val.RawValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_MaxValue_Is57344()
     {
         // E5M2 max finite value: exp=30, mantissa=3
@@ -288,7 +288,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(57344f, max.ToFloat());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_OverMax_BecomesInfinity()
     {
         // Values above 57344 should become infinity
@@ -297,7 +297,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.False(inf.IsNegative);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_NegativeOverMax_BecomesNegativeInfinity()
     {
         var negInf = Float8E5M2.FromFloat(-100000f);
@@ -305,7 +305,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.True(negInf.IsNegative);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_PositiveInfinity_EncodedCorrectly()
     {
         // +Inf: sign=0, exp=31, mantissa=0 => byte 0x7C
@@ -315,7 +315,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0x7C, inf.RawValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_NegativeInfinity_EncodedCorrectly()
     {
         // -Inf: sign=1, exp=31, mantissa=0 => byte 0xFC
@@ -325,7 +325,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0xFC, inf.RawValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_NaN_EncodedCorrectly()
     {
         // NaN: exp=31, mantissa!=0 => byte 0x7F
@@ -334,7 +334,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.True(float.IsNaN(nan.ToFloat()));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_SubnormalValues_CorrectEncoding()
     {
         // Subnormal E5M2: exp=0, mantissa=m
@@ -346,7 +346,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.True(Math.Abs(result - 0.0000152588f) < 0.0001f);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_BelowMinSubnormal_FlushesToZero()
     {
         var val = Float8E5M2.FromFloat(1e-6f);
@@ -357,7 +357,7 @@ public class MixedPrecisionDeepMathIntegrationTests
 
     #region Float8E5M2 - Conversion Accuracy Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_PowersOfTwo_ExactRoundTrip()
     {
         // E5M2 has wider range but less precision
@@ -370,7 +370,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_Comparison_Ordering()
     {
         var small = Float8E5M2.FromFloat(1.0f);
@@ -379,7 +379,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.True(large > small);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_Equality_SameValue()
     {
         var a = Float8E5M2.FromFloat(1.5f);
@@ -392,7 +392,7 @@ public class MixedPrecisionDeepMathIntegrationTests
 
     #region Float8 Cross-Format Conversion Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_ToE5M2_PreservesValue()
     {
         // Convert 1.5 from E4M3 to E5M2 via float
@@ -401,7 +401,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(1.5f, e5m2.ToFloat());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_ToE4M3_PreservesValue()
     {
         var e5m2 = Float8E5M2.FromFloat(2.0f);
@@ -409,7 +409,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(2.0f, e4m3.ToFloat());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_HasMorePrecision_ThanE5M2()
     {
         // E4M3 has 3 mantissa bits => 8 distinct mantissa values per exponent
@@ -429,7 +429,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(1.125f, e4m3_precise.ToFloat());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_HasMoreRange_ThanE4M3()
     {
         // E5M2 max = 57344, E4M3 max = 448
@@ -441,7 +441,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(448f, e4m3.ToFloat()); // Clamped to max
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_BulkConversion_ArrayRoundTrip()
     {
         float[] values = { 0f, 1f, 2f, 4f, 8f, -1f, -4f, 0.5f, 0.25f };
@@ -455,7 +455,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_BulkConversion_ArrayRoundTrip()
     {
         float[] values = { 0f, 1f, 2f, 4f, 1024f, -1f, -256f };
@@ -473,7 +473,7 @@ public class MixedPrecisionDeepMathIntegrationTests
 
     #region Float8E4M3 - Bit-Level Verification Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_BitDecomposition_ManualVerification()
     {
         // For value 3.0: 1.1 * 2^1
@@ -494,7 +494,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(3.0f, expected, FloatTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_BitDecomposition_ForFive()
     {
         // 5.0 = 1.01 * 2^2
@@ -514,7 +514,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(5.0f, expected, FloatTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_AllExponentValues_CorrectRange()
     {
         // For each exponent value (1-15, normal range), verify the smallest value
@@ -533,7 +533,7 @@ public class MixedPrecisionDeepMathIntegrationTests
 
     #region Float8E5M2 - Bit-Level Verification Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_BitDecomposition_ManualVerification()
     {
         // For value 3.0: 1.1 * 2^1
@@ -553,7 +553,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(3.0f, expected, FloatTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_BitDecomposition_ForEight()
     {
         // 8.0 = 1.0 * 2^3
@@ -577,7 +577,7 @@ public class MixedPrecisionDeepMathIntegrationTests
 
     #region LossScaler - Exact Scaling Math Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_ScaleLoss_ExactMultiplication()
     {
         // ScaleLoss(loss) = loss * scale
@@ -589,7 +589,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(6.5536, scaledLoss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_UnscaleGradient_ExactDivision()
     {
         // UnscaleGradient(grad) = grad * (1/scale)
@@ -601,7 +601,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0.5, unscaled, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_ScaleThenUnscale_IsIdentity()
     {
         // UnscaleGradient(ScaleLoss(x)) should approximately equal x
@@ -613,7 +613,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(original, recovered, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_VectorUnscale_ExactPerElementDivision()
     {
         var scaler = new LossScaler<double>(initialScale: 200.0);
@@ -628,7 +628,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(3.0, gradients[3], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_TensorUnscale_ExactPerElementDivision()
     {
         var scaler = new LossScaler<double>(initialScale: 50.0);
@@ -648,7 +648,7 @@ public class MixedPrecisionDeepMathIntegrationTests
 
     #region LossScaler - Dynamic Scaling State Machine Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_DynamicGrowth_ExactScaleAfterInterval()
     {
         // After GrowthInterval consecutive successes, scale *= GrowthFactor
@@ -669,7 +669,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(200.0, scaler.Scale, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_DynamicBackoff_ExactScaleOnOverflow()
     {
         // On overflow: scale *= BackoffFactor
@@ -686,7 +686,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(500.0, scaler.Scale, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_MultipleBackoffs_GeometricDecay()
     {
         // Each overflow: scale *= 0.5
@@ -706,7 +706,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(125.0, scaler.Scale, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_MinScaleClamping_PreventsGoingBelow()
     {
         // scale = 10, backoff = 0.1, minScale = 5
@@ -723,7 +723,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(5.0, scaler.Scale, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_MaxScaleClamping_PreventsGoingAbove()
     {
         // scale = 100, growth = 10, maxScale = 500
@@ -741,7 +741,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(500.0, scaler.Scale, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_ConsecutiveSuccessReset_OnOverflow()
     {
         // Growth should only happen after CONSECUTIVE successes
@@ -776,7 +776,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(100.0, scaler.Scale, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_StaticScaling_NeverChanges()
     {
         // Dynamic scaling disabled - scale never changes
@@ -801,7 +801,7 @@ public class MixedPrecisionDeepMathIntegrationTests
 
     #region LossScaler - Overflow Rate Math Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_OverflowRate_ExactComputation()
     {
         // OverflowRate = skippedUpdates / totalUpdates
@@ -819,14 +819,14 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0.4, scaler.OverflowRate, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_OverflowRate_ZeroUpdates_ReturnsZero()
     {
         var scaler = new LossScaler<double>(initialScale: 100.0);
         Assert.Equal(0.0, scaler.OverflowRate, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_OverflowRate_AllOverflow_ReturnsOne()
     {
         var scaler = new LossScaler<double>(initialScale: 100.0);
@@ -839,7 +839,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(1.0, scaler.OverflowRate, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_Reset_ClearsAllStatistics()
     {
         var scaler = new LossScaler<double>(initialScale: 100.0);
@@ -855,7 +855,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0.0, scaler.OverflowRate, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_Reset_WithNewScale_UpdatesScaleOnly()
     {
         var scaler = new LossScaler<double>(initialScale: 100.0);
@@ -870,42 +870,42 @@ public class MixedPrecisionDeepMathIntegrationTests
 
     #region LossScaler - Overflow Detection Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_HasOverflow_NaN_True()
     {
         var scaler = new LossScaler<double>();
         Assert.True(scaler.HasOverflow(double.NaN));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_HasOverflow_PositiveInfinity_True()
     {
         var scaler = new LossScaler<double>();
         Assert.True(scaler.HasOverflow(double.PositiveInfinity));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_HasOverflow_NegativeInfinity_True()
     {
         var scaler = new LossScaler<double>();
         Assert.True(scaler.HasOverflow(double.NegativeInfinity));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_HasOverflow_NormalValue_False()
     {
         var scaler = new LossScaler<double>();
         Assert.False(scaler.HasOverflow(1234.5678));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_HasOverflow_Zero_False()
     {
         var scaler = new LossScaler<double>();
         Assert.False(scaler.HasOverflow(0.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_DetectOverflow_TensorWithNaN()
     {
         var scaler = new LossScaler<double>();
@@ -914,7 +914,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.True(scaler.DetectOverflow(tensor));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_DetectOverflow_TensorAllNormal()
     {
         var scaler = new LossScaler<double>();
@@ -927,7 +927,7 @@ public class MixedPrecisionDeepMathIntegrationTests
 
     #region MixedPrecisionContext - FP32/FP16 Casting Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Context_Initialize_StoresMasterWeights()
     {
         using var ctx = new MixedPrecisionContext();
@@ -944,7 +944,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(3.0f, master[2], FloatTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Context_CastToFP16_PreservesRepresentableValues()
     {
         using var ctx = new MixedPrecisionContext();
@@ -962,7 +962,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(-1.0f, (float)working[3], FloatTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Context_FP32toFP16_PrecisionLoss()
     {
         // FP16 has 10-bit mantissa, so values needing more precision will be rounded
@@ -980,7 +980,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.True(Math.Abs(fp16Value - 1.0f) < 0.01f);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Context_UpdateMasterWeights_SGDFormula()
     {
         // SGD: weights = weights - learningRate * gradients
@@ -1001,7 +1001,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(29.7f, updated[2], FloatTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Context_MultipleNamedParameters_IndependentManagement()
     {
         using var ctx = new MixedPrecisionContext();
@@ -1026,7 +1026,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(5.0f, layer2[2], FloatTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Context_PrepareGradients_UnscalesAndChecks()
     {
         using var ctx = new MixedPrecisionContext(new MixedPrecisionConfig
@@ -1046,7 +1046,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(5.0f, floatGrads[0], 0.1f);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Context_Reset_ClearsAllState()
     {
         using var ctx = new MixedPrecisionContext();
@@ -1060,7 +1060,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0, ctx.ParameterCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Context_DoubleInitialize_Throws()
     {
         using var ctx = new MixedPrecisionContext();
@@ -1071,7 +1071,7 @@ public class MixedPrecisionDeepMathIntegrationTests
             ctx.Initialize(new Vector<float>(new[] { 2.0f })));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Context_GetWorkingBeforeCast_Throws()
     {
         using var ctx = new MixedPrecisionContext();
@@ -1086,7 +1086,7 @@ public class MixedPrecisionDeepMathIntegrationTests
 
     #region Cross-Component Integration Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_GrowthThenBackoff_ExactStateTransitions()
     {
         // Test complex state transitions: grow, grow, overflow, grow
@@ -1125,7 +1125,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(1.0 / 7.0, scaler.OverflowRate, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_E5M2_FormatComparison_SameExactValues()
     {
         // Both formats should represent powers of 2 exactly (within range)
@@ -1139,7 +1139,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullPipeline_ScaleUnscale_WithFloat8Gradients()
     {
         // Simulate: compute loss in FP32, scale, convert to E5M2 gradients, convert back
@@ -1172,7 +1172,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(0.5f, gradVector[2], FloatTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Context_FullTrainingStep_MathVerification()
     {
         // Full training step: init -> cast FP16 -> compute -> update master
@@ -1214,7 +1214,7 @@ public class MixedPrecisionDeepMathIntegrationTests
 
     #region Edge Case and Numerical Stability Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_HashCode_ConsistentWithEquality()
     {
         var a = Float8E4M3.FromFloat(1.5f);
@@ -1222,7 +1222,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(a.GetHashCode(), b.GetHashCode());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_HashCode_ConsistentWithEquality()
     {
         var a = Float8E5M2.FromFloat(1.5f);
@@ -1230,7 +1230,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(a.GetHashCode(), b.GetHashCode());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_NaN_NotEqualToNaN()
     {
         // NaN comparison: NaN != NaN in IEEE 754
@@ -1241,7 +1241,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.True(a == b);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_InfinityConvertBackToFloat()
     {
         var posInf = Float8E5M2.PositiveInfinity;
@@ -1251,7 +1251,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.True(float.IsNegativeInfinity(negInf.ToFloat()));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_UnscaleAndCheck_TensorOverflow_ReducesScale()
     {
         var scaler = new LossScaler<double>(
@@ -1271,7 +1271,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(1, scaler.SkippedUpdates);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LossScaler_UnscaleAndCheck_TensorNoOverflow_GradientsCorrect()
     {
         var scaler = new LossScaler<double>(
@@ -1292,7 +1292,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(2.0, tensor.GetFlatIndexValue(2), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E4M3_ExplicitCastOperators_WorkCorrectly()
     {
         float original = 4.0f;
@@ -1301,7 +1301,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         Assert.Equal(original, decoded, FloatTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E5M2_ExplicitCastOperators_WorkCorrectly()
     {
         float original = 8.0f;

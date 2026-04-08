@@ -49,7 +49,7 @@ public class CrossDomainMetaTests
         return false;
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetaFDMixup_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -69,7 +69,7 @@ public class CrossDomainMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FreqPrior_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -89,7 +89,7 @@ public class CrossDomainMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetaCollaborative_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -109,7 +109,7 @@ public class CrossDomainMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SDCL_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -129,7 +129,7 @@ public class CrossDomainMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FreqPrompt_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -149,7 +149,7 @@ public class CrossDomainMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OpenMAMLPlus_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -169,7 +169,7 @@ public class CrossDomainMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FreqPrior_MultiStep_StableLoss()
     {
         var model = new LinearVectorModel(3);

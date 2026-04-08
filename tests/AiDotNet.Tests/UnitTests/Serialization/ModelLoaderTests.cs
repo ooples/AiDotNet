@@ -10,13 +10,13 @@ using Xunit;
 
 public class ModelLoaderTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IsSelfDescribing_ReturnsFalseForMissingFile()
     {
         Assert.False(ModelLoader.IsSelfDescribing("nonexistent_file_99999.bin"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IsSelfDescribing_ReturnsTrueForAimfFile()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"aimf_isd_{Guid.NewGuid():N}.bin");
@@ -38,7 +38,7 @@ public class ModelLoaderTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IsSelfDescribing_ReturnsFalseForLegacyFile()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"legacy_isd_{Guid.NewGuid():N}.bin");
@@ -57,26 +57,26 @@ public class ModelLoaderTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Inspect_ThrowsOnNullPath()
     {
         Assert.Throws<ArgumentException>(() => ModelLoader.Inspect(null));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Inspect_ThrowsOnEmptyPath()
     {
         Assert.Throws<ArgumentException>(() => ModelLoader.Inspect(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Inspect_ThrowsOnMissingFile()
     {
         Assert.Throws<FileNotFoundException>(() =>
             ModelLoader.Inspect("definitely_not_a_real_file_abc123.bin"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Inspect_ReturnsHeaderInfo()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"aimf_inspect_{Guid.NewGuid():N}.bin");
@@ -109,26 +109,26 @@ public class ModelLoaderTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Load_ThrowsOnNullPath()
     {
         Assert.Throws<ArgumentException>(() => ModelLoader.Load<double>(null));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Load_ThrowsOnEmptyPath()
     {
         Assert.Throws<ArgumentException>(() => ModelLoader.Load<double>(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Load_ThrowsOnMissingFile()
     {
         Assert.Throws<FileNotFoundException>(() =>
             ModelLoader.Load<double>("no_such_model_xyz.aimf"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Load_ThrowsOnLegacyFile()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"legacy_load_{Guid.NewGuid():N}.bin");
@@ -148,13 +148,13 @@ public class ModelLoaderTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadFromBytes_ThrowsOnNull()
     {
         Assert.Throws<ArgumentNullException>(() => ModelLoader.LoadFromBytes<double>(null));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadFromBytes_ThrowsOnNonAimfData()
     {
         var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -162,7 +162,7 @@ public class ModelLoaderTests
         Assert.Contains("AIMF", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadFromBytes_StubModel_RoundTrip()
     {
         // Register the stub so the registry can resolve it
@@ -183,7 +183,7 @@ public class ModelLoaderTests
         Assert.Equal(payload, loadedStub.GetDeserializedData());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Load_FileRoundTrip()
     {
         // Register the stub so the registry can resolve it
@@ -221,7 +221,7 @@ public class ModelLoaderTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadFromBytes_UnknownType_Throws()
     {
         // Create AIMF data with a type name that won't be in the registry

@@ -14,7 +14,7 @@ public class IntegrationTests
 {
     #region Template Composition Integration
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CompositeTemplate_WithConditional_WorksTogether()
     {
         var composite = CompositePromptTemplate.Builder()
@@ -45,7 +45,7 @@ public class IntegrationTests
         Assert.Contains("User: What is machine learning?", withoutContext);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ChainOfThoughtTemplate_WithContextWindow_TruncatesCorrectly()
     {
         var task = "Solve this very complex mathematical problem";
@@ -61,7 +61,7 @@ public class IntegrationTests
         Assert.True(manager.FitsInWindow(prompt));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RolePlayingTemplate_WithStructuredOutput_CombinesCorrectly()
     {
         // Use the role constructor (not template constructor) by providing expertise param
@@ -89,7 +89,7 @@ public class IntegrationTests
 
     #region Few-Shot with Templates Integration
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FewShotPromptTemplate_WithExamples_FormatsCorrectly()
     {
         var selector = new FixedExampleSelector<double>();
@@ -114,7 +114,7 @@ public class IntegrationTests
         Assert.Contains("Good morning", prompt);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RandomExampleSelector_SelectsCorrectCount()
     {
         var selector = new RandomExampleSelector<double>(seed: 42);
@@ -133,7 +133,7 @@ public class IntegrationTests
         Assert.Equal(3, selected.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FixedExampleSelector_ReturnsAllExamples()
     {
         var selector = new FixedExampleSelector<double>();
@@ -152,7 +152,7 @@ public class IntegrationTests
 
     #region Context Window Management Integration
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ContextWindowManager_WithLongPrompt_SplitsCorrectly()
     {
         var manager = new ContextWindowManager(100, text => text.Length);
@@ -167,7 +167,7 @@ public class IntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ContextWindowManager_EstimatesTokensReasonably()
     {
         var manager = new ContextWindowManager(4096);
@@ -182,7 +182,7 @@ public class IntegrationTests
         Assert.True(shortEstimate > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ContextWindowManager_ReservedTokens_AccountedFor()
     {
         var manager = new ContextWindowManager(100, text => text.Length);
@@ -197,7 +197,7 @@ public class IntegrationTests
 
     #region Template Chaining Integration
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MultipleTemplates_ChainedTogether_ProducesValidOutput()
     {
         // Step 1: Create a role-playing prompt using role constructor
@@ -229,7 +229,7 @@ public class IntegrationTests
         Assert.Contains("json", finalPrompt.ToLower());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InstructionTemplate_WithConditionals_ProducesCorrectOutput()
     {
         var instructionTemplate = new InstructionFollowingTemplate()
@@ -270,7 +270,7 @@ public class IntegrationTests
 
     #region End-to-End Workflow Integration
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CompleteWorkflow_QASystem_WorksEndToEnd()
     {
         // Simulate a QA system workflow
@@ -311,7 +311,7 @@ public class IntegrationTests
         Assert.Contains("What is the largest planet?", prompt);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CompleteWorkflow_DataAnalysis_WorksEndToEnd()
     {
         // Simulate a data analysis workflow
@@ -350,7 +350,7 @@ public class IntegrationTests
         Assert.Contains("summary", finalPrompt);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CompleteWorkflow_CodeReview_WorksEndToEnd()
     {
         // Simulate a code review workflow
@@ -394,7 +394,7 @@ public class IntegrationTests
 
     #region Error Handling Integration
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Integration_MissingRequiredVariable_ThrowsAppropriately()
     {
         var template = new SimplePromptTemplate("Hello {name}, your order {orderId} is ready");
@@ -406,7 +406,7 @@ public class IntegrationTests
         }));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Integration_InvalidTemplateChain_HandlesGracefully()
     {
         var template1 = new SimplePromptTemplate("Step 1: {step1}");

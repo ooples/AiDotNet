@@ -17,7 +17,7 @@ namespace AiDotNet.Tests.IntegrationTests.Regression;
 /// </summary>
 public class AiModelBuilderSerializeRoundTripTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_SerializeDeserialize_PredictMatchesOriginal()
     {
         // Arrange: Train a RidgeRegression model through the builder
@@ -57,7 +57,7 @@ public class AiModelBuilderSerializeRoundTripTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_SerializeDeserialize_PredictMatchesOriginal()
     {
         // Arrange: Different model type to verify serializer generality
@@ -88,7 +88,7 @@ public class AiModelBuilderSerializeRoundTripTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SerializeDeserialize_PreservesOptimizationResult()
     {
         // Arrange: Train with default optimizer that performs feature selection
@@ -124,7 +124,7 @@ public class AiModelBuilderSerializeRoundTripTests
         Assert.NotNull(restored.OptimizationResult?.BestSolution);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SerializeDeserialize_PreservesPreprocessingInfo()
     {
         // Arrange: Train with explicit preprocessing
@@ -166,7 +166,7 @@ public class AiModelBuilderSerializeRoundTripTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SerializeDeserialize_EmptyModel_RoundTripPreserveEmptyState()
     {
         // Arrange: Create an AiModelResult with no model set

@@ -13,7 +13,7 @@ public class ResNetNetworkTests
 {
     #region ResNetConfiguration Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetConfiguration_Constructor_ValidParameters_CreatesConfiguration()
     {
         // Arrange & Act
@@ -29,7 +29,7 @@ public class ResNetNetworkTests
         Assert.True(config.ZeroInitResidual);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetConfiguration_BottleneckVariant_UsesBottleneck()
     {
         // Arrange & Act
@@ -40,7 +40,7 @@ public class ResNetNetworkTests
         Assert.Equal(4, config.Expansion);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetConfiguration_BasicBlockVariant_DoesNotUseBottleneck()
     {
         // Arrange & Act
@@ -51,7 +51,7 @@ public class ResNetNetworkTests
         Assert.Equal(1, config.Expansion);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetConfiguration_InvalidNumClasses_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
@@ -59,7 +59,7 @@ public class ResNetNetworkTests
             new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetConfiguration_InvalidInputDimensions_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
@@ -82,7 +82,7 @@ public class ResNetNetworkTests
         Assert.Equal(expectedBlocks, config.BlockCounts);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetConfiguration_InputShape_ReturnsCorrectShape()
     {
         // Arrange
@@ -99,7 +99,7 @@ public class ResNetNetworkTests
         Assert.Equal(224, inputShape[2]); // width
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetConfiguration_CreateResNet50_CreatesCorrectConfiguration()
     {
         // Act
@@ -111,7 +111,7 @@ public class ResNetNetworkTests
         Assert.True(config.UsesBottleneck);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetConfiguration_CreateForCIFAR_Creates32x32Input()
     {
         // Act
@@ -123,7 +123,7 @@ public class ResNetNetworkTests
         Assert.Equal(10, config.NumClasses);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetConfiguration_CreateLightweight_CreatesResNet18()
     {
         // Act
@@ -138,7 +138,7 @@ public class ResNetNetworkTests
 
     #region ResNetNetwork Construction Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetNetwork_Construction_CreatesValidNetwork()
     {
         // Arrange
@@ -164,7 +164,7 @@ public class ResNetNetworkTests
         Assert.True(network.LayerCount > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetNetwork_WithBottleneck_CreatesValidNetwork()
     {
         // Arrange
@@ -186,7 +186,7 @@ public class ResNetNetworkTests
         Assert.True(network.UsesBottleneck);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetNetwork_NullConfiguration_ThrowsArgumentNullException()
     {
         // Arrange
@@ -204,7 +204,7 @@ public class ResNetNetworkTests
             new ResNetNetwork<float>(architecture, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetNetwork_MismatchedOutputSize_ThrowsArgumentException()
     {
         // Arrange
@@ -224,7 +224,7 @@ public class ResNetNetworkTests
             new ResNetNetwork<float>(architecture, config));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetNetwork_MismatchedInputShape_ThrowsArgumentException()
     {
         // Arrange
@@ -248,7 +248,7 @@ public class ResNetNetworkTests
 
     #region ResNetNetwork Forward Pass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetNetwork_Forward_ReturnsCorrectShape()
     {
         // Arrange
@@ -279,7 +279,7 @@ public class ResNetNetworkTests
         Assert.Equal(10, output.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetNetwork_Predict_ReturnsCorrectShape()
     {
         // Arrange
@@ -308,7 +308,7 @@ public class ResNetNetworkTests
         Assert.Equal(10, output.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetNetwork_Predict_With4DInput_ReturnsCorrectShape()
     {
         // Arrange - test with batch dimension [B, C, H, W]
@@ -339,7 +339,7 @@ public class ResNetNetworkTests
         Assert.Equal(10, output.Shape[output.Shape.Length - 1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetNetwork_BasicBlock_Forward_ReturnsCorrectShape()
     {
         // Arrange - specifically test BasicBlock architecture (ResNet18/34)
@@ -368,7 +368,7 @@ public class ResNetNetworkTests
         Assert.Equal(10, output.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetNetwork_Bottleneck_Forward_ReturnsCorrectShape()
     {
         // Arrange - specifically test BottleneckBlock architecture (ResNet50/101/152)
@@ -466,7 +466,7 @@ public class ResNetNetworkTests
 
     #region ResNetNetwork Metadata Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetNetwork_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -494,7 +494,7 @@ public class ResNetNetworkTests
         Assert.Equal(true, metadata.AdditionalInfo["UsesBottleneck"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
@@ -521,7 +521,7 @@ public class ResNetNetworkTests
 
     #region ResNetVariant Enum Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResNetVariant_AllVariantsAreDefined()
     {
         // Act - use non-generic Enum.GetValues for .NET Framework compatibility
@@ -540,7 +540,7 @@ public class ResNetNetworkTests
 
     #region Block Layer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicBlock_Construction_CreatesValidLayer()
     {
         // Arrange & Act
@@ -556,7 +556,7 @@ public class ResNetNetworkTests
         Assert.True(block.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicBlock_WithDownsample_CreatesValidLayer()
     {
         // Arrange & Act - stride=2 triggers downsampling
@@ -573,7 +573,7 @@ public class ResNetNetworkTests
         Assert.True(block.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BottleneckBlock_Construction_CreatesValidLayer()
     {
         // Arrange & Act
@@ -590,7 +590,7 @@ public class ResNetNetworkTests
         Assert.True(block.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BottleneckBlock_WithDownsample_CreatesValidLayer()
     {
         // Arrange & Act - stride=2 triggers downsampling
@@ -607,7 +607,7 @@ public class ResNetNetworkTests
         Assert.True(block.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdaptiveAveragePoolingLayer_GlobalPool_CreatesValidLayer()
     {
         // Arrange & Act
@@ -622,7 +622,7 @@ public class ResNetNetworkTests
 
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdaptiveAveragePoolingLayer_CustomOutput_CreatesValidLayer()
     {
         // Arrange & Act

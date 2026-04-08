@@ -14,7 +14,7 @@ public class PruningIntegrationTests
 {
     #region MagnitudePruningStrategy Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_Properties_ReturnCorrectValues()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -27,7 +27,7 @@ public class PruningIntegrationTests
         Assert.Contains(SparsityPattern.StructuredNtoM, strategy.SupportedPatterns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_ComputeImportanceScores_Vector_ReturnsAbsoluteValues()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -43,7 +43,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.9, scores[4], 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_ComputeImportanceScores_Matrix_ReturnsAbsoluteValues()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -59,7 +59,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.9, scores[1, 1], 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_ComputeImportanceScores_Tensor_ReturnsAbsoluteValues()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -75,7 +75,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.1, scores[1, 1], 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_CreateMask_Vector_PrunesSmallestWeights()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -88,7 +88,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.4, mask.GetSparsity(), 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_CreateMask_Matrix_PrunesSmallestWeights()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -102,7 +102,7 @@ public class PruningIntegrationTests
         Assert.True(mask.GetSparsity() >= 0.4 && mask.GetSparsity() <= 0.6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_CreateMask_Tensor_PrunesSmallestWeights()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -117,7 +117,7 @@ public class PruningIntegrationTests
         Assert.True(mask.GetSparsity() >= 0.4 && mask.GetSparsity() <= 0.6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_CreateMask_ZeroSparsity_KeepsAllWeights()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -129,7 +129,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.0, mask.GetSparsity(), 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_CreateMask_FullSparsity_PrunesAllWeights()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -141,7 +141,7 @@ public class PruningIntegrationTests
         Assert.Equal(1.0, mask.GetSparsity(), 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_CreateMask_InvalidSparsity_ThrowsArgumentException()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -152,7 +152,7 @@ public class PruningIntegrationTests
         Assert.Throws<ArgumentException>(() => strategy.CreateMask(scores, 1.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_ApplyPruning_Vector_ZerosPrunedWeights()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -170,7 +170,7 @@ public class PruningIntegrationTests
         Assert.Equal(2, zeroCount); // 40% of 5 = 2 zeros
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_ApplyPruning_Matrix_ZerosPrunedWeights()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -191,7 +191,7 @@ public class PruningIntegrationTests
         Assert.Equal(3, zeroCount); // 50% of 6 = 3 zeros
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_Create2to4Mask_CreatesCorrectPattern()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -207,7 +207,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.5, mask.GetSparsity(), 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_CreateNtoMMask_CreatesCorrectPattern()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -222,7 +222,7 @@ public class PruningIntegrationTests
         Assert.True(mask.GetSparsity() >= 0.3 && mask.GetSparsity() <= 0.35);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_ToSparseFormat_COO_ReturnsValidResult()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -239,7 +239,7 @@ public class PruningIntegrationTests
         Assert.Equal(new[] { 2, 3 }, result.OriginalShape);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_ToSparseFormat_CSR_ReturnsValidResult()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -255,7 +255,7 @@ public class PruningIntegrationTests
         Assert.NotNull(result.ColumnIndices);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_ToSparseFormat_CSC_ReturnsValidResult()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -271,7 +271,7 @@ public class PruningIntegrationTests
         Assert.NotNull(result.RowIndices);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MagnitudePruningStrategy_ToSparseFormat_Structured2to4_ReturnsValidResult()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -291,7 +291,7 @@ public class PruningIntegrationTests
 
     #region GradientPruningStrategy Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GradientPruningStrategy_Properties_ReturnCorrectValues()
     {
         var strategy = new GradientPruningStrategy<double>();
@@ -301,7 +301,7 @@ public class PruningIntegrationTests
         Assert.False(strategy.IsStructured);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GradientPruningStrategy_ComputeImportanceScores_Vector_ReturnsWeightGradientProduct()
     {
         var strategy = new GradientPruningStrategy<double>();
@@ -316,7 +316,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.16, scores[2], 6); // |0.8 * -0.2|
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GradientPruningStrategy_ComputeImportanceScores_Matrix_ReturnsWeightGradientProduct()
     {
         var strategy = new GradientPruningStrategy<double>();
@@ -334,7 +334,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.12, scores[0, 1], 6); // |-0.3 * 0.4|
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GradientPruningStrategy_ComputeImportanceScores_NullGradients_ThrowsArgumentException()
     {
         var strategy = new GradientPruningStrategy<double>();
@@ -343,7 +343,7 @@ public class PruningIntegrationTests
         Assert.Throws<ArgumentException>(() => strategy.ComputeImportanceScores(weights, null));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GradientPruningStrategy_ComputeImportanceScores_MismatchedShapes_ThrowsArgumentException()
     {
         var strategy = new GradientPruningStrategy<double>();
@@ -353,7 +353,7 @@ public class PruningIntegrationTests
         Assert.Throws<ArgumentException>(() => strategy.ComputeImportanceScores(weights, gradients));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GradientPruningStrategy_CreateMask_PrunesLowImportanceWeights()
     {
         var strategy = new GradientPruningStrategy<double>();
@@ -366,7 +366,7 @@ public class PruningIntegrationTests
         Assert.True(mask.GetSparsity() >= 0.4 && mask.GetSparsity() <= 0.6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GradientPruningStrategy_ApplyPruning_ZerosPrunedWeights()
     {
         var strategy = new GradientPruningStrategy<double>();
@@ -384,7 +384,7 @@ public class PruningIntegrationTests
         Assert.Equal(2, zeroCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GradientPruningStrategy_Create2to4Mask_CreatesCorrectPattern()
     {
         var strategy = new GradientPruningStrategy<double>();
@@ -402,7 +402,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.5, mask.GetSparsity(), 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GradientPruningStrategy_ToSparseFormat_COO_ReturnsValidResult()
     {
         var strategy = new GradientPruningStrategy<double>();
@@ -420,7 +420,7 @@ public class PruningIntegrationTests
 
     #region StructuredPruningStrategy Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StructuredPruningStrategy_NeuronType_Properties_ReturnCorrectValues()
     {
         var strategy = new StructuredPruningStrategy<double>(
@@ -433,7 +433,7 @@ public class PruningIntegrationTests
         Assert.Contains(SparsityPattern.ColumnStructured, strategy.SupportedPatterns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StructuredPruningStrategy_FilterType_Properties_ReturnCorrectValues()
     {
         var strategy = new StructuredPruningStrategy<double>(
@@ -442,7 +442,7 @@ public class PruningIntegrationTests
         Assert.Contains(SparsityPattern.FilterStructured, strategy.SupportedPatterns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StructuredPruningStrategy_ChannelType_Properties_ReturnCorrectValues()
     {
         var strategy = new StructuredPruningStrategy<double>(
@@ -451,7 +451,7 @@ public class PruningIntegrationTests
         Assert.Contains(SparsityPattern.ChannelStructured, strategy.SupportedPatterns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StructuredPruningStrategy_Neuron_ComputeImportanceScores_ReturnsColumnNorms()
     {
         var strategy = new StructuredPruningStrategy<double>(
@@ -475,7 +475,7 @@ public class PruningIntegrationTests
         Assert.True(scores[0, 1] > scores[0, 0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StructuredPruningStrategy_Filter_ComputeImportanceScores_ReturnsRowNorms()
     {
         var strategy = new StructuredPruningStrategy<double>(
@@ -494,7 +494,7 @@ public class PruningIntegrationTests
         Assert.Equal(scores[1, 0], scores[1, 2], 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StructuredPruningStrategy_Neuron_CreateMask_PrunesEntireColumns()
     {
         var strategy = new StructuredPruningStrategy<double>(
@@ -530,7 +530,7 @@ public class PruningIntegrationTests
         Assert.Equal(2, zeroColumns); // 50% of 4 columns = 2 pruned
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StructuredPruningStrategy_Filter_CreateMask_PrunesEntireRows()
     {
         var strategy = new StructuredPruningStrategy<double>(
@@ -566,7 +566,7 @@ public class PruningIntegrationTests
         Assert.Equal(2, zeroRows);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StructuredPruningStrategy_Filter_4DTensor_ComputeImportanceScores()
     {
         var strategy = new StructuredPruningStrategy<double>(
@@ -583,7 +583,7 @@ public class PruningIntegrationTests
         Assert.Equal(scores.Shape.ToArray(), weights.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StructuredPruningStrategy_Channel_4DTensor_ComputeImportanceScores()
     {
         var strategy = new StructuredPruningStrategy<double>(
@@ -598,7 +598,7 @@ public class PruningIntegrationTests
         Assert.Equal(scores.Shape.ToArray(), weights.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StructuredPruningStrategy_CreateMask_InvalidSparsity_ThrowsArgumentException()
     {
         var strategy = new StructuredPruningStrategy<double>();
@@ -614,7 +614,7 @@ public class PruningIntegrationTests
         Assert.Throws<ArgumentException>(() => strategy.CreateMask(scores, double.NaN));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StructuredPruningStrategy_ToSparseFormat_COO_ReturnsValidResult()
     {
         var strategy = new StructuredPruningStrategy<double>();
@@ -632,7 +632,7 @@ public class PruningIntegrationTests
 
     #region LotteryTicketPruningStrategy Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LotteryTicketPruningStrategy_Properties_ReturnCorrectValues()
     {
         var strategy = new LotteryTicketPruningStrategy<double>();
@@ -642,14 +642,14 @@ public class PruningIntegrationTests
         Assert.False(strategy.IsStructured);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LotteryTicketPruningStrategy_Constructor_InvalidRounds_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new LotteryTicketPruningStrategy<double>(0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new LotteryTicketPruningStrategy<double>(-1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LotteryTicketPruningStrategy_StoreAndGetInitialWeights_WorksCorrectly()
     {
         var strategy = new LotteryTicketPruningStrategy<double>();
@@ -669,7 +669,7 @@ public class PruningIntegrationTests
                 Assert.Equal(weights[i, j], retrieved[i, j]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LotteryTicketPruningStrategy_GetInitialWeights_NoStoredWeights_ThrowsInvalidOperationException()
     {
         var strategy = new LotteryTicketPruningStrategy<double>();
@@ -677,7 +677,7 @@ public class PruningIntegrationTests
         Assert.Throws<InvalidOperationException>(() => strategy.GetInitialWeights("nonexistent"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LotteryTicketPruningStrategy_ComputeImportanceScores_UseMagnitude()
     {
         var strategy = new LotteryTicketPruningStrategy<double>();
@@ -691,7 +691,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.1, scores[3], 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LotteryTicketPruningStrategy_CreateMask_IterativePruning_WorksCorrectly()
     {
         var strategy = new LotteryTicketPruningStrategy<double>(iterativeRounds: 3);
@@ -704,7 +704,7 @@ public class PruningIntegrationTests
             $"Sparsity {mask.GetSparsity()} should be between 0.4 and 0.6");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LotteryTicketPruningStrategy_CreateMask_Matrix_IterativePruning()
     {
         var strategy = new LotteryTicketPruningStrategy<double>(iterativeRounds: 3);
@@ -719,7 +719,7 @@ public class PruningIntegrationTests
         Assert.True(mask.GetSparsity() >= 0.4 && mask.GetSparsity() <= 0.6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LotteryTicketPruningStrategy_ResetToInitialWeights_ResetsCorrectly()
     {
         var strategy = new LotteryTicketPruningStrategy<double>();
@@ -764,7 +764,7 @@ public class PruningIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LotteryTicketPruningStrategy_ResetToInitialWeights_MismatchedDimensions_ThrowsArgumentException()
     {
         var strategy = new LotteryTicketPruningStrategy<double>();
@@ -779,7 +779,7 @@ public class PruningIntegrationTests
             strategy.ResetToInitialWeights("layer1", wrongSizeWeights, mask));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LotteryTicketPruningStrategy_Create2to4Mask_CreatesCorrectPattern()
     {
         var strategy = new LotteryTicketPruningStrategy<double>();
@@ -793,7 +793,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.5, mask.GetSparsity(), 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LotteryTicketPruningStrategy_CreateNtoMMask_InvalidParameters_ThrowsException()
     {
         var strategy = new LotteryTicketPruningStrategy<double>();
@@ -807,7 +807,7 @@ public class PruningIntegrationTests
         Assert.Throws<ArgumentException>(() => strategy.CreateNtoMMask(scores, 5, 4)); // n > m
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LotteryTicketPruningStrategy_ToSparseFormat_AllFormats()
     {
         var strategy = new LotteryTicketPruningStrategy<double>();
@@ -831,7 +831,7 @@ public class PruningIntegrationTests
 
     #region PruningMask Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_Constructor_RowsCols_InitializesAllOnes()
     {
         var mask = new PruningMask<double>(3, 4);
@@ -840,7 +840,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.0, mask.GetSparsity(), 6); // No pruning = 0 sparsity
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_Constructor_BoolArray1D_InitializesCorrectly()
     {
         var keepIndices = new[] { true, false, true, false };
@@ -849,7 +849,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.5, mask.GetSparsity(), 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_Constructor_BoolArray2D_InitializesCorrectly()
     {
         var keepIndices = new bool[2, 3];
@@ -861,7 +861,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.5, mask.GetSparsity(), 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_Constructor_Matrix_InitializesCorrectly()
     {
         var matrix = new Matrix<double>(2, 2);
@@ -873,7 +873,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.5, mask.GetSparsity(), 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_Apply_Vector_ReturnsCorrectResult()
     {
         var keepIndices = new[] { true, false, true, false };
@@ -888,7 +888,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.0, result[3], 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_Apply_Vector_MismatchedLength_ThrowsArgumentException()
     {
         var keepIndices = new[] { true, false, true };
@@ -898,7 +898,7 @@ public class PruningIntegrationTests
         Assert.Throws<ArgumentException>(() => mask.Apply(weights));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_Apply_Matrix_ReturnsCorrectResult()
     {
         var keepIndices = new bool[2, 2];
@@ -918,7 +918,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.2, result[1, 1], 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_Apply_Matrix_MismatchedShape_ThrowsArgumentException()
     {
         var mask = new PruningMask<double>(2, 3);
@@ -927,7 +927,7 @@ public class PruningIntegrationTests
         Assert.Throws<ArgumentException>(() => mask.Apply(weights));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_Apply_Tensor2D_ReturnsCorrectResult()
     {
         var keepIndices = new bool[2, 2];
@@ -947,7 +947,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.2, result[1, 1], 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_UpdateMask_BoolArray1D_UpdatesCorrectly()
     {
         var mask = new PruningMask<double>(1, 4);
@@ -958,7 +958,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.5, mask.GetSparsity(), 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_UpdateMask_BoolArray2D_UpdatesCorrectly()
     {
         var mask = new PruningMask<double>(2, 2);
@@ -971,7 +971,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.75, mask.GetSparsity(), 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_UpdateMask_MismatchedShape_ThrowsArgumentException()
     {
         var mask = new PruningMask<double>(2, 3);
@@ -980,7 +980,7 @@ public class PruningIntegrationTests
             mask.UpdateMask(new bool[3, 2])); // Wrong shape
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_CombineWith_LogicalAND()
     {
         var keepIndices1 = new[] { true, true, false, false };
@@ -995,7 +995,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.75, combined.GetSparsity(), 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_CombineWith_MismatchedShape_ThrowsArgumentException()
     {
         var mask1 = new PruningMask<double>(2, 3);
@@ -1004,7 +1004,7 @@ public class PruningIntegrationTests
         Assert.Throws<ArgumentException>(() => mask1.CombineWith(mask2));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_GetKeptIndices_ReturnsCorrectIndices()
     {
         var keepIndices = new[] { true, false, true, false, true };
@@ -1015,7 +1015,7 @@ public class PruningIntegrationTests
         Assert.Equal(new[] { 0, 2, 4 }, keptIndices);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_GetPrunedIndices_ReturnsCorrectIndices()
     {
         var keepIndices = new[] { true, false, true, false, true };
@@ -1026,7 +1026,7 @@ public class PruningIntegrationTests
         Assert.Equal(new[] { 1, 3 }, prunedIndices);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_GetMaskData_ReturnsFlattenedData()
     {
         var keepIndices = new bool[2, 2];
@@ -1043,7 +1043,7 @@ public class PruningIntegrationTests
         Assert.Equal(1.0, data[3], 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningMask_Pattern_ReturnsUnstructured()
     {
         var mask = new PruningMask<double>(2, 3);
@@ -1055,7 +1055,7 @@ public class PruningIntegrationTests
 
     #region PruningConfig Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningConfig_DefaultValues_AreCorrect()
     {
         var config = new PruningConfig();
@@ -1074,7 +1074,7 @@ public class PruningIntegrationTests
         Assert.Equal(SparseFormat.CSR, config.OutputFormat);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PruningConfig_SetProperties_WorksCorrectly()
     {
         var config = new PruningConfig
@@ -1104,7 +1104,7 @@ public class PruningIntegrationTests
 
     #region SparseCompressionResult Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SparseCompressionResult_Sparsity_CalculatesCorrectly()
     {
         var result = new SparseCompressionResult<double>
@@ -1119,7 +1119,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.5, result.Sparsity, 6); // 3/6 = 50% non-zero, so 50% sparse
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SparseCompressionResult_NonZeroCount_ReturnsValuesLength()
     {
         var result = new SparseCompressionResult<double>
@@ -1132,7 +1132,7 @@ public class PruningIntegrationTests
         Assert.Equal(4, result.NonZeroCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SparseCompressionResult_GetCompressedSizeBytes_CalculatesCorrectly()
     {
         var result = new SparseCompressionResult<double>
@@ -1157,7 +1157,7 @@ public class PruningIntegrationTests
 
     #region Integration Scenarios
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Integration_FullPruningWorkflow_MagnitudeStrategy()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -1192,7 +1192,7 @@ public class PruningIntegrationTests
         Assert.True(sparse.Sparsity >= 0.4 && sparse.Sparsity <= 0.6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Integration_FullPruningWorkflow_GradientStrategy()
     {
         var strategy = new GradientPruningStrategy<double>();
@@ -1220,7 +1220,7 @@ public class PruningIntegrationTests
         Assert.True(mask.GetSparsity() >= 0.4 && mask.GetSparsity() <= 0.6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Integration_FullPruningWorkflow_StructuredStrategy()
     {
         var strategy = new StructuredPruningStrategy<double>(
@@ -1253,7 +1253,7 @@ public class PruningIntegrationTests
         Assert.Equal(4, zeroColumns); // 50% of 8 columns
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Integration_LotteryTicketHypothesis_Workflow()
     {
         var strategy = new LotteryTicketPruningStrategy<double>(iterativeRounds: 3);
@@ -1301,7 +1301,7 @@ public class PruningIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Integration_CompareStrategies_SameSparsity()
     {
         var magnitudeStrategy = new MagnitudePruningStrategy<double>();
@@ -1330,7 +1330,7 @@ public class PruningIntegrationTests
         Assert.True(lotMask.GetSparsity() >= 0.4 && lotMask.GetSparsity() <= 0.6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Integration_SparseFormatRoundTrip()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -1356,7 +1356,7 @@ public class PruningIntegrationTests
         Assert.Equal(csrResult.Sparsity, cscResult.Sparsity, 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Integration_2to4Sparsity_AllStrategies()
     {
         var strategies = new IPruningStrategy<double>[]
@@ -1386,7 +1386,7 @@ public class PruningIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Integration_MaskCombination_MultipleRounds()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -1413,7 +1413,7 @@ public class PruningIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EdgeCase_SingleElement_Pruning()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -1427,7 +1427,7 @@ public class PruningIntegrationTests
         Assert.Equal(1.0, mask1.GetSparsity(), 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EdgeCase_AllSameWeights_Pruning()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -1440,7 +1440,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.5, mask.GetSparsity(), 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EdgeCase_AllZeroWeights_Pruning()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -1453,7 +1453,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.5, mask.GetSparsity(), 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EdgeCase_VeryHighSparsity()
     {
         var strategy = new MagnitudePruningStrategy<double>();
@@ -1468,7 +1468,7 @@ public class PruningIntegrationTests
         Assert.True(mask.GetSparsity() >= 0.98 && mask.GetSparsity() <= 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EdgeCase_LargeMatrix_Performance()
     {
         var strategy = new MagnitudePruningStrategy<double>();

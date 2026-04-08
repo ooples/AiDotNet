@@ -15,7 +15,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
     // GraphNode: Construction
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphNode_Construction_SetsIdAndLabel()
     {
         var node = new GraphNode<double>("node-1", "PERSON");
@@ -26,25 +26,25 @@ public class KnowledgeGraphDeepMathIntegrationTests
         Assert.Null(node.Embedding);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphNode_Construction_NullIdThrows()
     {
         Assert.Throws<ArgumentException>(() => new GraphNode<double>(null!, "PERSON"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphNode_Construction_EmptyIdThrows()
     {
         Assert.Throws<ArgumentException>(() => new GraphNode<double>("", "PERSON"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphNode_Construction_NullLabelThrows()
     {
         Assert.Throws<ArgumentException>(() => new GraphNode<double>("node-1", null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphNode_SetProperty_StoresValue()
     {
         var node = new GraphNode<double>("node-1", "PERSON");
@@ -55,7 +55,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
         Assert.Equal("Albert Einstein", node.Properties["name"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphNode_GetProperty_ReturnsCorrectType()
     {
         var node = new GraphNode<double>("node-1", "PERSON");
@@ -66,7 +66,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
         Assert.Equal(76, node.GetProperty<int>("age"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphNode_GetProperty_MissingKeyReturnsDefault()
     {
         var node = new GraphNode<double>("node-1", "PERSON");
@@ -74,7 +74,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
         Assert.Equal(0, node.GetProperty<int>("missing"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphNode_Equality_ByIdOnly()
     {
         var node1 = new GraphNode<double>("node-1", "PERSON");
@@ -85,7 +85,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
         Assert.NotEqual(node1, node3); // Different ID
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphNode_ToString_ContainsLabelAndName()
     {
         var node = new GraphNode<double>("node-1", "PERSON");
@@ -96,7 +96,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
         Assert.Contains("Einstein", str);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphNode_ToString_WithoutName_UsesId()
     {
         var node = new GraphNode<double>("node-1", "PERSON");
@@ -108,7 +108,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
     // GraphEdge: Construction
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphEdge_Construction_SetsProperties()
     {
         var edge = new GraphEdge<double>("source", "target", "WORKS_FOR");
@@ -120,33 +120,33 @@ public class KnowledgeGraphDeepMathIntegrationTests
         Assert.Empty(edge.Properties);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphEdge_Construction_CustomWeight()
     {
         var edge = new GraphEdge<double>("s", "t", "KNOWS", 0.5);
         Assert.Equal(0.5, edge.Weight);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphEdge_Construction_IdFormat()
     {
         var edge = new GraphEdge<double>("alice", "bob", "KNOWS");
         Assert.Equal("alice_KNOWS_bob", edge.Id);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphEdge_Construction_NullSourceThrows()
     {
         Assert.Throws<ArgumentException>(() => new GraphEdge<double>(null!, "t", "REL"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphEdge_Construction_NullTargetThrows()
     {
         Assert.Throws<ArgumentException>(() => new GraphEdge<double>("s", null!, "REL"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphEdge_Construction_NullRelationThrows()
     {
         Assert.Throws<ArgumentException>(() => new GraphEdge<double>("s", "t", null!));
@@ -176,7 +176,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
     // GraphEdge: Temporal Validity
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphEdge_IsValidAt_NoBoundsAlwaysValid()
     {
         var edge = new GraphEdge<double>("s", "t", "REL");
@@ -185,7 +185,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
         Assert.True(edge.IsValidAt(DateTime.MaxValue));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphEdge_IsValidAt_WithTemporalWindow()
     {
         var edge = new GraphEdge<double>("s", "t", "PRESIDENT");
@@ -200,7 +200,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
         Assert.False(edge.IsValidAt(new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphEdge_SetTemporalWindow_InvalidRangeThrows()
     {
         var edge = new GraphEdge<double>("s", "t", "REL");
@@ -210,7 +210,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => edge.SetTemporalWindow(later, earlier));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphEdge_SetTemporalWindow_EqualTimesThrows()
     {
         var edge = new GraphEdge<double>("s", "t", "REL");
@@ -222,7 +222,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
     // GraphEdge: Properties
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphEdge_SetProperty_StoresValue()
     {
         var edge = new GraphEdge<double>("s", "t", "REL");
@@ -230,7 +230,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
         Assert.Single(edge.Properties);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphEdge_GetProperty_ReturnsCorrectType()
     {
         var edge = new GraphEdge<double>("s", "t", "REL");
@@ -238,7 +238,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
         Assert.Equal("important", edge.GetProperty<string>("label"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphEdge_Equality_ById()
     {
         var edge1 = new GraphEdge<double>("a", "b", "REL");
@@ -249,7 +249,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
         Assert.NotEqual(edge1, edge3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphEdge_ToString_Format()
     {
         var edge = new GraphEdge<double>("alice", "bob", "KNOWS", 0.8);
@@ -264,7 +264,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
     // Graph Math: PageRank
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphMath_PageRank_UniformForCompleteGraph()
     {
         // In a complete graph with n nodes, all PageRank values are 1/n
@@ -295,7 +295,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphMath_PageRank_SumsToOne()
     {
         int n = 5;
@@ -325,7 +325,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
     // Graph Math: Clustering Coefficient
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphMath_ClusteringCoefficient_CompleteGraph()
     {
         // In a complete graph, clustering coefficient = 1.0
@@ -338,7 +338,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
         Assert.Equal(1.0, cc, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphMath_ClusteringCoefficient_StarGraph()
     {
         // In a star graph (center + leaves), clustering coefficient of center = 0
@@ -355,7 +355,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
     // Graph Math: Shortest Path (Dijkstra-like)
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphMath_ShortestPath_DirectPath()
     {
         // Simple graph: A --(1)--> B --(2)--> C
@@ -366,7 +366,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
         Assert.Equal(3, distances[2]); // Via B
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphMath_ShortestPath_TriangleInequality()
     {
         // Triangle inequality: d(A,C) <= d(A,B) + d(B,C)
@@ -378,7 +378,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
     // KG Embedding Math: TransE
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphMath_TransE_ScoreFunction()
     {
         // TransE: score(h, r, t) = ||h + r - t||
@@ -400,7 +400,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
         Assert.True(score < 1.0, "This triple should have a low score (approximately correct)");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphMath_TransE_CorruptedTripleHigherScore()
     {
         double[] h = { 1.0, 0.5, -0.3 };

@@ -13,7 +13,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
     /// </summary>
     public class FairnessEvaluatorTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EvaluateFairness_WithInvalidSensitiveFeatureIndex_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -26,7 +26,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
                 evaluator.EvaluateFairness(model, inputs, 5));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EvaluateFairness_WithBalancedPredictions_ReturnsZeroMetrics()
         {
             // Arrange
@@ -60,7 +60,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(0.0, result.StatisticalParityDifference, 2);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EvaluateFairness_WithUnbalancedPredictions_DetectsBias()
         {
             // Arrange
@@ -92,7 +92,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.True(result.StatisticalParityDifference > 0.9); // Large difference
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EvaluateFairness_WithActualLabels_ComputesAllMetrics()
         {
             // Arrange
@@ -130,7 +130,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.NotEqual(0.0, result.PredictiveParity);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EvaluateFairness_WithSingleGroup_ReturnsZeroMetrics()
         {
             // Arrange
@@ -155,7 +155,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(0.0, result.StatisticalParityDifference);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EvaluateFairness_AdditionalMetrics_ContainGroupStatistics()
         {
             // Arrange
@@ -181,7 +181,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.True(result.AdditionalMetrics.ContainsKey("Group_1_Size"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EvaluateFairness_WithThreeGroups_HandlesMultipleGroups()
         {
             // Arrange
@@ -212,7 +212,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.True(result.AdditionalMetrics.ContainsKey("Group_2_Size"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EvaluateFairness_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -234,7 +234,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(1.0f, result.DisparateImpact, 2);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EvaluateFairness_ComputesDemographicParity_Correctly()
         {
             // Arrange
@@ -262,7 +262,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Assert.Equal(0.5, result.StatisticalParityDifference, 2);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EvaluateFairness_ComputesDisparateImpact_Correctly()
         {
             // Arrange

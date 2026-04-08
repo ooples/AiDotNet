@@ -14,7 +14,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix Construction Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_ConstructWithRowsAndColumns_CreatesCorrectDimensions()
     {
         // Arrange & Act
@@ -25,7 +25,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(4, matrix.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_ConstructFromNestedEnumerable_InitializesValues()
     {
         // Arrange
@@ -45,7 +45,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(6.0, matrix[1, 2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_ConstructFrom2DArray_InitializesCorrectly()
     {
         // Arrange
@@ -71,7 +71,7 @@ public class MatrixVectorIntegrationTests
 
     #region Vector Construction Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_ConstructWithLength_CreatesCorrectSize()
     {
         // Arrange & Act
@@ -81,7 +81,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(5, vector.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_ConstructFromEnumerable_InitializesValues()
     {
         // Arrange
@@ -96,7 +96,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(5.0, vector[4]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_FromArray_CreatesVectorFromArray()
     {
         // Arrange
@@ -115,7 +115,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix Static Factory Methods
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_CreateIdentity_CreatesCorrectIdentityMatrix()
     {
         // Arrange & Act
@@ -131,7 +131,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(0.0, identity[1, 0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_CreateZeros_CreatesMatrixOfZeros()
     {
         // Arrange & Act
@@ -149,7 +149,7 @@ public class MatrixVectorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_CreateOnes_CreatesMatrixOfOnes()
     {
         // Arrange & Act
@@ -167,7 +167,7 @@ public class MatrixVectorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_CreateRandom_CreatesMatrixWithRandomValues()
     {
         // Arrange & Act
@@ -178,7 +178,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(4, random.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_CreateDiagonal_CreatesDiagonalMatrix()
     {
         // Arrange
@@ -200,7 +200,7 @@ public class MatrixVectorIntegrationTests
 
     #region Vector Static Factory Methods
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_CreateRandom_CreatesVectorWithRandomValues()
     {
         // Arrange & Act
@@ -210,7 +210,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(5, random.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_Concatenate_CombinesMultipleVectors()
     {
         // Arrange
@@ -228,7 +228,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(5.0, concatenated[4]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_CreateStandardBasis_CreatesCorrectBasisVector()
     {
         // Arrange & Act
@@ -246,7 +246,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix-Vector Multiplication
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatrixVectorMultiply_ComputesCorrectResult()
     {
         // Arrange
@@ -266,7 +266,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(32.0, result[1], Tolerance); // 4*1 + 5*2 + 6*3 = 32
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatrixVectorOperator_ComputesSameAsMethod()
     {
         // Arrange
@@ -290,7 +290,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix-Matrix Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatrixAdd_AddsTwoMatrices()
     {
         // Arrange
@@ -307,7 +307,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(12.0, result[1, 1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatrixSubtract_SubtractsTwoMatrices()
     {
         // Arrange
@@ -324,7 +324,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(4.0, result[1, 1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatrixMultiply_MultipliesTwoMatrices()
     {
         // Arrange
@@ -341,7 +341,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(50.0, result[1, 1], Tolerance);  // 3*6 + 4*8 = 50
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatrixScalarMultiply_MultipliesMatrixByScalar()
     {
         // Arrange
@@ -357,7 +357,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(8.0, result[1, 1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatrixScalarDivide_DividesMatrixByScalar()
     {
         // Arrange
@@ -377,7 +377,7 @@ public class MatrixVectorIntegrationTests
 
     #region Vector-Vector Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorAdd_AddsTwoVectors()
     {
         // Arrange
@@ -393,7 +393,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(9.0, result[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorSubtract_SubtractsTwoVectors()
     {
         // Arrange
@@ -409,7 +409,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(6.0, result[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorScalarMultiply_MultipliesVectorByScalar()
     {
         // Arrange
@@ -424,7 +424,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(9.0, result[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorScalarDivide_DividesVectorByScalar()
     {
         // Arrange
@@ -439,7 +439,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(4.0, result[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorElementwiseMultiply_MultipliesElementWise()
     {
         // Arrange
@@ -455,7 +455,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(18.0, result[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorElementwiseDivide_DividesElementWise()
     {
         // Arrange
@@ -475,7 +475,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix Transpose and Clone
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatrixTranspose_TransposesMatrix()
     {
         // Arrange
@@ -497,7 +497,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(5.0, transposed[1, 1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatrixClone_CreatesIndependentCopy()
     {
         // Arrange
@@ -516,7 +516,7 @@ public class MatrixVectorIntegrationTests
 
     #region Vector Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorClone_CreatesIndependentCopy()
     {
         // Arrange
@@ -531,7 +531,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(999.0, clone[0]); // Clone modified
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorNormalize_CreatesUnitVector()
     {
         // Arrange
@@ -547,7 +547,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(0.8, normalized[1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorVariance_ComputesCorrectVariance()
     {
         // Arrange
@@ -560,7 +560,7 @@ public class MatrixVectorIntegrationTests
         Assert.True(variance > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorNorm_ComputesL2Norm()
     {
         // Arrange
@@ -577,7 +577,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix Row/Column Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatrixGetColumn_ReturnsCorrectColumn()
     {
         // Arrange
@@ -598,7 +598,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(8.0, column[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatrixGetSubMatrix_ReturnsCorrectSubMatrix()
     {
         // Arrange
@@ -622,7 +622,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(11.0, subMatrix[1, 1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatrixPointwiseDivide_DividesElementWise()
     {
         // Arrange
@@ -643,7 +643,7 @@ public class MatrixVectorIntegrationTests
 
     #region Complex Integration Scenarios
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IdentityMatrixMultiplication_PreservesVector()
     {
         // Arrange
@@ -659,7 +659,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(3.0, result[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatrixMultiplicationAssociativity()
     {
         // Arrange
@@ -681,7 +681,7 @@ public class MatrixVectorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorOuterProduct_CreatesCorrectMatrix()
     {
         // Arrange
@@ -702,7 +702,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(15.0, outerProduct[2, 1], Tolerance); // 3 * 5
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiagonalMatrixMultiplication_ScalesVector()
     {
         // Arrange
@@ -719,7 +719,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(4.0, result[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransposeOfTranspose_ReturnsOriginal()
     {
         // Arrange
@@ -748,7 +748,7 @@ public class MatrixVectorIntegrationTests
 
     #region Vector Subvector and Segment Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorGetSubVector_ReturnsCorrectPortion()
     {
         // Arrange
@@ -764,7 +764,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(4.0, subVector[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorRemoveAt_RemovesElementAtIndex()
     {
         // Arrange
@@ -781,7 +781,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(5.0, result[3]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorIndexOfMax_ReturnsCorrectIndex()
     {
         // Arrange
@@ -798,7 +798,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix Row/Column Removal Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatrixRemoveRow_RemovesCorrectRow()
     {
         // Arrange
@@ -819,7 +819,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(7.0, result[1, 0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatrixRemoveColumn_RemovesCorrectColumn()
     {
         // Arrange
@@ -844,7 +844,7 @@ public class MatrixVectorIntegrationTests
 
     #region Large Scale Integration Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LargeMatrixMultiplication_CompletesWithinTimeout()
     {
         // Arrange
@@ -859,7 +859,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(100, result.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LargeVectorOperations_CompletesWithinTimeout()
     {
         // Arrange
@@ -881,7 +881,7 @@ public class MatrixVectorIntegrationTests
 
     #region Vector Additional Factory Methods
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_FromEnumerable_CreatesVectorFromEnumerable()
     {
         // Arrange
@@ -896,7 +896,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(4.0, vector[3]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_FromList_CreatesVectorFromList()
     {
         // Arrange
@@ -911,7 +911,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(15.0, vector[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_Range_CreatesSequentialValues()
     {
         // Arrange & Act
@@ -925,7 +925,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(8.0, vector[3], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_Empty_CreatesEmptyVector()
     {
         // Arrange & Act
@@ -935,7 +935,7 @@ public class MatrixVectorIntegrationTests
         Assert.True(vector.IsEmpty || vector.Length == 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_Zeros_CreatesZeroVector()
     {
         // Arrange
@@ -953,7 +953,7 @@ public class MatrixVectorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_Ones_CreatesOnesVector()
     {
         // Arrange
@@ -971,7 +971,7 @@ public class MatrixVectorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_Default_CreatesVectorWithDefaultValue()
     {
         // Arrange
@@ -989,7 +989,7 @@ public class MatrixVectorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_CreateDefault_CreatesVectorWithDefaultValue()
     {
         // Arrange & Act
@@ -1007,7 +1007,7 @@ public class MatrixVectorIntegrationTests
 
     #region Vector Functional Methods
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_Where_FiltersElements()
     {
         // Arrange
@@ -1023,7 +1023,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(5.0, filtered[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_Select_TransformsElements()
     {
         // Arrange
@@ -1039,7 +1039,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(6.0, transformed[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_Transform_AppliesFunction()
     {
         // Arrange
@@ -1055,7 +1055,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(3.0, transformed[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_TransformWithIndex_AppliesFunctionWithIndex()
     {
         // Arrange
@@ -1075,7 +1075,7 @@ public class MatrixVectorIntegrationTests
 
     #region Vector Aggregation Methods
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_Mean_ComputesCorrectMean()
     {
         // Arrange
@@ -1088,7 +1088,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(5.0, mean, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_Sum_ComputesCorrectSum()
     {
         // Arrange
@@ -1101,7 +1101,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(10.0, sum, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_L2Norm_ComputesCorrectNorm()
     {
         // Arrange
@@ -1114,7 +1114,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(5.0, l2Norm, Tolerance); // sqrt(9 + 16) = 5
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_NonZeroCount_CountsNonZeros()
     {
         // Arrange
@@ -1127,7 +1127,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(3, count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_NonZeroIndices_ReturnsCorrectIndices()
     {
         // Arrange
@@ -1146,7 +1146,7 @@ public class MatrixVectorIntegrationTests
 
     #region Vector Indexing and Search Methods
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_IndexOf_FindsElement()
     {
         // Arrange
@@ -1159,7 +1159,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(2, index);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_IndexOf_ReturnsMinusOneWhenNotFound()
     {
         // Arrange
@@ -1172,7 +1172,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(-1, index);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_BinarySearch_FindsElementInSortedVector()
     {
         // Arrange
@@ -1185,7 +1185,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(2, index);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_SetValue_SetsValueAndReturnsVector()
     {
         // Arrange
@@ -1198,7 +1198,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(99.0, result[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_Fill_FillsWithValue()
     {
         // Arrange
@@ -1218,7 +1218,7 @@ public class MatrixVectorIntegrationTests
 
     #region Vector Segment and Range Methods
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_Subvector_ReturnsCorrectSubvector()
     {
         // Arrange
@@ -1234,7 +1234,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(4.0, subvector[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_GetRange_ReturnsCorrectRange()
     {
         // Arrange
@@ -1249,7 +1249,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(40.0, range[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_GetSegment_ReturnsCorrectSegment()
     {
         // Arrange
@@ -1264,7 +1264,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(4.0, segment[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_GetElements_ReturnsElementsAtIndices()
     {
         // Arrange
@@ -1285,7 +1285,7 @@ public class MatrixVectorIntegrationTests
 
     #region Vector Conversion Methods
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_ToArray_ReturnsCorrectArray()
     {
         // Arrange
@@ -1300,7 +1300,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(3.0, array[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_AsSpan_ReturnsSpan()
     {
         // Arrange
@@ -1315,7 +1315,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(3.0, span[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_Transpose_CreatesColumnMatrix()
     {
         // Arrange
@@ -1332,7 +1332,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(3.0, matrix[2, 0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_AppendAsMatrix_CreatesMatrixWithAppendedValue()
     {
         // Arrange - Standard ML: append bias term to feature vector
@@ -1350,7 +1350,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(3.0, matrix[0, 2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_ImplicitConversionToArray_Works()
     {
         // Arrange
@@ -1368,7 +1368,7 @@ public class MatrixVectorIntegrationTests
 
     #region Vector Serialization Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_SerializeDeserialize_RoundTripsCorrectly()
     {
         // Arrange
@@ -1390,7 +1390,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix Additional Factory Methods
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_Empty_CreatesEmptyMatrix()
     {
         // Arrange & Act
@@ -1400,7 +1400,7 @@ public class MatrixVectorIntegrationTests
         Assert.NotNull(matrix);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_FromVector_CreatesMatrixFromVector()
     {
         // Arrange
@@ -1414,7 +1414,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(1, matrix.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_FromRows_CreatesMatrixFromRowVectors()
     {
         // Arrange
@@ -1431,7 +1431,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(6.0, matrix[1, 2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_FromColumns_CreatesMatrixFromColumnVectors()
     {
         // Arrange
@@ -1449,7 +1449,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(2.0, matrix[0, 1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_FromRowVectors_CreatesMatrixFromEnumerable()
     {
         // Arrange
@@ -1469,7 +1469,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(5.0, matrix[2, 0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_FromColumnVectors_CreatesMatrixFromEnumerable()
     {
         // Arrange
@@ -1487,7 +1487,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(2, matrix.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_CreateDefault_CreatesMatrixWithDefaultValue()
     {
         // Arrange & Act
@@ -1505,7 +1505,7 @@ public class MatrixVectorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_BlockDiagonal_CreatesBlockDiagonalMatrix()
     {
         // Arrange
@@ -1523,7 +1523,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(0.0, blockDiag[0, 2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_OuterProduct_ComputesCorrectOuterProduct()
     {
         // Arrange
@@ -1544,7 +1544,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix Row/Column Segment Methods
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_GetColumnSegment_ReturnsCorrectSegment()
     {
         // Arrange
@@ -1565,7 +1565,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(5.0, segment[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_GetRowSegment_ReturnsCorrectSegment()
     {
         // Arrange
@@ -1584,7 +1584,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(3.0, segment[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_SetSubMatrix_SetsSubMatrixCorrectly()
     {
         // Arrange
@@ -1602,7 +1602,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(0.0, matrix[0, 0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_Slice_ReturnsCorrectSlice()
     {
         // Arrange
@@ -1624,7 +1624,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(9.0, slice[1, 2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_GetRows_ReturnsRowsAtIndices()
     {
         // Arrange
@@ -1650,7 +1650,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix Conversion Methods
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_ToColumnVector_ConvertsToColumnVector()
     {
         // Arrange
@@ -1667,7 +1667,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(4, vector.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_ToRowVector_ConvertsToRowVector()
     {
         // Arrange
@@ -1684,7 +1684,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(4, vector.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_GetColumns_ReturnsAllColumns()
     {
         // Arrange
@@ -1704,7 +1704,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(4.0, columns[0][1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_GetRows_ReturnsAllRows()
     {
         // Arrange
@@ -1723,7 +1723,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(1.0, rows[0][0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_GetRowSpan_ReturnsSpanForRow()
     {
         // Arrange
@@ -1742,7 +1742,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(6.0, span[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_GetRowReadOnlySpan_ReturnsReadOnlySpan()
     {
         // Arrange
@@ -1760,7 +1760,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(1.0, span[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_GetColumnAsArray_ReturnsColumnArray()
     {
         // Arrange
@@ -1785,7 +1785,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix Aggregation Methods
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_RowWiseMax_ReturnsMaxPerRow()
     {
         // Arrange
@@ -1804,7 +1804,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(9.0, maxes[1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_RowWiseSum_ReturnsSumPerRow()
     {
         // Arrange
@@ -1823,7 +1823,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(15.0, sums[1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_Transform_AppliesFunctionToAllElements()
     {
         // Arrange
@@ -1847,7 +1847,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix Serialization Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_SerializeDeserialize_RoundTripsCorrectly()
     {
         // Arrange
@@ -1877,7 +1877,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix Division Operator Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_DivisionOperator_DividesTwoMatrices()
     {
         // Arrange
@@ -1894,7 +1894,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(2.0, result[1, 1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_DivideMethod_DividesByScalar()
     {
         // Arrange
@@ -1910,7 +1910,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(4.0, result[1, 1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_DivideMethod_DividesByMatrix()
     {
         // Arrange
@@ -1931,7 +1931,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix SetRow/SetColumn Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_SetRow_SetsRowCorrectly()
     {
         // Arrange
@@ -1948,7 +1948,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(0.0, matrix[0, 0]); // Other rows unchanged
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_SetColumn_SetsColumnCorrectly()
     {
         // Arrange
@@ -1969,7 +1969,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix Diagonal and SubMatrix Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_Diagonal_ReturnsDiagonalElements()
     {
         // Arrange
@@ -1990,7 +1990,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(9.0, diagonal[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_SubMatrix_ReturnsCorrectSubMatrix()
     {
         // Arrange
@@ -2014,7 +2014,7 @@ public class MatrixVectorIntegrationTests
         Assert.Equal(11.0, subMatrix[1, 1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_SubMatrixWithColumnIndices_ReturnsCorrectSubMatrix()
     {
         // Arrange
@@ -2041,7 +2041,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix ElementWise Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_ElementWiseMultiplyAndSum_ComputesCorrectly()
     {
         // Arrange - Frobenius inner product: sum(A .* B)
@@ -2067,7 +2067,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix Span Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_AsSpan_ReturnsCorrectSpan()
     {
         // Arrange
@@ -2092,7 +2092,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix GetRow Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_GetRow_ReturnsCorrectRow()
     {
         // Arrange
@@ -2117,7 +2117,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix Add with Tensor
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_AddTensor_AddsCorrectly()
     {
         // Arrange
@@ -2142,7 +2142,7 @@ public class MatrixVectorIntegrationTests
 
     #region Vector Static Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_IsCpuAccelerated_ReturnsBoolean()
     {
         // Act - just verify it doesn't throw and returns a valid boolean
@@ -2152,7 +2152,7 @@ public class MatrixVectorIntegrationTests
         Assert.True(isCpuAccelerated || !isCpuAccelerated); // Always true, just checking it runs
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_IsGpuAccelerated_ReturnsBoolean()
     {
         // Act
@@ -2162,7 +2162,7 @@ public class MatrixVectorIntegrationTests
         Assert.True(isGpuAccelerated || !isGpuAccelerated);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vector_SimdVectorCount_ReturnsPositive()
     {
         // Act
@@ -2176,7 +2176,7 @@ public class MatrixVectorIntegrationTests
 
     #region Matrix Factory Methods
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_Ones_CreatesMatrixOfOnes()
     {
         // Arrange
@@ -2193,7 +2193,7 @@ public class MatrixVectorIntegrationTests
                 Assert.Equal(1.0, result[i, j]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_Zeros_CreatesMatrixOfZeros()
     {
         // Arrange
@@ -2214,7 +2214,7 @@ public class MatrixVectorIntegrationTests
                 Assert.Equal(0.0, result[i, j]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Matrix_CreateMatrix_GenericFactory_CreatesCorrectDimensions()
     {
         // Act - CreateMatrix is static

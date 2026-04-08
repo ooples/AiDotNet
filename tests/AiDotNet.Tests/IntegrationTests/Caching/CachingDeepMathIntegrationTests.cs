@@ -15,7 +15,7 @@ public class CachingDeepMathIntegrationTests
     // Determinism Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_SameInputs_SameKey()
     {
         var v = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -26,7 +26,7 @@ public class CachingDeepMathIntegrationTests
         Assert.Equal(key1, key2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_DifferentCalls_SameResult()
     {
         // Create two separate but identical vectors
@@ -39,7 +39,7 @@ public class CachingDeepMathIntegrationTests
         Assert.Equal(key1, key2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_MultipleCallsSameInstance_Consistent()
     {
         var v = new Vector<double>(new double[] { 0.0, 1.0 });
@@ -56,7 +56,7 @@ public class CachingDeepMathIntegrationTests
     // SHA-256 Format Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_Returns64CharHexString()
     {
         // SHA-256 produces 256 bits = 32 bytes = 64 hex chars
@@ -67,7 +67,7 @@ public class CachingDeepMathIntegrationTests
         Assert.Equal(64, key.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_LowercaseHex()
     {
         var v = new Vector<double>(new double[] { 1.0 });
@@ -82,7 +82,7 @@ public class CachingDeepMathIntegrationTests
     // Input Sensitivity Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_DifferentVectors_DifferentKeys()
     {
         var v1 = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
@@ -94,7 +94,7 @@ public class CachingDeepMathIntegrationTests
         Assert.NotEqual(key1, key2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_DifferentDescriptors_DifferentKeys()
     {
         var v = new Vector<double>(new double[] { 1.0, 2.0 });
@@ -105,7 +105,7 @@ public class CachingDeepMathIntegrationTests
         Assert.NotEqual(key1, key2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_DifferentVectorLengths_DifferentKeys()
     {
         var v1 = new Vector<double>(new double[] { 1.0, 2.0 });
@@ -117,7 +117,7 @@ public class CachingDeepMathIntegrationTests
         Assert.NotEqual(key1, key2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_SmallValueDifference_DifferentKeys()
     {
         // Even tiny value differences should produce different keys
@@ -134,7 +134,7 @@ public class CachingDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_ZeroVector_ValidKey()
     {
         var v = new Vector<double>(new double[] { 0.0, 0.0, 0.0 });
@@ -145,7 +145,7 @@ public class CachingDeepMathIntegrationTests
         Assert.Matches("^[0-9a-f]{64}$", key);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_NegativeValues_ValidKey()
     {
         var v = new Vector<double>(new double[] { -1.0, -2.5, -100.0 });
@@ -155,7 +155,7 @@ public class CachingDeepMathIntegrationTests
         Assert.Equal(64, key.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_LargeValues_ValidKey()
     {
         var v = new Vector<double>(new double[] { 1e15, -1e15, 1e-15 });
@@ -169,7 +169,7 @@ public class CachingDeepMathIntegrationTests
     // Collision Resistance Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_ManyDistinctInputs_AllDistinctKeys()
     {
         var keys = new HashSet<string>();
@@ -185,7 +185,7 @@ public class CachingDeepMathIntegrationTests
         Assert.Equal(100, keys.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_DifferentLengthVectors_AllDifferent()
     {
         var keys = new HashSet<string>();
@@ -209,7 +209,7 @@ public class CachingDeepMathIntegrationTests
     // Descriptor Sensitivity Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_EmptyDescriptor_ValidKey()
     {
         var v = new Vector<double>(new double[] { 1.0 });
@@ -219,7 +219,7 @@ public class CachingDeepMathIntegrationTests
         Assert.Equal(64, key.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_WhitespaceDescriptor_TrimmedSame()
     {
         var v = new Vector<double>(new double[] { 1.0 });
@@ -235,14 +235,14 @@ public class CachingDeepMathIntegrationTests
     // Null Input Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_NullVector_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             DeterministicCacheKeyGenerator.GenerateKey<double>(null!, "test"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_NullDescriptor_Throws()
     {
         var v = new Vector<double>(new double[] { 1.0 });
@@ -254,7 +254,7 @@ public class CachingDeepMathIntegrationTests
     // CreateInputDataDescriptor Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateDescriptor_MatrixInput_ContainsShape()
     {
         var xTrain = new Matrix<double>(10, 5);
@@ -267,7 +267,7 @@ public class CachingDeepMathIntegrationTests
         Assert.Contains("Vector(10)", descriptor);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateDescriptor_WithValidation_IncludesValSection()
     {
         var xTrain = new Matrix<double>(10, 5);
@@ -282,7 +282,7 @@ public class CachingDeepMathIntegrationTests
         Assert.Contains("val:", descriptor);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateDescriptor_WithTest_IncludesTestSection()
     {
         var xTrain = new Matrix<double>(10, 5);
@@ -296,7 +296,7 @@ public class CachingDeepMathIntegrationTests
         Assert.Contains("test:", descriptor);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateDescriptor_SameInputs_SameDescriptor()
     {
         var xTrain1 = new Matrix<double>(10, 5);
@@ -312,7 +312,7 @@ public class CachingDeepMathIntegrationTests
         Assert.Equal(desc1, desc2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateDescriptor_DifferentShapes_DifferentDescriptors()
     {
         var xTrain1 = new Matrix<double>(10, 5);
@@ -332,7 +332,7 @@ public class CachingDeepMathIntegrationTests
     // End-to-End Cache Key Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullCacheKeyPipeline_Deterministic()
     {
         // Simulate full pipeline: descriptor + key generation
@@ -351,7 +351,7 @@ public class CachingDeepMathIntegrationTests
         Assert.Equal(key1, key2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullCacheKeyPipeline_ChangedParams_DifferentKey()
     {
         var xTrain = new Matrix<double>(100, 10);
@@ -369,7 +369,7 @@ public class CachingDeepMathIntegrationTests
         Assert.NotEqual(key1, key2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullCacheKeyPipeline_ChangedData_DifferentKey()
     {
         var modelParams = new Vector<double>(new double[] { 0.1, 0.2 });
@@ -394,7 +394,7 @@ public class CachingDeepMathIntegrationTests
     // Large Vector Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_LargeVector_ValidKey()
     {
         var data = new double[1000];
@@ -408,7 +408,7 @@ public class CachingDeepMathIntegrationTests
         Assert.Matches("^[0-9a-f]{64}$", key);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_SingleElement_ValidKey()
     {
         var v = new Vector<double>(new double[] { 42.0 });

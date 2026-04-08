@@ -17,7 +17,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Haar Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_Calculate_FirstHalf_ReturnsOne()
     {
         // Arrange
@@ -30,7 +30,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_Calculate_SecondHalf_ReturnsNegativeOne()
     {
         // Arrange
@@ -43,7 +43,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(-1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_Calculate_OutsideRange_ReturnsZero()
     {
         // Arrange
@@ -58,7 +58,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(0.0, result2, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_Decompose_EvenLength_ReturnsCorrectSize()
     {
         // Arrange
@@ -73,7 +73,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(2, detail.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_Decompose_OddLength_ThrowsArgumentException()
     {
         // Arrange
@@ -84,7 +84,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Throws<ArgumentException>(() => wavelet.Decompose(input));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_GetScalingCoefficients_ReturnsTwoElements()
     {
         // Arrange
@@ -99,7 +99,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(1.0 / Math.Sqrt(2), coefficients[1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_GetWaveletCoefficients_ReturnsTwoElements()
     {
         // Arrange
@@ -118,7 +118,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Daubechies Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaubechiesWavelet_Calculate_ReturnsValue()
     {
         // Arrange
@@ -132,7 +132,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaubechiesWavelet_GetScalingCoefficients_ReturnsCorrectLength()
     {
         // Arrange
@@ -145,7 +145,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaubechiesWavelet_GetWaveletCoefficients_ReturnsCorrectLength()
     {
         // Arrange
@@ -162,7 +162,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Mexican Hat Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MexicanHatWavelet_Calculate_AtZero_ReturnsPositiveValue()
     {
         // Arrange
@@ -175,7 +175,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(result > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MexicanHatWavelet_Calculate_Symmetric()
     {
         // Arrange
@@ -189,7 +189,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(result1, result2, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MexicanHatWavelet_Calculate_FarFromCenter_ApproachesZero()
     {
         // Arrange
@@ -206,7 +206,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Morlet Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MorletWavelet_Calculate_ReturnsValue()
     {
         // Arrange
@@ -219,7 +219,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsNaN(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MorletWavelet_Calculate_DecaysAwayFromCenter()
     {
         // Arrange
@@ -237,7 +237,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Gaussian Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianWavelet_Calculate_AtZero_ReturnsValue()
     {
         // Arrange
@@ -251,7 +251,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianWavelet_DifferentSigmas_ProduceDifferentResults()
     {
         // Arrange
@@ -270,7 +270,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Symlet Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymletWavelet_Calculate_ReturnsValue()
     {
         // Arrange
@@ -283,7 +283,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsNaN(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymletWavelet_GetScalingCoefficients_HasCoefficients()
     {
         // Arrange
@@ -300,7 +300,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Coiflet Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CoifletWavelet_Calculate_ReturnsValue()
     {
         // Arrange
@@ -313,7 +313,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsNaN(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CoifletWavelet_GetCoefficients_HasCoefficients()
     {
         // Arrange
@@ -332,7 +332,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Biorthogonal Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BiorthogonalWavelet_Calculate_ReturnsValue()
     {
         // Arrange
@@ -349,7 +349,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Meyer Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeyerWavelet_Calculate_ReturnsValue()
     {
         // Arrange
@@ -367,7 +367,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Shannon Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShannonWavelet_Calculate_ReturnsValue()
     {
         // Arrange
@@ -384,7 +384,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region DOG Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOGWavelet_Calculate_ReturnsValue()
     {
         // Arrange
@@ -397,7 +397,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsNaN(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOGWavelet_Calculate_Symmetric()
     {
         // Arrange
@@ -415,7 +415,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region BSpline Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BSplineWavelet_Calculate_ReturnsValue()
     {
         // Arrange
@@ -432,7 +432,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Gabor Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaborWavelet_Calculate_ReturnsValue()
     {
         // Arrange
@@ -445,7 +445,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsNaN(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaborWavelet_Calculate_DecaysWithDistance()
     {
         // Arrange
@@ -463,7 +463,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Paul Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PaulWavelet_Calculate_ReturnsValue()
     {
         // Arrange
@@ -480,7 +480,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Complex Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexMorletWavelet_Calculate_ReturnsComplexValue()
     {
         // Arrange
@@ -497,7 +497,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsInfinity(result.Imaginary));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexMorletWavelet_Calculate_AtZero_ReturnsValue()
     {
         // Arrange
@@ -511,7 +511,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(result.Magnitude > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexMorletWavelet_CustomOmega_AffectsResult()
     {
         // Arrange
@@ -527,7 +527,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.NotEqual(result1.Real, result2.Real, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexMorletWavelet_GetScalingCoefficients_ReturnsVector()
     {
         // Arrange
@@ -541,7 +541,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coeffs.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexMorletWavelet_GetWaveletCoefficients_ReturnsVector()
     {
         // Arrange
@@ -555,7 +555,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coeffs.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexGaussianWavelet_Calculate_ReturnsComplexValue()
     {
         // Arrange
@@ -570,7 +570,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsNaN(result.Imaginary));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexGaussianWavelet_Calculate_AtZero_ReturnsValue()
     {
         // Arrange
@@ -584,7 +584,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsNaN(result.Real));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexGaussianWavelet_DifferentOrders_ProduceDifferentResults()
     {
         // Arrange
@@ -600,7 +600,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.NotEqual(result1.Real, result2.Real, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexGaussianWavelet_GetScalingCoefficients_ReturnsVector()
     {
         // Arrange
@@ -614,7 +614,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coeffs.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexGaussianWavelet_GetWaveletCoefficients_ReturnsVector()
     {
         // Arrange
@@ -628,7 +628,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coeffs.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexMorletWavelet_Decompose_ReturnsApproximationAndDetail()
     {
         // Arrange
@@ -648,7 +648,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(detail.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexGaussianWavelet_Decompose_ReturnsApproximationAndDetail()
     {
         // Arrange
@@ -672,7 +672,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region ContinuousMexicanHat Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContinuousMexicanHatWavelet_Calculate_ReturnsValue()
     {
         // Arrange
@@ -696,7 +696,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region BattleLemarie Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BattleLemarieWavelet_Calculate_ReturnsValue()
     {
         // Arrange
@@ -713,7 +713,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region FejerKorovkin Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FejérKorovkinWavelet_Calculate_ReturnsValue()
     {
         // Arrange
@@ -730,7 +730,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllWaveletFunctions_Calculate_DoNotReturnNaN()
     {
         // Arrange
@@ -754,7 +754,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_Decompose_PreservesEnergy()
     {
         // Arrange
@@ -776,7 +776,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(inputEnergy, outputEnergy, 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WaveletFunctions_GetCoefficients_NoNaNValues()
     {
         // Arrange
@@ -809,7 +809,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Reverse Biorthogonal Wavelet Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_DefaultConstructor_CreatesInstance()
     {
         // Arrange & Act
@@ -819,7 +819,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.NotNull(wavelet);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_Calculate_ReturnsValue()
     {
         // Arrange
@@ -833,7 +833,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_GetScalingCoefficients_ReturnsNonEmptyVector()
     {
         // Arrange
@@ -847,7 +847,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_GetWaveletCoefficients_ReturnsNonEmptyVector()
     {
         // Arrange
@@ -861,7 +861,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_Decompose_ReturnsApproximationAndDetail()
     {
         // Arrange
@@ -882,7 +882,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Mathematical Correctness Tests - Haar Wavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_Calculate_BoundaryAt0_ReturnsOne()
     {
         // Arrange
@@ -895,7 +895,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_Calculate_BoundaryAt0Point5_ReturnsNegativeOne()
     {
         // Arrange
@@ -908,7 +908,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(-1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_Calculate_BoundaryAt1_ReturnsZero()
     {
         // Arrange
@@ -921,7 +921,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_ScalingCoefficients_CorrectValues()
     {
         // Arrange
@@ -937,7 +937,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(expectedValue, coefficients[1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_WaveletCoefficients_CorrectValues()
     {
         // Arrange
@@ -954,7 +954,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(expectedNegative, coefficients[1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_ScalingCoefficients_SumToSqrt2()
     {
         // Arrange
@@ -970,7 +970,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(Math.Sqrt(2), sum, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_WaveletCoefficients_SumToZero()
     {
         // Arrange
@@ -990,7 +990,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Mathematical Correctness Tests - Mexican Hat Wavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MexicanHatWavelet_Calculate_AtZero_ReturnsTwoWithDefaultSigma()
     {
         // Arrange - Mexican Hat: (2 - x²/σ²) * exp(-x²/2σ²)
@@ -1004,7 +1004,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(2.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MexicanHatWavelet_Calculate_ZeroCrossings()
     {
         // Arrange - Zero crossings occur where 2 - x²/σ² = 0, i.e., x = ±√2σ
@@ -1020,7 +1020,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(Math.Abs(result2) < 0.01, $"Expected ~0 at x=-√2, got {result2}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MexicanHatWavelet_Calculate_NegativeInDipRegion()
     {
         // Arrange - The "dip" of the sombrero is negative, occurs around x ≈ ±2
@@ -1035,7 +1035,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(result2 < 0, $"Expected negative at x=-2, got {result2}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MexicanHatWavelet_Calculate_PerfectSymmetry()
     {
         // Arrange
@@ -1051,7 +1051,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MexicanHatWavelet_Calculate_DifferentSigmas_ScaleCorrectly()
     {
         // Arrange
@@ -1071,7 +1071,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Mathematical Correctness Tests - Morlet Wavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MorletWavelet_Calculate_AtZero_ReturnsOne()
     {
         // Arrange - Morlet: cos(ω*x) * exp(-x²/2)
@@ -1085,7 +1085,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MorletWavelet_Calculate_OscillatesWithOmega()
     {
         // Arrange - With ω=5, should have zeros approximately at x = π/(2ω) = π/10
@@ -1099,7 +1099,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(Math.Abs(result) < 0.1, $"Expected ~0 at first oscillation zero, got {result}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MorletWavelet_Calculate_DecaysWithDistance()
     {
         // Arrange
@@ -1117,7 +1117,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(at3 < 0.02, "Should be very small at x=3");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MorletWavelet_DifferentOmega_AffectsOscillationFrequency()
     {
         // Arrange
@@ -1136,7 +1136,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Mathematical Correctness Tests - Gaussian Wavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianWavelet_Calculate_AtZero_ReturnsOne()
     {
         // Arrange - Gaussian: exp(-x²/2σ²)
@@ -1150,7 +1150,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianWavelet_Calculate_AlwaysPositive()
     {
         // Arrange
@@ -1165,7 +1165,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianWavelet_Calculate_PerfectSymmetry()
     {
         // Arrange
@@ -1181,7 +1181,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianWavelet_Calculate_AtOneSigma_ReturnsExpNegHalf()
     {
         // Arrange - At x=σ: exp(-σ²/2σ²) = exp(-1/2) ≈ 0.6065
@@ -1195,7 +1195,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(expected, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianWavelet_Calculate_MonotonicallyDecreases()
     {
         // Arrange
@@ -1213,7 +1213,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(at2 > at3, "Should decrease from x=2 to x=3");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianWavelet_DifferentSigmas_AffectWidth()
     {
         // Arrange
@@ -1232,7 +1232,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Mathematical Correctness Tests - Daubechies Wavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaubechiesWavelet_D4_ScalingCoefficients_CorrectValues()
     {
         // Arrange - D4 coefficients are well-known
@@ -1253,7 +1253,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(h3, coefficients[3], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaubechiesWavelet_D4_ScalingCoefficients_SumToSqrt2()
     {
         // Arrange
@@ -1269,7 +1269,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(Math.Sqrt(2), sum, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaubechiesWavelet_D4_WaveletCoefficients_QuadratureMirrorFilter()
     {
         // Arrange - Wavelet coefficients: g[n] = (-1)^n * h[L-1-n]
@@ -1289,7 +1289,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaubechiesWavelet_D4_WaveletCoefficients_SumToZero()
     {
         // Arrange
@@ -1305,7 +1305,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(0.0, sum, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaubechiesWavelet_D4_ScalingCoefficients_UnitNorm()
     {
         // Arrange
@@ -1321,7 +1321,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(1.0, sumOfSquares, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaubechiesWavelet_Calculate_ZeroOutsideSupport()
     {
         // Arrange - D4 has support [0, 3]
@@ -1340,7 +1340,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Mathematical Correctness Tests - Energy Preservation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_Decompose_PreservesEnergyExactly()
     {
         // Arrange
@@ -1363,7 +1363,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(inputEnergy, outputEnergy, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaubechiesWavelet_Decompose_PreservesEnergy()
     {
         // Arrange
@@ -1390,7 +1390,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Mathematical Correctness Tests - DOG Wavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOGWavelet_Order2_IsSecondDerivativeOfGaussian()
     {
         // Arrange - DOG order 2 formula: (x² - 1) * exp(-x²/2)
@@ -1407,7 +1407,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(Math.Abs(atOne) < 0.01, $"DOG order 2 should be ~0 at x=1, got {atOne}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOGWavelet_EvenOrder_IsSymmetric()
     {
         // Arrange - Even order DOG wavelets are symmetric
@@ -1427,7 +1427,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Mathematical Correctness Tests - Shannon Wavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShannonWavelet_Calculate_ReturnsFiniteValues()
     {
         // Arrange
@@ -1447,7 +1447,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Mathematical Correctness Tests - Coefficient Normalization
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllOrthogonalWavelets_ScalingCoefficients_HaveUnitNorm()
     {
         // Arrange - Orthogonal wavelets should have unit norm scaling coefficients
@@ -1473,7 +1473,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Full Coverage Tests - All Wavelet Methods
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MexicanHatWavelet_Decompose_ReturnsValidCoefficients()
     {
         var wavelet = new MexicanHatWavelet<double>(sigma: 1.0);
@@ -1483,7 +1483,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(input.Length, detail.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MexicanHatWavelet_GetScalingCoefficients_ReturnsValidVector()
     {
         var wavelet = new MexicanHatWavelet<double>(sigma: 1.0);
@@ -1492,7 +1492,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsNaN(coefficients[0]));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MexicanHatWavelet_GetWaveletCoefficients_ReturnsValidVector()
     {
         var wavelet = new MexicanHatWavelet<double>(sigma: 1.0);
@@ -1501,7 +1501,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsNaN(coefficients[0]));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianWavelet_Decompose_ReturnsValidCoefficients()
     {
         var wavelet = new GaussianWavelet<double>(sigma: 1.0);
@@ -1511,7 +1511,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(input.Length, detail.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianWavelet_GetScalingCoefficients_ReturnsValidVector()
     {
         var wavelet = new GaussianWavelet<double>(sigma: 1.0);
@@ -1520,7 +1520,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsNaN(coefficients[0]));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianWavelet_GetWaveletCoefficients_ReturnsValidVector()
     {
         var wavelet = new GaussianWavelet<double>(sigma: 1.0);
@@ -1529,7 +1529,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsNaN(coefficients[0]));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MorletWavelet_Decompose_ReturnsValidCoefficients()
     {
         var wavelet = new MorletWavelet<double>(omega: 5.0);
@@ -1539,7 +1539,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(detail.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MorletWavelet_GetScalingCoefficients_ReturnsValidVector()
     {
         var wavelet = new MorletWavelet<double>(omega: 5.0);
@@ -1547,7 +1547,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MorletWavelet_GetWaveletCoefficients_ReturnsValidVector()
     {
         var wavelet = new MorletWavelet<double>(omega: 5.0);
@@ -1555,7 +1555,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOGWavelet_Decompose_ReturnsValidCoefficients()
     {
         var wavelet = new DOGWavelet<double>(order: 2);
@@ -1565,7 +1565,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(detail.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOGWavelet_GetScalingCoefficients_ReturnsValidVector()
     {
         var wavelet = new DOGWavelet<double>(order: 2);
@@ -1573,7 +1573,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOGWavelet_GetWaveletCoefficients_ReturnsValidVector()
     {
         var wavelet = new DOGWavelet<double>(order: 2);
@@ -1581,7 +1581,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOGWavelet_Order1_Calculate_IsAntisymmetric()
     {
         var wavelet = new DOGWavelet<double>(order: 1);
@@ -1590,7 +1590,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Equal(-atOne, atNegOne, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOGWavelet_Order3_Calculate_ReturnsValidValues()
     {
         var wavelet = new DOGWavelet<double>(order: 3);
@@ -1599,7 +1599,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOGWavelet_Order4_Calculate_ReturnsValidValues()
     {
         var wavelet = new DOGWavelet<double>(order: 4);
@@ -1608,7 +1608,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOGWavelet_HigherOrder_Calculate_ReturnsValidValues()
     {
         var wavelet = new DOGWavelet<double>(order: 5);
@@ -1617,7 +1617,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShannonWavelet_Decompose_ReturnsValidCoefficients()
     {
         var wavelet = new ShannonWavelet<double>();
@@ -1627,7 +1627,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(detail.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShannonWavelet_GetScalingCoefficients_ReturnsValidVector()
     {
         var wavelet = new ShannonWavelet<double>();
@@ -1635,7 +1635,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShannonWavelet_GetWaveletCoefficients_ReturnsValidVector()
     {
         var wavelet = new ShannonWavelet<double>();
@@ -1643,7 +1643,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeyerWavelet_Decompose_ReturnsValidCoefficients()
     {
         var wavelet = new MeyerWavelet<double>();
@@ -1653,7 +1653,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(detail.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeyerWavelet_GetScalingCoefficients_ReturnsValidVector()
     {
         var wavelet = new MeyerWavelet<double>();
@@ -1661,7 +1661,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeyerWavelet_GetWaveletCoefficients_ReturnsValidVector()
     {
         var wavelet = new MeyerWavelet<double>();
@@ -1669,7 +1669,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeyerWavelet_Calculate_ReturnsValidValues()
     {
         var wavelet = new MeyerWavelet<double>();
@@ -1678,7 +1678,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContinuousMexicanHatWavelet_Decompose_ReturnsValidCoefficients()
     {
         var wavelet = new ContinuousMexicanHatWavelet<double>();
@@ -1688,7 +1688,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(detail.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContinuousMexicanHatWavelet_GetScalingCoefficients_ReturnsValidVector()
     {
         var wavelet = new ContinuousMexicanHatWavelet<double>();
@@ -1696,7 +1696,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContinuousMexicanHatWavelet_GetWaveletCoefficients_ReturnsValidVector()
     {
         var wavelet = new ContinuousMexicanHatWavelet<double>();
@@ -1704,7 +1704,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContinuousMexicanHatWavelet_Calculate_ReturnsValidValues()
     {
         var wavelet = new ContinuousMexicanHatWavelet<double>();
@@ -1713,7 +1713,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BattleLemarieWavelet_Decompose_ReturnsValidCoefficients()
     {
         var wavelet = new BattleLemarieWavelet<double>();
@@ -1723,7 +1723,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(detail.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BattleLemarieWavelet_GetScalingCoefficients_ReturnsValidVector()
     {
         var wavelet = new BattleLemarieWavelet<double>();
@@ -1731,7 +1731,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BattleLemarieWavelet_GetWaveletCoefficients_ReturnsValidVector()
     {
         var wavelet = new BattleLemarieWavelet<double>();
@@ -1739,7 +1739,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BattleLemarieWavelet_Calculate_ReturnsValidValues()
     {
         var wavelet = new BattleLemarieWavelet<double>();
@@ -1748,7 +1748,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BSplineWavelet_Decompose_ReturnsValidCoefficients()
     {
         var wavelet = new BSplineWavelet<double>();
@@ -1758,7 +1758,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(detail.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BSplineWavelet_GetScalingCoefficients_ReturnsValidVector()
     {
         var wavelet = new BSplineWavelet<double>();
@@ -1766,7 +1766,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BSplineWavelet_GetWaveletCoefficients_ReturnsValidVector()
     {
         var wavelet = new BSplineWavelet<double>();
@@ -1774,7 +1774,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BSplineWavelet_Calculate_ReturnsValidValues()
     {
         var wavelet = new BSplineWavelet<double>();
@@ -1783,7 +1783,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaborWavelet_Decompose_ReturnsValidCoefficients()
     {
         var wavelet = new GaborWavelet<double>();
@@ -1793,7 +1793,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(detail.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaborWavelet_GetScalingCoefficients_ReturnsValidVector()
     {
         var wavelet = new GaborWavelet<double>();
@@ -1801,7 +1801,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaborWavelet_GetWaveletCoefficients_ReturnsValidVector()
     {
         var wavelet = new GaborWavelet<double>();
@@ -1809,7 +1809,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PaulWavelet_Decompose_ReturnsValidCoefficients()
     {
         var wavelet = new PaulWavelet<double>();
@@ -1819,7 +1819,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(detail.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PaulWavelet_GetScalingCoefficients_ReturnsValidVector()
     {
         var wavelet = new PaulWavelet<double>();
@@ -1827,7 +1827,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PaulWavelet_GetWaveletCoefficients_ReturnsValidVector()
     {
         var wavelet = new PaulWavelet<double>();
@@ -1835,7 +1835,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PaulWavelet_Calculate_ReturnsValidValues()
     {
         var wavelet = new PaulWavelet<double>();
@@ -1844,7 +1844,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BiorthogonalWavelet_Decompose_ReturnsValidCoefficients()
     {
         var wavelet = new BiorthogonalWavelet<double>();
@@ -1854,7 +1854,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(detail.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BiorthogonalWavelet_GetScalingCoefficients_ReturnsValidVector()
     {
         var wavelet = new BiorthogonalWavelet<double>();
@@ -1862,7 +1862,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BiorthogonalWavelet_GetWaveletCoefficients_ReturnsValidVector()
     {
         var wavelet = new BiorthogonalWavelet<double>();
@@ -1870,7 +1870,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BiorthogonalWavelet_Calculate_ReturnsValidValues()
     {
         var wavelet = new BiorthogonalWavelet<double>();
@@ -1879,7 +1879,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymletWavelet_Decompose_ReturnsValidCoefficients()
     {
         var wavelet = new SymletWavelet<double>();
@@ -1889,7 +1889,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(detail.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymletWavelet_GetScalingCoefficients_ReturnsValidVector()
     {
         var wavelet = new SymletWavelet<double>();
@@ -1897,7 +1897,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymletWavelet_GetWaveletCoefficients_ReturnsValidVector()
     {
         var wavelet = new SymletWavelet<double>();
@@ -1905,7 +1905,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymletWavelet_Calculate_ReturnsValidValues()
     {
         var wavelet = new SymletWavelet<double>();
@@ -1914,7 +1914,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CoifletWavelet_Decompose_ReturnsValidCoefficients()
     {
         var wavelet = new CoifletWavelet<double>();
@@ -1924,7 +1924,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(detail.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CoifletWavelet_GetScalingCoefficients_ReturnsValidVector()
     {
         var wavelet = new CoifletWavelet<double>();
@@ -1932,7 +1932,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CoifletWavelet_GetWaveletCoefficients_ReturnsValidVector()
     {
         var wavelet = new CoifletWavelet<double>();
@@ -1940,7 +1940,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CoifletWavelet_Calculate_ReturnsValidValues()
     {
         var wavelet = new CoifletWavelet<double>();
@@ -1949,7 +1949,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FejérKorovkinWavelet_Decompose_ReturnsValidCoefficients()
     {
         var wavelet = new FejérKorovkinWavelet<double>();
@@ -1959,7 +1959,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(detail.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FejérKorovkinWavelet_GetScalingCoefficients_ReturnsValidVector()
     {
         var wavelet = new FejérKorovkinWavelet<double>();
@@ -1967,7 +1967,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FejérKorovkinWavelet_GetWaveletCoefficients_ReturnsValidVector()
     {
         var wavelet = new FejérKorovkinWavelet<double>();
@@ -1975,7 +1975,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FejérKorovkinWavelet_Calculate_ReturnsValidValues()
     {
         var wavelet = new FejérKorovkinWavelet<double>();
@@ -1984,7 +1984,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_GetScalingCoefficients_DualSynthesis()
     {
         var wavelet = new ReverseBiorthogonalWavelet<double>();
@@ -1992,7 +1992,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_GetWaveletCoefficients_DualSynthesis()
     {
         var wavelet = new ReverseBiorthogonalWavelet<double>();
@@ -2000,7 +2000,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(coefficients.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexGaussianWavelet_Calculate_ReturnsValidValues()
     {
         var wavelet = new ComplexGaussianWavelet<double>();
@@ -2009,7 +2009,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsNaN(result.Imaginary));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaubechiesWavelet_Decompose_ThrowsOnOddLength()
     {
         var wavelet = new DaubechiesWavelet<double>(order: 4);
@@ -2017,7 +2017,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Throws<ArgumentException>(() => wavelet.Decompose(input));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_Decompose_ThrowsOnOddLength()
     {
         var wavelet = new HaarWavelet<double>();
@@ -2025,7 +2025,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.Throws<ArgumentException>(() => wavelet.Decompose(input));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_Reconstruct_ReturnsValidVector()
     {
         var wavelet = new ReverseBiorthogonalWavelet<double>();
@@ -2035,7 +2035,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(reconstructed.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_Calculate_ReturnsValidValues()
     {
         var wavelet = new ReverseBiorthogonalWavelet<double>();
@@ -2044,7 +2044,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsInfinity(result));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_Decompose_ReturnsValidCoefficients()
     {
         var wavelet = new ReverseBiorthogonalWavelet<double>();
@@ -2054,7 +2054,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(detail.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymletWavelet_Decompose_WithDifferentOrders()
     {
         var wavelet2 = new SymletWavelet<double>(order: 2);
@@ -2071,7 +2071,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(approx6.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CoifletWavelet_Decompose_WithDifferentOrders()
     {
         var wavelet1 = new CoifletWavelet<double>(order: 1);
@@ -2088,7 +2088,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(approx3.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BiorthogonalWavelet_Decompose_WithDifferentOrders()
     {
         // BiorthogonalWavelet takes decompositionOrder and reconstructionOrder
@@ -2106,7 +2106,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(approx3.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeyerWavelet_Decompose_WithLargerInput()
     {
         var wavelet = new MeyerWavelet<double>();
@@ -2116,7 +2116,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(detail.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShannonWavelet_Decompose_WithLargerInput()
     {
         var wavelet = new ShannonWavelet<double>();
@@ -2126,7 +2126,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(detail.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FejérKorovkinWavelet_Decompose_WithDifferentOrders()
     {
         var wavelet4 = new FejérKorovkinWavelet<double>(order: 4);
@@ -2140,7 +2140,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(approx6.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BattleLemarieWavelet_Decompose_WithDifferentOrders()
     {
         var wavelet1 = new BattleLemarieWavelet<double>(order: 1);
@@ -2154,7 +2154,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(approx2.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaubechiesWavelet_Calculate_WithDifferentOrders()
     {
         var wavelet2 = new DaubechiesWavelet<double>(order: 2);
@@ -2171,7 +2171,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Additional Coverage Tests for SymletWavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymletWavelet_AllOrders_CreateSuccessfully()
     {
         var wavelet2 = new SymletWavelet<double>(order: 2);
@@ -2185,7 +2185,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.NotNull(wavelet8);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymletWavelet_AllOrders_Decompose()
     {
         var input = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
@@ -2201,7 +2201,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(approx8.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymletWavelet_AllOrders_Calculate()
     {
         var result2 = new SymletWavelet<double>(order: 2).Calculate(0.5);
@@ -2215,7 +2215,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.False(double.IsNaN(result8));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymletWavelet_AllOrders_GetCoefficients()
     {
         var orders = new[] { 2, 4, 6, 8 };
@@ -2230,7 +2230,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymletWavelet_InvalidOrder_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new SymletWavelet<double>(order: 1));
@@ -2243,7 +2243,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Additional Coverage Tests for ReverseBiorthogonalWavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_AllWaveletTypes_CreateSuccessfully()
     {
         var waveletTypes = new[]
@@ -2262,7 +2262,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_AllWaveletTypes_Decompose()
     {
         var input = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
@@ -2281,7 +2281,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_DecomposeMultiLevel_ReturnsMultipleLevels()
     {
         var wavelet = new ReverseBiorthogonalWavelet<double>();
@@ -2295,7 +2295,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(details[1].Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_ReconstructMultiLevel_ReturnsSignal()
     {
         var wavelet = new ReverseBiorthogonalWavelet<double>();
@@ -2307,7 +2307,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(reconstructed.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_BoundaryMethods_Work()
     {
         var input = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
@@ -2325,7 +2325,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(approxZeroPad.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_DifferentChunkSizes_Work()
     {
         var input = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
@@ -2340,7 +2340,7 @@ public class WaveletFunctionsIntegrationTests
         Assert.True(approx2048.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_Calculate_AllTypes()
     {
         var waveletTypes = new[] { WaveletType.ReverseBior11, WaveletType.ReverseBior22, WaveletType.ReverseBior33, WaveletType.ReverseBior44 };
@@ -2357,7 +2357,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Additional Coverage Tests for CoifletWavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CoifletWavelet_AllOrders_CreateSuccessfully()
     {
         var orders = new[] { 1, 2, 3, 4, 5 };
@@ -2368,7 +2368,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CoifletWavelet_AllOrders_Decompose()
     {
         var input = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
@@ -2383,7 +2383,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CoifletWavelet_AllOrders_Calculate()
     {
         var orders = new[] { 1, 2, 3, 4, 5 };
@@ -2396,7 +2396,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CoifletWavelet_AllOrders_GetCoefficients()
     {
         var orders = new[] { 1, 2, 3, 4, 5 };
@@ -2415,7 +2415,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Additional Coverage Tests for MeyerWavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeyerWavelet_Calculate_AtMultiplePoints()
     {
         var wavelet = new MeyerWavelet<double>();
@@ -2428,7 +2428,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeyerWavelet_DecomposeAndGetCoefficients()
     {
         var wavelet = new MeyerWavelet<double>();
@@ -2448,7 +2448,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Additional Coverage Tests for FejérKorovkinWavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FejérKorovkinWavelet_AllOrders_CreateAndDecompose()
     {
         // Input must be at least as long as the largest filter order (22)
@@ -2467,7 +2467,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FejérKorovkinWavelet_AllOrders_GetCoefficients()
     {
         var orders = new[] { 4, 6, 8, 14, 18, 22 };
@@ -2486,7 +2486,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Additional Coverage Tests for DOGWavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOGWavelet_AllOrders_Calculate()
     {
         var orders = new[] { 1, 2, 3, 4, 5 };
@@ -2499,7 +2499,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOGWavelet_AllOrders_Decompose()
     {
         var input = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
@@ -2517,7 +2517,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Additional Coverage Tests for ShannonWavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShannonWavelet_Calculate_AtMultiplePoints()
     {
         var wavelet = new ShannonWavelet<double>();
@@ -2530,7 +2530,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShannonWavelet_GetCoefficients()
     {
         var wavelet = new ShannonWavelet<double>();
@@ -2545,7 +2545,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Additional Coverage Tests for BattleLemarieWavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BattleLemarieWavelet_AllOrders_CreateAndCalculate()
     {
         var orders = new[] { 1, 2, 3 };
@@ -2558,7 +2558,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BattleLemarieWavelet_AllOrders_GetCoefficients()
     {
         var orders = new[] { 1, 2, 3 };
@@ -2577,7 +2577,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Additional Coverage Tests for ComplexGaussianWavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexGaussianWavelet_AllOrders_CreateAndCalculate()
     {
         var orders = new[] { 1, 2, 3, 4, 5 };
@@ -2592,7 +2592,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexGaussianWavelet_AllOrders_GetCoefficients()
     {
         var orders = new[] { 1, 2, 3, 4, 5 };
@@ -2611,7 +2611,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Additional Coverage Tests for PaulWavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PaulWavelet_AllOrders_CreateAndCalculate()
     {
         var orders = new[] { 1, 2, 3, 4, 5 };
@@ -2624,7 +2624,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PaulWavelet_AllOrders_GetCoefficients()
     {
         var orders = new[] { 1, 2, 3, 4, 5 };
@@ -2643,7 +2643,7 @@ public class WaveletFunctionsIntegrationTests
 
     #region Additional Coverage Tests for DaubechiesWavelet
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaubechiesWavelet_AllOrders_CreateAndDecompose()
     {
         var input = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
@@ -2657,7 +2657,7 @@ public class WaveletFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DaubechiesWavelet_AllOrders_GetCoefficients()
     {
         var orders = new[] { 2, 3, 4, 5, 6, 7, 8, 9, 10 };
@@ -2680,7 +2680,7 @@ public class WaveletFunctionsIntegrationTests
     /// Tests that Haar wavelet achieves perfect reconstruction.
     /// Haar is an orthogonal wavelet, so decompose + reconstruct should equal original.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_PerfectReconstruction_ReturnsOriginalSignal()
     {
         // Arrange
@@ -2745,7 +2745,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests multi-level Haar decomposition and reconstruction.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_MultiLevel_PerfectReconstruction()
     {
         // Arrange
@@ -2783,7 +2783,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests ReverseBiorthogonal wavelet perfect reconstruction using its Reconstruct method.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_PerfectReconstruction_ReturnsOriginalSignal()
     {
         // Arrange
@@ -2809,7 +2809,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests ReverseBiorthogonal wavelet multi-level perfect reconstruction.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReverseBiorthogonalWavelet_MultiLevel_PerfectReconstruction()
     {
         // Arrange
@@ -2936,7 +2936,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests that Biorthogonal wavelets have proper analysis and synthesis filters.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BiorthogonalWavelet_Coefficients_AreProperlyDefined()
     {
         // Arrange
@@ -2962,7 +2962,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests that Haar decomposition and reconstruction preserve signal energy.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_DecomposeReconstruct_PreservesEnergyExactly()
     {
         // Arrange
@@ -3038,7 +3038,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests HaarWavelet Reconstruct method for basic functionality.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HaarWavelet_Reconstruct_ReturnsValidVector()
     {
         var wavelet = new HaarWavelet<double>();
@@ -3176,7 +3176,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests MeyerWavelet Reconstruct method.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeyerWavelet_Reconstruct_ReturnsValidVector()
     {
         var wavelet = new MeyerWavelet<double>();
@@ -3196,7 +3196,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests ShannonWavelet Reconstruct method.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShannonWavelet_Reconstruct_ReturnsValidVector()
     {
         var wavelet = new ShannonWavelet<double>();
@@ -3216,7 +3216,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests DOGWavelet Reconstruct method.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOGWavelet_Reconstruct_ReturnsValidVector()
     {
         var wavelet = new DOGWavelet<double>();
@@ -3236,7 +3236,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests MorletWavelet Reconstruct method.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MorletWavelet_Reconstruct_ReturnsValidVector()
     {
         var wavelet = new MorletWavelet<double>();
@@ -3256,7 +3256,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests PaulWavelet Reconstruct method.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PaulWavelet_Reconstruct_ReturnsValidVector()
     {
         var wavelet = new PaulWavelet<double>();
@@ -3320,7 +3320,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests ContinuousMexicanHatWavelet Reconstruct method.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContinuousMexicanHatWavelet_Reconstruct_ReturnsValidVector()
     {
         var wavelet = new ContinuousMexicanHatWavelet<double>();
@@ -3340,7 +3340,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests MexicanHatWavelet Reconstruct method.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MexicanHatWavelet_Reconstruct_ReturnsValidVector()
     {
         var wavelet = new MexicanHatWavelet<double>();
@@ -3360,7 +3360,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests GaussianWavelet Reconstruct method.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianWavelet_Reconstruct_ReturnsValidVector()
     {
         var wavelet = new GaussianWavelet<double>();
@@ -3380,7 +3380,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests GaborWavelet Reconstruct method.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaborWavelet_Reconstruct_ReturnsValidVector()
     {
         var wavelet = new GaborWavelet<double>();
@@ -3400,7 +3400,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests ComplexMorletWavelet Reconstruct method.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexMorletWavelet_Reconstruct_ReturnsValidVector()
     {
         var wavelet = new ComplexMorletWavelet<double>();
@@ -3427,7 +3427,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests ComplexGaussianWavelet Reconstruct method.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexGaussianWavelet_Reconstruct_ReturnsValidVector()
     {
         var wavelet = new ComplexGaussianWavelet<double>();
@@ -3820,7 +3820,7 @@ public class WaveletFunctionsIntegrationTests
     /// Tests BSpline wavelet coefficient symmetry.
     /// B-spline wavelets should have symmetric scaling coefficients.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BSplineWavelet_Coefficients_AreSymmetric()
     {
         // Arrange
@@ -3888,7 +3888,7 @@ public class WaveletFunctionsIntegrationTests
     /// Tests Meyer wavelet frequency domain properties.
     /// Meyer wavelets are defined in the frequency domain and have compact support there.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeyerWavelet_FrequencyDomain_HasCompactSupport()
     {
         // Arrange
@@ -3913,7 +3913,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests Meyer wavelet decomposition produces valid output.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeyerWavelet_Decompose_ProducesValidOutput()
     {
         // Arrange
@@ -3936,7 +3936,7 @@ public class WaveletFunctionsIntegrationTests
     /// Tests Shannon wavelet band separation properties.
     /// Shannon wavelets provide perfect frequency band isolation.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShannonWavelet_BandSeparation_SincProperties()
     {
         // Arrange
@@ -3957,7 +3957,7 @@ public class WaveletFunctionsIntegrationTests
     /// Tests ComplexMorlet admissibility condition.
     /// The integral of a wavelet over all x must be zero for admissibility.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexMorletWavelet_Admissibility_IntegralApproachesZero()
     {
         // Arrange
@@ -3985,7 +3985,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests ComplexMorlet wavelet magnitude at origin.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComplexMorletWavelet_AtOrigin_HasExpectedMagnitude()
     {
         // Arrange
@@ -4054,7 +4054,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests Gabor wavelet decay with distance from origin.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaborWavelet_Decay_WithDistanceFromOrigin()
     {
         // Arrange
@@ -4114,7 +4114,7 @@ public class WaveletFunctionsIntegrationTests
     /// Tests DOG (Difference of Gaussians) admissibility.
     /// The integral of DOG over all x should be zero.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOGWavelet_Admissibility_IntegralIsZero()
     {
         // Arrange
@@ -4158,7 +4158,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests DOG wavelet at origin returns expected value.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOGWavelet_AtOrigin_ReturnsExpectedValue()
     {
         // Arrange
@@ -4176,7 +4176,7 @@ public class WaveletFunctionsIntegrationTests
     /// Tests FejérKorovkin wavelet polynomial reproduction property.
     /// Should have small detail coefficients for polynomial signals.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FejérKorovkinWavelet_PolynomialReproduction_SmallDetail()
     {
         // Arrange
@@ -4207,7 +4207,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests FejérKorovkin wavelet coefficient properties.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FejérKorovkinWavelet_Coefficients_AreValid()
     {
         // Arrange
@@ -4234,7 +4234,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests BattleLemarie spline-based wavelet orthogonality properties.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BattleLemarieWavelet_SplineOrthogonality_CoefficientProperties()
     {
         // Arrange
@@ -4262,7 +4262,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests BattleLemarie wavelet decomposition.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BattleLemarieWavelet_Decompose_ProducesValidOutput()
     {
         // Arrange
@@ -4289,7 +4289,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests ContinuousMexicanHat wavelet properties.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContinuousMexicanHatWavelet_Properties_AreValid()
     {
         // Arrange
@@ -4308,7 +4308,7 @@ public class WaveletFunctionsIntegrationTests
     /// <summary>
     /// Tests ContinuousMexicanHat admissibility (integral should be zero).
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContinuousMexicanHatWavelet_Admissibility_IntegralIsZero()
     {
         // Arrange

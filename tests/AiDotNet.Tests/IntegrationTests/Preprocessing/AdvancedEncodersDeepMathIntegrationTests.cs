@@ -21,7 +21,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
     // TargetEncoder - Smoothed Target Mean Encoding
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_SmoothedMean_HandComputedFormula()
     {
         // Data: category column with values [1, 1, 1, 2, 2]
@@ -43,7 +43,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(40.0, result[4, 0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_HighSmoothing_PullsTowardGlobalMean()
     {
         // Data: [1, 1, 2, 2]
@@ -69,7 +69,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.True(Math.Abs(result[2, 0] - 50) < 2.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_ZeroSmoothing_UsesRawCategoryMean()
     {
         // smoothing = 0 means no shrinkage
@@ -86,7 +86,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(85.0, result[2, 0], Tol); // (80+90)/2
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_MinSamplesLeaf_RareCategoryGetsGlobalMean()
     {
         // Data: [1, 1, 1, 1, 2] - Category 2 has only 1 sample
@@ -106,7 +106,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(40.0, result[4, 0], Tol); // rare category -> global mean
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_UnknownCategory_UsesGlobalMean()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 1 }, { 2 }, { 2 } });
@@ -123,7 +123,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(50.0, result[0, 0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_UnknownCategory_ErrorMode_Throws()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 } });
@@ -136,7 +136,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => encoder.Transform(testData));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_MultiColumn_IndependentEncoding()
     {
         // Two columns with different categories
@@ -157,7 +157,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(300.0, result[1, 1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_NegativeSmoothing_Throws()
     {
         Assert.Throws<ArgumentException>(() => new TargetEncoder<double>(smoothing: -1.0));
@@ -167,7 +167,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
     // WOEEncoder - Weight of Evidence
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WOEEncoder_HandComputed_TwoCategories()
     {
         // Data: [1, 1, 1, 2, 2, 2]
@@ -199,7 +199,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(expectedWoeCat2, result[3, 0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WOEEncoder_PositiveWOE_MoreEventsInCategory()
     {
         // Category with more events than non-events should have positive WOE
@@ -215,7 +215,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.True(result[0, 0] > 0, "Category with more events should have positive WOE");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WOEEncoder_NegativeWOE_MoreNonEventsInCategory()
     {
         // Category with more non-events than events should have negative WOE
@@ -230,7 +230,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.True(result[0, 0] < 0, "Category with more non-events should have negative WOE");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WOEEncoder_Clamping_ExtremeValuesClampedToFive()
     {
         // Create extreme imbalance: one category has almost all events
@@ -263,7 +263,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.True(result[100, 0] >= -5.0 - Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WOEEncoder_InformationValue_HandComputed()
     {
         // Using same data as HandComputed test
@@ -288,7 +288,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.True(ivValues[0] >= 0, "IV should be non-negative");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WOEEncoder_BinaryTargetRequired_Throws()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 } });
@@ -298,7 +298,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => encoder.Fit(data, target));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WOEEncoder_SingleClassTarget_Throws()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 } });
@@ -308,7 +308,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => encoder.Fit(data, target));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WOEEncoder_UnknownCategory_UseZero()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 1 }, { 2 }, { 2 } });
@@ -323,7 +323,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(0.0, result[0, 0], Tol); // Unknown -> 0 (neutral evidence)
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WOEEncoder_Symmetry_SwappedClassesNegateWOE()
     {
         // If we swap events and non-events for a category, WOE should negate
@@ -348,7 +348,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
     // HelmertEncoder - Contrast Coding
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HelmertEncoder_ThreeCategories_ContrastMatrixValues()
     {
         // 3 categories (10, 20, 30), creates 2 contrast columns
@@ -378,7 +378,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(-1.0 / 2, result[2, 1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HelmertEncoder_ReversedMode_ComparesWithPreviousLevels()
     {
         // Reversed Helmert for k=3:
@@ -407,7 +407,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(2.0 / 3, result[2, 1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HelmertEncoder_OutputDimension_KMinusOneColumns()
     {
         // 4 categories -> 3 contrast columns
@@ -421,7 +421,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(3, result.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HelmertEncoder_ColumnSumsToZero()
     {
         // Each column in the Helmert contrast matrix should sum to zero
@@ -442,7 +442,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HelmertEncoder_UnknownCategory_ZeroVector()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
@@ -461,7 +461,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
     // JamesSteinEncoder - Bayesian Shrinkage
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void JamesSteinEncoder_LargeCountLowShrinkage_NearCategoryMean()
     {
         // Large count category far from global mean -> low shrinkage -> close to category mean
@@ -501,7 +501,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.True(result[100, 0] < 10, $"Cat 2 encoded {result[100, 0]} should be close to its mean 0");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void JamesSteinEncoder_SmallCount_FullShrinkageToGlobalMean()
     {
         // Category with count <= 2 gets full shrinkage (shrinkage=1.0)
@@ -519,7 +519,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(globalMean, result[0, 0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void JamesSteinEncoder_GlobalMean_IsCorrect()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 1 }, { 2 }, { 2 } });
@@ -531,7 +531,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(25.0, encoder.GlobalMean, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void JamesSteinEncoder_UnknownCategory_UsesGlobalMean()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 1 }, { 2 }, { 2 } });
@@ -550,7 +550,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
     // LeaveOneOutEncoder - LOO Target Encoding
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeaveOneOutEncoder_HandComputed_ThreeSamples()
     {
         // Category "A" (value 1) has 3 samples with targets [10, 20, 30]
@@ -582,7 +582,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(40.0, result[4, 0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeaveOneOutEncoder_WithSmoothing_HandComputed()
     {
         // Same data as above but with smoothing=1
@@ -599,7 +599,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(expected, result[0, 0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeaveOneOutEncoder_SingleSampleCategory_FallsToGlobalMean()
     {
         // Category with only 1 sample: LOO count = 0, should use global mean
@@ -616,7 +616,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(globalMean, result[0, 0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeaveOneOutEncoder_TransformForTestData_UsesFullStats()
     {
         // Transform (without target) for test data uses full category statistics
@@ -632,7 +632,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(expectedCat1, result[0, 0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeaveOneOutEncoder_EachRowGetsDifferentEncoding()
     {
         // Unlike TargetEncoder, LOO gives different encodings per row even for same category
@@ -658,7 +658,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
     // MEstimateEncoder - Simplified Target Encoding with M-Parameter
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MEstimateEncoder_HandComputed_Formula()
     {
         // Formula: (sum + m * globalMean) / (count + m)
@@ -685,7 +685,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(65.5, result[4, 0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MEstimateEncoder_MZero_EqualsRawCategoryMean()
     {
         // m=0: encoded = (sum + 0)/(count + 0) = sum/count = categoryMean
@@ -700,7 +700,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(80.0, result[2, 0], Tol); // (70+90)/2
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MEstimateEncoder_VeryLargeM_ApproachesGlobalMean()
     {
         // m=10000: encoded ~ globalMean for all categories
@@ -716,7 +716,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.True(Math.Abs(result[2, 0] - 50.0) < 0.1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MEstimateEncoder_EquivalenceWithTargetEncoder()
     {
         // MEstimate with m=s and TargetEncoder with smoothing=s should produce same results
@@ -740,7 +740,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MEstimateEncoder_UnknownCategory_UsesGlobalMean()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 } });
@@ -755,7 +755,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(20.0, result[0, 0], Tol); // global mean
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MEstimateEncoder_NegativeM_Throws()
     {
         Assert.Throws<ArgumentException>(() => new MEstimateEncoder<double>(m: -1.0));
@@ -765,7 +765,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
     // BackwardDifferenceEncoder - Contrast Coding
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BackwardDifferenceEncoder_ThreeCategories_ContrastValues()
     {
         // k=3 categories (1, 2, 3), creates 2 contrast columns
@@ -801,7 +801,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(2.0 / 3, result[2, 1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BackwardDifferenceEncoder_ColumnSumsToZero()
     {
         // Each column should sum to zero (balanced contrast)
@@ -822,7 +822,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BackwardDifferenceEncoder_OutputDimension_KMinusOne()
     {
         // 5 categories -> 4 contrast columns
@@ -836,7 +836,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Equal(4, result.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BackwardDifferenceEncoder_AdjacentDifference_IsOneOverK()
     {
         // The difference between adjacent rows in each column should be predictable
@@ -860,7 +860,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BackwardDifferenceEncoder_UnknownCategory_ZeroVector()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
@@ -879,28 +879,28 @@ public class AdvancedEncodersDeepMathIntegrationTests
     // Cross-Encoder Properties
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_InverseTransform_NotSupported()
     {
         var encoder = new TargetEncoder<double>();
         Assert.False(encoder.SupportsInverseTransform);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WOEEncoder_InverseTransform_NotSupported()
     {
         var encoder = new WOEEncoder<double>();
         Assert.False(encoder.SupportsInverseTransform);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HelmertEncoder_InverseTransform_NotSupported()
     {
         var encoder = new HelmertEncoder<double>();
         Assert.False(encoder.SupportsInverseTransform);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_FitWithoutTarget_Throws()
     {
         var encoder = new TargetEncoder<double>();
@@ -908,7 +908,7 @@ public class AdvancedEncodersDeepMathIntegrationTests
         Assert.Throws<InvalidOperationException>(() => encoder.Fit(data));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WOEEncoder_FitWithoutTarget_Throws()
     {
         var encoder = new WOEEncoder<double>();

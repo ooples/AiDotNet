@@ -14,119 +14,119 @@ public class EnginesDeepMathIntegrationTests
     // GpuAccelerationConfig: Defaults
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_Defaults_DeviceType_Auto()
     {
         var config = new GpuAccelerationConfig();
         Assert.Equal(GpuDeviceType.Auto, config.DeviceType);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_Defaults_UsageLevel_Default()
     {
         var config = new GpuAccelerationConfig();
         Assert.Equal(GpuUsageLevel.Default, config.UsageLevel);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_Defaults_DeviceIndex_Zero()
     {
         var config = new GpuAccelerationConfig();
         Assert.Equal(0, config.DeviceIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_Defaults_VerboseLogging_False()
     {
         var config = new GpuAccelerationConfig();
         Assert.False(config.VerboseLogging);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_Defaults_EnableForInference_True()
     {
         var config = new GpuAccelerationConfig();
         Assert.True(config.EnableForInference);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_Defaults_EnableGpuPersistence_True()
     {
         var config = new GpuAccelerationConfig();
         Assert.True(config.EnableGpuPersistence);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_Defaults_ExecutionMode_Auto()
     {
         var config = new GpuAccelerationConfig();
         Assert.Equal(GpuExecutionModeConfig.Auto, config.ExecutionMode);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_Defaults_EnableGraphCompilation_True()
     {
         var config = new GpuAccelerationConfig();
         Assert.True(config.EnableGraphCompilation);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_Defaults_EnableAutoFusion_True()
     {
         var config = new GpuAccelerationConfig();
         Assert.True(config.EnableAutoFusion);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_Defaults_EnableComputeTransferOverlap_True()
     {
         var config = new GpuAccelerationConfig();
         Assert.True(config.EnableComputeTransferOverlap);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_Defaults_MaxComputeStreams_Three()
     {
         var config = new GpuAccelerationConfig();
         Assert.Equal(3, config.MaxComputeStreams);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_Defaults_MinGpuElements_4096()
     {
         var config = new GpuAccelerationConfig();
         Assert.Equal(4096, config.MinGpuElements);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_Defaults_MaxGpuMemoryUsage_80Percent()
     {
         var config = new GpuAccelerationConfig();
         Assert.Equal(0.8, config.MaxGpuMemoryUsage, 0.001);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_Defaults_EnablePrefetch_True()
     {
         var config = new GpuAccelerationConfig();
         Assert.True(config.EnablePrefetch);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_Defaults_CacheCompiledGraphs_True()
     {
         var config = new GpuAccelerationConfig();
         Assert.True(config.CacheCompiledGraphs);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_Defaults_EnableProfiling_False()
     {
         var config = new GpuAccelerationConfig();
         Assert.False(config.EnableProfiling);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_Defaults_TransferStreams_Two()
     {
         var config = new GpuAccelerationConfig();
@@ -137,7 +137,7 @@ public class EnginesDeepMathIntegrationTests
     // GpuAccelerationConfig: ToString
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_ToString_ContainsDeviceType()
     {
         var config = new GpuAccelerationConfig();
@@ -145,7 +145,7 @@ public class EnginesDeepMathIntegrationTests
         Assert.Contains("DeviceType=Auto", str);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_ToString_ContainsUsageLevel()
     {
         var config = new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.Aggressive };
@@ -153,7 +153,7 @@ public class EnginesDeepMathIntegrationTests
         Assert.Contains("UsageLevel=Aggressive", str);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_ToString_ContainsExecutionMode()
     {
         var config = new GpuAccelerationConfig { ExecutionMode = GpuExecutionModeConfig.Deferred };
@@ -161,7 +161,7 @@ public class EnginesDeepMathIntegrationTests
         Assert.Contains("ExecutionMode=Deferred", str);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_ToString_ContainsMaxMemory()
     {
         var config = new GpuAccelerationConfig();
@@ -169,7 +169,7 @@ public class EnginesDeepMathIntegrationTests
         Assert.Contains("MaxMemory=", str);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_ToString_ContainsMinElements()
     {
         var config = new GpuAccelerationConfig();
@@ -215,7 +215,7 @@ public class EnginesDeepMathIntegrationTests
         Assert.Equal(mode, config.ExecutionMode);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuConfig_CustomValues_AllSet()
     {
         var config = new GpuAccelerationConfig
@@ -262,7 +262,7 @@ public class EnginesDeepMathIntegrationTests
     // GpuDeviceType Enum: Count
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuDeviceType_HasFourValues()
     {
         var values = (((GpuDeviceType[])Enum.GetValues(typeof(GpuDeviceType))));
@@ -273,7 +273,7 @@ public class EnginesDeepMathIntegrationTests
     // GpuUsageLevel Enum: Count
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuUsageLevel_HasFiveValues()
     {
         var values = (((GpuUsageLevel[])Enum.GetValues(typeof(GpuUsageLevel))));
@@ -284,7 +284,7 @@ public class EnginesDeepMathIntegrationTests
     // GpuExecutionModeConfig Enum: Count
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuExecutionModeConfig_HasFourValues()
     {
         var values = (((GpuExecutionModeConfig[])Enum.GetValues(typeof(GpuExecutionModeConfig))));

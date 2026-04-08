@@ -29,7 +29,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Constructor Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullDocumentStore_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
@@ -37,7 +37,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
                 new VectorRetriever<double>(null, _embeddingModel));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullEmbeddingModel_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
@@ -45,7 +45,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
                 new VectorRetriever<double>(_documentStore, null));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -56,7 +56,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Equal(5, retriever.DefaultTopK);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithCustomDefaultTopK_SetsCorrectly()
         {
             // Arrange & Act
@@ -66,7 +66,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Equal(10, retriever.DefaultTopK);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithZeroDefaultTopK_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
@@ -75,7 +75,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Contains("must be greater than zero", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNegativeDefaultTopK_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
@@ -88,7 +88,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Query Validation Tests (RetrieverBase)
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -98,7 +98,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Throws<ArgumentException>(() => retriever.Retrieve(null));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -108,7 +108,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Throws<ArgumentException>(() => retriever.Retrieve(""));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithWhitespaceQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -122,7 +122,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region TopK Validation Tests (RetrieverBase)
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -132,7 +132,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Throws<ArgumentOutOfRangeException>(() => retriever.Retrieve("test query", 0));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithNegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -146,7 +146,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Metadata Filter Validation Tests (RetrieverBase)
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithNullMetadataFilters_ThrowsArgumentNullException()
         {
             // Arrange
@@ -161,7 +161,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Basic Retrieval Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithEmptyDocumentStore_ReturnsEmptyResults()
         {
             // Arrange
@@ -174,7 +174,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.Empty(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithValidQuery_ReturnsDocuments()
         {
             // Arrange
@@ -189,7 +189,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.All(results, doc => Assert.True(doc.HasRelevanceScore));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithDefaultTopK_ReturnsCorrectNumberOfResults()
         {
             // Arrange
@@ -203,7 +203,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.True(results.Count <= 3);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithCustomTopK_ReturnsCorrectNumberOfResults()
         {
             // Arrange
@@ -221,7 +221,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Relevance Score Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithValidQuery_AssignsRelevanceScores()
         {
             // Arrange
@@ -240,7 +240,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             });
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithValidQuery_ReturnsSortedByRelevance()
         {
             // Arrange
@@ -262,7 +262,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
         #region Metadata Filtering Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithMetadataFilter_ReturnsOnlyMatchingDocuments()
         {
             // Arrange
@@ -281,7 +281,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             });
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithEmptyMetadataFilter_ReturnsAllDocuments()
         {
             // Arrange
@@ -296,7 +296,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             Assert.NotEmpty(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithNonMatchingFilter_ReturnsEmpty()
         {
             // Arrange

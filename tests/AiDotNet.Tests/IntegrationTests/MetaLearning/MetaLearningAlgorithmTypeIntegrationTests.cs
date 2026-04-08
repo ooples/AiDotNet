@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
 public class MetaLearningAlgorithmTypeIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Enum_ContainsCoreAlgorithms()
     {
         var names = Enum.GetNames(typeof(MetaLearningAlgorithmType));

@@ -10,7 +10,7 @@ public class RegressionHelperIntegrationTests
 {
     #region CenterAndScale Tests - Basic Functionality
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterAndScale_SimpleData_ReturnsCorrectMeans()
     {
         var x = new Matrix<double>(new double[,]
@@ -28,7 +28,7 @@ public class RegressionHelperIntegrationTests
         Assert.Equal(20.0, xMean[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterAndScale_SimpleData_ReturnsCorrectStandardDeviations()
     {
         var x = new Matrix<double>(new double[,]
@@ -47,7 +47,7 @@ public class RegressionHelperIntegrationTests
         Assert.Equal(100.0, yStd, 5);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterAndScale_SimpleData_XScaledHasZeroMean()
     {
         var x = new Matrix<double>(new double[,]
@@ -68,7 +68,7 @@ public class RegressionHelperIntegrationTests
         Assert.True(Math.Abs(col1Mean) < 1e-10, $"Column 1 mean should be 0, got {col1Mean}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterAndScale_SimpleData_YScaledHasZeroMean()
     {
         var x = new Matrix<double>(new double[,]
@@ -85,7 +85,7 @@ public class RegressionHelperIntegrationTests
         Assert.True(Math.Abs(yScaledMean) < 1e-10, $"yScaled mean should be 0, got {yScaledMean}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterAndScale_SimpleData_XScaledHasUnitVariance()
     {
         var x = new Matrix<double>(new double[,]
@@ -113,7 +113,7 @@ public class RegressionHelperIntegrationTests
 
     #region CenterAndScale Tests - Shape Preservation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterAndScale_PreservesMatrixShape()
     {
         var x = new Matrix<double>(new double[,]
@@ -133,7 +133,7 @@ public class RegressionHelperIntegrationTests
         Assert.Equal(x.Columns, xStd.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterAndScale_SingleRow_ReturnsNaN()
     {
         // With a single row, standard deviation is 0, causing division by zero
@@ -156,7 +156,7 @@ public class RegressionHelperIntegrationTests
         Assert.True(double.IsNaN(xScaled[0, 2]));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterAndScale_SingleColumn_Works()
     {
         var x = new Matrix<double>(new double[,]
@@ -178,7 +178,7 @@ public class RegressionHelperIntegrationTests
 
     #region CenterAndScale Tests - Float Type
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterAndScale_Float_ReturnsCorrectValues()
     {
         var x = new Matrix<float>(new float[,]
@@ -201,7 +201,7 @@ public class RegressionHelperIntegrationTests
 
     #region CenterAndScale Tests - Different Data Distributions
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterAndScale_NegativeValues_HandlesCorrectly()
     {
         var x = new Matrix<double>(new double[,]
@@ -223,7 +223,7 @@ public class RegressionHelperIntegrationTests
         Assert.Equal(2, xScaled.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterAndScale_LargeValues_HandlesCorrectly()
     {
         var x = new Matrix<double>(new double[,]
@@ -245,7 +245,7 @@ public class RegressionHelperIntegrationTests
         Assert.Equal(2, xScaled.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterAndScale_SmallValues_HandlesCorrectly()
     {
         var x = new Matrix<double>(new double[,]
@@ -267,7 +267,7 @@ public class RegressionHelperIntegrationTests
         Assert.Equal(2, xScaled.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterAndScale_MixedScaleFeatures_NormalizesCorrectly()
     {
         // Features with vastly different scales
@@ -297,7 +297,7 @@ public class RegressionHelperIntegrationTests
 
     #region CenterAndScale Tests - Known Values
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterAndScale_KnownValues_VerifyCalculation()
     {
         // Use simple values for easy manual verification
@@ -329,7 +329,7 @@ public class RegressionHelperIntegrationTests
 
     #region CenterAndScale Tests - Large Dataset
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterAndScale_LargeDataset_PerformsCorrectly()
     {
         int rows = 1000;
@@ -374,7 +374,7 @@ public class RegressionHelperIntegrationTests
 
     #region CenterAndScale Tests - Reversibility
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterAndScale_CanBeReversed()
     {
         var x = new Matrix<double>(new double[,]

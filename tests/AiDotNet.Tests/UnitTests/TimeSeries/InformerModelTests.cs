@@ -11,7 +11,7 @@ public class InformerModelTests
 {
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithDefaultOptions_CreatesValidModel()
     {
         var model = new InformerModel<double>();
@@ -19,7 +19,7 @@ public class InformerModelTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithCustomOptions_CreatesValidModel()
     {
         var options = new InformerOptions<double>
@@ -39,7 +39,7 @@ public class InformerModelTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroEmbeddingDim_ThrowsArgumentException()
     {
         var options = new InformerOptions<double>
@@ -50,7 +50,7 @@ public class InformerModelTests
         Assert.Throws<ArgumentException>(() => new InformerModel<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroEncoderLayers_ThrowsArgumentException()
     {
         var options = new InformerOptions<double>
@@ -61,7 +61,7 @@ public class InformerModelTests
         Assert.Throws<ArgumentException>(() => new InformerModel<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroDecoderLayers_ThrowsArgumentException()
     {
         var options = new InformerOptions<double>
@@ -72,7 +72,7 @@ public class InformerModelTests
         Assert.Throws<ArgumentException>(() => new InformerModel<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroAttentionHeads_ThrowsArgumentException()
     {
         var options = new InformerOptions<double>
@@ -87,7 +87,7 @@ public class InformerModelTests
 
     #region Training Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Train_WithValidData_CompletesWithoutError()
     {
         var options = new InformerOptions<double>
@@ -110,7 +110,7 @@ public class InformerModelTests
         Assert.Null(exception);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Train_WithMinimalData_CompletesWithoutError()
     {
         var options = new InformerOptions<double>
@@ -137,7 +137,7 @@ public class InformerModelTests
 
     #region Prediction Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PredictSingle_AfterTraining_ReturnsValidPrediction()
     {
         var options = new InformerOptions<double>
@@ -168,7 +168,7 @@ public class InformerModelTests
         Assert.False(double.IsInfinity(prediction), "Prediction is Infinity");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PredictSingle_ReturnsFiniteValues()
     {
         var options = new InformerOptions<double>
@@ -199,7 +199,7 @@ public class InformerModelTests
         Assert.False(double.IsInfinity(prediction), "Prediction contains Infinity");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Predict_WithMatrix_ReturnsValidPredictions()
     {
         var options = new InformerOptions<double>
@@ -234,7 +234,7 @@ public class InformerModelTests
 
     #region Serialization Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Serialize_AndDeserialize_PreservesModel()
     {
         var options = new InformerOptions<double>
@@ -276,7 +276,7 @@ public class InformerModelTests
 
     #region Float Type Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithFloatType_CreatesValidModel()
     {
         var options = new InformerOptions<float>

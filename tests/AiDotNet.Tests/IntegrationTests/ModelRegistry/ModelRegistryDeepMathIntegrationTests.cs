@@ -27,7 +27,7 @@ public class ModelRegistryDeepMathIntegrationTests
         Assert.True(Enum.IsDefined(typeof(ModelStage), stage));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelStage_HasFourValues()
     {
         var values = (((ModelStage[])Enum.GetValues(typeof(ModelStage))));
@@ -38,7 +38,7 @@ public class ModelRegistryDeepMathIntegrationTests
     // ModelStage: Lifecycle Progression
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelStage_TypicalLifecycle_Order()
     {
         // Models typically progress through these stages
@@ -62,7 +62,7 @@ public class ModelRegistryDeepMathIntegrationTests
     // ModelMetadata: Defaults
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelMetadata_Defaults()
     {
         var metadata = new ModelMetadata<double>();
@@ -146,7 +146,7 @@ public class ModelRegistryDeepMathIntegrationTests
     // Path Security: Directory Containment
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PathSecurity_PathWithinDirectory_ValidPath()
     {
         // A path within the base directory should pass validation
@@ -163,7 +163,7 @@ public class ModelRegistryDeepMathIntegrationTests
         Assert.True(fullPath.StartsWith(fullBase, StringComparison.OrdinalIgnoreCase));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PathSecurity_SiblingPrefixBypass_Prevented()
     {
         // Test that "model_registrymalicious" doesn't match "model_registry"
@@ -228,7 +228,7 @@ public class ModelRegistryDeepMathIntegrationTests
     // JSON Serialization Security
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void JsonSettings_TypeNameHandlingNone()
     {
         // ModelRegistryBase uses TypeNameHandling.None for security
@@ -245,7 +245,7 @@ public class ModelRegistryDeepMathIntegrationTests
     // Registry Operations: Thread Safety Patterns
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThreadSafety_LockObject_NotNull()
     {
         // ModelRegistryBase uses a SyncLock object for thread safety
@@ -261,7 +261,7 @@ public class ModelRegistryDeepMathIntegrationTests
         Assert.True(entered);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThreadSafety_ConcurrentAccess_Pattern()
     {
         // Verify concurrent dictionary access pattern

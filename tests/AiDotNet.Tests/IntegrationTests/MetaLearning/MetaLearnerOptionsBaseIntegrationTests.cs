@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
 public class MetaLearnerOptionsBaseIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Defaults_AreValidAndStable()
     {
         var options = new MetaLearnerOptionsBase<double>();
@@ -35,7 +35,7 @@ public class MetaLearnerOptionsBaseIntegrationTests
         Assert.False(options.IsValid());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clone_CopiesValues()
     {
         var options = new MetaLearnerOptionsBase<double>
@@ -72,7 +72,7 @@ public class MetaLearnerOptionsBaseIntegrationTests
         Assert.Equal(options.CheckpointFrequency, cloned.CheckpointFrequency);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_BuildsConfiguredOptions()
     {
         var options = MetaLearnerOptionsBase<double>.CreateBuilder()
@@ -102,7 +102,7 @@ public class MetaLearnerOptionsBaseIntegrationTests
         Assert.Equal(0, options.CheckpointFrequency);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_InvalidConfiguration_Throws()
     {
         var builder = MetaLearnerOptionsBase<double>.CreateBuilder()

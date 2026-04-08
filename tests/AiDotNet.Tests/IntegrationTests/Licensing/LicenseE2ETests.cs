@@ -58,7 +58,7 @@ public class LicenseE2ETests : IDisposable
 
     // ─── E2E: Community License via Environment Variable ───
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E2E_CommunityLicense_EnvVar_TrainSerializeDeserializePredict()
     {
         // Step 1: Simulate receiving a community license key from the register-community-license
@@ -101,7 +101,7 @@ public class LicenseE2ETests : IDisposable
 
     // ─── E2E: Community License via File ───
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E2E_CommunityLicense_File_TrainSerializeDeserializePredict()
     {
         ClearAllLicenseSources();
@@ -137,7 +137,7 @@ public class LicenseE2ETests : IDisposable
 
     // ─── E2E: Explicit License Key Object ───
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E2E_ExplicitLicenseKey_TrainSerializeDeserializePredict()
     {
         ClearAllLicenseSources();
@@ -173,7 +173,7 @@ public class LicenseE2ETests : IDisposable
 
     // ─── E2E: Trial Lifecycle ───
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E2E_TrialLifecycle_TrainFreeSerializeWithTrialExhaustThenLicense()
     {
         ClearAllLicenseSources();
@@ -234,7 +234,7 @@ public class LicenseE2ETests : IDisposable
 
     // ─── E2E: License Key Format Validation ───
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E2E_InvalidKeyFormat_RejectedByOfflineValidator()
     {
         // Keys that don't match aidn.X.Y format should be rejected
@@ -265,7 +265,7 @@ public class LicenseE2ETests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E2E_ValidKeyFormat_AcceptedByOfflineValidator()
     {
         var validKeys = new[]
@@ -287,7 +287,7 @@ public class LicenseE2ETests : IDisposable
 
     // ─── E2E: License Key Resolver Chain ───
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E2E_ResolverChain_ExplicitKeyTakesPriority()
     {
         // Set env var
@@ -300,7 +300,7 @@ public class LicenseE2ETests : IDisposable
         Assert.Equal("aidn.explicitkey1.zyxwvutsrqponmlk", resolved);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E2E_ResolverChain_EnvVarFallsBackToFile()
     {
         ClearAllLicenseSources();
@@ -325,7 +325,7 @@ public class LicenseE2ETests : IDisposable
         Assert.Equal("aidn.envvarkey123.abcdefghijklmnop", resolved);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E2E_ResolverChain_NoSources_ReturnsNull()
     {
         ClearAllLicenseSources();
@@ -336,7 +336,7 @@ public class LicenseE2ETests : IDisposable
 
     // ─── E2E: Unreachable Server Graceful Fallback ───
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void E2E_UnreachableServer_FallsBackToOffline()
     {
         // Simulate a key with a non-existent server — should not crash

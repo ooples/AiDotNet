@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.Reasoning.Benchmarks;
 /// </summary>
 public class BenchmarkTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GSM8KBenchmark_LoadsProblems()
     {
         // Arrange
@@ -27,7 +27,7 @@ public class BenchmarkTests
         });
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task MATHBenchmark_LoadsProblems()
     {
         // Arrange
@@ -42,7 +42,7 @@ public class BenchmarkTests
         Assert.All(problems, p => Assert.Contains("math", p.Category.ToLowerInvariant()));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ARCAGIBenchmark_HasCorrectProblemCount()
     {
         // Arrange
@@ -55,7 +55,7 @@ public class BenchmarkTests
         Assert.Equal(800, totalProblems);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task MMLUBenchmark_HasCorrectProblemCount()
     {
         // Arrange
@@ -68,7 +68,7 @@ public class BenchmarkTests
         Assert.Equal(15908, totalProblems);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task HumanEvalBenchmark_LoadsCodeProblems()
     {
         // Arrange
@@ -86,7 +86,7 @@ public class BenchmarkTests
         });
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task MBPPBenchmark_LoadsPythonProblems()
     {
         // Arrange
@@ -100,7 +100,7 @@ public class BenchmarkTests
         Assert.Equal(3, problems.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task HellaSwagBenchmark_LoadsCommonsenseProblems()
     {
         // Arrange
@@ -118,7 +118,7 @@ public class BenchmarkTests
         });
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task BoolQBenchmark_LoadsYesNoQuestions()
     {
         // Arrange
@@ -137,7 +137,7 @@ public class BenchmarkTests
         });
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task PIQABenchmark_LoadsPhysicalCommonsenseProblems()
     {
         // Arrange
@@ -151,7 +151,7 @@ public class BenchmarkTests
         Assert.All(problems, p => Assert.Contains("Solution", p.Problem));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task WinoGrandeBenchmark_LoadsPronounProblems()
     {
         // Arrange
@@ -169,7 +169,7 @@ public class BenchmarkTests
         });
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task TruthfulQABenchmark_LoadsTruthfulnessQuestions()
     {
         // Arrange
@@ -183,7 +183,7 @@ public class BenchmarkTests
         Assert.Equal(817, benchmark.TotalProblems);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task LogiQABenchmark_LoadsLogicalReasoningProblems()
     {
         // Arrange
@@ -197,7 +197,7 @@ public class BenchmarkTests
         Assert.Equal(8678, benchmark.TotalProblems);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task DROPBenchmark_LoadsDiscreteReasoningProblems()
     {
         // Arrange
@@ -211,7 +211,7 @@ public class BenchmarkTests
         Assert.Equal(96000, benchmark.TotalProblems);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task CommonsenseQABenchmark_LoadsCommonsenseQuestions()
     {
         // Arrange
@@ -229,7 +229,7 @@ public class BenchmarkTests
         });
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task BenchmarkEvaluate_WithMockFunction_ReturnsResult()
     {
         // Arrange
@@ -267,7 +267,7 @@ public class BenchmarkTests
         Assert.Equal(count, problems.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AllBenchmarks_HaveValidNames()
     {
         // Arrange & Act & Assert
@@ -287,7 +287,7 @@ public class BenchmarkTests
         Assert.Equal("CommonsenseQA", new CommonsenseQABenchmark<double>().BenchmarkName);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AllBenchmarks_HaveDescriptions()
     {
         // Arrange

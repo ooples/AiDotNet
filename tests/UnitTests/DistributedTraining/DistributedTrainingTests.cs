@@ -25,7 +25,7 @@ public class DistributedTrainingTests
     /// <summary>
     /// Tests that the InMemoryCommunicationBackend correctly initializes.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InMemoryBackend_Initialize_Succeeds()
     {
         // Arrange
@@ -51,7 +51,7 @@ public class DistributedTrainingTests
     /// This simulates having 4 processes, each with a vector [1, 2, 3].
     /// After AllReduce with Sum, each should have [4, 8, 12] (sum of all 4 vectors).
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InMemoryBackend_AllReduceSum_CorrectlyCombinesValues()
     {
         // Arrange - Simulate 4 processes
@@ -106,7 +106,7 @@ public class DistributedTrainingTests
     /// This verifies gradient averaging - a crucial operation in distributed training.
     /// Each process calculates gradients, then they're averaged across all processes.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InMemoryBackend_AllReduceAverage_CorrectlyAveragesValues()
     {
         // Arrange - Simulate 4 processes with different values
@@ -161,7 +161,7 @@ public class DistributedTrainingTests
     /// AllGather is used to reconstruct full parameters from shards.
     /// Each process has a piece, AllGather gives everyone the full picture.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InMemoryBackend_AllGather_CorrectlyConcatenatesData()
     {
         // Arrange - Simulate 4 processes, each with different data
@@ -219,7 +219,7 @@ public class DistributedTrainingTests
     /// This verifies that when we create a sharded model, parameters are
     /// correctly split across processes and each process gets its fair share.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ShardedModel_ParameterSharding_DistributesCorrectly()
     {
         // Arrange - Create a simple model with known parameters
@@ -252,7 +252,7 @@ public class DistributedTrainingTests
     /// When we have many small parameter arrays, the analyzer groups them together
     /// to reduce communication overhead. This test verifies that grouping works correctly.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ParameterAnalyzer_SmallParameters_GroupsCorrectly()
     {
         // Arrange
@@ -285,7 +285,7 @@ public class DistributedTrainingTests
     /// This tests the simple one-line API for making a model distributed.
     /// It should be as easy as: myModel.AsDistributed(backend)
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AsDistributed_Extension_CreatesShardedModel()
     {
         // Arrange
@@ -319,7 +319,7 @@ public class DistributedTrainingTests
     /// NOTE: This is a simplified test. A full implementation would train an actual
     /// model through multiple iterations and compare final parameters.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DistributedTraining_NumericalEquivalence_MatchesSingleProcess()
     {
         // Arrange - Create identical models for single-process and distributed
@@ -354,7 +354,7 @@ public class DistributedTrainingTests
     /// <summary>
     /// Tests that CommunicationManager correctly initializes and manages backends.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CommunicationManager_Initialize_ManagesBackendCorrectly()
     {
         // Arrange
@@ -380,7 +380,7 @@ public class DistributedTrainingTests
     /// ShardingConfiguration has preset configurations for different scenarios
     /// (high bandwidth, low bandwidth). This tests that they're set up correctly.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ShardingConfiguration_FactoryMethods_CreateCorrectConfigurations()
     {
         // Arrange

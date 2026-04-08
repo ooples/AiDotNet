@@ -23,7 +23,7 @@ public class MpcIntegrationTests
 
     // ========== ArithmeticSecretSharing Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ArithmeticSS_ShareAndReconstruct_RecoversOriginal()
     {
         var ss = new ArithmeticSecretSharing<double>(numberOfParties: 3, seed: 42);
@@ -43,7 +43,7 @@ public class MpcIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ArithmeticSS_ShareSize_MatchesOriginal()
     {
         var ss = new ArithmeticSecretSharing<double>(numberOfParties: 3, seed: 42);
@@ -57,7 +57,7 @@ public class MpcIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ArithmeticSS_SecureAdd_ProducesCorrectResult()
     {
         var ss = new ArithmeticSecretSharing<double>(numberOfParties: 2, seed: 42);
@@ -76,7 +76,7 @@ public class MpcIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ArithmeticSS_SecureMultiply_ProducesCorrectResult()
     {
         var ss = new ArithmeticSecretSharing<double>(numberOfParties: 2, seed: 42);
@@ -95,7 +95,7 @@ public class MpcIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ArithmeticSS_ScalarMultiply_ProducesCorrectResult()
     {
         var ss = new ArithmeticSecretSharing<double>(numberOfParties: 2, seed: 42);
@@ -112,14 +112,14 @@ public class MpcIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ArithmeticSS_TooFewParties_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new ArithmeticSecretSharing<double>(numberOfParties: 1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ArithmeticSS_PreGenerateBeaverTriples_Succeeds()
     {
         var ss = new ArithmeticSecretSharing<double>(numberOfParties: 2, seed: 42);
@@ -128,7 +128,7 @@ public class MpcIntegrationTests
         ss.PreGenerateBeaverTriples(shape: new[] { 3 }, count: 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ArithmeticSS_ShareNull_Throws()
     {
         var ss = new ArithmeticSecretSharing<double>(numberOfParties: 2, seed: 42);
@@ -136,7 +136,7 @@ public class MpcIntegrationTests
         Assert.Throws<ArgumentNullException>(() => ss.Share(null, 2));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ArithmeticSS_ReconstructNull_Throws()
     {
         var ss = new ArithmeticSecretSharing<double>(numberOfParties: 2, seed: 42);
@@ -146,7 +146,7 @@ public class MpcIntegrationTests
 
     // ========== BooleanSecretSharing Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BooleanSS_ShareAndReconstruct_RecoversOriginal()
     {
         var ss = new BooleanSecretSharing(numberOfParties: 2);
@@ -161,7 +161,7 @@ public class MpcIntegrationTests
         Assert.Equal(secret, reconstructed);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BooleanSS_SecureXor_ProducesCorrectResult()
     {
         var ss = new BooleanSecretSharing(numberOfParties: 2);
@@ -180,7 +180,7 @@ public class MpcIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BooleanSS_SecureAnd_ProducesCorrectResult()
     {
         var ss = new BooleanSecretSharing(numberOfParties: 2);
@@ -201,7 +201,7 @@ public class MpcIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BooleanSS_GenerateAndTriple_ProducesValidTriple()
     {
         var ss = new BooleanSecretSharing(numberOfParties: 2);
@@ -217,14 +217,14 @@ public class MpcIntegrationTests
         Assert.Equal(2, triple.SharesW.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BooleanSS_TooFewParties_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new BooleanSecretSharing(numberOfParties: 1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BooleanSS_ShareEmptySecret_Throws()
     {
         var ss = new BooleanSecretSharing(numberOfParties: 2);
@@ -232,7 +232,7 @@ public class MpcIntegrationTests
         Assert.Throws<ArgumentException>(() => ss.Share(Array.Empty<byte>()));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BooleanSS_ShareNullSecret_Throws()
     {
         var ss = new BooleanSecretSharing(numberOfParties: 2);
@@ -242,7 +242,7 @@ public class MpcIntegrationTests
 
     // ========== BaseObliviousTransfer Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BaseOT_Transfer_ReturnsSelectedMessage()
     {
         var ot = new BaseObliviousTransfer();
@@ -258,7 +258,7 @@ public class MpcIntegrationTests
         Assert.Equal(message1, result1);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BaseOT_BatchTransfer_ReturnsCorrectMessages()
     {
         var ot = new BaseObliviousTransfer();
@@ -276,7 +276,7 @@ public class MpcIntegrationTests
 
     // ========== ExtendedObliviousTransfer Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ExtendedOT_Initialize_Succeeds()
     {
         var extOt = new ExtendedObliviousTransfer();
@@ -285,7 +285,7 @@ public class MpcIntegrationTests
         extOt.Initialize();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ExtendedOT_Transfer_Works()
     {
         var extOt = new ExtendedObliviousTransfer();
@@ -298,7 +298,7 @@ public class MpcIntegrationTests
         Assert.Equal(message1, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ExtendedOT_BatchTransfer_Works()
     {
         var extOt = new ExtendedObliviousTransfer();
@@ -317,7 +317,7 @@ public class MpcIntegrationTests
 
     // ========== GarbledCircuit Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GarbledCircuit_GarbleAndGate_ProducesValidData()
     {
         var generator = new GarbledCircuitGenerator();
@@ -336,7 +336,7 @@ public class MpcIntegrationTests
         Assert.NotNull(garbled.DecodingTable);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GarbledCircuit_EvaluateAndGate_ProducesCorrectOutput()
     {
         var generator = new GarbledCircuitGenerator();
@@ -360,7 +360,7 @@ public class MpcIntegrationTests
         Assert.Equal(1, decoded[0]); // AND(1, 1) = 1
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GarbledCircuit_EvaluateAndGate_ZeroInputs_ProducesZero()
     {
         var generator = new GarbledCircuitGenerator();
@@ -380,7 +380,7 @@ public class MpcIntegrationTests
         Assert.Equal(0, decoded[0]); // AND(0, 1) = 0
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GarbledCircuit_XorGate_ProducesCorrectOutput()
     {
         var generator = new GarbledCircuitGenerator(enableFreeXor: true);
@@ -400,7 +400,7 @@ public class MpcIntegrationTests
         Assert.Equal(1, decoded[0]); // XOR(1, 0) = 1
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GarbledCircuit_MultiGateCircuit_Works()
     {
         var generator = new GarbledCircuitGenerator();
@@ -430,7 +430,7 @@ public class MpcIntegrationTests
 
     // ========== SecureComparisonProtocol Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SecureComparison_Compare_ReturnsResult()
     {
         var ss = new ArithmeticSecretSharing<double>(numberOfParties: 2, seed: 42);
@@ -446,7 +446,7 @@ public class MpcIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SecureComparison_SecureMax_ReturnsResult()
     {
         var ss = new ArithmeticSecretSharing<double>(numberOfParties: 2, seed: 42);
@@ -463,7 +463,7 @@ public class MpcIntegrationTests
         Assert.Equal(2, maxShares.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SecureComparison_SecureMin_ReturnsResult()
     {
         var ss = new ArithmeticSecretSharing<double>(numberOfParties: 2, seed: 42);
@@ -479,7 +479,7 @@ public class MpcIntegrationTests
         Assert.NotNull(minShares);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SecureComparison_SecureNormSquared_ReturnsResult()
     {
         var ss = new ArithmeticSecretSharing<double>(numberOfParties: 2, seed: 42);
@@ -493,7 +493,7 @@ public class MpcIntegrationTests
         Assert.NotNull(normSquaredShares);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SecureComparison_NullProtocol_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
@@ -502,7 +502,7 @@ public class MpcIntegrationTests
 
     // ========== SecureClippingProtocol Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SecureClipping_ClipByNorm_ReturnsResult()
     {
         var ss = new ArithmeticSecretSharing<double>(numberOfParties: 2, seed: 42);
@@ -520,7 +520,7 @@ public class MpcIntegrationTests
         Assert.Equal(3, clipped.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SecureClipping_ClipByValue_ReturnsResult()
     {
         var ss = new ArithmeticSecretSharing<double>(numberOfParties: 2, seed: 42);
@@ -537,7 +537,7 @@ public class MpcIntegrationTests
         Assert.Equal(4, clipped.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SecureClipping_ClipMultipleClients_Works()
     {
         var ss = new ArithmeticSecretSharing<double>(numberOfParties: 2, seed: 42);
@@ -557,7 +557,7 @@ public class MpcIntegrationTests
         Assert.Equal(3, clipped.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SecureClipping_NullProtocol_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
@@ -566,7 +566,7 @@ public class MpcIntegrationTests
 
     // ========== HybridMpcProtocol Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HybridMpc_DefaultConstructor_Succeeds()
     {
         var hybrid = new HybridMpcProtocol<double>();
@@ -580,7 +580,7 @@ public class MpcIntegrationTests
         Assert.NotNull(hybrid.Clipping);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HybridMpc_WithOptions_Succeeds()
     {
         var options = new MpcOptions
@@ -595,7 +595,7 @@ public class MpcIntegrationTests
         Assert.NotNull(hybrid);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HybridMpc_SecureClipGradient_Works()
     {
         var hybrid = new HybridMpcProtocol<double>(new MpcOptions { ClippingNormThreshold = 1.0 });
@@ -611,7 +611,7 @@ public class MpcIntegrationTests
         Assert.NotNull(clipped);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HybridMpc_SecureWeightedSum_ProducesResult()
     {
         var hybrid = new HybridMpcProtocol<double>();
@@ -630,7 +630,7 @@ public class MpcIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HybridMpc_SecureClippedAggregation_EndToEnd()
     {
         var hybrid = new HybridMpcProtocol<double>(new MpcOptions { ClippingNormThreshold = 5.0 });
@@ -652,7 +652,7 @@ public class MpcIntegrationTests
 
     // ========== MpcOptions Defaults ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MpcOptions_DefaultValues()
     {
         var options = new MpcOptions();
@@ -671,13 +671,13 @@ public class MpcIntegrationTests
         Assert.Null(options.RandomSeed);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MpcProtocol_HasAllExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(MpcProtocol), MpcProtocol.AdditiveSecretSharing));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MpcSecurityModel_HasAllExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(MpcSecurityModel), MpcSecurityModel.SemiHonest));
@@ -685,7 +685,7 @@ public class MpcIntegrationTests
 
     // ========== GateType enum ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GateType_HasAllExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(GateType), GateType.And));
@@ -694,7 +694,7 @@ public class MpcIntegrationTests
         Assert.True(Enum.IsDefined(typeof(GateType), GateType.Or));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CircuitGate_DefaultValues()
     {
         var gate = new CircuitGate();

@@ -24,7 +24,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 testActual, testPredicted);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithDefaultOptions_CreatesInstance()
         {
             // Act
@@ -34,7 +34,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithCustomOptions_CreatesInstance()
         {
             // Arrange
@@ -53,7 +53,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithNullEvaluationData_ThrowsArgumentNullException()
         {
             // Arrange
@@ -63,7 +63,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Throws<ArgumentNullException>(() => detector.DetectFit(null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithSimilarTrainAndValidationMse_ReturnsGoodFit()
         {
             // Arrange
@@ -81,7 +81,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithLargeValidationMse_IndicatesPoorFit()
         {
             // Arrange
@@ -97,7 +97,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_CalculatesConfidenceLevel()
         {
             // Arrange
@@ -113,7 +113,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_GeneratesRecommendationsBasedOnFitType()
         {
             // Arrange
@@ -129,7 +129,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.All(result.Recommendations, r => Assert.False(string.IsNullOrWhiteSpace(r)));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ResultContainsAllRequiredFields()
         {
             // Arrange
@@ -146,7 +146,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result.AdditionalInfo);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_IncludesLossInfoInAdditionalInfo()
         {
             // Arrange
@@ -165,7 +165,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.AdditionalInfo.ContainsKey("OverfittingScore"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithCustomThresholds_UsesThresholdsCorrectly()
         {
             // Arrange
@@ -186,7 +186,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithModerateFit_ReturnsModerate()
         {
             // Arrange

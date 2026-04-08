@@ -27,7 +27,7 @@ public class SpecializedCausalDiscoveryTests
 
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GOBNILP_FindsCausalStructure()
     {
         var algo = new GOBNILPAlgorithm<double>();

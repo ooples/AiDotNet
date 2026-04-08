@@ -136,7 +136,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region FGSM Mathematical Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FGSM_PerturbationMagnitude_ExactlyEpsilonPerDimension()
     {
         // FGSM formula: x_adv = clip(x + epsilon * sign(grad), 0, 1)
@@ -169,7 +169,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FGSM_Output_ClippedToZeroOne()
     {
         // FGSM clips output to [0, 1]
@@ -198,7 +198,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FGSM_TargetedNegation_VerifyWithSameGradientClass()
     {
         // When untargeted (trueClass=0) and targeted (targetClass=0) use the SAME class
@@ -248,7 +248,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.True(oppositeCount > 0, "No dimensions showed opposite perturbation directions");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FGSM_CalculatePerturbation_EqualsAdversarialMinusOriginal()
     {
         // CalculatePerturbation should return adversarial - original exactly
@@ -272,7 +272,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FGSM_LinfPerturbation_AllDimensionsWithinEpsilon()
     {
         // The L-infinity norm of the perturbation should be <= epsilon
@@ -308,7 +308,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region PGD Mathematical Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PGD_Iterative_PerturbationGrowsWithIterations()
     {
         // PGD with more iterations should potentially create larger perturbation
@@ -345,7 +345,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
             $"5-iter L2 norm {norm5} < 1-iter L2 norm {norm1}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PGD_LinfProjection_EachDimensionClampedToEpsilon()
     {
         // After PGD, each dimension's perturbation should be <= epsilon (L-inf projection)
@@ -377,7 +377,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PGD_L2Projection_TotalNormBoundedByEpsilon()
     {
         // After PGD with L2 norm, total L2 perturbation should be <= epsilon
@@ -413,7 +413,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
             $"L2 perturbation norm {l2Norm} exceeds epsilon {epsilon}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PGD_OutputAlwaysInValidRange()
     {
         // PGD output should always be clipped to [0, 1]
@@ -445,7 +445,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PGD_ZeroIterations_ReturnsStartingPoint()
     {
         // With 0 iterations, PGD should return the starting point
@@ -473,7 +473,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PGD_StepSizeAffectsConvergenceRate()
     {
         // Larger step size should potentially create larger perturbation per iteration
@@ -513,7 +513,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region CW Attack Mathematical Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CW_TanhTransform_MapsToZeroOneRange()
     {
         // CW uses x = (tanh(w) + 1) / 2 to map from (-inf, inf) to (0, 1)
@@ -534,7 +534,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(0.5, xAtZero, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CW_TanhInverse_ConsistentWithForward()
     {
         // atanh(2x - 1) should be the inverse of (tanh(w) + 1) / 2
@@ -547,7 +547,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CW_AttackLoss_HandComputed()
     {
         // CW attack loss for untargeted: max(max_other_logit - true_logit, 0)
@@ -566,7 +566,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(1.0, attackLoss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CW_AttackLoss_ZeroWhenCorrectlyClassified()
     {
         // If true class has highest logit, attack loss should be 0
@@ -579,7 +579,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(0.0, attackLoss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CW_ObjectiveFunction_HandComputed()
     {
         // CW objective: ||x_adv - x_orig||^2 + c * attack_loss
@@ -598,7 +598,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(1.05, objective, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CW_GeneratesAdversarial_WithinBounds()
     {
         // CW should produce output in [0, 1] due to tanh parameterization
@@ -627,7 +627,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CW_TargetedAttackLoss_HandComputed()
     {
         // Targeted CW loss: max(max_other_logit - target_logit, 0)
@@ -644,7 +644,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region Randomized Smoothing Certified Radius
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomizedSmoothing_CertifiedRadius_Formula()
     {
         // R = sigma * Phi^(-1)(pA)
@@ -660,7 +660,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(0.4207, expectedRadius, 2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomizedSmoothing_CertifiedRadius_ZeroWhenPABelowHalf()
     {
         // When pA <= 0.5, Phi^(-1)(pA) <= 0, so R = 0 (no certification possible)
@@ -674,7 +674,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(0.0, radius, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomizedSmoothing_CertifiedRadius_ScalesLinearly_WithSigma()
     {
         // R = sigma * Phi^(-1)(pA), so doubling sigma doubles R
@@ -689,7 +689,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(r1 * 2, r2, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomizedSmoothing_CertifiedRadius_IncreasesWithConfidence()
     {
         // Higher pA (more confident) -> higher certified radius
@@ -707,7 +707,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
             $"Higher pA should give larger radius: {r_high} vs {r_low}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomizedSmoothing_InverseNormalCDF_KnownValues()
     {
         // Verify Phi^(-1) at known quantiles:
@@ -724,7 +724,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(2.576, inv_0995, 0.02);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomizedSmoothing_Certify_ProducesCertifiedRadius()
     {
         // End-to-end: certify a prediction and verify radius properties
@@ -761,7 +761,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
             $"Confidence {prediction.Confidence} should be > 0.5 for strong model");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomizedSmoothing_LargerSigma_LargerRadius_ButLowerAccuracy()
     {
         // Property: larger sigma gives potentially larger certified radius
@@ -797,7 +797,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.True(predLarge.CertifiedRadius >= 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomizedSmoothing_ConfidenceBounds_Consistent()
     {
         // Lower bound <= point estimate <= upper bound
@@ -826,7 +826,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region Cross-Entropy Loss Computation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossEntropy_HandComputed_ThreeClasses()
     {
         // Softmax of logits [2.0, 1.0, 0.1]:
@@ -848,7 +848,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(0.4170, crossEntropy, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossEntropy_PerfectPrediction_ZeroLoss()
     {
         // If probability of true class = 1.0, loss = -log(1.0) = 0
@@ -856,7 +856,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossEntropy_UniformPrediction_LogK()
     {
         // For uniform distribution over K classes, loss = -log(1/K) = log(K)
@@ -866,7 +866,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(Math.Log(K), loss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Softmax_Stability_ShiftByMaxLogit()
     {
         // Softmax(z) = softmax(z - max(z))
@@ -893,7 +893,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region Norm and Projection Mathematics
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2Norm_HandComputed()
     {
         // ||[3, 4]||_2 = sqrt(9 + 16) = sqrt(25) = 5
@@ -902,7 +902,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(5.0, norm, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LInfNorm_HandComputed()
     {
         // ||[3, -4, 2]||_inf = max(|3|, |-4|, |2|) = 4
@@ -911,7 +911,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(4.0, norm, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2Projection_InsideBall_NoChange()
     {
         // If ||perturbation||_2 <= epsilon, projection is identity
@@ -927,7 +927,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(perturbation[1], projected[1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2Projection_OutsideBall_ScalesDown()
     {
         // If ||perturbation||_2 > epsilon, scale by epsilon / ||perturbation||
@@ -948,7 +948,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(epsilon, projectedNorm, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinfProjection_ClampsEachDimension()
     {
         // L-inf projection: clamp each dimension to [-epsilon, epsilon]
@@ -963,7 +963,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(-0.3, projected[3], Tolerance); // clamped from -0.8
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SignFunction_ReturnsCorrectSigns()
     {
         // sign(x) = -1 if x < 0, 0 if x == 0, +1 if x > 0
@@ -978,7 +978,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region Finite Difference Gradient Approximation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FiniteDifference_ApproximatesDerivative()
     {
         // For f(x) = x^2, f'(x) = 2x
@@ -993,7 +993,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(exactDerivative, approxDerivative, 2); // 2 decimal places
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FiniteDifference_ForSoftmaxCrossEntropy()
     {
         // For softmax cross-entropy loss with respect to input:
@@ -1019,7 +1019,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region Attack Comparison Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FGSM_SingleStep_PGD_OneIteration_Equivalent()
     {
         // PGD with 1 iteration and step_size = epsilon should be equivalent to FGSM
@@ -1050,7 +1050,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PGD_StrongerThanFGSM_WithMultipleIterations()
     {
         // PGD with many iterations should produce perturbation at least as large as FGSM
@@ -1086,7 +1086,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
             $"PGD L2^2 norm {pgdNorm} < FGSM L2^2 norm {fgsmNorm}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllAttacks_Deterministic_WithSameSeed()
     {
         // Same seed should produce same result
@@ -1116,7 +1116,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region Softmax and Argmax Helper Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Softmax_SumsToOne()
     {
         double[] logits = { 1.0, 2.0, 3.0, 4.0 };
@@ -1124,7 +1124,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(1.0, probs.Sum(), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Softmax_PreservesOrdering()
     {
         double[] logits = { 1.0, 3.0, 2.0 };
@@ -1134,7 +1134,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.True(probs[2] > probs[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Softmax_HandComputed_TwoClasses()
     {
         // softmax([1, 2]) = [exp(1)/(exp(1)+exp(2)), exp(2)/(exp(1)+exp(2))]
@@ -1146,7 +1146,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.Equal(0.7311, probs[1], 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Argmax_ReturnsCorrectIndex()
     {
         double[] values = { 0.1, 0.7, 0.2 };
@@ -1161,7 +1161,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
     #region Clopper-Pearson Confidence Interval
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ClopperPearson_HandComputed_Properties()
     {
         // Clopper-Pearson interval should contain the point estimate
@@ -1183,7 +1183,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         Assert.True(upper <= 1, $"Upper bound {upper} > 1");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ClopperPearson_NarrowsWithMoreSamples()
     {
         // More samples -> narrower confidence interval
@@ -1199,7 +1199,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
             $"Width with 500 samples ({width500}) not narrower than 50 samples ({width50})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ClopperPearson_SymmetricForHalf()
     {
         // For p_hat = 0.5, interval should be approximately symmetric

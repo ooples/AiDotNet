@@ -14,7 +14,7 @@ public class DataCollationIntegrationTests
 
     #region DefaultCollateFunction
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DefaultCollate_StacksSameSizeSamples()
     {
         var collate = new DefaultCollateFunction<double>();
@@ -32,7 +32,7 @@ public class DataCollationIntegrationTests
         Assert.Equal(6.0, batch[1, 2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DefaultCollate_2DSamples_StacksCorrectly()
     {
         var collate = new DefaultCollateFunction<double>();
@@ -47,7 +47,7 @@ public class DataCollationIntegrationTests
         Assert.Equal(new[] { 2, 2, 2 }, batch.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DefaultCollate_SingleSample_Works()
     {
         var collate = new DefaultCollateFunction<double>();
@@ -62,7 +62,7 @@ public class DataCollationIntegrationTests
         Assert.Equal(1.0, batch[0, 0], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DefaultCollate_EmptyList_Throws()
     {
         var collate = new DefaultCollateFunction<double>();
@@ -70,7 +70,7 @@ public class DataCollationIntegrationTests
             collate.Collate(new List<Tensor<double>>()));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DefaultCollate_MismatchedRanks_Throws()
     {
         var collate = new DefaultCollateFunction<double>();
@@ -83,7 +83,7 @@ public class DataCollationIntegrationTests
         Assert.Throws<ArgumentException>(() => collate.Collate(samples));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DefaultCollate_MismatchedShapes_Throws()
     {
         var collate = new DefaultCollateFunction<double>();
@@ -100,7 +100,7 @@ public class DataCollationIntegrationTests
 
     #region PaddingCollateFunction
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PaddingCollate_PadsToMaxLength()
     {
         var collate = new PaddingCollateFunction<double>();
@@ -122,7 +122,7 @@ public class DataCollationIntegrationTests
         Assert.Equal(8.0, batch[1, 4], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PaddingCollate_WithCustomPadValue()
     {
         var collate = new PaddingCollateFunction<double>(-1.0);
@@ -139,7 +139,7 @@ public class DataCollationIntegrationTests
         Assert.Equal(-1.0, batch[0, 3], Tolerance); // custom pad
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PaddingCollate_WithMaxLength_Truncates()
     {
         var collate = new PaddingCollateFunction<double>(maxLength: 3);
@@ -157,7 +157,7 @@ public class DataCollationIntegrationTests
         Assert.Equal(3.0, batch[0, 2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PaddingCollate_SameLengthSamples_NoPadding()
     {
         var collate = new PaddingCollateFunction<double>();
@@ -174,7 +174,7 @@ public class DataCollationIntegrationTests
         Assert.Equal(6.0, batch[1, 2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PaddingCollate_EmptyList_Throws()
     {
         var collate = new PaddingCollateFunction<double>();
@@ -186,7 +186,7 @@ public class DataCollationIntegrationTests
 
     #region PackedSequenceCollateFunction
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PackedSequence_PacksSequences()
     {
         var collate = new PackedSequenceCollateFunction<double>();
@@ -207,7 +207,7 @@ public class DataCollationIntegrationTests
         Assert.Equal(2, batch.Lengths[2]); // shortest last
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PackedSequence_SortedIndices_MapCorrectly()
     {
         var collate = new PackedSequenceCollateFunction<double>();
@@ -226,7 +226,7 @@ public class DataCollationIntegrationTests
         Assert.Equal(0, batch.SortedIndices[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PackedSequence_WithoutSort_PreservesOrder()
     {
         var collate = new PackedSequenceCollateFunction<double>(sortByLength: false);
@@ -244,7 +244,7 @@ public class DataCollationIntegrationTests
         Assert.Equal(4, batch.Lengths[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PackedSequence_EmptyList_Throws()
     {
         var collate = new PackedSequenceCollateFunction<double>();
@@ -252,7 +252,7 @@ public class DataCollationIntegrationTests
             collate.Collate(new List<Tensor<double>>()));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PackedSequence_SingleSample_Works()
     {
         var collate = new PackedSequenceCollateFunction<double>();
@@ -272,7 +272,7 @@ public class DataCollationIntegrationTests
 
     #region PackedSequenceBatch
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PackedSequenceBatch_Properties()
     {
         var data = new Tensor<double>(new[] { 6 }, new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 }));

@@ -10,14 +10,14 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
 {
     public class IVFIndexTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullMetric_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() => new IVFIndex<double>(null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNegativeNumClusters_ThrowsArgumentException()
         {
             // Arrange
@@ -27,7 +27,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => new IVFIndex<double>(metric, numClusters: -1));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithZeroNumClusters_ThrowsArgumentException()
         {
             // Arrange
@@ -37,7 +37,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => new IVFIndex<double>(metric, numClusters: 0));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNegativeNumProbes_ThrowsArgumentException()
         {
             // Arrange
@@ -47,7 +47,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Throws<ArgumentException>(() => new IVFIndex<double>(metric, numClusters: 10, numProbes: -1));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Add_WithValidVector_IncreasesCount()
         {
             // Arrange
@@ -62,7 +62,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(1, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddBatch_WithValidVectors_IncreasesCount()
         {
             // Arrange
@@ -82,7 +82,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(3, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_WithCosineSimilarity_ReturnsApproximateResults()
         {
             // Arrange
@@ -105,7 +105,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.True(results.Count <= 2);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_OnEmptyIndex_ReturnsEmptyList()
         {
             // Arrange
@@ -120,7 +120,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Empty(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_WithMultipleProbes_ImproveRecall()
         {
             // Arrange
@@ -151,7 +151,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.True(resultsMulti.Count >= resultsSingle.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Remove_WithExistingId_RemovesVectorAndReturnsTrue()
         {
             // Arrange
@@ -167,7 +167,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(0, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Remove_WithNonExistingId_ReturnsFalse()
         {
             // Arrange
@@ -183,7 +183,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(1, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Clear_RemovesAllVectors()
         {
             // Arrange
@@ -200,7 +200,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.Equal(0, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_WithEuclideanDistance_WorksCorrectly()
         {
             // Arrange
@@ -220,7 +220,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.NotEmpty(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void IndexRebuilds_AfterAddingVectors()
         {
             // Arrange
@@ -245,7 +245,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.NotEmpty(results2);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_WithFewerClustersThanVectors_WorksCorrectly()
         {
             // Arrange
@@ -269,7 +269,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.True(results.Count <= 5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Search_WithMoreClustersThanVectors_WorksCorrectly()
         {
             // Arrange
@@ -292,7 +292,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.NotEmpty(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Index_WithHighDimensionalVectors_WorksCorrectly()
         {
             // Arrange

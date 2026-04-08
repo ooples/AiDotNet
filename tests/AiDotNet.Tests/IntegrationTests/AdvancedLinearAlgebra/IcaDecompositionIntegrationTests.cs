@@ -94,7 +94,7 @@ public class IcaDecompositionIntegrationTests
         Assert.Equal(samples, ica.IndependentComponents.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IcaDecomposition_DefaultComponents_UsesMinDimension()
     {
         // Arrange
@@ -122,7 +122,7 @@ public class IcaDecompositionIntegrationTests
         Assert.Equal(features, ica.Mean.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IcaDecomposition_WhiteningMatrix_HasCorrectDimensions()
     {
         // Arrange
@@ -143,7 +143,7 @@ public class IcaDecompositionIntegrationTests
 
     #region Unmixing Matrix Properties Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IcaDecomposition_UnmixingMatrix_RowsAreApproximatelyOrthogonal()
     {
         // Arrange
@@ -170,7 +170,7 @@ public class IcaDecompositionIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IcaDecomposition_NoNaNOrInfinity_InMatrices()
     {
         // Arrange
@@ -208,7 +208,7 @@ public class IcaDecompositionIntegrationTests
 
     #region Transform Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IcaDecomposition_Transform_ProducesCorrectDimensions()
     {
         // Arrange
@@ -224,7 +224,7 @@ public class IcaDecompositionIntegrationTests
         Assert.Equal(3, transformed.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IcaDecomposition_Transform_WrongDimensions_ThrowsArgumentException()
     {
         // Arrange
@@ -240,7 +240,7 @@ public class IcaDecompositionIntegrationTests
 
     #region Error Handling Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IcaDecomposition_ZeroComponents_ThrowsArgumentException()
     {
         // Arrange
@@ -250,7 +250,7 @@ public class IcaDecompositionIntegrationTests
         Assert.Throws<ArgumentException>(() => new IcaDecomposition<double>(X, 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IcaDecomposition_TooManyComponents_ThrowsArgumentException()
     {
         // Arrange
@@ -260,7 +260,7 @@ public class IcaDecompositionIntegrationTests
         Assert.Throws<ArgumentException>(() => new IcaDecomposition<double>(X, 10));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IcaDecomposition_NegativeComponents_ThrowsArgumentException()
     {
         // Arrange
@@ -280,7 +280,7 @@ public class IcaDecompositionIntegrationTests
 
     #region Convergence Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IcaDecomposition_VaryingIterations_ProducesValidResults()
     {
         // Arrange
@@ -295,7 +295,7 @@ public class IcaDecompositionIntegrationTests
         Assert.False(double.IsNaN(FrobeniusNorm(icaMany.UnmixingMatrix)));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IcaDecomposition_TightTolerance_StillConverges()
     {
         // Arrange
@@ -313,7 +313,7 @@ public class IcaDecompositionIntegrationTests
 
     #region Independent Components Properties Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IcaDecomposition_IndependentComponents_HaveFiniteValues()
     {
         // Arrange
@@ -335,7 +335,7 @@ public class IcaDecompositionIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IcaDecomposition_IndependentComponents_AreApproximatelyUncorrelated()
     {
         // Arrange

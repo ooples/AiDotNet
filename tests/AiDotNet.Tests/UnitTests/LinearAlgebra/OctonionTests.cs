@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.UnitTests.LinearAlgebra;
 
 public class OctonionTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Addition_AddsComponents()
     {
         var a = new Octonion<double>(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0);
@@ -23,7 +23,7 @@ public class OctonionTests
         Assert.Equal(9.5, sum.E7, precision: 12);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Multiplication_UsesStandardBasisRules()
     {
         var e1 = new Octonion<double>(0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
@@ -34,7 +34,7 @@ public class OctonionTests
         AssertOctonionClose(e2 * e1, new Octonion<double>(0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0), 12);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Multiplication_IsNotAssociative()
     {
         var e1 = new Octonion<double>(0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
@@ -47,7 +47,7 @@ public class OctonionTests
         Assert.False(left.Equals(right));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Conjugate_ProductIsScalarNormSquared()
     {
         var value = new Octonion<double>(1.5, -2.0, 0.5, 0.0, 1.0, -0.25, 0.0, 2.0);
@@ -64,7 +64,7 @@ public class OctonionTests
         Assert.Equal(0.0, product.E7, precision: 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Inverse_MultipliesToIdentity()
     {
         var value = new Octonion<double>(2.0, -1.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0);

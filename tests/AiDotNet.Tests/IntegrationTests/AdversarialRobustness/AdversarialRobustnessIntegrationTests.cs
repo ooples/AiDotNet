@@ -62,7 +62,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region FGSM Attack Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FGSMAttack_GeneratesAdversarialExample_WithinEpsilonBound()
     {
         // Arrange
@@ -92,7 +92,7 @@ public class AdversarialRobustnessIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FGSMAttack_GenerateBatch_ProcessesMultipleInputs()
     {
         // Arrange
@@ -115,7 +115,7 @@ public class AdversarialRobustnessIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FGSMAttack_CalculatePerturbation_ReturnsValidPerturbation()
     {
         // Arrange
@@ -136,7 +136,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(input.Length, perturbation.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FGSMAttack_Targeted_GeneratesAdversarialTowardTarget()
     {
         // Arrange
@@ -159,7 +159,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(adversarial);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FGSMAttack_GetOptions_ReturnsConfiguredOptions()
     {
         // Arrange
@@ -179,7 +179,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(0.02, retrievedOptions.StepSize, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FGSMAttack_SerializationRoundTrip_PreservesOptions()
     {
         // Arrange
@@ -197,7 +197,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(0.15, newOptions.Epsilon, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FGSMAttack_ThrowsOnNullInput()
     {
         // Arrange
@@ -211,7 +211,7 @@ public class AdversarialRobustnessIntegrationTests
             attack.GenerateAdversarialExample(null!, label, model));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FGSMAttack_ThrowsOnNullLabel()
     {
         // Arrange
@@ -225,7 +225,7 @@ public class AdversarialRobustnessIntegrationTests
             attack.GenerateAdversarialExample(input, null!, model));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FGSMAttack_ThrowsOnNullModel()
     {
         // Arrange
@@ -243,7 +243,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region PGD Attack Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PGDAttack_GeneratesAdversarialExample_WithinEpsilonBound()
     {
         // Arrange
@@ -272,7 +272,7 @@ public class AdversarialRobustnessIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PGDAttack_WithRandomStart_GeneratesDifferentAdversarials()
     {
         // Arrange
@@ -300,7 +300,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(adv2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PGDAttack_MultipleIterations_ImprovesAttack()
     {
         // Arrange
@@ -333,7 +333,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(adv10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PGDAttack_Reset_ReturnsToInitialState()
     {
         // Arrange
@@ -356,7 +356,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region CW Attack Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CWAttack_GeneratesAdversarialExample()
     {
         // Arrange
@@ -379,7 +379,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(input.Length, adversarial.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CWAttack_CalculatePerturbation_MinimizesL2Norm()
     {
         // Arrange
@@ -416,7 +416,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(l2Norm >= 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CWAttack_Targeted_AttemptsToMisclassifyToTarget()
     {
         // Arrange
@@ -444,7 +444,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region AutoAttack Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AutoAttack_CombinesMultipleAttacks()
     {
         // Arrange
@@ -466,7 +466,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(input.Length, adversarial.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AutoAttack_GetOptions_ReturnsConfiguredOptions()
     {
         // Arrange
@@ -488,7 +488,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region Adversarial Training Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdversarialTraining_ApplyDefense_ReturnsModel()
     {
         // Arrange
@@ -509,7 +509,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(defendedModel);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdversarialTraining_WithPreprocessing_AppliesInputPreprocessing()
     {
         // Arrange
@@ -530,7 +530,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(input.Length, preprocessed.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdversarialTraining_PreprocessingMethods_AllSupported()
     {
         // Test different preprocessing methods
@@ -556,7 +556,7 @@ public class AdversarialRobustnessIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdversarialTraining_EvaluateRobustness_ReturnsMetrics()
     {
         // Arrange
@@ -578,7 +578,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.InRange(metrics.AdversarialAccuracy, 0.0, 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdversarialTraining_SerializationRoundTrip_PreservesState()
     {
         // Arrange
@@ -601,7 +601,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(0.15, newOptions.Epsilon, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdversarialTraining_ThrowsOnNullTrainingData()
     {
         // Arrange
@@ -615,7 +615,7 @@ public class AdversarialRobustnessIntegrationTests
             defense.ApplyDefense(null!, labels, model));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdversarialTraining_ThrowsOnMismatchedDataLabelCount()
     {
         // Arrange
@@ -634,7 +634,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region Randomized Smoothing Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomizedSmoothing_CertifyPrediction_ReturnsCertifiedPrediction()
     {
         // Arrange
@@ -658,7 +658,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.InRange(prediction.Confidence, 0.0, 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomizedSmoothing_CertifyBatch_ProcessesMultipleInputs()
     {
         // Arrange
@@ -684,7 +684,7 @@ public class AdversarialRobustnessIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomizedSmoothing_ComputeCertifiedRadius_ReturnsNonNegativeRadius()
     {
         // Arrange
@@ -705,7 +705,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(radius >= 0, "Certified radius should be non-negative");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomizedSmoothing_EvaluateCertifiedAccuracy_ReturnsValidMetrics()
     {
         // Arrange
@@ -730,7 +730,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.InRange(metrics.CertificationRate, 0.0, 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomizedSmoothing_HigherSigma_ProducesLargerRadius()
     {
         // Arrange
@@ -761,7 +761,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(predHigh);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomizedSmoothing_SerializationRoundTrip_PreservesOptions()
     {
         // Arrange
@@ -785,7 +785,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(200, newOptions.NumSamples);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomizedSmoothing_ThrowsOnNullInput()
     {
         // Arrange
@@ -798,7 +798,7 @@ public class AdversarialRobustnessIntegrationTests
             smoothing.CertifyPrediction(null!, model));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomizedSmoothing_ThrowsOnNullModel()
     {
         // Arrange
@@ -815,7 +815,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region Interval Bound Propagation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntervalBoundPropagation_CertifyPrediction_ReturnsCertifiedPrediction()
     {
         // Arrange
@@ -837,7 +837,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(prediction.PredictedClass >= 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntervalBoundPropagation_DefaultConstructor_Works()
     {
         // Arrange & Act
@@ -849,7 +849,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal("IBP", options.CertificationMethod);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntervalBoundPropagation_CertifyBatch_ProcessesMultipleInputs()
     {
         // Arrange
@@ -871,7 +871,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(2, predictions.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntervalBoundPropagation_ComputeCertifiedRadius_ReturnsNonNegative()
     {
         // Arrange
@@ -892,7 +892,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(radius >= 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntervalBoundPropagation_EvaluateCertifiedAccuracy_ReturnsMetrics()
     {
         // Arrange
@@ -916,7 +916,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.InRange(metrics.CertifiedAccuracy, 0.0, 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntervalBoundPropagation_Reset_ResetsToDefaults()
     {
         // Arrange
@@ -931,7 +931,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal("IBP", newOptions.CertificationMethod);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntervalBoundPropagation_SerializationRoundTrip_PreservesOptions()
     {
         // Arrange
@@ -954,7 +954,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(100, newOptions.NumSamples);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntervalBoundPropagation_ThrowsOnMismatchedDataLabelCount()
     {
         // Arrange
@@ -973,7 +973,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region CROWN Verification Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CROWNVerification_CertifyPrediction_ReturnsCertifiedPrediction()
     {
         // Arrange
@@ -995,7 +995,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(prediction.PredictedClass >= 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CROWNVerification_DefaultConstructor_SetsCROWNMethod()
     {
         // Arrange & Act
@@ -1008,7 +1008,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(options.UseTightBounds);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CROWNVerification_CertifyBatch_ProcessesMultipleInputs()
     {
         // Arrange
@@ -1030,7 +1030,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(2, predictions.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CROWNVerification_ProducesTighterBoundsThanIBP()
     {
         // Note: This is a theoretical property - CROWN should produce tighter bounds
@@ -1057,7 +1057,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(ibpPred);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CROWNVerification_SerializationRoundTrip_PreservesOptions()
     {
         // Arrange
@@ -1080,7 +1080,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(75, newOptions.NumSamples);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CROWNVerification_Reset_ResetsToDefaults()
     {
         // Arrange
@@ -1100,7 +1100,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region Safety Filter Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SafetyFilter_ValidateInput_ReturnsValidResult()
     {
         // Arrange
@@ -1121,7 +1121,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.InRange(result.SafetyScore, 0.0, 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SafetyFilter_ValidateInput_DetectsLengthExceeded()
     {
         // Arrange
@@ -1143,7 +1143,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Contains(result.Issues, i => i.Type == "LengthExceeded");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SafetyFilter_ValidateInput_DetectsNaNValues()
     {
         // Arrange
@@ -1169,7 +1169,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Contains(result.Issues, i => i.Type == "InvalidValue");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SafetyFilter_ValidateInput_DetectsInfinityValues()
     {
         // Arrange
@@ -1194,7 +1194,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Contains(result.Issues, i => i.Type == "InvalidValue");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SafetyFilter_FilterOutput_ReturnsFilteredResult()
     {
         // Arrange
@@ -1214,7 +1214,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(result.FilteredOutput);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SafetyFilter_DetectJailbreak_ReturnsResult()
     {
         // Arrange
@@ -1230,7 +1230,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(result.Indicators);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SafetyFilter_IdentifyHarmfulContent_ReturnsResult()
     {
         // Arrange
@@ -1249,7 +1249,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(result.CategoryScores);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SafetyFilter_ComputeSafetyScore_ReturnsValidScore()
     {
         // Arrange
@@ -1267,7 +1267,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.InRange(score, 0.0, 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SafetyFilter_SerializationRoundTrip_PreservesOptions()
     {
         // Arrange
@@ -1290,7 +1290,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(newOptions.EnableOutputFiltering);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SafetyFilter_DisabledValidation_BypassesChecks()
     {
         // Arrange
@@ -1309,7 +1309,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(result.IsValid); // Bypassed due to disabled validation
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SafetyFilter_ThrowsOnNullInput()
     {
         // Arrange
@@ -1320,7 +1320,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Throws<ArgumentNullException>(() => filter.ValidateInput(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SafetyFilter_ThrowsOnNullOutput()
     {
         // Arrange
@@ -1335,7 +1335,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region Rule-Based Content Classifier Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RuleBasedContentClassifier_ClassifyText_ReturnsResult()
     {
         // Arrange
@@ -1350,7 +1350,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(result.PrimaryCategory);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RuleBasedContentClassifier_ClassifyText_DetectsViolence()
     {
         // Arrange
@@ -1366,7 +1366,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Contains("Violence", result.DetectedCategories);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RuleBasedContentClassifier_ClassifyText_EmptyText_ReturnsSafe()
     {
         // Arrange
@@ -1382,7 +1382,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal("Safe", result.PrimaryCategory);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RuleBasedContentClassifier_ClassifyVector_ReturnsResult()
     {
         // Arrange
@@ -1398,7 +1398,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.False(result.IsHarmful);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RuleBasedContentClassifier_IsReady_ReturnsTrue()
     {
         // Arrange
@@ -1408,7 +1408,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(classifier.IsReady());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RuleBasedContentClassifier_AddPattern_AddsNewPattern()
     {
         // Arrange
@@ -1421,7 +1421,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Contains("CustomCategory", classifier.GetSupportedCategories());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RuleBasedContentClassifier_ClearCategory_RemovesPatterns()
     {
         // Arrange
@@ -1436,7 +1436,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RuleBasedContentClassifier_CustomPatterns_WorkCorrectly()
     {
         // Arrange
@@ -1455,7 +1455,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Contains("Custom", result.DetectedCategories);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RuleBasedContentClassifier_SerializationRoundTrip_PreservesState()
     {
         // Arrange
@@ -1472,7 +1472,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Contains("TestCategory", newClassifier.GetSupportedCategories());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RuleBasedContentClassifier_ThrowsOnNullVector()
     {
         // Arrange
@@ -1482,7 +1482,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Throws<ArgumentNullException>(() => classifier.Classify(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RuleBasedContentClassifier_ThrowsOnEmptyCategory()
     {
         // Arrange
@@ -1492,7 +1492,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Throws<ArgumentException>(() => classifier.AddPattern("", @"\btest\b"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RuleBasedContentClassifier_ThrowsOnEmptyPattern()
     {
         // Arrange
@@ -1506,7 +1506,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region Integration Scenarios
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntegrationScenario_AttackThenDefense_WorksTogether()
     {
         // Arrange
@@ -1535,7 +1535,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(input.Length, preprocessed.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntegrationScenario_CertificationAfterDefense_WorksTogether()
     {
         // Arrange
@@ -1564,7 +1564,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(certification);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntegrationScenario_SafetyFilterWithCertification_WorksTogether()
     {
         // Arrange
@@ -1601,7 +1601,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(certification);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntegrationScenario_MultipleAttackComparison()
     {
         // Arrange
@@ -1638,7 +1638,7 @@ public class AdversarialRobustnessIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntegrationScenario_CertificationMethodComparison()
     {
         // Arrange
@@ -1676,7 +1676,7 @@ public class AdversarialRobustnessIntegrationTests
 
     #region Edge Cases and Error Handling
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EdgeCase_EmptyInput_HandledGracefully()
     {
         // Arrange
@@ -1692,7 +1692,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(result.IsValid); // Empty but valid
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EdgeCase_VerySmallEpsilon_StillWorks()
     {
         // Arrange
@@ -1718,7 +1718,7 @@ public class AdversarialRobustnessIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EdgeCase_ZeroIterations_HandledGracefully()
     {
         // Some implementations may handle 0 iterations by returning the original input
@@ -1741,7 +1741,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.NotNull(adversarial);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EdgeCase_SingleElementInput_HandledCorrectly()
     {
         // Arrange
@@ -1759,7 +1759,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Single(adversarial.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EdgeCase_LargeInput_HandledEfficiently()
     {
         // Arrange
@@ -1777,7 +1777,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.Equal(1000, adversarial.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EdgeCase_AllZeroInput_HandledCorrectly()
     {
         // Arrange
@@ -1799,7 +1799,7 @@ public class AdversarialRobustnessIntegrationTests
         Assert.True(prediction.PredictedClass >= 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EdgeCase_AllOnesInput_HandledCorrectly()
     {
         // Arrange

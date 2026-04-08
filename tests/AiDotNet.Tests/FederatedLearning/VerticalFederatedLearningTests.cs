@@ -38,7 +38,7 @@ public class VerticalFederatedLearningTests
 
     // ========== VerticalDataPartitioner Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DataPartitioner_PartitionSequential_SplitsEvenly()
     {
         var partitions = VerticalDataPartitioner<double>.PartitionSequential(
@@ -55,7 +55,7 @@ public class VerticalFederatedLearningTests
         Assert.Equal(9, partitions[1][4]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DataPartitioner_PartitionSequential_HandlesUnevenSplit()
     {
         var partitions = VerticalDataPartitioner<double>.PartitionSequential(
@@ -67,21 +67,21 @@ public class VerticalFederatedLearningTests
         Assert.Equal(7, totalAssigned);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DataPartitioner_PartitionSequential_ZeroFeatures_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             VerticalDataPartitioner<double>.PartitionSequential(0, 2));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DataPartitioner_PartitionSequential_ZeroParties_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             VerticalDataPartitioner<double>.PartitionSequential(10, 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DataPartitioner_PartitionInterleaved_AlternatesColumns()
     {
         var partitions = VerticalDataPartitioner<double>.PartitionInterleaved(
@@ -100,7 +100,7 @@ public class VerticalFederatedLearningTests
 
     // ========== SplitNeuralNetwork Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SplitNN_Constructor_WithDefaults_Succeeds()
     {
         var splitNN = new SplitNeuralNetwork<double>(
@@ -111,7 +111,7 @@ public class VerticalFederatedLearningTests
         Assert.NotNull(splitNN);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SplitNN_Constructor_WithOptions_Succeeds()
     {
         var splitOptions = new SplitModelOptions
@@ -130,7 +130,7 @@ public class VerticalFederatedLearningTests
         Assert.NotNull(splitNN);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SplitNN_AggregateAndForward_ProducesOutput()
     {
         var splitNN = new SplitNeuralNetwork<double>(
@@ -154,7 +154,7 @@ public class VerticalFederatedLearningTests
 
     // ========== SecureGradientExchange Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SecureGradientExchange_Constructor_WithEncryption_Succeeds()
     {
         var exchange = new SecureGradientExchange<double>(useEncryption: true, seed: 42);
@@ -162,7 +162,7 @@ public class VerticalFederatedLearningTests
         Assert.NotNull(exchange);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SecureGradientExchange_Constructor_WithoutEncryption_Succeeds()
     {
         var exchange = new SecureGradientExchange<double>(useEncryption: false);
@@ -170,7 +170,7 @@ public class VerticalFederatedLearningTests
         Assert.NotNull(exchange);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SecureGradientExchange_ProtectAndRecover_RoundTrips()
     {
         var exchange = new SecureGradientExchange<double>(useEncryption: true, seed: 42);
@@ -193,7 +193,7 @@ public class VerticalFederatedLearningTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SecureGradientExchange_NoEncryption_PassesThrough()
     {
         var exchange = new SecureGradientExchange<double>(useEncryption: false);
@@ -206,7 +206,7 @@ public class VerticalFederatedLearningTests
 
     // ========== MissingFeatureHandler Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MissingFeatureHandler_DefaultOptions_Succeeds()
     {
         var handler = new MissingFeatureHandler<double>();
@@ -214,7 +214,7 @@ public class VerticalFederatedLearningTests
         Assert.NotNull(handler);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MissingFeatureHandler_WithOptions_Succeeds()
     {
         var options = new MissingFeatureOptions
@@ -229,7 +229,7 @@ public class VerticalFederatedLearningTests
         Assert.NotNull(handler);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MissingFeatureHandler_ImputeEmbeddings_ProducesOutput()
     {
         var options = new MissingFeatureOptions
@@ -247,7 +247,7 @@ public class VerticalFederatedLearningTests
 
     // ========== LabelDifferentialPrivacy Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LabelDP_Constructor_WithDefaults_Succeeds()
     {
         var dp = new LabelDifferentialPrivacy<double>();
@@ -255,7 +255,7 @@ public class VerticalFederatedLearningTests
         Assert.NotNull(dp);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LabelDP_Constructor_WithParams_Succeeds()
     {
         var dp = new LabelDifferentialPrivacy<double>(
@@ -264,21 +264,21 @@ public class VerticalFederatedLearningTests
         Assert.NotNull(dp);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LabelDP_ZeroEpsilon_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new LabelDifferentialPrivacy<double>(epsilon: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LabelDP_NegativeEpsilon_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new LabelDifferentialPrivacy<double>(epsilon: -1.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LabelDP_ProtectGradients_AddsNoise()
     {
         var dp = new LabelDifferentialPrivacy<double>(epsilon: 1.0, seed: 42);
@@ -305,7 +305,7 @@ public class VerticalFederatedLearningTests
 
     // ========== VerticalFederatedTrainer Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflTrainer_DefaultConstructor_Succeeds()
     {
         var trainer = new VerticalFederatedTrainer<double>();
@@ -313,7 +313,7 @@ public class VerticalFederatedLearningTests
         Assert.NotNull(trainer);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflTrainer_WithOptions_Succeeds()
     {
         var options = new VerticalFederatedLearningOptions
@@ -329,7 +329,7 @@ public class VerticalFederatedLearningTests
         Assert.NotNull(trainer);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflTrainer_WithLabelProtector_Succeeds()
     {
         var options = new VerticalFederatedLearningOptions
@@ -343,7 +343,7 @@ public class VerticalFederatedLearningTests
         Assert.NotNull(trainer);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflTrainer_RegisterParty_Succeeds()
     {
         var trainer = new VerticalFederatedTrainer<double>();
@@ -359,7 +359,7 @@ public class VerticalFederatedLearningTests
         trainer.RegisterParty(labelHolder);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflTrainer_RegisterMultipleParties_Succeeds()
     {
         var trainer = new VerticalFederatedTrainer<double>();
@@ -379,7 +379,7 @@ public class VerticalFederatedLearningTests
 
     // ========== VerticalPartyClient Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerticalPartyClient_Constructor_Succeeds()
     {
         var entityIds = new[] { "e1", "e2", "e3" };
@@ -391,7 +391,7 @@ public class VerticalFederatedLearningTests
         Assert.Equal("bank", client.PartyId);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerticalPartyClient_ComputeForward_ProducesOutput()
     {
         var entityIds = new[] { "e1", "e2", "e3" };
@@ -407,7 +407,7 @@ public class VerticalFederatedLearningTests
 
     // ========== VerticalPartyLabelHolder Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerticalPartyLabelHolder_Constructor_Succeeds()
     {
         var entityIds = new[] { "e1", "e2", "e3" };
@@ -422,7 +422,7 @@ public class VerticalFederatedLearningTests
 
     // ========== VerticalFederatedUnlearner Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflUnlearner_DefaultConstructor_Succeeds()
     {
         var unlearner = new VerticalFederatedUnlearner<double>();
@@ -430,7 +430,7 @@ public class VerticalFederatedLearningTests
         Assert.NotNull(unlearner);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflUnlearner_WithOptions_Succeeds()
     {
         var options = new VflUnlearningOptions
@@ -450,7 +450,7 @@ public class VerticalFederatedLearningTests
 
     // ========== VerticalFederatedBenchmark Tests ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflBenchmark_GenerateDataset_ProducesValidData()
     {
         var dataset = VerticalFederatedBenchmark<double>.GenerateDataset(
@@ -467,7 +467,7 @@ public class VerticalFederatedLearningTests
         Assert.Equal(2, dataset.Parties.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflBenchmark_GenerateDataset_LastPartyHasLabels()
     {
         var dataset = VerticalFederatedBenchmark<double>.GenerateDataset(
@@ -482,7 +482,7 @@ public class VerticalFederatedLearningTests
         Assert.NotNull(lastParty.Labels);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflBenchmark_GenerateDataset_PartiesHaveFeatures()
     {
         var dataset = VerticalFederatedBenchmark<double>.GenerateDataset(
@@ -506,28 +506,28 @@ public class VerticalFederatedLearningTests
         Assert.Equal(10, totalCols);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflBenchmark_GenerateDataset_ZeroEntities_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             VerticalFederatedBenchmark<double>.GenerateDataset(totalEntities: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflBenchmark_GenerateDataset_ZeroFeatures_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             VerticalFederatedBenchmark<double>.GenerateDataset(totalFeatures: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflBenchmark_GenerateDataset_OneParty_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             VerticalFederatedBenchmark<double>.GenerateDataset(numberOfParties: 1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflBenchmark_GenerateDataset_InvalidOverlap_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -537,7 +537,7 @@ public class VerticalFederatedLearningTests
             VerticalFederatedBenchmark<double>.GenerateDataset(overlapRatio: -0.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflBenchmark_GenerateDataset_SharedEntityCount_MatchesOverlap()
     {
         var dataset = VerticalFederatedBenchmark<double>.GenerateDataset(
@@ -550,7 +550,7 @@ public class VerticalFederatedLearningTests
         Assert.Equal(50, dataset.SharedEntityCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflBenchmark_LowOverlap_StillWorks()
     {
         var dataset = VerticalFederatedBenchmark<double>.GenerateDataset(
@@ -565,7 +565,7 @@ public class VerticalFederatedLearningTests
 
     // ========== VerticalFederatedLearningOptions Defaults ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflOptions_DefaultValues()
     {
         var options = new VerticalFederatedLearningOptions();
@@ -586,7 +586,7 @@ public class VerticalFederatedLearningTests
         Assert.False(options.VerboseLogging);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SplitModelOptions_DefaultValues()
     {
         var options = new SplitModelOptions();
@@ -601,7 +601,7 @@ public class VerticalFederatedLearningTests
         Assert.Equal(0.01, options.EmbeddingNoiseScale);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MissingFeatureOptions_DefaultValues()
     {
         var options = new MissingFeatureOptions();
@@ -613,7 +613,7 @@ public class VerticalFederatedLearningTests
         Assert.True(options.AddMissingnessIndicator);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflUnlearningOptions_DefaultValues()
     {
         var options = new VflUnlearningOptions();
@@ -627,13 +627,13 @@ public class VerticalFederatedLearningTests
         Assert.False(options.VerifyUnlearning);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflAggregationMode_HasExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(VflAggregationMode), VflAggregationMode.Concatenation));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MissingFeatureStrategy_HasExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(MissingFeatureStrategy), MissingFeatureStrategy.Skip));
@@ -641,7 +641,7 @@ public class VerticalFederatedLearningTests
         Assert.True(Enum.IsDefined(typeof(MissingFeatureStrategy), MissingFeatureStrategy.Mean));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VflUnlearningMethod_HasExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(VflUnlearningMethod), VflUnlearningMethod.GradientAscent));
@@ -650,7 +650,7 @@ public class VerticalFederatedLearningTests
 
     // ========== End-to-End Integration ==========
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VFL_EndToEnd_BenchmarkDatasetWithTrainer()
     {
         // Generate benchmark dataset

@@ -36,7 +36,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 features: features);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithDefaultOptions_InitializesSuccessfully()
         {
             // Arrange & Act
@@ -46,7 +46,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithCustomOptions_InitializesSuccessfully()
         {
             // Arrange
@@ -64,7 +64,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithValidData_ReturnsValidFitType()
         {
             // Arrange
@@ -83,7 +83,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 result.FitType == FitType.Unstable);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ReturnsConfidenceLevel()
         {
             // Arrange
@@ -98,7 +98,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_IncludesBayesianMetricsInRecommendations()
         {
             // Arrange
@@ -117,7 +117,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Contains(result.Recommendations, r => r.Contains("Bayes Factor:"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithCustomThresholds_InitializesSuccessfully()
         {
             // Arrange
@@ -137,7 +137,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ReturnsRecommendationsForFitType()
         {
             // Arrange
@@ -160,7 +160,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(hasAdvice);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ReturnsNonEmptyRecommendations()
         {
             // Arrange
@@ -176,7 +176,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.Recommendations.Count >= 5); // At least fit advice + 5 metrics
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithLowMse_ReturnsResult()
         {
             // Arrange
@@ -191,7 +191,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithHighMse_ReturnsResult()
         {
             // Arrange
@@ -206,7 +206,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ResultContainsAllRequiredFields()
         {
             // Arrange
@@ -222,7 +222,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithDifferentTrainValidationMse_ReturnsResult()
         {
             // Arrange
@@ -238,7 +238,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_MultipleCallsReturnConsistentResults()
         {
             // Arrange

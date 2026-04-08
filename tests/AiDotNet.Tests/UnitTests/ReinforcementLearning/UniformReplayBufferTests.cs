@@ -7,7 +7,7 @@ namespace AiDotNet.Tests.UnitTests.ReinforcementLearning;
 
 public class UniformReplayBufferTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithValidCapacity_CreatesBuffer()
     {
         // Arrange & Act
@@ -18,7 +18,7 @@ public class UniformReplayBufferTests
         Assert.Equal(0, buffer.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithInvalidCapacity_ThrowsException()
     {
         // Arrange, Act & Assert
@@ -26,7 +26,7 @@ public class UniformReplayBufferTests
         Assert.Throws<ArgumentException>(() => new UniformReplayBuffer<double, Vector<double>, Vector<double>>(capacity: -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Add_WithValidExperience_IncreasesCount()
     {
         // Arrange
@@ -43,7 +43,7 @@ public class UniformReplayBufferTests
         Assert.Equal(1, buffer.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Add_BeyondCapacity_ReplacesOldest()
     {
         // Arrange
@@ -63,7 +63,7 @@ public class UniformReplayBufferTests
         Assert.Equal(3, buffer.Count); // Should still be at capacity
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Sample_WithEnoughExperiences_ReturnsBatch()
     {
         // Arrange
@@ -86,7 +86,7 @@ public class UniformReplayBufferTests
         Assert.Equal(10, batch.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Sample_WithInsufficientExperiences_ThrowsException()
     {
         // Arrange
@@ -106,7 +106,7 @@ public class UniformReplayBufferTests
         Assert.Throws<InvalidOperationException>(() => buffer.Sample(batchSize: 10));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CanSample_ReturnsCorrectValue()
     {
         // Arrange
@@ -127,7 +127,7 @@ public class UniformReplayBufferTests
         Assert.False(buffer.CanSample(6));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Clear_RemovesAllExperiences()
     {
         // Arrange

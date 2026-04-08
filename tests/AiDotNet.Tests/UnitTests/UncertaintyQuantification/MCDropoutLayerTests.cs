@@ -7,7 +7,7 @@ namespace AiDotNet.Tests.UnitTests.UncertaintyQuantification;
 
 public class MCDropoutLayerTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithValidDropoutRate_CreatesLayer()
     {
         // Arrange & Act
@@ -18,7 +18,7 @@ public class MCDropoutLayerTests
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithInvalidDropoutRate_ThrowsException()
     {
         // Arrange, Act & Assert
@@ -27,7 +27,7 @@ public class MCDropoutLayerTests
         Assert.Throws<ArgumentException>(() => new MCDropoutLayer<double>(1.5));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Forward_InTrainingMode_AppliesDropout()
     {
         // Arrange
@@ -57,7 +57,7 @@ public class MCDropoutLayerTests
         Assert.True(hasZeros && hasNonZeros, "Dropout should zero some activations while leaving others scaled.");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Forward_InMonteCarloMode_AppliesDropout()
     {
         // Arrange
@@ -83,7 +83,7 @@ public class MCDropoutLayerTests
         Assert.True(hasModifiedValues);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Forward_InInferenceMode_WithoutMCMode_PassesThrough()
     {
         // Arrange
@@ -102,7 +102,7 @@ public class MCDropoutLayerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetParameters_ReturnsEmptyVector()
     {
         // Arrange
@@ -116,7 +116,7 @@ public class MCDropoutLayerTests
         Assert.Equal(0, parameters.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MonteCarloMode_CanBeToggledOnOff()
     {
         // Arrange

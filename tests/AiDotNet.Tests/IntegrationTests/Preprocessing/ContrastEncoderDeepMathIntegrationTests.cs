@@ -36,7 +36,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// For category 2.0 (index 1): [-1/3, 1/2]
     /// For category 3.0 (index 2): [-1/3, -1/2]
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HelmertEncoder_3Categories_CorrectContrastMatrix()
     {
         var encoder = new HelmertEncoder<double>();
@@ -66,7 +66,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// Col 1: level 1 vs mean(2,3)   → [0,    2/3,  -1/3, -1/3]
     /// Col 2: level 2 vs mean(3)     → [0,    0,     1/2,  -1/2]
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HelmertEncoder_4Categories_CorrectContrastMatrix()
     {
         var encoder = new HelmertEncoder<double>();
@@ -104,7 +104,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// Col 0: 2/3 + (-1/3) + (-1/3) = 0
     /// Col 1: 0 + 1/2 + (-1/2) = 0
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HelmertEncoder_3Categories_ColumnSumsAreZero()
     {
         var encoder = new HelmertEncoder<double>();
@@ -127,7 +127,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// Helmert with k=2 categories: simplest case.
     /// Col 0: level 0 vs level 1 → [1/2, -1/2]
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HelmertEncoder_2Categories_SimpleContrast()
     {
         var encoder = new HelmertEncoder<double>();
@@ -151,7 +151,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// Col 0: level 1 vs level 0      → [-1/2, 1/2, 0]
     /// Col 1: level 2 vs mean(0,1)    → [-1/3, -1/3, 2/3]
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HelmertEncoder_Reversed_3Categories_CorrectContrastMatrix()
     {
         var encoder = new HelmertEncoder<double>(reversed: true);
@@ -178,7 +178,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// <summary>
     /// Reversed Helmert column sums should also be zero.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HelmertEncoder_Reversed_ColumnSumsAreZero()
     {
         var encoder = new HelmertEncoder<double>(reversed: true);
@@ -200,7 +200,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// <summary>
     /// Unknown categories with HelmertHandleUnknown.UseZeros should give all zeros.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HelmertEncoder_UnknownCategory_UseZeros_AllZeros()
     {
         var encoder = new HelmertEncoder<double>(handleUnknown: HelmertHandleUnknown.UseZeros);
@@ -218,7 +218,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// <summary>
     /// Unknown categories with HelmertHandleUnknown.Error should throw.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HelmertEncoder_UnknownCategory_Error_Throws()
     {
         var encoder = new HelmertEncoder<double>(handleUnknown: HelmertHandleUnknown.Error);
@@ -243,7 +243,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// Index 1: [1/3,  -1/3]
     /// Index 2: [1/3,   2/3]
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BackwardDifferenceEncoder_3Categories_CorrectContrastMatrix()
     {
         var encoder = new BackwardDifferenceEncoder<double>();
@@ -273,7 +273,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// Col 1: rows <= 1 get -(4-1-1)/4 = -2/4 = -1/2, rows > 1 get 2/4 = 1/2
     /// Col 2: rows <= 2 get -(4-2-1)/4 = -1/4, rows > 2 get 3/4
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BackwardDifferenceEncoder_4Categories_CorrectContrastMatrix()
     {
         var encoder = new BackwardDifferenceEncoder<double>();
@@ -310,7 +310,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// Col 0: -2/3 + 1/3 + 1/3 = 0
     /// Col 1: -1/3 + (-1/3) + 2/3 = 0
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BackwardDifferenceEncoder_3Categories_ColumnSumsAreZero()
     {
         var encoder = new BackwardDifferenceEncoder<double>();
@@ -340,7 +340,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// Col 1: row0=-1/3, row1=-1/3, diff=0; row1=-1/3, row2=2/3, diff=1.0
     /// So the difference is exactly 1.0 at the step boundary and 0 elsewhere.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BackwardDifferenceEncoder_StepProperty_DiffEquals1AtBoundary()
     {
         var encoder = new BackwardDifferenceEncoder<double>();
@@ -369,7 +369,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// Backward difference with k=2: simplest case.
     /// Col 0: row 0 gets -(2-0-1)/2 = -1/2, row 1 gets (0+1)/2 = 1/2
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BackwardDifferenceEncoder_2Categories_SimpleContrast()
     {
         var encoder = new BackwardDifferenceEncoder<double>();
@@ -387,7 +387,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// <summary>
     /// Unknown category with BackwardDifferenceHandleUnknown.UseZeros gives all zeros.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BackwardDifferenceEncoder_UnknownCategory_UseZeros_AllZeros()
     {
         var encoder = new BackwardDifferenceEncoder<double>(handleUnknown: BackwardDifferenceHandleUnknown.UseZeros);
@@ -412,7 +412,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// Category 2.0 (index 1): [0, 1]
     /// Category 3.0 (index 2): [-1, -1]
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SumEncoder_3Categories_CorrectEncoding()
     {
         var encoder = new SumEncoder<double>();
@@ -445,7 +445,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// But for k=4: col 0 = [1, 0, 0, -1] → sum = 0; col 1 = [0, 1, 0, -1] → sum = 0
     /// So column sums are always zero.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SumEncoder_ColumnSumsAreZero()
     {
         var encoder = new SumEncoder<double>();
@@ -471,7 +471,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// Category 3 (idx 2): [0, 0, 1]
     /// Category 4 (idx 3): [-1,-1,-1]
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SumEncoder_4Categories_CorrectEncoding()
     {
         var encoder = new SumEncoder<double>();
@@ -508,7 +508,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// Category 1 (index 0): [1]
     /// Category 2 (index 1, reference): [-1]
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SumEncoder_2Categories_SimpleContrast()
     {
         var encoder = new SumEncoder<double>();
@@ -527,7 +527,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// Row sums of Sum encoding: reference row sums to -(k-1), other rows sum to 1.
     /// k=3: row 0 = [1, 0] → sum=1; row 1 = [0, 1] → sum=1; row 2 = [-1, -1] → sum=-2
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SumEncoder_3Categories_RowSums()
     {
         var encoder = new SumEncoder<double>();
@@ -550,7 +550,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// <summary>
     /// Unknown category with SumEncoderHandleUnknown.UseZeros gives all zeros.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SumEncoder_UnknownCategory_UseZeros_AllZeros()
     {
         var encoder = new SumEncoder<double>(handleUnknown: SumEncoderHandleUnknown.UseZeros);
@@ -567,7 +567,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// <summary>
     /// Unknown category with SumEncoderHandleUnknown.Error should throw.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SumEncoder_UnknownCategory_Error_Throws()
     {
         var encoder = new SumEncoder<double>(handleUnknown: SumEncoderHandleUnknown.Error);
@@ -586,7 +586,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// Helmert feature names follow {base}_helmert_{index} pattern.
     /// Reversed Helmert uses {base}_rev_helmert_{index}.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HelmertEncoder_FeatureNames_CorrectPattern()
     {
         var encoder = new HelmertEncoder<double>();
@@ -602,7 +602,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// <summary>
     /// Reversed Helmert feature names use rev_helmert suffix.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HelmertEncoder_Reversed_FeatureNames_CorrectPattern()
     {
         var encoder = new HelmertEncoder<double>(reversed: true);
@@ -618,7 +618,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// <summary>
     /// BackwardDifference feature names follow {base}_diff_{n+1}_vs_{n} pattern.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BackwardDifferenceEncoder_FeatureNames_CorrectPattern()
     {
         var encoder = new BackwardDifferenceEncoder<double>();
@@ -634,7 +634,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// <summary>
     /// Sum encoder feature names follow {base}_sum_{index} pattern.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SumEncoder_FeatureNames_CorrectPattern()
     {
         var encoder = new SumEncoder<double>();
@@ -654,7 +654,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// <summary>
     /// When only some columns are encoded, pass-through columns keep original values.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SumEncoder_PartialColumns_PassThrough()
     {
         var encoder = new SumEncoder<double>(columnIndices: new[] { 0 });
@@ -675,7 +675,7 @@ public class ContrastEncoderDeepMathIntegrationTests
     /// Categories are sorted numerically, so data order doesn't affect encoding.
     /// Data presented as [3, 1, 2] should still sort to [1, 2, 3] internally.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HelmertEncoder_CategoriesSorted_RegardlessOfInputOrder()
     {
         var encoder = new HelmertEncoder<double>();

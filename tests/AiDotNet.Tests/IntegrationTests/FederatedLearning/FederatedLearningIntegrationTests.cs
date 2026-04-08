@@ -22,7 +22,7 @@ public class FederatedLearningIntegrationTests
 
     #region Aggregation Strategies
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvgAggregationStrategy_Aggregate_ReturnsWeightedAverage()
     {
         // Arrange
@@ -54,14 +54,14 @@ public class FederatedLearningIntegrationTests
         Assert.Equal(expectedFirst, result["layer1"][0], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvgAggregationStrategy_GetStrategyName_ReturnsFedAvg()
     {
         var aggregator = new FedAvgAggregationStrategy<double>();
         Assert.Equal("FedAvg", aggregator.GetStrategyName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvgAggregationStrategy_Aggregate_ThrowsOnEmptyClientModels()
     {
         var aggregator = new FedAvgAggregationStrategy<double>();
@@ -71,7 +71,7 @@ public class FederatedLearningIntegrationTests
         Assert.Throws<ArgumentException>(() => aggregator.Aggregate(emptyModels, weights));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvgAggregationStrategy_Aggregate_ThrowsOnEmptyWeights()
     {
         var aggregator = new FedAvgAggregationStrategy<double>();
@@ -84,7 +84,7 @@ public class FederatedLearningIntegrationTests
         Assert.Throws<ArgumentException>(() => aggregator.Aggregate(models, emptyWeights));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedProxAggregationStrategy_Aggregate_ReturnsWeightedAverage()
     {
         // FedProx uses same aggregation as FedAvg (proximal term is client-side)
@@ -109,7 +109,7 @@ public class FederatedLearningIntegrationTests
         Assert.Equal(3.0, result["layer1"][1], Tolerance); // (2+4)/2
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedProxAggregationStrategy_GetStrategyName_ReturnsFedProx()
     {
         var aggregator = new FedProxAggregationStrategy<double>();
@@ -117,7 +117,7 @@ public class FederatedLearningIntegrationTests
         Assert.Equal("FedProx(μ=0.01)", aggregator.GetStrategyName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedBNAggregationStrategy_Aggregate_ReturnsWeightedAverage()
     {
         var aggregator = new FedBNAggregationStrategy<double>();
@@ -141,7 +141,7 @@ public class FederatedLearningIntegrationTests
         Assert.Equal(3.5, result["layer1"][0], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedBNAggregationStrategy_GetStrategyName_ReturnsFedBN()
     {
         var aggregator = new FedBNAggregationStrategy<double>();
@@ -158,7 +158,7 @@ public class FederatedLearningIntegrationTests
 
     #region Client Selection Strategies
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniformRandomClientSelectionStrategy_SelectClients_ReturnsSubset()
     {
         var strategy = new UniformRandomClientSelectionStrategy();
@@ -183,21 +183,21 @@ public class FederatedLearningIntegrationTests
         Assert.All(selected, id => Assert.Contains(id, request.CandidateClientIds));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniformRandomClientSelectionStrategy_GetStrategyName_ReturnsUniformRandom()
     {
         var strategy = new UniformRandomClientSelectionStrategy();
         Assert.Equal("UniformRandom", strategy.GetStrategyName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniformRandomClientSelectionStrategy_SelectClients_ThrowsOnNullRequest()
     {
         var strategy = new UniformRandomClientSelectionStrategy();
         Assert.Throws<ArgumentNullException>(() => strategy.SelectClients(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeightedRandomClientSelectionStrategy_SelectClients_FavorsHigherWeights()
     {
         var strategy = new WeightedRandomClientSelectionStrategy();
@@ -234,14 +234,14 @@ public class FederatedLearningIntegrationTests
         Assert.True(client0Selected > 50);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeightedRandomClientSelectionStrategy_GetStrategyName_ReturnsWeightedRandom()
     {
         var strategy = new WeightedRandomClientSelectionStrategy();
         Assert.Equal("WeightedRandom", strategy.GetStrategyName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StratifiedClientSelectionStrategy_SelectClients_SelectsFromAllGroups()
     {
         var strategy = new StratifiedClientSelectionStrategy();
@@ -275,14 +275,14 @@ public class FederatedLearningIntegrationTests
         Assert.True(selectedGroups.Count >= 2); // At least 2 groups represented
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StratifiedClientSelectionStrategy_GetStrategyName_ReturnsStratified()
     {
         var strategy = new StratifiedClientSelectionStrategy();
         Assert.Equal("Stratified", strategy.GetStrategyName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AvailabilityAwareClientSelectionStrategy_SelectClients_FiltersUnavailable()
     {
         var strategy = new AvailabilityAwareClientSelectionStrategy(availabilityThreshold: 0.5);
@@ -317,14 +317,14 @@ public class FederatedLearningIntegrationTests
         Assert.All(selected, id => Assert.True(availabilities[id] >= 0.5));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AvailabilityAwareClientSelectionStrategy_GetStrategyName_ReturnsAvailabilityAware()
     {
         var strategy = new AvailabilityAwareClientSelectionStrategy(0.5);
         Assert.Equal("AvailabilityAware", strategy.GetStrategyName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PerformanceAwareClientSelectionStrategy_SelectClients_FavorsHighPerformers()
     {
         var strategy = new PerformanceAwareClientSelectionStrategy(explorationRate: 0.1);
@@ -365,14 +365,14 @@ public class FederatedLearningIntegrationTests
         Assert.True(highPerformersSelected > 60);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PerformanceAwareClientSelectionStrategy_GetStrategyName_ReturnsPerformanceAware()
     {
         var strategy = new PerformanceAwareClientSelectionStrategy(0.1);
         Assert.Equal("PerformanceAware", strategy.GetStrategyName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ClusteredClientSelectionStrategy_SelectClients_SelectsFromClusters()
     {
         var strategy = new ClusteredClientSelectionStrategy(clusterCount: 3, iterations: 5);
@@ -404,7 +404,7 @@ public class FederatedLearningIntegrationTests
         Assert.Equal(3, selected.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ClusteredClientSelectionStrategy_GetStrategyName_ReturnsClustered()
     {
         var strategy = new ClusteredClientSelectionStrategy(clusterCount: 3, iterations: 5);
@@ -415,7 +415,7 @@ public class FederatedLearningIntegrationTests
 
     #region Privacy Mechanisms
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDifferentialPrivacy_ApplyPrivacy_AddsNoise()
     {
         var mechanism = new GaussianDifferentialPrivacy<double>(clipNorm: 1.0, randomSeed: 42);
@@ -441,7 +441,7 @@ public class FederatedLearningIntegrationTests
         Assert.True(hasNoise);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDifferentialPrivacy_ApplyPrivacy_TracksPrivacyBudget()
     {
         var mechanism = new GaussianDifferentialPrivacy<double>(clipNorm: 1.0, randomSeed: 42);
@@ -460,7 +460,7 @@ public class FederatedLearningIntegrationTests
         Assert.Equal(0.8, mechanism.GetPrivacyBudgetConsumed(), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDifferentialPrivacy_ApplyPrivacy_ClipsLargeNorms()
     {
         var mechanism = new GaussianDifferentialPrivacy<double>(clipNorm: 1.0, randomSeed: 42);
@@ -479,7 +479,7 @@ public class FederatedLearningIntegrationTests
         Assert.True(sumSq < 300.0); // Much smaller than original
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDifferentialPrivacy_ApplyPrivacy_ThrowsOnInvalidEpsilon()
     {
         var mechanism = new GaussianDifferentialPrivacy<double>(clipNorm: 1.0);
@@ -489,7 +489,7 @@ public class FederatedLearningIntegrationTests
         Assert.Throws<ArgumentException>(() => mechanism.ApplyPrivacy(model, epsilon: -1.0, delta: 1e-5));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDifferentialPrivacy_ApplyPrivacy_ThrowsOnInvalidDelta()
     {
         var mechanism = new GaussianDifferentialPrivacy<double>(clipNorm: 1.0);
@@ -500,14 +500,14 @@ public class FederatedLearningIntegrationTests
         Assert.Throws<ArgumentException>(() => mechanism.ApplyPrivacy(model, epsilon: 1.0, delta: -0.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDifferentialPrivacy_GetMechanismName_ReturnsCorrectName()
     {
         var mechanism = new GaussianDifferentialPrivacy<double>(clipNorm: 1.5);
         Assert.Equal("Gaussian DP (clip=1.5)", mechanism.GetMechanismName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDifferentialPrivacy_ResetPrivacyBudget_ClearsBudget()
     {
         var mechanism = new GaussianDifferentialPrivacy<double>(clipNorm: 1.0, randomSeed: 42);
@@ -520,7 +520,7 @@ public class FederatedLearningIntegrationTests
         Assert.Equal(0.0, mechanism.GetPrivacyBudgetConsumed());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDifferentialPrivacy_Constructor_ThrowsOnInvalidClipNorm()
     {
         Assert.Throws<ArgumentException>(() => new GaussianDifferentialPrivacy<double>(clipNorm: 0.0));
@@ -531,7 +531,7 @@ public class FederatedLearningIntegrationTests
 
     #region Privacy Accountants
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicCompositionPrivacyAccountant_AddRound_AccumulatesEpsilon()
     {
         var accountant = new BasicCompositionPrivacyAccountant();
@@ -543,14 +543,14 @@ public class FederatedLearningIntegrationTests
         Assert.Equal(0.8, accountant.GetTotalEpsilonConsumed(), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicCompositionPrivacyAccountant_GetAccountantName_ReturnsBasicComposition()
     {
         var accountant = new BasicCompositionPrivacyAccountant();
         Assert.Equal("Basic", accountant.GetAccountantName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RdpPrivacyAccountant_AddRound_TracksPrivacy()
     {
         var accountant = new RdpPrivacyAccountant(clipNorm: 1.0);
@@ -560,14 +560,14 @@ public class FederatedLearningIntegrationTests
         Assert.True(accountant.GetTotalEpsilonConsumed() >= 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RdpPrivacyAccountant_GetAccountantName_ReturnsRDP()
     {
         var accountant = new RdpPrivacyAccountant(1.0);
         Assert.Equal("RDP", accountant.GetAccountantName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RdpPrivacyAccountant_GetEpsilonAtDelta_ReturnsValidEpsilon()
     {
         var accountant = new RdpPrivacyAccountant(clipNorm: 1.0);
@@ -582,7 +582,7 @@ public class FederatedLearningIntegrationTests
 
     #region Cryptography
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShamirSecretSharing_SplitAndCombine_ReconstructsSecret()
     {
         // Test with internal static class via reflection or through ThresholdSecureAggregation
@@ -627,7 +627,7 @@ public class FederatedLearningIntegrationTests
         Assert.Equal(secret, reconstructed);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HkdfSha256_DeriveKey_ProducesConsistentOutput()
     {
         var ikm = new byte[] { 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b };
@@ -641,7 +641,7 @@ public class FederatedLearningIntegrationTests
         Assert.Equal(key1, key2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HkdfSha256_DeriveKey_ProducesDifferentOutputForDifferentInfo()
     {
         var ikm = new byte[] { 0x0b, 0x0b, 0x0b, 0x0b };
@@ -657,7 +657,7 @@ public class FederatedLearningIntegrationTests
 
     #region Server Optimizers
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAdamServerOptimizer_Step_UpdatesParameters()
     {
         var optimizer = new FedAdamServerOptimizer<double>(
@@ -677,14 +677,14 @@ public class FederatedLearningIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAdamServerOptimizer_GetOptimizerName_ReturnsFedAdam()
     {
         var optimizer = new FedAdamServerOptimizer<double>();
         Assert.Equal("FedAdam", optimizer.GetOptimizerName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAdamServerOptimizer_Constructor_ThrowsOnInvalidParameters()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -697,7 +697,7 @@ public class FederatedLearningIntegrationTests
             new FedAdamServerOptimizer<double>(epsilon: 0.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAdagradServerOptimizer_Step_UpdatesParameters()
     {
         var optimizer = new FedAdagradServerOptimizer<double>(learningRate: 0.1, epsilon: 1e-8);
@@ -714,14 +714,14 @@ public class FederatedLearningIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAdagradServerOptimizer_GetOptimizerName_ReturnsFedAdagrad()
     {
         var optimizer = new FedAdagradServerOptimizer<double>();
         Assert.Equal("FedAdagrad", optimizer.GetOptimizerName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedYogiServerOptimizer_Step_UpdatesParameters()
     {
         var optimizer = new FedYogiServerOptimizer<double>(
@@ -739,14 +739,14 @@ public class FederatedLearningIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedYogiServerOptimizer_GetOptimizerName_ReturnsFedYogi()
     {
         var optimizer = new FedYogiServerOptimizer<double>();
         Assert.Equal("FedYogi", optimizer.GetOptimizerName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvgMServerOptimizer_Step_UpdatesWithMomentum()
     {
         var optimizer = new FedAvgMServerOptimizer<double>(learningRate: 1.0, momentum: 0.9);
@@ -763,7 +763,7 @@ public class FederatedLearningIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvgMServerOptimizer_GetOptimizerName_ReturnsFedAvgM()
     {
         var optimizer = new FedAvgMServerOptimizer<double>();
@@ -774,7 +774,7 @@ public class FederatedLearningIntegrationTests
 
     #region Heterogeneity Corrections
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScaffoldHeterogeneityCorrection_Correct_AdjustsParameters()
     {
         var correction = new ScaffoldHeterogeneityCorrection<double>(clientLearningRate: 0.1);
@@ -792,14 +792,14 @@ public class FederatedLearningIntegrationTests
         Assert.Equal(3, corrected.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScaffoldHeterogeneityCorrection_GetCorrectionName_ReturnsScaffold()
     {
         var correction = new ScaffoldHeterogeneityCorrection<double>(0.1);
         Assert.Equal("SCAFFOLD", correction.GetCorrectionName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedNovaHeterogeneityCorrection_Correct_NormalizesUpdate()
     {
         var correction = new FedNovaHeterogeneityCorrection<double>();
@@ -817,14 +817,14 @@ public class FederatedLearningIntegrationTests
         Assert.Equal(2, corrected.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedNovaHeterogeneityCorrection_GetCorrectionName_ReturnsFedNova()
     {
         var correction = new FedNovaHeterogeneityCorrection<double>();
         Assert.Equal("FedNova", correction.GetCorrectionName());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedDynHeterogeneityCorrection_Correct_AppliesDynamicRegularization()
     {
         var correction = new FedDynHeterogeneityCorrection<double>(alpha: 0.01);
@@ -842,7 +842,7 @@ public class FederatedLearningIntegrationTests
         Assert.Equal(2, corrected.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedDynHeterogeneityCorrection_GetCorrectionName_ReturnsFedDyn()
     {
         var correction = new FedDynHeterogeneityCorrection<double>(0.01);
@@ -853,7 +853,7 @@ public class FederatedLearningIntegrationTests
 
     #region Secure Aggregation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SecureAggregationVector_MaskAndAggregate_PreservesSum()
     {
         var parameterCount = 5;
@@ -896,7 +896,7 @@ public class FederatedLearningIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SecureAggregationVector_ClearSecrets_RemovesSensitiveData()
     {
         var secureAgg = new SecureAggregationVector<double>(10, randomSeed: 42);
@@ -911,7 +911,7 @@ public class FederatedLearningIntegrationTests
         Assert.True(true);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThresholdSecureAggregationVector_InitializeRound_SetsParameters()
     {
         var parameterCount = 5;
@@ -929,7 +929,7 @@ public class FederatedLearningIntegrationTests
         Assert.Equal(2, secureAgg.ReconstructionThreshold);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThresholdSecureAggregationVector_MaskAndAggregate_ToleratesDropouts()
     {
         var parameterCount = 3;
@@ -972,7 +972,7 @@ public class FederatedLearningIntegrationTests
 
     #region GaussianDifferentialPrivacyVector
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDifferentialPrivacyVector_ApplyPrivacy_AddsNoiseToVector()
     {
         var mechanism = new GaussianDifferentialPrivacyVector<double>(clipNorm: 1.0, randomSeed: 42);
@@ -997,7 +997,7 @@ public class FederatedLearningIntegrationTests
         Assert.True(hasNoise);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDifferentialPrivacyVector_GetMechanismName_ReturnsCorrectName()
     {
         var mechanism = new GaussianDifferentialPrivacyVector<double>(clipNorm: 2.0);
@@ -1008,7 +1008,7 @@ public class FederatedLearningIntegrationTests
 
     #region Edge Cases and Validation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvgAggregationStrategy_Aggregate_HandlesSingleClient()
     {
         var aggregator = new FedAvgAggregationStrategy<double>();
@@ -1028,7 +1028,7 @@ public class FederatedLearningIntegrationTests
         Assert.Equal(new[] { 1.0, 2.0, 3.0 }, result["layer1"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FedAvgAggregationStrategy_Aggregate_HandlesMultipleLayers()
     {
         var aggregator = new FedAvgAggregationStrategy<double>();
@@ -1064,7 +1064,7 @@ public class FederatedLearningIntegrationTests
         Assert.Equal(20.0, result["layer2"][0], Tolerance); // (10+30)/2
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ClientSelectionRequest_HandlesEmptyCandidates()
     {
         var strategy = new UniformRandomClientSelectionStrategy();
@@ -1084,7 +1084,7 @@ public class FederatedLearningIntegrationTests
         Assert.Empty(selected);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ServerOptimizer_MultipleSteps_AccumulatesMomentum()
     {
         var optimizer = new FedAdamServerOptimizer<double>(learningRate: 0.1);
@@ -1102,7 +1102,7 @@ public class FederatedLearningIntegrationTests
         Assert.True(updated2[0] < updated3[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HeterogeneityCorrection_MultipleRounds_MaintainsState()
     {
         var correction = new ScaffoldHeterogeneityCorrection<double>(clientLearningRate: 0.1);

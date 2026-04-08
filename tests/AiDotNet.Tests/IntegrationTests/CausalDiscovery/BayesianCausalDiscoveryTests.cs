@@ -27,7 +27,7 @@ public class BayesianCausalDiscoveryTests
 
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OrderMCMC_FindsCausalStructure()
     {
         var algo = new OrderMCMCAlgorithm<double>();
@@ -36,7 +36,7 @@ public class BayesianCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PartitionMCMC_FindsCausalStructure()
     {
         var algo = new PartitionMCMCAlgorithm<double>();
@@ -45,7 +45,7 @@ public class BayesianCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IterativeMCMC_FindsCausalStructure()
     {
         var algo = new IterativeMCMCAlgorithm<double>();
@@ -54,7 +54,7 @@ public class BayesianCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BayesDAG_FindsCausalStructure()
     {
         var algo = new BayesDAGAlgorithm<double>();
@@ -63,7 +63,7 @@ public class BayesianCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiBS_FindsCausalStructure()
     {
         var algo = new DiBSAlgorithm<double>();
@@ -72,7 +72,7 @@ public class BayesianCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BCDNets_FindsCausalStructure()
     {
         var algo = new BCDNetsAlgorithm<double>();

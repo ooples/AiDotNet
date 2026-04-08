@@ -37,7 +37,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region Experiment Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Experiment_ValidConstruction()
     {
         // Arrange & Act
@@ -51,7 +51,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.NotNull(experiment.Tags);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Experiment_WithDescription()
     {
         // Arrange & Act
@@ -61,7 +61,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Test description", experiment.Description);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Experiment_WithTags()
     {
         // Arrange
@@ -80,21 +80,21 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("1.0", experiment.Tags["version"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Experiment_NullName_ThrowsException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new Experiment(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Experiment_EmptyName_ThrowsException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => new Experiment(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Experiment_WhitespaceName_ThrowsException()
     {
         // Act & Assert
@@ -105,7 +105,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region Experiment Properties Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Experiment_ExperimentId_IsGuid()
     {
         // Arrange & Act
@@ -115,7 +115,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.True(Guid.TryParse(experiment.ExperimentId, out _));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Experiment_CreatedAt_IsSet()
     {
         // Arrange
@@ -129,7 +129,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.True(experiment.CreatedAt <= DateTime.UtcNow.AddSeconds(1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Experiment_LastUpdatedAt_IsInitialized()
     {
         // Arrange & Act
@@ -139,7 +139,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.True(experiment.LastUpdatedAt >= experiment.CreatedAt.AddMilliseconds(-1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Experiment_Name_CanBeSet()
     {
         // Arrange
@@ -152,7 +152,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Updated", experiment.Name);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Experiment_Name_SetNull_ThrowsException()
     {
         // Arrange
@@ -162,7 +162,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentNullException>(() => experiment.Name = null!);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Experiment_Description_CanBeSet()
     {
         // Arrange
@@ -179,7 +179,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region Experiment Methods Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Experiment_Archive_ChangesStatusToArchived()
     {
         // Arrange
@@ -192,7 +192,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Archived", experiment.Status);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Experiment_Archive_UpdatesLastUpdatedAt()
     {
         // Arrange
@@ -207,7 +207,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.True(experiment.LastUpdatedAt > originalUpdated);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Experiment_Restore_ChangesStatusToActive()
     {
         // Arrange
@@ -221,7 +221,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Active", experiment.Status);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Experiment_Restore_UpdatesLastUpdatedAt()
     {
         // Arrange
@@ -241,7 +241,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentRun Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_ValidConstruction()
     {
         // Arrange & Act
@@ -255,7 +255,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Null(run.EndTime);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_WithRunName()
     {
         // Arrange & Act
@@ -265,7 +265,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("my-run", run.RunName);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_WithTags()
     {
         // Arrange
@@ -284,14 +284,14 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("100", run.Tags["epochs"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_NullExperimentId_ThrowsException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new ExperimentRun<double>(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_RunId_IsGuid()
     {
         // Arrange & Act
@@ -301,7 +301,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.True(Guid.TryParse(run.RunId, out _));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_StartTime_IsSet()
     {
         // Arrange
@@ -318,7 +318,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentRun Parameter Logging Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_LogParameter_StoresParameter()
     {
         // Arrange
@@ -333,7 +333,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal(0.001, parameters["learning_rate"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_LogParameter_EmptyKey_ThrowsException()
     {
         // Arrange
@@ -343,7 +343,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => run.LogParameter("", 0.001));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_LogParameters_StoresMultiple()
     {
         // Arrange
@@ -366,7 +366,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("adam", logged["optimizer"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_LogParameters_NullDictionary_ThrowsException()
     {
         // Arrange
@@ -380,7 +380,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentRun Metric Logging Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_LogMetric_StoresMetric()
     {
         // Arrange
@@ -397,7 +397,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal(10, metrics["accuracy"][0].Step);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_LogMetric_EmptyKey_ThrowsException()
     {
         // Arrange
@@ -407,7 +407,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => run.LogMetric("", 0.5));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_LogMetric_MultipleSteps()
     {
         // Arrange
@@ -423,7 +423,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal(3, metrics["loss"].Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_LogMetrics_StoresMultiple()
     {
         // Arrange
@@ -445,7 +445,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal(5, logged["accuracy"][0].Step);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_LogMetrics_NullDictionary_ThrowsException()
     {
         // Arrange
@@ -455,7 +455,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentNullException>(() => run.LogMetrics(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_GetLatestMetric_ReturnsLatestByStep()
     {
         // Arrange
@@ -471,7 +471,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal(0.25, latest);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_GetLatestMetric_NonExistentMetric_ReturnsDefault()
     {
         // Arrange
@@ -488,7 +488,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentRun Artifact Logging Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_LogArtifact_StoresPath()
     {
         // Arrange
@@ -503,7 +503,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("file.txt", artifacts[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_LogArtifact_EmptyPath_ThrowsException()
     {
         // Arrange
@@ -513,7 +513,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => run.LogArtifact(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_LogArtifact_UsesFileName_WhenNoArtifactPath()
     {
         // Arrange
@@ -532,7 +532,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentRun Status Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_Complete_ChangesStatusToCompleted()
     {
         // Arrange
@@ -546,7 +546,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.NotNull(run.EndTime);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_Fail_ChangesStatusToFailed()
     {
         // Arrange
@@ -561,7 +561,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Out of memory", run.GetErrorMessage());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_Fail_WithoutMessage()
     {
         // Arrange
@@ -575,7 +575,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Null(run.GetErrorMessage());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_GetDuration_Running_ReturnsElapsedTime()
     {
         // Arrange
@@ -590,7 +590,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.True(duration.Value.TotalMilliseconds >= 50);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_GetDuration_Completed_ReturnsTotalDuration()
     {
         // Arrange
@@ -610,7 +610,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentRun Notes Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_AddNote_StoresNote()
     {
         // Arrange
@@ -625,7 +625,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Training started successfully", notes[0].Note);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_AddNote_EmptyNote_ThrowsException()
     {
         // Arrange
@@ -635,7 +635,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => run.AddNote(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentRun_GetNotes_OrderedByTimestamp()
     {
         // Arrange
@@ -656,7 +656,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_ValidConstruction()
     {
         // Act
@@ -666,7 +666,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.NotNull(tracker);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_CreatesStorageDirectory()
     {
         // Arrange
@@ -683,7 +683,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker CreateExperiment Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_CreateExperiment_ReturnsExperimentId()
     {
         // Arrange
@@ -697,7 +697,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.True(Guid.TryParse(experimentId, out _));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_CreateExperiment_WithDescription()
     {
         // Arrange
@@ -711,7 +711,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Test description", experiment.Description);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_CreateExperiment_WithTags()
     {
         // Arrange
@@ -726,7 +726,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("value", experiment.Tags["key"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_CreateExperiment_EmptyName_ThrowsException()
     {
         // Arrange
@@ -736,7 +736,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => tracker.CreateExperiment(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_CreateExperiment_DuplicateName_ReturnsExistingId()
     {
         // Arrange
@@ -754,7 +754,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker StartRun Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_StartRun_ReturnsRun()
     {
         // Arrange
@@ -770,7 +770,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Running", run.Status);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_StartRun_WithRunName()
     {
         // Arrange
@@ -784,7 +784,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("my-run", run.RunName);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_StartRun_NonexistentExperiment_ThrowsException()
     {
         // Arrange
@@ -794,7 +794,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => tracker.StartRun("nonexistent"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_StartRun_EmptyExperimentId_ThrowsException()
     {
         // Arrange
@@ -808,7 +808,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker GetExperiment Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_GetExperiment_ReturnsExperiment()
     {
         // Arrange
@@ -823,7 +823,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("Description", experiment.Description);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_GetExperiment_NonexistentId_ThrowsException()
     {
         // Arrange
@@ -837,7 +837,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker GetRun Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_GetRun_ReturnsRun()
     {
         // Arrange
@@ -852,7 +852,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("my-run", retrievedRun.RunName);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_GetRun_NonexistentId_ThrowsException()
     {
         // Arrange
@@ -866,7 +866,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker ListExperiments Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_ListExperiments_ReturnsAll()
     {
         // Arrange
@@ -882,7 +882,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal(3, experiments.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_ListExperiments_WithFilter()
     {
         // Arrange
@@ -898,7 +898,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal(2, experiments.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_ListExperiments_OrderedByLastUpdated()
     {
         // Arrange
@@ -920,7 +920,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker ListRuns Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_ListRuns_ReturnsRunsForExperiment()
     {
         // Arrange
@@ -936,7 +936,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal(2, runs.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_ListRuns_NonexistentExperiment_ThrowsException()
     {
         // Arrange
@@ -946,7 +946,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => tracker.ListRuns("nonexistent"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_ListRuns_WithFilter()
     {
         // Arrange
@@ -966,7 +966,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker SearchRuns Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_SearchRuns_FindsByRunName()
     {
         // Arrange
@@ -983,7 +983,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Equal("unique_run_name", runs[0].RunName);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_SearchRuns_FindsByStatus()
     {
         // Arrange
@@ -1000,7 +1000,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Single(runs);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_SearchRuns_RespectsMaxResults()
     {
         // Arrange
@@ -1022,7 +1022,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker DeleteExperiment Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_DeleteExperiment_RemovesExperiment()
     {
         // Arrange
@@ -1036,7 +1036,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => tracker.GetExperiment(experimentId));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_DeleteExperiment_DeletesAssociatedRuns()
     {
         // Arrange
@@ -1052,7 +1052,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => tracker.GetRun(runId));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_DeleteExperiment_NonexistentId_ThrowsException()
     {
         // Arrange
@@ -1066,7 +1066,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker DeleteRun Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_DeleteRun_RemovesRun()
     {
         // Arrange
@@ -1081,7 +1081,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         Assert.Throws<ArgumentException>(() => tracker.GetRun(run.RunId));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_DeleteRun_NonexistentId_ThrowsException()
     {
         // Arrange
@@ -1095,7 +1095,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region ExperimentTracker Float Type Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_Float_Works()
     {
         // Arrange
@@ -1114,7 +1114,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
 
     #region Path Sanitization Tests (Via ExperimentTracker)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExperimentTracker_CreateExperiment_SanitizesName()
     {
         // Arrange

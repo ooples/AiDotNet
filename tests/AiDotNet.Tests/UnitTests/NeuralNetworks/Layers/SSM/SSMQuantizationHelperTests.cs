@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class SSMQuantizationHelperTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizeSSMLayer_ReducesParameterPrecision()
     {
         var block = new MambaBlock<float>(4, 32, 8);
@@ -35,7 +35,7 @@ public class SSMQuantizationHelperTests
         Assert.True(anyDifferent, "Quantization should modify at least some parameters");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizeSSMLayer_WithDProtection_PreservesDParameter()
     {
         var block = new MambaBlock<float>(4, 32, 8);
@@ -56,7 +56,7 @@ public class SSMQuantizationHelperTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizeSSMLayer_WithoutDProtection_QuantizesDParameter()
     {
         var block = new MambaBlock<float>(4, 32, 8);
@@ -84,7 +84,7 @@ public class SSMQuantizationHelperTests
         Assert.True(anyDifferent, "D parameter should be quantized when protection is disabled");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizeSSMLayer_ThrowsOnNullLayer()
     {
         var config = new QuantizationConfiguration { TargetBitWidth = 8 };
@@ -93,7 +93,7 @@ public class SSMQuantizationHelperTests
             SSMQuantizationHelper<float>.QuantizeSSMLayer(null!, config));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizeSSMLayer_ThrowsOnNullConfig()
     {
         var block = new MambaBlock<float>(4, 32, 8);
@@ -102,7 +102,7 @@ public class SSMQuantizationHelperTests
             SSMQuantizationHelper<float>.QuantizeSSMLayer(block, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizeSSMLayer_QuantizedBlockStillProducesValidOutput()
     {
         int seqLen = 4;
@@ -121,14 +121,14 @@ public class SSMQuantizationHelperTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizeStateCache_ThrowsOnNullCache()
     {
         Assert.Throws<ArgumentNullException>(() =>
             SSMQuantizationHelper<float>.QuantizeStateCache(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizeStateCache_ThrowsOnInvalidBitWidth()
     {
         var cache = new SSMStateCache<float>();
@@ -140,7 +140,7 @@ public class SSMQuantizationHelperTests
             SSMQuantizationHelper<float>.QuantizeStateCache(cache, 33));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizeStateCache_EmptyCache_ReturnsEmptyCompressedCache()
     {
         var cache = new SSMStateCache<float>();
@@ -150,7 +150,7 @@ public class SSMQuantizationHelperTests
         Assert.Equal(0, compressed.CachedLayerCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizeStateCache_MigratesExistingStates()
     {
         var cache = new SSMStateCache<float>();
@@ -182,7 +182,7 @@ public class SSMQuantizationHelperTests
         Assert.True(maxError < 0.02, $"Max quantization error {maxError} exceeds tolerance");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizeStateCache_MigratesConvBuffers()
     {
         var cache = new SSMStateCache<float>();
@@ -200,7 +200,7 @@ public class SSMQuantizationHelperTests
         Assert.Equal(convBuf.Shape.ToArray(), retrievedBuf.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizeStateCache_LowerBitWidth_ProducesMoreError()
     {
         var cache = new SSMStateCache<float>();
@@ -225,14 +225,14 @@ public class SSMQuantizationHelperTests
         Assert.True(error4 >= error8, $"4-bit error ({error4}) should be >= 8-bit error ({error8})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EstimateMemorySavings_ThrowsOnNullLayer()
     {
         Assert.Throws<ArgumentNullException>(() =>
             SSMQuantizationHelper<float>.EstimateMemorySavings(null!, 8));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EstimateMemorySavings_8bit_ReturnsApprox4xCompression()
     {
         var block = new MambaBlock<float>(4, 32, 8);
@@ -248,7 +248,7 @@ public class SSMQuantizationHelperTests
         Assert.True(ratio < 5.0, $"Compression ratio {ratio} should be < 5x for 8-bit");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EstimateMemorySavings_4bit_HigherCompressionThan8bit()
     {
         var block = new MambaBlock<float>(4, 32, 8);
@@ -260,14 +260,14 @@ public class SSMQuantizationHelperTests
             $"4-bit ratio ({ratio4}) should be greater than 8-bit ratio ({ratio8})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeQuantizationError_ThrowsOnNullLayer()
     {
         Assert.Throws<ArgumentNullException>(() =>
             SSMQuantizationHelper<float>.ComputeQuantizationError(null!, 8));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeQuantizationError_8bit_IsSmall()
     {
         var block = new MambaBlock<float>(4, 32, 8);
@@ -279,7 +279,7 @@ public class SSMQuantizationHelperTests
         Assert.True(error < 0.1, $"8-bit quantization error {error} should be < 0.1");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeQuantizationError_LowerBitWidth_ProducesMoreError()
     {
         var block = new MambaBlock<float>(4, 32, 8);
@@ -294,7 +294,7 @@ public class SSMQuantizationHelperTests
             $"2-bit error ({error2}) should be >= 4-bit error ({error4})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeQuantizationError_DoesNotModifyLayer()
     {
         var block = new MambaBlock<float>(4, 32, 8);
@@ -309,7 +309,7 @@ public class SSMQuantizationHelperTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizeSSMLayer_NonMambaBlock_QuantizesNormally()
     {
         // Use S4DLayer which is not a MambaBlock - D parameter protection should be skipped
@@ -326,7 +326,7 @@ public class SSMQuantizationHelperTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizeSSMLayer_Double_Works()
     {
         var block = new MambaBlock<double>(4, 32, 8);
@@ -340,7 +340,7 @@ public class SSMQuantizationHelperTests
         Assert.False(ContainsNaNDouble(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EstimateMemorySavings_Double_Works()
     {
         var block = new MambaBlock<double>(4, 32, 8);
@@ -352,7 +352,7 @@ public class SSMQuantizationHelperTests
         Assert.True(ratio > 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComputeQuantizationError_Double_Works()
     {
         var block = new MambaBlock<double>(4, 32, 8);

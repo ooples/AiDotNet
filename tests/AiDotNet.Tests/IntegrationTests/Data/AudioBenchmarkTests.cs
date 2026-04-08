@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.IntegrationTests.Data;
 
 public class AudioBenchmarkTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Esc50Loader_LoadsSyntheticData()
     {
         string tempDir = CreateTempDirectory();
@@ -70,7 +70,7 @@ public class AudioBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task UrbanSound8kLoader_LoadsSyntheticData()
     {
         string tempDir = CreateTempDirectory();
@@ -118,7 +118,7 @@ public class AudioBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Musdb18Loader_LoadsSyntheticTracks()
     {
         string tempDir = CreateTempDirectory();
@@ -167,7 +167,7 @@ public class AudioBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task MaestroLoader_LoadsSyntheticCsv()
     {
         string tempDir = CreateTempDirectory();
@@ -225,7 +225,7 @@ public class AudioBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task AudioSetLoader_LoadsSyntheticMultiLabel()
     {
         string tempDir = CreateTempDirectory();
@@ -282,7 +282,7 @@ public class AudioBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task Esc50Loader_SplitReturnsThreeSets()
     {
         string tempDir = CreateTempDirectory();
@@ -333,7 +333,7 @@ public class AudioBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpectrogramTransform_TypeExists()
     {
         // SpectrogramTransform wraps MelSpectrogram which requires engine initialization.
@@ -343,7 +343,7 @@ public class AudioBenchmarkTests
         Assert.True(type.GetInterfaces().Length > 0, "SpectrogramTransform should implement ITransform.");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpecAugmentTransform_MasksSpectrogram()
     {
         int timeFrames = 100;
@@ -389,7 +389,7 @@ public class AudioBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LibriSpeechOptions_DefaultValues()
     {
         var options = new LibriSpeechDataLoaderOptions();
@@ -399,7 +399,7 @@ public class AudioBenchmarkTests
         Assert.True(options.AutoDownload);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CommonVoiceOptions_DefaultValues()
     {
         var options = new CommonVoiceDataLoaderOptions();
@@ -408,7 +408,7 @@ public class AudioBenchmarkTests
         Assert.Equal(10.0, options.MaxDurationSeconds);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VoxPopuliOptions_DefaultValues()
     {
         var options = new VoxPopuliDataLoaderOptions();
@@ -418,7 +418,7 @@ public class AudioBenchmarkTests
         Assert.False(options.AutoDownload);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FleursOptions_DefaultValues()
     {
         var options = new FleursDataLoaderOptions();
@@ -427,7 +427,7 @@ public class AudioBenchmarkTests
         Assert.Equal("en_us", options.Language);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Musdb18Options_DefaultValues()
     {
         var options = new Musdb18DataLoaderOptions();
@@ -436,7 +436,7 @@ public class AudioBenchmarkTests
         Assert.False(options.AutoDownload);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaestroOptions_DefaultValues()
     {
         var options = new MaestroDataLoaderOptions();
@@ -519,7 +519,7 @@ public class AudioBenchmarkTests
         return midi.ToArray();
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlacDecoder_DecodesAudioSamples()
     {
         // Test that LoadAudioSamples auto-detects FLAC and produces non-zero output.
@@ -550,7 +550,7 @@ public class AudioBenchmarkTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AudioLoaderHelper_AutoDetectsWavVsFlac()
     {
         var numOps = MathHelper.GetNumericOperations<double>();

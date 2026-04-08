@@ -11,7 +11,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
 {
     public class LocalTransformerEmbeddingTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
@@ -21,7 +21,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(512, model.MaxTokens);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithDefaultParameters_CreatesInstance()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path");
@@ -31,7 +31,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(512, model.MaxTokens);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullModelPath_ThrowsArgumentException()
         {
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -39,7 +39,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Model path cannot be empty", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithEmptyModelPath_ThrowsArgumentException()
         {
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -47,7 +47,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Model path cannot be empty", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithWhitespaceModelPath_ThrowsArgumentException()
         {
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -55,7 +55,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Model path cannot be empty", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithZeroDimension_ThrowsArgumentException()
         {
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -63,7 +63,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Dimension must be positive", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNegativeDimension_ThrowsArgumentException()
         {
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -71,7 +71,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Dimension must be positive", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithZeroMaxTokens_ThrowsArgumentException()
         {
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -79,7 +79,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Max tokens must be positive", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNegativeMaxTokens_ThrowsArgumentException()
         {
             var exception = Assert.Throws<ArgumentException>(() =>
@@ -87,7 +87,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Max tokens must be positive", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithValidText_ThrowsFileNotFoundForMissingModel()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
@@ -95,7 +95,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("This is a test sentence."));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithSameTextTwice_ThrowsFileNotFoundForMissingModel()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
@@ -103,7 +103,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Hello world"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithSingleText_ThrowsFileNotFoundForMissingModel()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
@@ -111,7 +111,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Hello world"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_ReturnsNormalizedVector_ThrowsFileNotFoundForMissingModel()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
@@ -119,7 +119,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Test normalization"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithNullText_ThrowsArgumentException()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path");
@@ -127,7 +127,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(null));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithEmptyText_ThrowsArgumentException()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path");
@@ -135,7 +135,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(string.Empty));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithWhitespaceText_ThrowsArgumentException()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path");
@@ -143,7 +143,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed("   "));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithValidTexts_ThrowsFileNotFoundForMissingModel()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
@@ -152,7 +152,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path");
@@ -160,7 +160,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentNullException>(() => model.EmbedBatch(null));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path");
@@ -169,7 +169,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_ProducesSameEmbeddingsAsIndividualCalls_ThrowsFileNotFoundForMissingModel()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
@@ -178,7 +178,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithFloatType_ThrowsFileNotFoundForMissingModel()
         {
             var model = new LocalTransformerEmbedding<float>("test-model-path", 384, 512);
@@ -186,7 +186,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Test with float type"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithCustomDimension_ThrowsFileNotFoundForMissingModel()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path", 768, 512);
@@ -194,7 +194,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Testing custom dimension"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_Deterministic_MultipleInstances_ThrowsFileNotFoundForMissingModel()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
@@ -202,7 +202,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Determinism test"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_AllRowsAreNormalized_ThrowsFileNotFoundForMissingModel()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
@@ -211,7 +211,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithLongText_ThrowsFileNotFoundForMissingModel()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);
@@ -220,7 +220,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed(longText));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithSpecialCharacters_ThrowsFileNotFoundForMissingModel()
         {
             var model = new LocalTransformerEmbedding<double>("test-model-path", 384, 512);

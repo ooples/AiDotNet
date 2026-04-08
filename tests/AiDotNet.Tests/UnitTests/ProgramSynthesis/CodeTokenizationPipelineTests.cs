@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public class CodeTokenizationPipelineTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Tokenize_Sql_ProducesOffsetsAndSpans()
     {
         var baseTokenizer = CharacterTokenizer.CreateAscii(SpecialTokens.Bert(), lowercase: false);
@@ -34,7 +34,7 @@ public class CodeTokenizationPipelineTests
         Assert.Equal(1, result.TokenSpans[0].Start.Column);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TokenizeWithStructure_CSharp_IncludesAstNodes()
     {
         var baseTokenizer = CharacterTokenizer.CreateAscii(SpecialTokens.Bert(), lowercase: false);

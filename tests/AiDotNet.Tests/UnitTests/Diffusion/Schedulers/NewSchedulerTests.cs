@@ -13,7 +13,7 @@ public class NewSchedulerTests
 {
     #region DDPM Scheduler Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DDPMScheduler_Constructor_CreatesSuccessfully()
     {
         var config = SchedulerConfig<double>.CreateDefault();
@@ -23,7 +23,7 @@ public class NewSchedulerTests
         Assert.Equal(1000, scheduler.TrainTimesteps);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DDPMScheduler_Step_ReturnsFiniteValues()
     {
         var config = new SchedulerConfig<double>(trainTimesteps: 50, betaStart: 0.0001, betaEnd: 0.02);
@@ -44,7 +44,7 @@ public class NewSchedulerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DDPMScheduler_FullLoop_ProducesFiniteResults()
     {
         var config = SchedulerConfig<double>.CreateDefault();
@@ -66,7 +66,7 @@ public class NewSchedulerTests
 
     #region Euler Discrete Scheduler Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EulerDiscreteScheduler_Constructor_CreatesSuccessfully()
     {
         var config = SchedulerConfig<double>.CreateStableDiffusion();
@@ -76,7 +76,7 @@ public class NewSchedulerTests
         Assert.Equal(1000, scheduler.TrainTimesteps);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EulerDiscreteScheduler_Step_ReturnsFiniteValues()
     {
         var config = new SchedulerConfig<double>(trainTimesteps: 50, betaStart: 0.0001, betaEnd: 0.02);
@@ -93,7 +93,7 @@ public class NewSchedulerTests
         AssertVectorIsFinite(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EulerDiscreteScheduler_IsDeterministic()
     {
         var config = new SchedulerConfig<double>(trainTimesteps: 100, betaStart: 0.0001, betaEnd: 0.02);
@@ -117,7 +117,7 @@ public class NewSchedulerTests
 
     #region Euler Ancestral Discrete Scheduler Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EulerAncestralScheduler_Constructor_CreatesSuccessfully()
     {
         var config = SchedulerConfig<double>.CreateStableDiffusion();
@@ -126,7 +126,7 @@ public class NewSchedulerTests
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EulerAncestralScheduler_Step_ReturnsFiniteValues()
     {
         var config = new SchedulerConfig<double>(trainTimesteps: 50, betaStart: 0.0001, betaEnd: 0.02);
@@ -143,7 +143,7 @@ public class NewSchedulerTests
         AssertVectorIsFinite(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EulerAncestralScheduler_WithNoise_DiffersFromDeterministic()
     {
         var config = new SchedulerConfig<double>(trainTimesteps: 100, betaStart: 0.0001, betaEnd: 0.02);
@@ -174,7 +174,7 @@ public class NewSchedulerTests
 
     #region DPM-Solver++ Multistep Scheduler Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DPMSolverMultistep_Constructor_CreatesSuccessfully()
     {
         var config = SchedulerConfig<double>.CreateStableDiffusion();
@@ -205,7 +205,7 @@ public class NewSchedulerTests
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DPMSolverMultistep_FullLoop_ProducesFiniteResults()
     {
         var config = SchedulerConfig<double>.CreateStableDiffusion();
@@ -227,7 +227,7 @@ public class NewSchedulerTests
 
     #region LCM Scheduler Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LCMScheduler_Constructor_CreatesSuccessfully()
     {
         var config = SchedulerConfig<double>.CreateLCM();
@@ -236,7 +236,7 @@ public class NewSchedulerTests
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LCMScheduler_Step_ReturnsFiniteValues()
     {
         var config = SchedulerConfig<double>.CreateLCM();
@@ -252,7 +252,7 @@ public class NewSchedulerTests
         AssertVectorIsFinite(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LCMScheduler_FullLoop_FewSteps_ProducesFiniteResults()
     {
         var config = SchedulerConfig<double>.CreateLCM();
@@ -274,7 +274,7 @@ public class NewSchedulerTests
 
     #region Flow Matching Scheduler Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlowMatchingScheduler_Constructor_CreatesSuccessfully()
     {
         var config = SchedulerConfig<double>.CreateRectifiedFlow();
@@ -284,14 +284,14 @@ public class NewSchedulerTests
         Assert.Equal(1000, scheduler.TrainTimesteps);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlowMatchingScheduler_CreateDefault_Works()
     {
         var scheduler = FlowMatchingScheduler<double>.CreateDefault();
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlowMatchingScheduler_AddNoise_UsesLinearInterpolation()
     {
         var config = SchedulerConfig<double>.CreateRectifiedFlow();
@@ -322,7 +322,7 @@ public class NewSchedulerTests
             "Higher timestep should result in more deviation from original");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlowMatchingScheduler_Step_ReturnsFiniteValues()
     {
         var config = SchedulerConfig<double>.CreateRectifiedFlow();
@@ -338,7 +338,7 @@ public class NewSchedulerTests
         AssertVectorIsFinite(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlowMatchingScheduler_FullLoop_ProducesFiniteResults()
     {
         var config = SchedulerConfig<double>.CreateRectifiedFlow();
@@ -356,7 +356,7 @@ public class NewSchedulerTests
         AssertVectorIsFinite(sample);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlowMatchingScheduler_GetState_ContainsSchedulerType()
     {
         var scheduler = FlowMatchingScheduler<double>.CreateDefault();
@@ -372,7 +372,7 @@ public class NewSchedulerTests
 
     #region UniPC Scheduler Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniPCScheduler_Constructor_CreatesSuccessfully()
     {
         var config = SchedulerConfig<double>.CreateStableDiffusion();
@@ -403,7 +403,7 @@ public class NewSchedulerTests
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniPCScheduler_Step_ReturnsFiniteValues()
     {
         var config = new SchedulerConfig<double>(trainTimesteps: 50, betaStart: 0.0001, betaEnd: 0.02);
@@ -420,7 +420,7 @@ public class NewSchedulerTests
         AssertVectorIsFinite(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniPCScheduler_WithoutCorrectorStep_FullLoop()
     {
         var config = SchedulerConfig<double>.CreateStableDiffusion();
@@ -438,7 +438,7 @@ public class NewSchedulerTests
         AssertVectorIsFinite(sample);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniPCScheduler_WithCorrectorStep_FullLoop()
     {
         var config = SchedulerConfig<double>.CreateStableDiffusion();
@@ -456,7 +456,7 @@ public class NewSchedulerTests
         AssertVectorIsFinite(sample);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniPCScheduler_GetState_ContainsSchedulerType()
     {
         var config = SchedulerConfig<double>.CreateStableDiffusion();
@@ -475,7 +475,7 @@ public class NewSchedulerTests
 
     #region SchedulerConfig Factory Method Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SchedulerConfig_CreateRectifiedFlow_HasCorrectDefaults()
     {
         var config = SchedulerConfig<double>.CreateRectifiedFlow();
@@ -486,7 +486,7 @@ public class NewSchedulerTests
         Assert.False(config.ClipSample);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SchedulerConfig_CreateLCM_HasCorrectDefaults()
     {
         var config = SchedulerConfig<double>.CreateLCM();
@@ -500,7 +500,7 @@ public class NewSchedulerTests
 
     #region Cross-Scheduler Contract Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllSchedulers_SetTimesteps_ProducesDescendingSequence()
     {
         var sdConfig = SchedulerConfig<double>.CreateStableDiffusion();
@@ -534,7 +534,7 @@ public class NewSchedulerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllSchedulers_Step_ReturnsCorrectLength()
     {
         var sdConfig = SchedulerConfig<double>.CreateStableDiffusion();
@@ -567,7 +567,7 @@ public class NewSchedulerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllSchedulers_NullModelOutput_ThrowsArgumentNullException()
     {
         var config = SchedulerConfig<double>.CreateDefault();

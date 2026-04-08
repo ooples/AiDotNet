@@ -18,7 +18,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             return tempFile;
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
@@ -28,14 +28,14 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(512, model.MaxTokens);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullModelPath_ThrowsArgumentNullException()
         {
             Assert.Throws<ArgumentNullException>(() =>
                 new MultiModalEmbeddingModel<double>(null, true, 512));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithValidText_ThrowsFileNotFoundForMissingModel()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
@@ -43,7 +43,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("This is a test sentence."));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithNormalization_ThrowsFileNotFoundForMissingModel()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
@@ -51,7 +51,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Test normalization"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithoutNormalization_ThrowsFileNotFoundForMissingModel()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", false, 512);
@@ -59,7 +59,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Test no normalization"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithNullText_ThrowsArgumentException()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
@@ -67,7 +67,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(null));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithEmptyText_ThrowsArgumentException()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
@@ -75,7 +75,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(string.Empty));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedImage_WithValidImagePath_ReturnsVectorOfCorrectDimension()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
@@ -95,7 +95,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedImage_WithNullImagePath_ThrowsArgumentException()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
@@ -104,7 +104,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Image path cannot be null or whitespace", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedImage_WithEmptyImagePath_ThrowsArgumentException()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
@@ -113,7 +113,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Image path cannot be null or whitespace", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedImage_WithNonExistentImagePath_ThrowsFileNotFoundException()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
@@ -122,7 +122,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.EmbedImage(nonExistentPath));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedImage_WithNormalization_ReturnsNormalizedVector()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
@@ -147,7 +147,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedImage_WithSameImageTwice_ReturnsSameEmbedding()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
@@ -170,7 +170,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedImageBatch_WithValidImagePaths_ReturnsCorrectNumberOfEmbeddings()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
@@ -198,7 +198,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedImageBatch_WithNullImagePaths_ThrowsArgumentNullException()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
@@ -206,7 +206,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentNullException>(() => model.EmbedImageBatch(null));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithValidTexts_ThrowsFileNotFoundForMissingModel()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
@@ -215,7 +215,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithFloatType_ThrowsFileNotFoundForMissingModel()
         {
             var model = new MultiModalEmbeddingModel<float>("test-model-path.onnx", true, 512);
@@ -223,7 +223,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Test with float type"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithCustomDimension_ThrowsFileNotFoundForMissingModel()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 768);
@@ -231,7 +231,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Testing custom dimension"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedImage_WithCustomDimension_ReturnsCorrectSize()
         {
             var customDimension = 768;
@@ -251,7 +251,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_Deterministic_MultipleInstances_ThrowsFileNotFoundForMissingModel()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
@@ -259,7 +259,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<FileNotFoundException>(() => model.Embed("Determinism test"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MaxTokens_ReturnsCorrectValue()
         {
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);

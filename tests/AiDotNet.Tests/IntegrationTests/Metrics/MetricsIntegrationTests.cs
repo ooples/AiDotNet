@@ -14,7 +14,7 @@ public class MetricsIntegrationTests
 {
     #region PeakSignalToNoiseRatio Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PSNR_IdenticalImages_ReturnsHighValue()
     {
         var psnr = new PeakSignalToNoiseRatio<double>();
@@ -32,7 +32,7 @@ public class MetricsIntegrationTests
         Assert.True(result >= 99.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PSNR_DifferentImages_ReturnsReasonableValue()
     {
         var psnr = new PeakSignalToNoiseRatio<double>();
@@ -55,7 +55,7 @@ public class MetricsIntegrationTests
         Assert.True(result > 0 && result < 100);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PSNR_WithCustomMaxValue_ComputesCorrectly()
     {
         var psnr = new PeakSignalToNoiseRatio<double>(255.0);
@@ -75,7 +75,7 @@ public class MetricsIntegrationTests
         Assert.True(result >= 99.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PSNR_NullPredicted_ThrowsArgumentNullException()
     {
         var psnr = new PeakSignalToNoiseRatio<double>();
@@ -85,7 +85,7 @@ public class MetricsIntegrationTests
         Assert.Throws<ArgumentNullException>(() => psnr.Compute(null!, image));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PSNR_NullGroundTruth_ThrowsArgumentNullException()
     {
         var psnr = new PeakSignalToNoiseRatio<double>();
@@ -95,7 +95,7 @@ public class MetricsIntegrationTests
         Assert.Throws<ArgumentNullException>(() => psnr.Compute(image, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PSNR_ShapeMismatch_ThrowsArgumentException()
     {
         var psnr = new PeakSignalToNoiseRatio<double>();
@@ -106,7 +106,7 @@ public class MetricsIntegrationTests
         Assert.Throws<ArgumentException>(() => psnr.Compute(image1, image2));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PSNR_ComputeBatch_ReturnsCorrectArraySize()
     {
         var psnr = new PeakSignalToNoiseRatio<double>();
@@ -120,7 +120,7 @@ public class MetricsIntegrationTests
         Assert.Equal(2, results.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PSNR_ComputeBatch_Non4DTensor_ThrowsArgumentException()
     {
         var psnr = new PeakSignalToNoiseRatio<double>();
@@ -134,7 +134,7 @@ public class MetricsIntegrationTests
 
     #region StructuralSimilarity Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SSIM_IdenticalImages_ReturnsOne()
     {
         var ssim = new StructuralSimilarity<double>();
@@ -151,7 +151,7 @@ public class MetricsIntegrationTests
         Assert.True(result > 0.99);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SSIM_DifferentImages_ReturnsLessThanOne()
     {
         var ssim = new StructuralSimilarity<double>();
@@ -175,7 +175,7 @@ public class MetricsIntegrationTests
         Assert.True(result < 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SSIM_MultiChannelImage_ComputesCorrectly()
     {
         var ssim = new StructuralSimilarity<double>();
@@ -192,7 +192,7 @@ public class MetricsIntegrationTests
         Assert.True(result > 0.99);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SSIM_NullPredicted_ThrowsArgumentNullException()
     {
         var ssim = new StructuralSimilarity<double>();
@@ -201,7 +201,7 @@ public class MetricsIntegrationTests
         Assert.Throws<ArgumentNullException>(() => ssim.Compute(null!, image));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SSIM_NullGroundTruth_ThrowsArgumentNullException()
     {
         var ssim = new StructuralSimilarity<double>();
@@ -210,7 +210,7 @@ public class MetricsIntegrationTests
         Assert.Throws<ArgumentNullException>(() => ssim.Compute(image, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SSIM_CustomParameters_WorksCorrectly()
     {
         var ssim = new StructuralSimilarity<double>(maxValue: 255.0, k1: 0.02, k2: 0.04, windowSize: 7);
@@ -229,7 +229,7 @@ public class MetricsIntegrationTests
 
     #region MeanIntersectionOverUnion Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void mIoU_PerfectPrediction_ReturnsOne()
     {
         var miou = new MeanIntersectionOverUnion<double>(numClasses: 3);
@@ -243,7 +243,7 @@ public class MetricsIntegrationTests
         Assert.Equal(1.0, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void mIoU_CompleteMismatch_ReturnsZero()
     {
         var miou = new MeanIntersectionOverUnion<double>(numClasses: 2);
@@ -256,7 +256,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.0, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void mIoU_PartialMatch_ReturnsBetweenZeroAndOne()
     {
         var miou = new MeanIntersectionOverUnion<double>(numClasses: 2);
@@ -269,7 +269,7 @@ public class MetricsIntegrationTests
         Assert.True(result > 0 && result < 1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void mIoU_IgnoreBackground_ExcludesClass0()
     {
         var miou = new MeanIntersectionOverUnion<double>(numClasses: 2, ignoreBackground: true);
@@ -283,13 +283,13 @@ public class MetricsIntegrationTests
         Assert.Equal(1.0, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void mIoU_TooFewClasses_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new MeanIntersectionOverUnion<double>(numClasses: 1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void mIoU_NullPredicted_ThrowsArgumentNullException()
     {
         var miou = new MeanIntersectionOverUnion<double>(numClasses: 2);
@@ -298,7 +298,7 @@ public class MetricsIntegrationTests
         Assert.Throws<ArgumentNullException>(() => miou.Compute(null!, groundTruth));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void mIoU_ComputePerClass_ReturnsCorrectArraySize()
     {
         var miou = new MeanIntersectionOverUnion<double>(numClasses: 3);
@@ -319,7 +319,7 @@ public class MetricsIntegrationTests
 
     #region OverallAccuracy Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OverallAccuracy_PerfectPrediction_ReturnsOne()
     {
         var accuracy = new OverallAccuracy<double>();
@@ -333,7 +333,7 @@ public class MetricsIntegrationTests
         Assert.Equal(1.0, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OverallAccuracy_HalfCorrect_ReturnsPointFive()
     {
         var accuracy = new OverallAccuracy<double>();
@@ -346,7 +346,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.5, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OverallAccuracy_NullPredicted_ThrowsArgumentNullException()
     {
         var accuracy = new OverallAccuracy<double>();
@@ -355,7 +355,7 @@ public class MetricsIntegrationTests
         Assert.Throws<ArgumentNullException>(() => accuracy.Compute(null!, groundTruth));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OverallAccuracy_LengthMismatch_ThrowsArgumentException()
     {
         var accuracy = new OverallAccuracy<double>();
@@ -370,7 +370,7 @@ public class MetricsIntegrationTests
 
     #region WordErrorRate Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WER_IdenticalText_ReturnsZero()
     {
         var wer = new WordErrorRate();
@@ -380,7 +380,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.0, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WER_CompletelyDifferent_ReturnsOne()
     {
         var wer = new WordErrorRate();
@@ -390,7 +390,7 @@ public class MetricsIntegrationTests
         Assert.Equal(1.0, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WER_OneDeletion_ComputesCorrectly()
     {
         var wer = new WordErrorRate();
@@ -402,7 +402,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.5, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WER_OneInsertion_ComputesCorrectly()
     {
         var wer = new WordErrorRate();
@@ -413,7 +413,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.5, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WER_OneSubstitution_ComputesCorrectly()
     {
         var wer = new WordErrorRate();
@@ -424,7 +424,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.5, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WER_EmptyReference_ReturnsCorrectValue()
     {
         var wer = new WordErrorRate();
@@ -433,7 +433,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.0, wer.Compute("", ""));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WER_ComputeBatch_ReturnsAverage()
     {
         var wer = new WordErrorRate();
@@ -448,7 +448,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.5, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WER_ComputeBatch_MismatchedArrays_ThrowsArgumentException()
     {
         var wer = new WordErrorRate();
@@ -457,7 +457,7 @@ public class MetricsIntegrationTests
             wer.ComputeBatch(new[] { "a", "b" }, new[] { "a" }));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WER_ComputeDetailed_ReturnsAllComponents()
     {
         var wer = new WordErrorRate();
@@ -472,7 +472,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0, dels);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WER_CaseInsensitive_MatchesCorrectly()
     {
         var wer = new WordErrorRate();
@@ -486,7 +486,7 @@ public class MetricsIntegrationTests
 
     #region CharacterErrorRate Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CER_IdenticalText_ReturnsZero()
     {
         var cer = new CharacterErrorRate();
@@ -496,7 +496,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.0, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CER_OneCharacterDifferent_ComputesCorrectly()
     {
         var cer = new CharacterErrorRate();
@@ -507,7 +507,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.2, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CER_EmptyReference_ReturnsCorrectValue()
     {
         var cer = new CharacterErrorRate();
@@ -516,7 +516,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.0, cer.Compute("", ""));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CER_IgnoreWhitespace_RemovesSpaces()
     {
         var cer = new CharacterErrorRate();
@@ -526,7 +526,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.0, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CER_ComputeBatch_ReturnsAverage()
     {
         var cer = new CharacterErrorRate();
@@ -544,7 +544,7 @@ public class MetricsIntegrationTests
 
     #region SignalToNoiseRatio Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SNR_IdenticalSignals_ReturnsHighValue()
     {
         var snr = new SignalToNoiseRatio<double>();
@@ -560,7 +560,7 @@ public class MetricsIntegrationTests
         Assert.True(result >= 99.0); // Very high SNR for identical signals
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SNR_NoisySignal_ReturnsPositiveValue()
     {
         var snr = new SignalToNoiseRatio<double>();
@@ -583,7 +583,7 @@ public class MetricsIntegrationTests
         Assert.True(result > 0); // Should be positive
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SNR_LengthMismatch_ThrowsArgumentException()
     {
         var snr = new SignalToNoiseRatio<double>();
@@ -594,7 +594,7 @@ public class MetricsIntegrationTests
         Assert.Throws<ArgumentException>(() => snr.Compute(clean, noisy));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SNR_ComputeSegmental_ReturnsReasonableValue()
     {
         var snr = new SignalToNoiseRatio<double>();
@@ -621,7 +621,7 @@ public class MetricsIntegrationTests
 
     #region ScaleInvariantSignalToDistortionRatio Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SISDR_IdenticalSignals_ReturnsHighValue()
     {
         var sisdr = new ScaleInvariantSignalToDistortionRatio<double>();
@@ -637,7 +637,7 @@ public class MetricsIntegrationTests
         Assert.True(result >= 99.0); // Very high SI-SDR for identical signals
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SISDR_ScaledSignal_HandlesScaleInvariance()
     {
         var sisdr = new ScaleInvariantSignalToDistortionRatio<double>();
@@ -660,7 +660,7 @@ public class MetricsIntegrationTests
         Assert.True(result > 90.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SISDR_LengthMismatch_ThrowsArgumentException()
     {
         var sisdr = new ScaleInvariantSignalToDistortionRatio<double>();
@@ -671,7 +671,7 @@ public class MetricsIntegrationTests
         Assert.Throws<ArgumentException>(() => sisdr.Compute(estimated, target));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SISDR_ComputeImprovement_ReturnsCorrectDifference()
     {
         var sisdr = new ScaleInvariantSignalToDistortionRatio<double>();
@@ -702,7 +702,7 @@ public class MetricsIntegrationTests
 
     #region ShortTimeObjectiveIntelligibility Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void STOI_IdenticalSignals_ReturnsHighValue()
     {
         var stoi = new ShortTimeObjectiveIntelligibility<double>(sampleRate: 16000);
@@ -718,7 +718,7 @@ public class MetricsIntegrationTests
         Assert.True(result >= 0.9); // High STOI for identical signals
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void STOI_LengthMismatch_ThrowsArgumentException()
     {
         var stoi = new ShortTimeObjectiveIntelligibility<double>();
@@ -729,21 +729,21 @@ public class MetricsIntegrationTests
         Assert.Throws<ArgumentException>(() => stoi.Compute(degraded, clean));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void STOI_InvalidSampleRate_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new ShortTimeObjectiveIntelligibility<double>(sampleRate: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void STOI_InvalidFrameLength_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new ShortTimeObjectiveIntelligibility<double>(frameLength: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void STOI_InvalidHopLength_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -753,7 +753,7 @@ public class MetricsIntegrationTests
             new ShortTimeObjectiveIntelligibility<double>(frameLength: 256, hopLength: 512));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void STOI_InvalidNumBands_ThrowsArgumentOutOfRangeException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -764,7 +764,7 @@ public class MetricsIntegrationTests
 
     #region PerceptualSpeechQuality Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PESQ_IdenticalSignals_ReturnsHighScore()
     {
         var pesq = new PerceptualSpeechQuality<double>(sampleRate: 16000);
@@ -780,14 +780,14 @@ public class MetricsIntegrationTests
         Assert.True(result >= 3.0); // Should be good quality for identical signals
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PESQ_InvalidSampleRate_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             new PerceptualSpeechQuality<double>(sampleRate: 44100));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PESQ_ValidSampleRates_DoNotThrow()
     {
         var pesq8k = new PerceptualSpeechQuality<double>(sampleRate: 8000);
@@ -801,7 +801,7 @@ public class MetricsIntegrationTests
 
     #region ChamferDistance Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChamferDistance_IdenticalPointClouds_ReturnsZero()
     {
         var chamfer = new ChamferDistance<double>();
@@ -815,7 +815,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.0, result, 5);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChamferDistance_DifferentPointClouds_ReturnsPositive()
     {
         var chamfer = new ChamferDistance<double>();
@@ -831,7 +831,7 @@ public class MetricsIntegrationTests
         Assert.True(result > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChamferDistance_Squared_ReturnsSquaredDistances()
     {
         var chamferSquared = new ChamferDistance<double>(squared: true);
@@ -852,7 +852,7 @@ public class MetricsIntegrationTests
         Assert.Equal(2.0, euclideanResult, 5);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChamferDistance_NullPointsA_ThrowsArgumentNullException()
     {
         var chamfer = new ChamferDistance<double>();
@@ -861,7 +861,7 @@ public class MetricsIntegrationTests
         Assert.Throws<ArgumentNullException>(() => chamfer.Compute(null!, points));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChamferDistance_Non2DTensor_ThrowsArgumentException()
     {
         var chamfer = new ChamferDistance<double>();
@@ -870,7 +870,7 @@ public class MetricsIntegrationTests
         Assert.Throws<ArgumentException>(() => chamfer.Compute(tensor, tensor));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChamferDistance_DimensionMismatch_ThrowsArgumentException()
     {
         var chamfer = new ChamferDistance<double>();
@@ -881,7 +881,7 @@ public class MetricsIntegrationTests
         Assert.Throws<ArgumentException>(() => chamfer.Compute(points3D, points2D));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChamferDistance_ComputeBatch_ReturnsCorrectArraySize()
     {
         var chamfer = new ChamferDistance<double>();
@@ -894,7 +894,7 @@ public class MetricsIntegrationTests
         Assert.Equal(2, results.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChamferDistance_ComputeOneWay_ReturnsCorrectDirection()
     {
         var chamfer = new ChamferDistance<double>();
@@ -914,7 +914,7 @@ public class MetricsIntegrationTests
 
     #region EarthMoversDistance Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EMD_IdenticalPointClouds_ReturnsZero()
     {
         var emd = new EarthMoversDistance<double>();
@@ -928,7 +928,7 @@ public class MetricsIntegrationTests
         Assert.True(result < 0.01); // Near zero for identical point clouds
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EMD_DifferentPointClouds_ReturnsPositive()
     {
         var emd = new EarthMoversDistance<double>();
@@ -944,7 +944,7 @@ public class MetricsIntegrationTests
         Assert.True(result > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EMD_NullPointClouds_ThrowsArgumentNullException()
     {
         var emd = new EarthMoversDistance<double>();
@@ -954,7 +954,7 @@ public class MetricsIntegrationTests
         Assert.Throws<ArgumentNullException>(() => emd.Compute(points, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EMD_Non2DTensor_ThrowsArgumentException()
     {
         var emd = new EarthMoversDistance<double>();
@@ -963,7 +963,7 @@ public class MetricsIntegrationTests
         Assert.Throws<ArgumentException>(() => emd.Compute(tensor, tensor));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EMD_CustomIterationsAndEpsilon_WorksCorrectly()
     {
         var emd = new EarthMoversDistance<double>(iterations: 50, epsilon: 0.05);
@@ -980,7 +980,7 @@ public class MetricsIntegrationTests
 
     #region FScore Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FScore_IdenticalPointClouds_ReturnsOne()
     {
         var fscore = new FScore<double>(threshold: 0.1);
@@ -994,7 +994,7 @@ public class MetricsIntegrationTests
         Assert.Equal(1.0, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FScore_FarPointClouds_ReturnsZero()
     {
         var fscore = new FScore<double>(threshold: 0.1);
@@ -1010,7 +1010,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.0, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FScore_PartialMatch_ReturnsBetweenZeroAndOne()
     {
         var fscore = new FScore<double>(threshold: 0.5);
@@ -1026,7 +1026,7 @@ public class MetricsIntegrationTests
         Assert.True(result > 0 && result < 1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FScore_ComputePrecisionRecall_ReturnsTuple()
     {
         var fscore = new FScore<double>(threshold: 0.1);
@@ -1040,7 +1040,7 @@ public class MetricsIntegrationTests
         Assert.Equal(1.0, recall, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FScore_EmptyPointClouds_HandleCorrectly()
     {
         var fscore = new FScore<double>(threshold: 0.1);
@@ -1059,7 +1059,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.0, r2, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FScore_NullPredicted_ThrowsArgumentNullException()
     {
         var fscore = new FScore<double>();
@@ -1072,7 +1072,7 @@ public class MetricsIntegrationTests
 
     #region IoU3D Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IoU3D_IdenticalVoxels_ReturnsOne()
     {
         var iou = new IoU3D<double>();
@@ -1087,7 +1087,7 @@ public class MetricsIntegrationTests
         Assert.Equal(1.0, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IoU3D_NoOverlap_ReturnsZero()
     {
         var iou = new IoU3D<double>();
@@ -1103,7 +1103,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.0, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IoU3D_PartialOverlap_ReturnsBetweenZeroAndOne()
     {
         var iou = new IoU3D<double>();
@@ -1120,7 +1120,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.5, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IoU3D_VoxelSizeMismatch_ThrowsArgumentException()
     {
         var iou = new IoU3D<double>();
@@ -1131,7 +1131,7 @@ public class MetricsIntegrationTests
         Assert.Throws<ArgumentException>(() => iou.ComputeVoxelIoU(voxelsA, voxelsB));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IoU3D_NullVoxels_ThrowsArgumentNullException()
     {
         var iou = new IoU3D<double>();
@@ -1140,7 +1140,7 @@ public class MetricsIntegrationTests
         Assert.Throws<ArgumentNullException>(() => iou.ComputeVoxelIoU(null!, voxels));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IoU3D_BoxIoU_IdenticalBoxes_ReturnsOne()
     {
         var iou = new IoU3D<double>();
@@ -1152,7 +1152,7 @@ public class MetricsIntegrationTests
         Assert.Equal(1.0, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IoU3D_BoxIoU_NoOverlap_ReturnsZero()
     {
         var iou = new IoU3D<double>();
@@ -1165,7 +1165,7 @@ public class MetricsIntegrationTests
         Assert.Equal(0.0, result, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IoU3D_BoxIoU_PartialOverlap_ReturnsBetweenZeroAndOne()
     {
         var iou = new IoU3D<double>();
@@ -1181,7 +1181,7 @@ public class MetricsIntegrationTests
         Assert.True(result > 0 && result < 1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IoU3D_BoxIoU_InvalidBoxFormat_ThrowsArgumentException()
     {
         var iou = new IoU3D<double>();

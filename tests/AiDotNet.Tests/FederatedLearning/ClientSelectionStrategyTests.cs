@@ -7,7 +7,7 @@ namespace AiDotNet.Tests.FederatedLearning;
 
 public class ClientSelectionStrategyTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StratifiedSelection_ReducesGroupAllocations_WhenTooManyGroups()
     {
         var strategy = new StratifiedClientSelectionStrategy();
@@ -37,7 +37,7 @@ public class ClientSelectionStrategyTests
         Assert.Equal(selected.Count, selectedGroups.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AvailabilityAwareSelection_FallsBackToHighestAvailability_WhenRandomEligibilityInsufficient()
     {
         var strategy = new AvailabilityAwareClientSelectionStrategy(availabilityThreshold: 0.9);
@@ -63,7 +63,7 @@ public class ClientSelectionStrategyTests
         Assert.Contains(13, selected);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ClusteredSelection_UsesEmbeddings_WhenProvided()
     {
         var strategy = new ClusteredClientSelectionStrategy(clusterCount: 2, iterations: 2);
@@ -92,7 +92,7 @@ public class ClientSelectionStrategyTests
         Assert.Contains(selected, id => id == 3 || id == 4);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void WeightedRandomSelection_FallsBackToUniform_WhenNoPositiveWeights()
     {
         var strategy = new WeightedRandomClientSelectionStrategy();
@@ -118,7 +118,7 @@ public class ClientSelectionStrategyTests
         Assert.True(selected.SequenceEqual(selected.OrderBy(i => i)));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void WeightedRandomSelection_ReturnsAllCandidates_WhenDesiredExceedsCount()
     {
         var strategy = new WeightedRandomClientSelectionStrategy();

@@ -60,7 +60,7 @@ public class FederatedLearningCompressionIntegrationTests
         Assert.All(metadata.RoundMetrics, r => Assert.True(r.UploadCompressionRatio <= 1.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task BuildAsync_WithUniformQuantizationAndZeroDelta_Completes()
     {
         var (x, y) = CreateToyData();

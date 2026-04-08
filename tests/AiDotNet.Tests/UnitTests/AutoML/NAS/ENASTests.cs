@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class ENASTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ENAS_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
@@ -21,7 +21,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(enas);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ENAS_SampleArchitecture_ReturnsValidArchitecture()
         {
             // Arrange
@@ -36,7 +36,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(architecture.Operations.Count > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ENAS_SampleArchitecture_ReturnsLogProbability()
         {
             // Arrange
@@ -50,7 +50,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(logProb <= 0.0); // Log probability should be non-positive
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ENAS_SampleArchitecture_ReturnsEntropy()
         {
             // Arrange
@@ -64,7 +64,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(entropy >= 0.0); // Entropy should be non-negative
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ENAS_GetControllerParameters_ReturnsNonEmptyList()
         {
             // Arrange
@@ -79,7 +79,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(parameters.Count > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ENAS_GetControllerGradients_ReturnsMatchingList()
         {
             // Arrange
@@ -94,7 +94,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(parameters.Count, gradients.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ENAS_GetSharedWeights_ReturnsEmptyDictionaryInitially()
         {
             // Arrange
@@ -109,7 +109,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Empty(sharedWeights);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ENAS_GetSharedWeights_WithKey_InitializesAndReturns()
         {
             // Arrange
@@ -124,7 +124,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(weights.Length > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ENAS_GetSharedWeights_SameKey_ReturnsSameReference()
         {
             // Arrange
@@ -139,7 +139,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Same(weights1, weights2);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ENAS_UpdateController_UpdatesBaseline()
         {
             // Arrange
@@ -156,7 +156,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotEqual(baselineBefore, baselineAfter);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ENAS_GetBaseline_ReturnsZeroInitially()
         {
             // Arrange
@@ -170,7 +170,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(0.0, baseline);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ENAS_MultipleSamples_ReturnDifferentArchitectures()
         {
             // Arrange
@@ -193,7 +193,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(desc3);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ENAS_CustomControllerHiddenSize_InitializesCorrectly()
         {
             // Arrange & Act
@@ -205,7 +205,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(enas.GetControllerParameters()[0].Length > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ENAS_CustomBaselineDecay_InitializesCorrectly()
         {
             // Arrange & Act
@@ -221,7 +221,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotEqual(0.0, baseline);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ENAS_CustomEntropyWeight_InitializesCorrectly()
         {
             // Arrange & Act

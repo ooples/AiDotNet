@@ -31,7 +31,7 @@ public class ContinualLearningDeepMathIntegrationTests
     // EWC: Elastic Weight Consolidation
     // ═══════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void EWC_NoTasks_RegularizationLossIsZero()
     {
@@ -44,7 +44,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.Equal(0.0, loss, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void EWC_OriginalFormulation_HandCalculatedLoss()
     {
@@ -93,7 +93,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.True(loss > 0, $"EWC loss {loss} should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void EWC_SameParameters_LossIsZero()
     {
@@ -113,7 +113,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.Equal(0.0, loss, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void EWC_LambdaScaling_LossProportionalToLambda()
     {
@@ -146,7 +146,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.Equal(2.0, loss2 / loss1, 1e-4);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void EWC_OnlineMode_AccumulatesFisher()
     {
@@ -182,7 +182,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.NotNull(ewc.ConsolidatedParameters);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void EWC_FisherComputation_EmptyCache_UniformImportance()
     {
@@ -204,7 +204,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.Equal(fisher[1], fisher[2], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void EWC_OptimalParameters_StoredCorrectly()
     {
@@ -226,7 +226,7 @@ public class ContinualLearningDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void EWC_Reset_ClearsAllState()
     {
@@ -253,7 +253,7 @@ public class ContinualLearningDeepMathIntegrationTests
     // SI: Synaptic Intelligence
     // ═══════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void SI_NoTasks_RegularizationLossIsZero()
     {
@@ -265,7 +265,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.Equal(0.0, loss, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void SI_Name_IsCorrect()
     {
@@ -274,7 +274,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.Equal("Synaptic-Intelligence", si.Name);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void SI_ImportanceComputation_PathIntegral()
     {
@@ -310,7 +310,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.NotNull(si.ConsolidatedImportance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void SI_SameParameters_LossIsZero()
     {
@@ -332,7 +332,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.Equal(0.0, loss, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void SI_ImportanceAccumulation_SumMode()
     {
@@ -375,7 +375,7 @@ public class ContinualLearningDeepMathIntegrationTests
             $"Omega[0] after task2 ({omega2[0]}) should be >= task1 ({val0Task1})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void SI_ImportanceAccumulation_MaxMode()
     {
@@ -409,7 +409,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.NotNull(si.ConsolidatedImportance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void SI_ImportanceAccumulation_WeightedSumMode()
     {
@@ -438,7 +438,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.NotNull(si.ConsolidatedImportance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void SI_Reset_ClearsAllState()
     {
@@ -463,7 +463,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.False(si.IsTrackingTask);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void SI_DampingPreventsZeroDivision()
     {
@@ -495,7 +495,7 @@ public class ContinualLearningDeepMathIntegrationTests
     // ExperienceReplayBuffer
     // ═══════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ReplayBuffer_InitialState_EmptyBuffer()
     {
@@ -508,7 +508,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.Equal(0, buffer.TaskCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ReplayBuffer_NegativeMaxSize_Throws()
     {
@@ -516,7 +516,7 @@ public class ContinualLearningDeepMathIntegrationTests
             new ExperienceReplayBuffer<double, double[], double[]>(maxSize: -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ReplayBuffer_SampleBatch_ReturnsCorrectSize()
     {
@@ -532,7 +532,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.Equal(5, batch.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ReplayBuffer_SampleBatchLargerThanBuffer_ReturnsBufferSize()
     {
@@ -548,7 +548,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.True(batch.Count <= buffer.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ReplayBuffer_EmptyBuffer_SampleReturnsEmpty()
     {
@@ -557,7 +557,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.Empty(batch);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ReplayBuffer_TaskTracking_CorrectCounts()
     {
@@ -573,7 +573,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.True(counts.ContainsKey(1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ReplayBuffer_Statistics_CorrectFillRatio()
     {
@@ -590,7 +590,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.Equal(expectedRatio, stats.FillRatio, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ReplayBuffer_Clear_EmptiesBuffer()
     {
@@ -605,7 +605,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.Equal(0, buffer.TaskCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ReplayBuffer_UpdatePriority_ValidRange()
     {
@@ -627,7 +627,7 @@ public class ContinualLearningDeepMathIntegrationTests
             buffer.UpdatePriority(-1, 1.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ReplayBuffer_SampleFromTask_ReturnsCorrectTaskData()
     {
@@ -652,7 +652,7 @@ public class ContinualLearningDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ReplayBuffer_SampleFromNonexistentTask_ReturnsEmpty()
     {
@@ -665,7 +665,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.Empty(samples);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ReplayBuffer_GetAll_ReturnsAllStoredData()
     {
@@ -678,7 +678,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.Equal(buffer.Count, all.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ReplayBuffer_ReplayStrategies_AllReturnValidData()
     {
@@ -701,7 +701,7 @@ public class ContinualLearningDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void DataPoint_Constructor_StoresCorrectly()
     {
@@ -715,7 +715,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.Contains("TaskId=7", dp.ToString());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ReplayBuffer_TotalSamplesProcessed_Tracks()
     {
@@ -731,7 +731,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.Equal(15, buffer.TotalSamplesProcessed);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void ReplayBuffer_TotalReplaySamples_Tracks()
     {
@@ -755,7 +755,7 @@ public class ContinualLearningDeepMathIntegrationTests
     // Common metrics and utilities
     // ═══════════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void EWC_Properties_Accessible()
     {
@@ -768,7 +768,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.False(ewc.ModifiesArchitecture);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void SI_Properties_Accessible()
     {
@@ -783,7 +783,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.False(si.ModifiesArchitecture);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public void EWC_GetMetrics_ReturnsExpectedKeys()
     {

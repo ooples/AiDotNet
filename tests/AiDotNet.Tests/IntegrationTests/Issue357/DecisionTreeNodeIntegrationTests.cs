@@ -13,7 +13,7 @@ public class DecisionTreeNodeIntegrationTests
 
     #region Node Construction
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_DefaultConstructor_CreatesLeafNode()
     {
         var node = new DecisionTreeNode<double>();
@@ -26,7 +26,7 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(0.0, node.Threshold);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_SplitConstructor_CreatesInternalNode()
     {
         var node = new DecisionTreeNode<double>(featureIndex: 2, splitValue: 5.0);
@@ -36,7 +36,7 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(5.0, node.SplitValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_PredictionConstructor_CreatesLeafWithValue()
     {
         var node = new DecisionTreeNode<double>(prediction: 42.5);
@@ -49,7 +49,7 @@ public class DecisionTreeNodeIntegrationTests
 
     #region Tree Structure
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_CanBuildSimpleTree()
     {
         // Create a simple decision tree:
@@ -72,7 +72,7 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(20.0, root.Right.Prediction);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_CanBuildMultiLevelTree()
     {
         // Create a deeper tree:
@@ -103,7 +103,7 @@ public class DecisionTreeNodeIntegrationTests
 
     #region Sample Management
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_Samples_DefaultsToEmptyList()
     {
         var node = new DecisionTreeNode<double>();
@@ -112,7 +112,7 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Empty(node.Samples);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_SampleValues_DefaultsToEmptyList()
     {
         var node = new DecisionTreeNode<double>();
@@ -121,7 +121,7 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Empty(node.SampleValues);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_SampleCounts_TrackLeftRightDistribution()
     {
         var node = new DecisionTreeNode<double>(featureIndex: 0, splitValue: 5.0)
@@ -138,7 +138,7 @@ public class DecisionTreeNodeIntegrationTests
 
     #region Node Statistics
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_UpdateStatistics_CalculatesSumSquaredError()
     {
         var node = new DecisionTreeNode<double>(prediction: 5.0);
@@ -154,7 +154,7 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(2.0, node.SumSquaredError, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_UpdateStatistics_EmptySamples_ReturnsZero()
     {
         var node = new DecisionTreeNode<double>(prediction: 5.0);
@@ -164,7 +164,7 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(0.0, node.SumSquaredError);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_UpdateStatistics_PerfectPrediction_ReturnsZeroSSE()
     {
         var node = new DecisionTreeNode<double>(prediction: 10.0);
@@ -182,7 +182,7 @@ public class DecisionTreeNodeIntegrationTests
 
     #region Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_Threshold_CanBeSetAndRetrieved()
     {
         var node = new DecisionTreeNode<double>
@@ -193,7 +193,7 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(7.5, node.Threshold);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_FeatureIndex_CanBeSetAndRetrieved()
     {
         var node = new DecisionTreeNode<double>
@@ -204,7 +204,7 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(3, node.FeatureIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_Predictions_Vector_CanBeSetAndRetrieved()
     {
         var node = new DecisionTreeNode<double>();
@@ -217,7 +217,7 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(1.0, node.Predictions[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_LinearModel_DefaultsToNull()
     {
         var node = new DecisionTreeNode<double>();
@@ -229,7 +229,7 @@ public class DecisionTreeNodeIntegrationTests
 
     #region Tree Traversal Simulation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_TreeTraversal_ReachesCorrectLeaf()
     {
         // Build tree for: if x[0] <= 5 then 10 else 20
@@ -250,7 +250,7 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Equal(20.0, result2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_DeepTreeTraversal_ReachesCorrectLeaf()
     {
         // Build tree for more complex decision
@@ -306,7 +306,7 @@ public class DecisionTreeNodeIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_LeafWithNoChildren_IsValidLeaf()
     {
         var leaf = new DecisionTreeNode<double>(prediction: 42.0);
@@ -316,7 +316,7 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Null(leaf.Right);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_InternalWithOnlyLeftChild_IsValid()
     {
         var node = new DecisionTreeNode<double>(featureIndex: 0, splitValue: 5.0)
@@ -329,7 +329,7 @@ public class DecisionTreeNodeIntegrationTests
         Assert.Null(node.Right);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecisionTreeNode_InternalWithOnlyRightChild_IsValid()
     {
         var node = new DecisionTreeNode<double>(featureIndex: 0, splitValue: 5.0)

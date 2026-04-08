@@ -13,7 +13,7 @@ public class RAGConfigurationIntegrationTests
 {
     #region RAGConfiguration
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RAGConfiguration_DefaultsAreNotNull()
     {
         var config = new RAGConfiguration<double>();
@@ -26,7 +26,7 @@ public class RAGConfigurationIntegrationTests
         Assert.NotNull(config.ContextCompression);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RAGConfiguration_CanSetSubconfigs()
     {
         var config = new RAGConfiguration<double>();
@@ -41,7 +41,7 @@ public class RAGConfigurationIntegrationTests
 
     #region ChunkingConfig
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChunkingConfig_DefaultValues()
     {
         var config = new ChunkingConfig();
@@ -52,7 +52,7 @@ public class RAGConfigurationIntegrationTests
         Assert.Empty(config.Parameters);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChunkingConfig_CanSetParameters()
     {
         var config = new ChunkingConfig
@@ -72,7 +72,7 @@ public class RAGConfigurationIntegrationTests
 
     #region DocumentStoreConfig
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DocumentStoreConfig_DefaultConstructor()
     {
         var config = new DocumentStoreConfig();
@@ -83,7 +83,7 @@ public class RAGConfigurationIntegrationTests
 
     #region EmbeddingConfig
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EmbeddingConfig_DefaultConstructor()
     {
         var config = new EmbeddingConfig();
@@ -94,7 +94,7 @@ public class RAGConfigurationIntegrationTests
 
     #region RetrievalConfig
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RetrievalConfig_DefaultConstructor()
     {
         var config = new RetrievalConfig();
@@ -105,7 +105,7 @@ public class RAGConfigurationIntegrationTests
 
     #region RerankingConfig
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RerankingConfig_DefaultConstructor()
     {
         var config = new RerankingConfig();
@@ -116,7 +116,7 @@ public class RAGConfigurationIntegrationTests
 
     #region QueryExpansionConfig
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QueryExpansionConfig_DefaultConstructor()
     {
         var config = new QueryExpansionConfig();
@@ -127,7 +127,7 @@ public class RAGConfigurationIntegrationTests
 
     #region ContextCompressionConfig
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContextCompressionConfig_DefaultConstructor()
     {
         var config = new ContextCompressionConfig();

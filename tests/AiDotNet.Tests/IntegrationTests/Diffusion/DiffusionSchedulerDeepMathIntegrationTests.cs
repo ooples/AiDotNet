@@ -15,7 +15,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region Linear Beta Schedule
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearBetaSchedule_HandCalculated_FirstBetaEqualsBetaStart()
     {
         // Linear: beta[0] = betaStart = 0.0001
@@ -28,7 +28,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.Equal(0.9999, alpha0, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearBetaSchedule_HandCalculated_LastBetaEqualsBetaEnd()
     {
         // Linear: beta[999] = betaEnd = 0.02
@@ -43,7 +43,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.True(alphaLast < 0.1); // Should be very small after 1000 steps
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearBetaSchedule_HandCalculated_InterpolationAtMidpoint()
     {
         // With 10 steps, linear interpolation: beta[i] = 0.0001 + (0.02 - 0.0001) * i / 9
@@ -66,7 +66,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.Equal(expectedAlphaCumprod1, alphaCumprod1, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearBetaSchedule_AlphaCumprod_MonotonicallyDecreasing()
     {
         var config = SchedulerConfig<double>.CreateDefault();
@@ -86,7 +86,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region Scaled Linear Beta Schedule
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScaledLinearBetaSchedule_HandCalculated_FirstAndLastBetas()
     {
         // ScaledLinear: beta[i] = (sqrt(betaStart) + (sqrt(betaEnd) - sqrt(betaStart)) * i/(steps-1))^2
@@ -100,7 +100,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.Equal(1.0 - 0.00085, alphaCumprod0, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScaledLinearBetaSchedule_HandCalculated_MidpointBeta()
     {
         // With 10 steps: beta[5] = (sqrt(0.00085) + (sqrt(0.012) - sqrt(0.00085)) * 5/9)^2
@@ -129,7 +129,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region Squared Cosine Beta Schedule
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SquaredCosineBetaSchedule_AlphaCumprod_StartsNearOneAndEndsNearZero()
     {
         var config = new SchedulerConfig<double>(1000, 0.0001, 0.02, BetaSchedule.SquaredCosine);
@@ -143,7 +143,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.True(alphaEnd < 0.05, $"Last alphaCumprod should be near 0, got {alphaEnd}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SquaredCosineBetaSchedule_AlphaCumprod_SmoothTransition()
     {
         var config = new SchedulerConfig<double>(100, 0.0001, 0.02, BetaSchedule.SquaredCosine);
@@ -160,7 +160,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SquaredCosineBetaSchedule_HandCalculated_Formula()
     {
         // Cosine schedule: alpha_bar(t) = cos((t/T + s) / (1+s) * pi/2)^2
@@ -198,7 +198,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region Forward Diffusion (AddNoise)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForwardDiffusion_HandCalculated_AtTimestep0()
     {
         // x_t = sqrt(alphaCumprod) * x_0 + sqrt(1-alphaCumprod) * noise
@@ -224,7 +224,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForwardDiffusion_HandCalculated_AtHighTimestep()
     {
         // At high timestep, alphaCumprod is near 0, so noise dominates
@@ -252,7 +252,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.True(sqrtOneMinusAlpha > sqrtAlpha, "Noise term should dominate at high timestep");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForwardDiffusion_EnergyConservation()
     {
         // If x_0 and noise are orthogonal unit vectors, the energy is preserved:
@@ -279,7 +279,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForwardDiffusion_ZeroNoise_ReturnsSqrtAlphaCumprodTimesSignal()
     {
         var config = new SchedulerConfig<double>(100, 0.0001, 0.02);
@@ -298,7 +298,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.Equal(sqrtAlpha * 3.0, result[1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForwardDiffusion_ZeroSignal_ReturnsSqrtOneMinusAlphaCumprodTimesNoise()
     {
         var config = new SchedulerConfig<double>(100, 0.0001, 0.02);
@@ -321,7 +321,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region DDPM Reverse Step
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DDPMStep_EpsilonPrediction_HandCalculated()
     {
         // With 10 steps, at timestep 9 (last), with epsilon prediction
@@ -348,7 +348,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.Equal(2, result.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DDPMStep_SamplePrediction_ReturnsPredictedSample()
     {
         // With Sample prediction, modelOutput is x_0 directly
@@ -364,7 +364,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DDPMStep_VPrediction_CorrectConversion()
     {
         // V-prediction: v = sqrt(alpha_bar) * eps - sqrt(1-alpha_bar) * x_0
@@ -382,7 +382,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.Equal(2, result.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DDPMStep_DeterministicWhenNoNoise()
     {
         var config = new SchedulerConfig<double>(10, 0.001, 0.02);
@@ -405,7 +405,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region DDIM Reverse Step
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DDIMStep_DeterministicEta0_HandCalculated()
     {
         // DDIM with eta=0 is fully deterministic
@@ -433,7 +433,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.Equal(2, result.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DDIMStep_DeterministicEta0_SameResultTwice()
     {
         var config = new SchedulerConfig<double>(10, 0.001, 0.02);
@@ -452,7 +452,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DDIMStep_StochasticEta1_DifferentWithDifferentNoise()
     {
         var config = new SchedulerConfig<double>(10, 0.001, 0.02);
@@ -481,7 +481,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region Euler Discrete Step
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EulerStep_EpsilonPrediction_HandCalculated()
     {
         // Euler: d = (x_t - pred_x_0) / sigma_t, x_{t-1} = x_t + d * dt
@@ -503,7 +503,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.Equal(2, result.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EulerStep_Deterministic_SameResultTwice()
     {
         var config = new SchedulerConfig<double>(10, 0.001, 0.02);
@@ -527,7 +527,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region Flow Matching Scheduler
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlowMatching_AddNoise_LinearInterpolation()
     {
         // Flow matching: x_t = (1-t) * x_0 + t * noise
@@ -557,7 +557,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlowMatching_AddNoise_HandCalculatedMidpoint()
     {
         // At timestep 499 of 1000, continuous time = 499/999 ≈ 0.4995
@@ -576,7 +576,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.Equal((1.0 - t) * 4.0, result[1], 1e-5);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlowMatching_Step_VPrediction_EulerODE()
     {
         // Euler ODE step: x_{t-dt} = x_t + dt * v
@@ -595,7 +595,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.Equal(2, result.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlowMatching_Step_Deterministic()
     {
         var config = SchedulerConfig<double>.CreateRectifiedFlow();
@@ -615,7 +615,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlowMatching_DiffersFromDDPM_AddNoise()
     {
         // Flow matching uses linear interpolation: x_t = (1-t)*x_0 + t*noise
@@ -649,7 +649,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region Signal-to-Noise Ratio Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SNR_MonotonicallyDecreasing_LinearSchedule()
     {
         // SNR = alpha_bar / (1 - alpha_bar) should decrease monotonically
@@ -667,7 +667,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SNR_HighAtStartLowAtEnd()
     {
         var config = SchedulerConfig<double>.CreateDefault();
@@ -682,7 +682,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.True(snr999 < 1, $"SNR at t=999 should be low, got {snr999}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sigma_EulerScheduler_HandCalculated()
     {
         // sigma_t = sqrt((1 - alpha_cumprod) / alpha_cumprod)
@@ -704,7 +704,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region SetTimesteps
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SetTimesteps_ReducesFromTrainingSteps()
     {
         var config = SchedulerConfig<double>.CreateDefault(); // 1000 training steps
@@ -714,7 +714,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.Equal(50, scheduler.Timesteps.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SetTimesteps_TimestepsAreDecreasing()
     {
         var config = SchedulerConfig<double>.CreateDefault();
@@ -729,7 +729,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SetTimesteps_InvalidZero_ThrowsException()
     {
         var config = SchedulerConfig<double>.CreateDefault();
@@ -737,7 +737,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => scheduler.SetTimesteps(0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SetTimesteps_ExceedsTrainingSteps_ThrowsException()
     {
         var config = SchedulerConfig<double>.CreateDefault(); // 1000 training steps
@@ -749,7 +749,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region Heun Discrete (Second-Order)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HeunStep_PredictorStep_ReturnsIntermediateResult()
     {
         var config = new SchedulerConfig<double>(10, 0.001, 0.02);
@@ -767,7 +767,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.Equal(2, intermediate.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HeunStep_CorrectorStep_UsesAveragedDerivative()
     {
         var config = new SchedulerConfig<double>(10, 0.001, 0.02);
@@ -792,7 +792,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region Cross-Scheduler Mathematical Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllSchedulers_SameAlphaCumprod_SameConfig()
     {
         // All schedulers inheriting from NoiseSchedulerBase should compute identical
@@ -813,7 +813,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllSchedulers_SameAddNoise_SameConfig()
     {
         // Forward diffusion (AddNoise) should be identical across DDPM-style schedulers
@@ -835,7 +835,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AlphaCumprod_IsProductOfAlphas_Verification()
     {
         // alpha_cumprod[t] = product(alpha[0]...alpha[t]) = product((1-beta[0])...(1-beta[t]))
@@ -856,7 +856,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DDPMStep_PerfectEpsilon_RecoversOriginal()
     {
         // If the model perfectly predicts the noise, the reverse step should
@@ -882,7 +882,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
             $"dist(x_t, x_0)={distXtToX0}, dist(result, x_0)={distResultToX0}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DDIMStep_PerfectEpsilon_RecoversOriginal()
     {
         var config = new SchedulerConfig<double>(10, 0.001, 0.02);
@@ -905,7 +905,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region Numerical Stability
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AlphaCumprod_NeverZeroOrNegative()
     {
         var config = SchedulerConfig<double>.CreateDefault();
@@ -918,7 +918,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AlphaCumprod_NeverExceedsOne()
     {
         var config = SchedulerConfig<double>.CreateDefault();
@@ -931,7 +931,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetAlphaCumulativeProduct_OutOfRange_ThrowsException()
     {
         var config = SchedulerConfig<double>.CreateDefault();
@@ -941,7 +941,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => scheduler.GetAlphaCumulativeProduct(1000));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AddNoise_MismatchedLengths_ThrowsException()
     {
         var config = SchedulerConfig<double>.CreateDefault();
@@ -954,7 +954,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => scheduler.AddNoise(x0, noise, 500));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_MismatchedLengths_ThrowsException()
     {
         var config = SchedulerConfig<double>.CreateDefault();
@@ -971,7 +971,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region State Management
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetState_ContainsExpectedKeys()
     {
         var config = SchedulerConfig<double>.CreateDefault();
@@ -988,7 +988,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.True(state.ContainsKey("prediction_type"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlowMatching_GetState_IncludesSchedulerType()
     {
         var scheduler = FlowMatchingScheduler<double>.CreateDefault();
@@ -1004,7 +1004,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region Clip Sample
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ClipSample_WhenEnabled_ClipsToNegOneToOne()
     {
         var config = new SchedulerConfig<double>(10, 0.001, 0.02,
@@ -1023,7 +1023,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ClipSample_WhenDisabled_DoesNotClip()
     {
         var configClip = new SchedulerConfig<double>(10, 0.001, 0.02,
@@ -1056,7 +1056,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region Beta Schedule Boundary Conditions
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearBetaSchedule_TwoSteps_BetaStartAndBetaEndExactly()
     {
         // With exactly 2 steps: beta[0] = betaStart, beta[1] = betaEnd
@@ -1073,7 +1073,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         Assert.Equal(0.891, alphaCumprod1, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScaledLinearBetaSchedule_TwoSteps_CorrectValues()
     {
         // ScaledLinear with 2 steps: beta[0] = (sqrt(betaStart))^2 = betaStart
@@ -1092,7 +1092,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region DDPM vs DDIM Mathematical Relationship
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DDIMEta1_EquivalentToDDPM_SameNoise()
     {
         // DDIM with eta=1 should produce results close to DDPM (same stochastic formulation)
@@ -1121,7 +1121,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DDIMEta0_ReducesToDeterministicFormula()
     {
         // DDIM with eta=0: sigma=0, so x_{t-1} = sqrt(alpha_prev)*x_0_pred + sqrt(1-alpha_prev)*eps
@@ -1149,7 +1149,7 @@ public class DiffusionSchedulerDeepMathIntegrationTests
 
     #region Mathematical Consistency of Forward-Reverse
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForwardReverse_MultiStep_ConvergesToOriginal()
     {
         // Running multiple reverse steps with perfect epsilon should converge toward x_0

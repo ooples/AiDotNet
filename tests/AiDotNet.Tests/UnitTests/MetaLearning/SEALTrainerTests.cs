@@ -55,7 +55,7 @@ public class SEALTrainerTests
 
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_ValidInputs_InitializesSuccessfully()
     {
         // Arrange
@@ -69,7 +69,7 @@ public class SEALTrainerTests
         Assert.Equal(MetaLearningAlgorithmType.SEAL, algorithm.AlgorithmType);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_NullOptions_ThrowsArgumentNullException()
     {
         // Act & Assert
@@ -81,7 +81,7 @@ public class SEALTrainerTests
 
     #region MetaTrain Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MetaTrain_WithValidTaskBatch_ReturnsNonNegativeLoss()
     {
         // Arrange
@@ -97,7 +97,7 @@ public class SEALTrainerTests
         Assert.True(loss >= 0, "Loss should be non-negative");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MetaTrain_WithMultipleTasks_ReturnsValidLoss()
     {
         // Arrange
@@ -114,7 +114,7 @@ public class SEALTrainerTests
         Assert.False(double.IsNaN(loss), "Loss should not be NaN");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MetaTrain_NullTaskBatch_ThrowsArgumentException()
     {
         // Arrange
@@ -125,7 +125,7 @@ public class SEALTrainerTests
         Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MetaTrain_EmptyTaskBatch_ThrowsArgumentException()
     {
         // Arrange
@@ -141,7 +141,7 @@ public class SEALTrainerTests
 
     #region Adapt Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Adapt_ValidTask_ReturnsAdaptedModel()
     {
         // Arrange
@@ -156,7 +156,7 @@ public class SEALTrainerTests
         Assert.NotNull(adaptedModel);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Adapt_NullTask_ThrowsArgumentNullException()
     {
         // Arrange
@@ -171,7 +171,7 @@ public class SEALTrainerTests
 
     #region Options Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Options_IsValid_ReturnsTrueForValidOptions()
     {
         // Arrange
@@ -184,7 +184,7 @@ public class SEALTrainerTests
         Assert.True(isValid);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Options_Clone_CreatesIndependentCopy()
     {
         // Arrange

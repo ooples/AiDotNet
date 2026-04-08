@@ -19,7 +19,7 @@ public class WindowFunctionsDeepMathIntegrationTests
     //  RECTANGULAR WINDOW
     // ============================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Rectangular_AllOnes()
     {
         var window = new RectangularWindow<double>().Create(DefaultSize);
@@ -29,7 +29,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Rectangular_SumEqualsLength()
     {
         int size = 64;
@@ -43,7 +43,7 @@ public class WindowFunctionsDeepMathIntegrationTests
     //  HANNING (HANN) WINDOW
     // ============================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hanning_ZeroAtEdges()
     {
         var window = new HanningWindow<double>().Create(DefaultSize);
@@ -51,7 +51,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.Equal(0.0, window[DefaultSize - 1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hanning_OneAtCenter()
     {
         // For odd-sized window, center value should be 1.0
@@ -60,7 +60,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.Equal(1.0, window[center], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hanning_Symmetry()
     {
         var window = new HanningWindow<double>().Create(DefaultSize);
@@ -70,7 +70,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hanning_HandValue_N4()
     {
         // Size 4: w(n) = 0.5*(1 - cos(2*pi*n/3))
@@ -85,7 +85,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.Equal(0.0, window[3], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hanning_HandValue_Specific()
     {
         // Size 5: w(n) = 0.5*(1 - cos(2*pi*n/4))
@@ -102,7 +102,7 @@ public class WindowFunctionsDeepMathIntegrationTests
     //  HAMMING WINDOW
     // ============================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hamming_NotZeroAtEdges()
     {
         // Hamming window has nonzero edges: 0.54 - 0.46 = 0.08
@@ -111,7 +111,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.Equal(0.08, window[DefaultSize - 1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hamming_OneAtCenter()
     {
         // At center: 0.54 - 0.46*cos(pi) = 0.54 + 0.46 = 1.0
@@ -120,7 +120,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.Equal(1.0, window[center], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hamming_Symmetry()
     {
         var window = new HammingWindow<double>().Create(DefaultSize);
@@ -130,7 +130,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hamming_HandValue_N5()
     {
         // Size 5: w(n) = 0.54 - 0.46*cos(2*pi*n/4)
@@ -147,7 +147,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.Equal(0.08, window[4], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hamming_GreaterThanOrEqualHanning()
     {
         // Hamming >= Hanning at all points (because Hamming lifts the minimum from 0 to 0.08)
@@ -164,7 +164,7 @@ public class WindowFunctionsDeepMathIntegrationTests
     //  BLACKMAN WINDOW
     // ============================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Blackman_ZeroAtEdges()
     {
         // At n=0: 0.42 - 0.5*cos(0) + 0.08*cos(0) = 0.42 - 0.5 + 0.08 = 0.0
@@ -173,7 +173,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.Equal(0.0, window[DefaultSize - 1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Blackman_OneAtCenter()
     {
         // At center: 0.42 - 0.5*cos(pi) + 0.08*cos(2pi) = 0.42 + 0.5 + 0.08 = 1.0
@@ -182,7 +182,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.Equal(1.0, window[center], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Blackman_Symmetry()
     {
         var window = new BlackmanWindow<double>().Create(DefaultSize);
@@ -192,7 +192,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Blackman_HandValue_N5()
     {
         // Size 5: w(n) = 0.42 - 0.5*cos(2*pi*n/4) + 0.08*cos(4*pi*n/4)
@@ -209,7 +209,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.Equal(0.0, window[4], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Blackman_LessThanOrEqualHanning()
     {
         // Blackman <= Hanning at all points (Blackman has more aggressive tapering)
@@ -226,7 +226,7 @@ public class WindowFunctionsDeepMathIntegrationTests
     //  TRIANGULAR WINDOW
     // ============================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Triangular_ZeroAtEdges()
     {
         // w(0) = 1 - |2*0 - L|/L = 1 - L/L = 0
@@ -235,7 +235,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.Equal(0.0, window[DefaultSize - 1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Triangular_OneAtCenter()
     {
         var window = new TriangularWindow<double>().Create(DefaultSize);
@@ -243,7 +243,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.Equal(1.0, window[center], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Triangular_Symmetry()
     {
         var window = new TriangularWindow<double>().Create(DefaultSize);
@@ -253,7 +253,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Triangular_Linear_Increase()
     {
         // First half should linearly increase
@@ -265,7 +265,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Triangular_HandValue_N5()
     {
         // Size 5, L=4: w(n) = 1 - |2n - 4|/4
@@ -286,7 +286,7 @@ public class WindowFunctionsDeepMathIntegrationTests
     //  GAUSSIAN WINDOW
     // ============================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gaussian_OneAtCenter()
     {
         var window = new GaussianWindow<double>(0.5).Create(DefaultSize);
@@ -294,7 +294,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.Equal(1.0, window[center], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gaussian_Symmetry()
     {
         var window = new GaussianWindow<double>(0.4).Create(DefaultSize);
@@ -304,7 +304,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gaussian_HandValue_AtEdge()
     {
         // Size 11, sigma=0.5
@@ -315,7 +315,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.Equal(Math.Exp(-2.0), window[0], LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gaussian_HandValue_AtQuarter()
     {
         // Size 11, sigma=0.5, halfN=5
@@ -325,7 +325,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.Equal(Math.Exp(-0.72), window[2], LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gaussian_AllPositive()
     {
         var window = new GaussianWindow<double>(0.5).Create(DefaultSize);
@@ -335,7 +335,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gaussian_NarrowerSigma_HasSmallerEdges()
     {
         // Narrower sigma => more tapered edges
@@ -349,7 +349,7 @@ public class WindowFunctionsDeepMathIntegrationTests
     //  KAISER WINDOW
     // ============================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Kaiser_OneAtCenter()
     {
         var window = new KaiserWindow<double>(5.0).Create(DefaultSize);
@@ -357,7 +357,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.Equal(1.0, window[center], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Kaiser_Symmetry()
     {
         var window = new KaiserWindow<double>(5.0).Create(DefaultSize);
@@ -367,7 +367,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Kaiser_AllPositive()
     {
         var window = new KaiserWindow<double>(5.0).Create(DefaultSize);
@@ -377,7 +377,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Kaiser_HigherBeta_SmallerEdges()
     {
         var lowBeta = new KaiserWindow<double>(2.0).Create(DefaultSize);
@@ -386,7 +386,7 @@ public class WindowFunctionsDeepMathIntegrationTests
             $"High beta edge {highBeta[0]} should be < low beta edge {lowBeta[0]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Kaiser_Beta0_ApproachesRectangular()
     {
         // With beta=0, Kaiser approaches Rectangular (but normalized)
@@ -401,7 +401,7 @@ public class WindowFunctionsDeepMathIntegrationTests
     //  CROSS-WINDOW PROPERTIES
     // ============================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllWindows_MaxAtCenter()
     {
         int size = 21;
@@ -431,7 +431,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllWindows_ValuesInRange01()
     {
         int size = 64;
@@ -457,7 +457,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WindowSum_Ordering()
     {
         // Rectangular has highest sum, then Hamming, Hanning, Blackman
@@ -472,7 +472,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.True(sumHanning > sumBlackman, $"Hanning sum {sumHanning} should be > Blackman sum {sumBlackman}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hanning_Sum_HandValue()
     {
         // For Hanning window of size N:
@@ -488,7 +488,7 @@ public class WindowFunctionsDeepMathIntegrationTests
     //  SIZE-1 EDGE CASE
     // ============================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllWindows_Size1_ReturnsSingleOne()
     {
         var windows = new (string name, IWindowFunction<double> wf)[]
@@ -511,7 +511,7 @@ public class WindowFunctionsDeepMathIntegrationTests
     //  EVEN SIZE TESTS
     // ============================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hanning_EvenSize_Symmetric()
     {
         int size = 10;
@@ -522,7 +522,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hamming_EvenSize_EdgeValues()
     {
         int size = 10;
@@ -535,7 +535,7 @@ public class WindowFunctionsDeepMathIntegrationTests
     //  FLOAT TYPE CROSS-CHECK
     // ============================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hanning_FloatAndDouble_Consistent()
     {
         int size = 11;
@@ -548,7 +548,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hamming_FloatAndDouble_Consistent()
     {
         int size = 11;
@@ -565,7 +565,7 @@ public class WindowFunctionsDeepMathIntegrationTests
     //  ENERGY NORMALIZATION TESTS
     // ============================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hanning_CoherentGain()
     {
         // Coherent gain = sum(w) / N
@@ -576,7 +576,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.Equal(0.5, coherentGain, 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Hamming_CoherentGain()
     {
         // For Hamming: ≈ 0.54
@@ -586,7 +586,7 @@ public class WindowFunctionsDeepMathIntegrationTests
         Assert.Equal(0.54, coherentGain, 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Blackman_CoherentGain()
     {
         // For Blackman: ≈ 0.42

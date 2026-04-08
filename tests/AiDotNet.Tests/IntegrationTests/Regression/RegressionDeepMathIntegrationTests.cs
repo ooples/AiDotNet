@@ -23,7 +23,7 @@ public class RegressionDeepMathIntegrationTests
 
     #region SimpleRegression OLS Closed-Form
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_PerfectLine_Y_Equals_2X_Plus_3()
     {
         // y = 2x + 3 for x = {1,2,3,4,5}
@@ -36,7 +36,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(3.0, reg.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_NoIntercept_Y_Equals_4X()
     {
         // y = 4x, no intercept
@@ -49,7 +49,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(0.0, reg.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_HandCalculated_OLS_Formulas()
     {
         // x = {1,2,3,4,5}, y = {2,4,5,4,5}
@@ -67,7 +67,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(2.2, reg.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_NegativeSlope_Y_Equals_Minus3X_Plus_10()
     {
         // y = -3x + 10
@@ -79,7 +79,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(10.0, reg.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_ConstantY_SlopeIsZero()
     {
         // y = 5 for all x → slope = 0, intercept = 5
@@ -91,7 +91,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(5.0, reg.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_Prediction_Matches_Manual_Computation()
     {
         // Train on y = 2x + 3, predict at x = {10, 20, 100}
@@ -105,7 +105,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(203.0, pred[2], Tolerance); // 2*100 + 3
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_TrainingResiduals_SumToZero()
     {
         // For OLS with intercept, residuals always sum to zero
@@ -123,7 +123,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(0.0, residualSum, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_NoIntercept_HandCalculated()
     {
         // x = {1,2,3}, y = {3,5,8}
@@ -135,7 +135,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(37.0 / 14.0, reg.Coefficients[0], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_TwoPoints_ExactLine()
     {
         // Two points: (1,5) and (3,11) → slope = (11-5)/(3-1) = 3, intercept = 5-3 = 2
@@ -147,7 +147,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(2.0, reg.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_LargeSlope_Y_Equals_1000X_Plus_1()
     {
         // y = 1000x + 1
@@ -167,7 +167,7 @@ public class RegressionDeepMathIntegrationTests
 
     #region MultipleRegression OLS Closed-Form
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_TwoFeatures_PerfectFit()
     {
         // y = 2*x1 + 3*x2 + 1
@@ -182,7 +182,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(1.0, reg.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_NoIntercept_ThreeFeatures()
     {
         // y = 1*x1 + 2*x2 + 3*x3 (no intercept)
@@ -200,7 +200,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(3.0, reg.Coefficients[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_Prediction_Equals_XBeta_Plus_Intercept()
     {
         // Verify that Predict(X) = X * beta + intercept
@@ -220,7 +220,7 @@ public class RegressionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_Training_Residuals_SumToZero_WithIntercept()
     {
         // For OLS with intercept: sum of residuals = 0
@@ -238,7 +238,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(0.0, residualSum, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_Training_Residuals_Orthogonal_To_Features()
     {
         // For OLS: X^T * (y - Xb) = 0 (residuals orthogonal to feature space)
@@ -268,7 +268,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(0.0, sumResiduals, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_IdentityDesign_RecoversMean()
     {
         // X = Identity, y = {2,4,6}: with intercept, the OLS solution is different
@@ -283,7 +283,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(6.0, reg.Coefficients[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_SimpleVsMultiple_SingleFeature_SameResult()
     {
         // When MultipleRegression has one feature, results should match SimpleRegression
@@ -299,7 +299,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(simpleReg.Intercept, multiReg.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_MeanOfY_Equals_Intercept_Plus_Coeffs_Dot_MeanX()
     {
         // OLS property: ybar = intercept + sum(coeff_j * xbar_j)
@@ -330,7 +330,7 @@ public class RegressionDeepMathIntegrationTests
 
     #region PolynomialRegression
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialRegression_Degree2_PerfectQuadratic()
     {
         // y = x^2, degree=2
@@ -351,7 +351,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(0.0, reg.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialRegression_Degree2_Y_Equals_3XSquared_Plus_2X_Plus_1()
     {
         // y = 3x^2 + 2x + 1
@@ -371,7 +371,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(1.0, reg.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialRegression_Degree1_EquivalentToLinear()
     {
         // Polynomial degree 1 should behave like linear regression
@@ -389,7 +389,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(linReg.Intercept, polyReg.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialRegression_Degree2_Prediction_Matches_Formula()
     {
         // Verify predictions use the polynomial expansion correctly
@@ -411,7 +411,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(2.0 * 100 - 10 + 3, pred[2], Tolerance);  // x=10: 193
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialRegression_Degree3_PerfectCubic()
     {
         // y = x^3 (need degree 3 polynomial features: x, x^2, x^3)
@@ -431,7 +431,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(0.0, reg.Intercept, MediumTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialRegression_NoIntercept_Y_Equals_XSquared()
     {
         // y = x^2 without intercept
@@ -459,7 +459,7 @@ public class RegressionDeepMathIntegrationTests
 
     #region RidgeRegression
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_Alpha0_Equals_OLS()
     {
         // With alpha=0, Ridge should give same result as OLS
@@ -478,7 +478,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(olsReg.Intercept, ridgeReg.Intercept, MediumTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_LargeAlpha_Shrinks_Coefficients_Toward_Zero()
     {
         // With increasing alpha, coefficients should shrink toward zero
@@ -508,7 +508,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.True(normMedium > normLarge, $"Medium alpha ({normMedium}) should have larger norm than large ({normLarge})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_VeryLargeAlpha_Coefficients_NearZero()
     {
         // With very large alpha, coefficients should be nearly zero
@@ -525,7 +525,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.True(Math.Abs(reg.Coefficients[1]) < 0.1, $"Coefficient[1] should be near zero: {reg.Coefficients[1]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_HandCalculated_SingleFeature()
     {
         // Single feature, no intercept for simpler hand calculation
@@ -542,7 +542,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(28.0 / 15.0, reg.Coefficients[0], MediumTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_DoesNotRegularize_Intercept()
     {
         // Ridge should NOT regularize the intercept term.
@@ -560,7 +560,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(10.0, reg.Intercept, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_PerfectData_Prediction_Still_Reasonable()
     {
         // Even with regularization, predictions should be reasonable
@@ -588,7 +588,7 @@ public class RegressionDeepMathIntegrationTests
 
     #region Cross-Model Consistency
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllLinearModels_PerfectData_SameCoefficients()
     {
         // On perfect linear data with tiny alpha, all should agree
@@ -607,7 +607,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(multiReg.Intercept, ridgeReg.Intercept, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OLS_R_Squared_Equals_1_For_PerfectFit()
     {
         // For perfect linear data, R^2 should be exactly 1
@@ -631,7 +631,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(1.0, rSquared, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OLS_TSS_Equals_ESS_Plus_RSS()
     {
         // Total Sum of Squares = Explained SS + Residual SS
@@ -657,7 +657,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(tss, ess + rss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_R2_Between_0_And_1()
     {
         // For typical data with intercept, R^2 is between 0 and 1
@@ -680,7 +680,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.True(rSquared >= 0.0 && rSquared <= 1.0, $"R^2 should be in [0,1], got {rSquared}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_Adding_Feature_Cannot_Decrease_R2()
     {
         // Adding a feature can only increase (or maintain) R^2
@@ -711,7 +711,7 @@ public class RegressionDeepMathIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_ZeroSlope_AllSameY()
     {
         // When all y values are the same, slope=0
@@ -723,7 +723,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(42.0, reg.Intercept, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_OneFeature_AllZeros_Coefficient_Is_Zero()
     {
         // If one feature is always zero, the matrix is rank-deficient.
@@ -746,7 +746,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(19.0, pred[0], MediumTolerance); // 3*6 + 1
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_LargeValues_StillAccurate()
     {
         // Test with large feature values
@@ -759,7 +759,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(100.0, reg.Intercept, MediumTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_SmallValues_StillAccurate()
     {
         // Test with small feature values
@@ -772,7 +772,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(1e-7, reg.Intercept, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_HighlyCorrelated_Features_Handles_Gracefully()
     {
         // Collinear features: x2 = 2*x1
@@ -802,7 +802,7 @@ public class RegressionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_Collinear_StabilizesCoefficients()
     {
         // Ridge should handle near-collinear features better than OLS
@@ -837,7 +837,7 @@ public class RegressionDeepMathIntegrationTests
 
     #region Metadata and Structure
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_HasExactlyOneCoefficient()
     {
         var reg = new SimpleRegression<double>(new RegressionOptions<double> { UseIntercept = true });
@@ -847,7 +847,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(1, reg.Coefficients.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleRegression_CoefficientCount_Matches_FeatureCount()
     {
         int numFeatures = 4;
@@ -863,7 +863,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(numFeatures, reg.Coefficients.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialRegression_CoefficientCount_Equals_OriginalFeatures_Times_Degree()
     {
         // With 1 original feature and degree=3, should have 3 polynomial features
@@ -875,7 +875,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(3, reg.Coefficients.Length); // x, x^2, x^3
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_HasIntercept_ReflectsOptions()
     {
         var withIntercept = new SimpleRegression<double>(new RegressionOptions<double> { UseIntercept = true });
@@ -885,7 +885,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.False(noIntercept.HasIntercept);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_Metadata_Contains_Alpha()
     {
         var options = new RidgeRegressionOptions<double> { Alpha = 2.5, UseIntercept = true };
@@ -906,7 +906,7 @@ public class RegressionDeepMathIntegrationTests
 
     #region Polynomial Feature Expansion
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialRegression_TwoFeatures_Degree2_CorrectExpansion()
     {
         // With 2 original features and degree=2, polynomial features should be:
@@ -926,7 +926,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(4, reg.Coefficients.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialRegression_Degree2_Symmetric_PredictionSymmetric()
     {
         // y = x^2 is symmetric around 0: f(a) = f(-a)
@@ -951,7 +951,7 @@ public class RegressionDeepMathIntegrationTests
 
     #region Input Validation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_MultipleColumns_ThrowsInvalidInputDimensionException()
     {
         // SimpleRegression requires exactly 1 feature column
@@ -962,7 +962,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Throws<InvalidInputDimensionException>(() => reg.Train(x, y));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_NegativeAlpha_ThrowsException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -979,7 +979,7 @@ public class RegressionDeepMathIntegrationTests
 
     #region Gauss-Markov Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OLS_IsUnbiased_MeanPrediction_Equals_MeanActual()
     {
         // For OLS with intercept: mean(yhat) = mean(y)
@@ -1000,7 +1000,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(meanActual, meanPredicted, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OLS_Normal_Equations_Satisfied()
     {
         // The normal equations: X'X * beta = X'y (when no regularization, no intercept trick)
@@ -1044,7 +1044,7 @@ public class RegressionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Polynomial_PerfectFit_Residuals_All_Zero()
     {
         // Polynomial of degree d should perfectly fit d+1 points
@@ -1072,7 +1072,7 @@ public class RegressionDeepMathIntegrationTests
 
     #region Serialization
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleRegression_Serialize_Deserialize_PreservesModel()
     {
         var reg = new SimpleRegression<double>(new RegressionOptions<double> { UseIntercept = true });
@@ -1094,7 +1094,7 @@ public class RegressionDeepMathIntegrationTests
         Assert.Equal(pred1[1], pred2[1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeRegression_Serialize_Deserialize_PreservesModel()
     {
         var options = new RidgeRegressionOptions<double> { Alpha = 2.0, UseIntercept = true };

@@ -16,7 +16,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
 
     // ─── Gaussian RBF ───────────────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gaussian_AtOrigin_ReturnsOne()
     {
         // f(0) = exp(-e*0) = 1 for any epsilon
@@ -24,7 +24,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         Assert.Equal(1.0, rbf.Compute(0.0), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gaussian_HandComputed_ExpValues()
     {
         // f(r) = exp(-e*r^2), with e=1: f(1) = exp(-1) ≈ 0.36788
@@ -33,7 +33,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         Assert.Equal(Math.Exp(-4), rbf.Compute(2.0), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gaussian_IsMonotonicallyDecreasing()
     {
         var rbf = new GaussianRBF<double>(epsilon: 1.0);
@@ -46,7 +46,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gaussian_Derivative_MatchesNumericalDerivative()
     {
         // Verify d/dr[exp(-e*r^2)] = -2er*exp(-e*r^2) using finite differences
@@ -62,7 +62,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gaussian_DerivativeAtOrigin_IsZero()
     {
         // f'(0) = -2e*0*exp(0) = 0
@@ -70,7 +70,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         Assert.Equal(0.0, rbf.ComputeDerivative(0.0), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gaussian_WidthDerivative_MatchesNumerical()
     {
         // d/de[exp(-e*r^2)] = -r^2*exp(-e*r^2)
@@ -88,7 +88,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
             $"Gaussian width derivative mismatch: analytic={analytic}, numerical={numerical}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gaussian_SymmetricInR()
     {
         // f(r) = f(-r) since f depends on r^2
@@ -98,7 +98,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
 
     // ─── Multiquadric RBF ───────────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Multiquadric_AtOrigin_ReturnsEpsilon()
     {
         // f(0) = sqrt(0 + e^2) = e
@@ -107,7 +107,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         Assert.Equal(eps, rbf.Compute(0.0), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Multiquadric_HandComputed()
     {
         // f(r) = sqrt(r^2 + e^2), e=1: f(3) = sqrt(9+1) = sqrt(10) ≈ 3.16228
@@ -115,7 +115,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(10), rbf.Compute(3.0), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Multiquadric_IsMonotonicallyIncreasing()
     {
         var rbf = new MultiquadricRBF<double>(epsilon: 1.0);
@@ -128,7 +128,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Multiquadric_Derivative_MatchesNumerical()
     {
         var rbf = new MultiquadricRBF<double>(epsilon: 1.0);
@@ -143,7 +143,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Multiquadric_DerivativeAtOrigin_IsZero()
     {
         // f'(0) = 0/sqrt(e^2) = 0
@@ -153,7 +153,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
 
     // ─── Inverse Multiquadric RBF ───────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseMultiquadric_AtOrigin_ReturnsOneOverEpsilon()
     {
         // f(0) = 1/sqrt(0 + e^2) = 1/e
@@ -162,7 +162,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         Assert.Equal(1.0 / eps, rbf.Compute(0.0), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseMultiquadric_IsReciprocal_OfMultiquadric()
     {
         // 1/sqrt(r^2 + e^2) = 1/MQ(r)
@@ -179,7 +179,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseMultiquadric_IsMonotonicallyDecreasing()
     {
         var rbf = new InverseMultiquadricRBF<double>(epsilon: 1.0);
@@ -192,7 +192,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseMultiquadric_Derivative_MatchesNumerical()
     {
         var rbf = new InverseMultiquadricRBF<double>(epsilon: 1.0);
@@ -209,7 +209,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
 
     // ─── Inverse Quadratic RBF ──────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseQuadratic_AtOrigin_ReturnsOne()
     {
         // f(0) = 1/(1 + 0) = 1
@@ -217,7 +217,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         Assert.Equal(1.0, rbf.Compute(0.0), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseQuadratic_HandComputed()
     {
         // f(r) = 1/(1 + (er)^2), e=1: f(1) = 1/(1+1) = 0.5
@@ -229,7 +229,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         Assert.Equal(0.2, rbf2.Compute(1.0), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseQuadratic_IsMonotonicallyDecreasing()
     {
         var rbf = new InverseQuadraticRBF<double>(epsilon: 1.0);
@@ -242,7 +242,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseQuadratic_Derivative_MatchesNumerical()
     {
         var rbf = new InverseQuadraticRBF<double>(epsilon: 1.0);
@@ -257,7 +257,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseQuadratic_WidthDerivative_MatchesNumerical()
     {
         double r = 2.0;
@@ -276,7 +276,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
 
     // ─── Linear RBF ─────────────────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Linear_ReturnsInputValue()
     {
         var rbf = new LinearRBF<double>();
@@ -285,7 +285,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         Assert.Equal(100.0, rbf.Compute(100.0), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Linear_DerivativeIsAlwaysOne()
     {
         var rbf = new LinearRBF<double>();
@@ -294,7 +294,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         Assert.Equal(1.0, rbf.ComputeDerivative(100.0), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Linear_WidthDerivativeIsAlwaysZero()
     {
         var rbf = new LinearRBF<double>();
@@ -304,7 +304,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
 
     // ─── Cubic RBF ──────────────────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cubic_ComputeHandValues()
     {
         // f(r) = r^3
@@ -314,7 +314,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         Assert.Equal(27.0, rbf.Compute(3.0), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cubic_Derivative_MatchesNumerical()
     {
         // f'(r) = 3r^2
@@ -332,7 +332,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
 
     // ─── Exponential RBF ────────────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Exponential_AtOrigin_ReturnsOne()
     {
         // f(0) = exp(-e*0) = 1
@@ -340,7 +340,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         Assert.Equal(1.0, rbf.Compute(0.0), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Exponential_HandComputed()
     {
         // f(r) = exp(-e*r), e=1: f(2) = exp(-2)
@@ -348,7 +348,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         Assert.Equal(Math.Exp(-2), rbf.Compute(2.0), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Exponential_Derivative_MatchesNumerical()
     {
         var rbf = new ExponentialRBF<double>(epsilon: 1.5);
@@ -365,7 +365,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
 
     // ─── Squared Exponential RBF ────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SquaredExponential_MatchesGaussian()
     {
         // Squared exponential = exp(-e^2 * r^2) = Gaussian with epsilon = e^2
@@ -375,7 +375,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         Assert.Equal(1.0, rbf.Compute(0.0), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SquaredExponential_Derivative_MatchesNumerical()
     {
         var rbf = new SquaredExponentialRBF<double>(epsilon: 1.0);
@@ -392,7 +392,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
 
     // ─── Cross-Function Properties ──────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllDecreasingRBFs_ArePositive()
     {
         // All bell-shaped RBFs should return positive values
@@ -408,7 +408,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianDecaysFasterThanInverseQuadratic()
     {
         // Gaussian decays exponentially, InverseQuadratic polynomially
@@ -424,7 +424,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
             $"At r={largeR}, Gaussian ({gVal}) should be < InverseQuadratic ({iqVal})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Gaussian_LargerEpsilon_DecaysFaster()
     {
         // Larger epsilon = narrower bell = smaller values at same r
@@ -436,7 +436,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
             "Gaussian with larger epsilon should decay faster");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiquadricAndInverseMQ_ProductIsOne()
     {
         // MQ(r) * IMQ(r) = 1 for all r
@@ -452,7 +452,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Multiquadric_WidthDerivative_MatchesNumerical()
     {
         double r = 2.0;
@@ -469,7 +469,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
             $"Multiquadric width derivative mismatch: analytic={analytic}, numerical={numerical}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseMultiquadric_WidthDerivative_MatchesNumerical()
     {
         double r = 2.0;
@@ -488,7 +488,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
 
     // ─── Thin Plate Spline RBF ──────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThinPlateSpline_AtOrigin_ReturnsZero()
     {
         // f(0) = 0^2 * ln(0) = 0 (by convention, 0*ln(0)=0)
@@ -498,7 +498,7 @@ public class RadialBasisFunctionDeepMathIntegrationTests
             $"TPS at origin should be 0, got {val}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThinPlateSpline_HandComputed()
     {
         // f(r) = r^2 * ln(r), f(e) = e^2 * ln(e) = e^2 * 1 = e^2 ≈ 7.389
@@ -509,14 +509,14 @@ public class RadialBasisFunctionDeepMathIntegrationTests
 
     // ─── Rational Quadratic RBF ─────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RationalQuadratic_AtOrigin_ReturnsOne()
     {
         var rbf = new RationalQuadraticRBF<double>(epsilon: 1.0);
         Assert.Equal(1.0, rbf.Compute(0.0), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RationalQuadratic_Derivative_MatchesNumerical()
     {
         var rbf = new RationalQuadraticRBF<double>(epsilon: 1.0);

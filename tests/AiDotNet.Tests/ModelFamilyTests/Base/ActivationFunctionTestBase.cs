@@ -146,7 +146,7 @@ public abstract class ActivationFunctionTestBase
     // INVARIANT 4: Activate(0) == 0 for zero-preserving activations
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void Activate_ZeroInput()
     {
         if (!ZeroMapsToZero) return;
@@ -161,7 +161,7 @@ public abstract class ActivationFunctionTestBase
     // INVARIANT 5: Monotonicity — for monotonic activations, larger input → larger output
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void Activate_ShouldBeMonotonic()
     {
         if (!IsMonotonic) return;
@@ -181,7 +181,7 @@ public abstract class ActivationFunctionTestBase
     // INVARIANT 6: Bounded activations stay within bounds
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void Activate_ShouldRespectBounds()
     {
         if (!IsBounded) return;
@@ -219,7 +219,7 @@ public abstract class ActivationFunctionTestBase
     // INVARIANT 8: Tensor-level Activate matches scalar Activate
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void TensorActivate_ShouldMatchScalarActivate()
     {
         var fn = CreateTestActivation();
@@ -243,7 +243,7 @@ public abstract class ActivationFunctionTestBase
     // For monotonically non-decreasing activations, f'(x) >= 0 everywhere.
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void Derivative_ShouldBeNonNegativeForMonotonicActivation()
     {
         if (!IsMonotonic) return;

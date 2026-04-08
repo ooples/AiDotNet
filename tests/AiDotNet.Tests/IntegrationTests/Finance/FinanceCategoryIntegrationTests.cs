@@ -84,7 +84,7 @@ public class FinanceCategoryIntegrationTests
     public static IEnumerable<object[]> AutoMlTypesDouble =>
         WrapTypes(FinanceModelTestFactory.GetFinanceModelTypesByNamespace<double>("AiDotNet.Finance.AutoML"));
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FinanceCategories_HaveModels()
     {
         Assert.NotEmpty(ForecastingTransformerTypesFloat);

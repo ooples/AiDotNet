@@ -94,7 +94,7 @@ public class SEALTrainerIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SEAL_CompletesTraining_WithoutErrors()
     {
         // Arrange
@@ -116,7 +116,7 @@ public class SEALTrainerIntegrationTests
         Assert.All(losses, loss => Assert.False(double.IsNaN(loss), "Loss should not be NaN"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SEAL_MetaTrain_UpdatesParametersCorrectly()
     {
         // Arrange
@@ -150,7 +150,7 @@ public class SEALTrainerIntegrationTests
         Assert.True(paramsChanged, "Meta-training should update model parameters");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SEAL_WithEntropyRegularization_CompletesSuccessfully()
     {
         // Arrange - SEAL with entropy regularization for better generalization
@@ -180,7 +180,7 @@ public class SEALTrainerIntegrationTests
         Assert.All(losses, loss => Assert.False(double.IsPositiveInfinity(loss), "Loss should not be infinite"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SEAL_WithTemperatureScaling_CompletesSuccessfully()
     {
         // Arrange - SEAL with temperature scaling
@@ -210,7 +210,7 @@ public class SEALTrainerIntegrationTests
         Assert.All(losses, loss => Assert.True(loss >= 0, "Loss should be non-negative"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SEAL_WithWeightDecay_CompletesSuccessfully()
     {
         // Arrange - SEAL with weight decay for regularization
@@ -239,7 +239,7 @@ public class SEALTrainerIntegrationTests
         Assert.All(losses, loss => Assert.False(double.IsNaN(loss), "Loss should not be NaN"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SEAL_WithAdaptiveLearningRate_CompletesSuccessfully()
     {
         // Arrange - SEAL with adaptive inner learning rates
@@ -269,7 +269,7 @@ public class SEALTrainerIntegrationTests
         Assert.All(losses, loss => Assert.False(double.IsNaN(loss), "Loss should not be NaN"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SEAL_Adapt_ProducesTaskSpecificModel()
     {
         // Arrange
@@ -308,7 +308,7 @@ public class SEALTrainerIntegrationTests
         Assert.True(metaParamsUnchanged, "Adaptation should not modify meta-model parameters");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SEAL_Evaluate_ProducesValidMetrics()
     {
         // Arrange
@@ -332,7 +332,7 @@ public class SEALTrainerIntegrationTests
         Assert.False(double.IsPositiveInfinity(evalLoss), "Evaluation loss should not be infinite");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SEAL_LongTraining_TracksLossCorrectly()
     {
         // Arrange
@@ -361,7 +361,7 @@ public class SEALTrainerIntegrationTests
         Assert.True(!double.IsNaN(lastLoss), "Loss should not be NaN");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SEAL_WithFirstOrderApproximation_CompletesSuccessfully()
     {
         // Arrange - SEAL with first-order approximation (FOMAML-style)
@@ -476,7 +476,7 @@ public class SEALTrainerIntegrationTests
         Assert.False(double.IsNaN(loss), $"Loss should not be NaN for mode={mode}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Algorithm_HasCorrectName()
     {
         // Arrange
@@ -487,7 +487,7 @@ public class SEALTrainerIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.SEAL, algorithm.AlgorithmType);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Algorithm_ExposesCorrectHyperparameters()
     {
         // Arrange
@@ -508,7 +508,7 @@ public class SEALTrainerIntegrationTests
         Assert.Equal(8, algorithm.AdaptationSteps);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Options_IsValid_ReturnsTrueForValidOptions()
     {
         // Arrange
@@ -518,7 +518,7 @@ public class SEALTrainerIntegrationTests
         Assert.True(options.IsValid());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Options_Clone_CreatesIndependentCopy()
     {
         // Arrange

@@ -15,7 +15,7 @@ public class BenchmarkingIntegrationTests
 {
     #region SafetyBenchmarkRunner Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Runner_FullBenchmark_ProducesResults()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
@@ -28,7 +28,7 @@ public class BenchmarkingIntegrationTests
         Assert.True(result.Recall >= 0 && result.Recall <= 1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Runner_JailbreakBenchmark_CorrectTestCount()
     {
         var config = new SafetyConfig { Text = { JailbreakDetection = true } };
@@ -40,7 +40,7 @@ public class BenchmarkingIntegrationTests
         Assert.Equal(StandardSafetyBenchmarks.JailbreakBenchmark.Count, result.TotalTestCases);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Runner_ToxicityBenchmark_ProducesMetrics()
     {
         var config = new SafetyConfig { Text = { ToxicityDetection = true } };
@@ -54,7 +54,7 @@ public class BenchmarkingIntegrationTests
         Assert.True(result.Recall >= 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Runner_PIIBenchmark_ProducesMetrics()
     {
         var config = new SafetyConfig { Text = { PIIDetection = true } };
@@ -66,7 +66,7 @@ public class BenchmarkingIntegrationTests
         Assert.True(result.TotalTestCases > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Runner_FullBenchmarkWithFairness_ProducesMetrics()
     {
         var config = new SafetyConfig { Fairness = { DemographicParity = true, StereotypeDetection = true } };
@@ -82,32 +82,32 @@ public class BenchmarkingIntegrationTests
 
     #region StandardSafetyBenchmarks Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardBenchmarks_FullBenchmark_HasTestCases()
     {
         Assert.True(StandardSafetyBenchmarks.FullBenchmark.Count > 0,
             "Full benchmark should have test cases");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardBenchmarks_ToxicityBenchmark_HasTestCases()
     {
         Assert.True(StandardSafetyBenchmarks.ToxicityBenchmark.Count > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardBenchmarks_JailbreakBenchmark_HasTestCases()
     {
         Assert.True(StandardSafetyBenchmarks.JailbreakBenchmark.Count > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardBenchmarks_PIIBenchmark_HasTestCases()
     {
         Assert.True(StandardSafetyBenchmarks.PIIBenchmark.Count > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardBenchmarks_FullBenchmark_IncludesMultipleCategories()
     {
         Assert.True(StandardSafetyBenchmarks.FullBenchmark.Count > 0,
@@ -118,7 +118,7 @@ public class BenchmarkingIntegrationTests
 
     #region Individual Benchmark Class Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToxicityBenchmark_RunsWithPipeline()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
@@ -129,14 +129,14 @@ public class BenchmarkingIntegrationTests
         Assert.True(result.TotalTestCases > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HallucinationBenchmark_ExistsInFullBenchmark()
     {
         // Verify the full benchmark contains hallucination test cases
         Assert.True(StandardSafetyBenchmarks.FullBenchmark.Count > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdversarialBenchmark_ExistsInFullBenchmark()
     {
         Assert.True(StandardSafetyBenchmarks.FullBenchmark.Count > 0);
@@ -146,7 +146,7 @@ public class BenchmarkingIntegrationTests
 
     #region Benchmark Metrics Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkResult_MetricsInValidRange()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();
@@ -159,7 +159,7 @@ public class BenchmarkingIntegrationTests
             $"Recall should be between 0 and 1, got {result.Recall}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BenchmarkResult_F1Score_Computable()
     {
         var pipeline = SafetyPipelineFactory<double>.Create();

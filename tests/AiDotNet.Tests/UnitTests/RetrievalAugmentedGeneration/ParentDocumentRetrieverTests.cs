@@ -212,7 +212,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange
@@ -227,7 +227,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(retriever);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_NullDocumentStore_ThrowsArgumentNullException()
         {
             // Arrange
@@ -238,7 +238,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new ParentDocumentRetriever<double>(null!, model, 256, 2048, true));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_NullEmbeddingModel_ThrowsArgumentNullException()
         {
             // Arrange
@@ -249,7 +249,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new ParentDocumentRetriever<double>(store, null!, 256, 2048, true));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_ZeroChunkSize_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -261,7 +261,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new ParentDocumentRetriever<double>(store, model, chunkSize: 0, parentSize: 2048, includeNeighboringChunks: true));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_NegativeChunkSize_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -273,7 +273,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new ParentDocumentRetriever<double>(store, model, chunkSize: -1, parentSize: 2048, includeNeighboringChunks: true));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_ZeroParentSize_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -285,7 +285,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new ParentDocumentRetriever<double>(store, model, chunkSize: 256, parentSize: 0, includeNeighboringChunks: true));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_NegativeParentSize_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -297,7 +297,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new ParentDocumentRetriever<double>(store, model, chunkSize: 256, parentSize: -1, includeNeighboringChunks: true));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_ParentSizeLessThanChunkSize_ThrowsArgumentException()
         {
             // Arrange
@@ -309,7 +309,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new ParentDocumentRetriever<double>(store, model, chunkSize: 512, parentSize: 256, includeNeighboringChunks: true));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_ParentSizeEqualsChunkSize_CreatesInstance()
         {
             // Arrange
@@ -328,7 +328,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Retrieve Method Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_EmptyStore_ReturnsEmptyResults()
         {
             // Arrange
@@ -343,7 +343,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_SingleChunk_ReturnsParentDocument()
         {
             // Arrange
@@ -359,7 +359,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("parent1", results[0].Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_MultipleChunksSameParent_ReturnsSingleParent()
         {
             // Arrange
@@ -377,7 +377,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("parent1", results[0].Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ChunksFromDifferentParents_ReturnsMultipleParents()
         {
             // Arrange
@@ -395,7 +395,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains(results, r => r.Id == "parent2");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithTopK_ReturnsLimitedResults()
         {
             // Arrange
@@ -414,7 +414,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results.Count <= 3);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_NullQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -427,7 +427,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve(null!).ToList());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_EmptyQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -440,7 +440,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("").ToList());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WhitespaceQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -457,7 +457,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Parent Document Retrieval Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ParentDocumentExists_ReturnsFullParentContent()
         {
             // Arrange
@@ -481,7 +481,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("full parent document content", results[0].Content);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ParentNotInStore_UsesFallbackWithChunkContent()
         {
             // Arrange - No parent documents, just chunks
@@ -499,7 +499,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("chunk content only", results[0].Content);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ChunkWithoutParentId_IsSkipped()
         {
             // Arrange - Chunk without parent_id metadata
@@ -532,7 +532,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Score Aggregation Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ParentScore_UsesMaxChunkScore()
         {
             // Arrange - Multiple chunks from same parent with different scores
@@ -551,7 +551,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(0.9, results[0].RelevanceScore, 3); // Max of 0.5, 0.9, 0.7
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ResultsOrderedByBestChunkScore()
         {
             // Arrange
@@ -577,7 +577,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Include Neighboring Chunks Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_IncludeNeighboringChunks_ConcatenatesContent()
         {
             // Arrange - Multiple chunks from same parent
@@ -596,7 +596,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("Second chunk content", results[0].Content);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_NoIncludeNeighboringChunks_UsesParentDocument()
         {
             // Arrange
@@ -624,7 +624,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Metadata Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ChunkSpecificMetadataRemoved()
         {
             // Arrange - Chunk with specific metadata that should be removed from parent
@@ -660,7 +660,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[0].Metadata.ContainsKey("category"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithMetadataFilter_FiltersChunks()
         {
             // Arrange
@@ -702,7 +702,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -715,7 +715,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("test", topK: 0).ToList());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_NegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -728,7 +728,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("test", topK: -1).ToList());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_TopKGreaterThanParents_ReturnsAllAvailable()
         {
             // Arrange
@@ -744,7 +744,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_DocumentsHaveRelevanceScores()
         {
             // Arrange
@@ -759,7 +759,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.All(results, r => Assert.True(r.HasRelevanceScore));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ChunkWithNullParentId_IsSkipped()
         {
             // Arrange
@@ -788,7 +788,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("parent1", results[0].Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ChunkWithEmptyParentId_IsSkipped()
         {
             // Arrange
@@ -817,7 +817,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("parent1", results[0].Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ManyChunksManyParents_HandlesCorrectly()
         {
             // Arrange

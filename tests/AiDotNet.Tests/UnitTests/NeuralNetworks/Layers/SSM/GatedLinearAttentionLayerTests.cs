@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class GatedLinearAttentionLayerTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ValidParameters_CreatesLayer()
     {
         int seqLen = 16;
@@ -23,7 +23,7 @@ public class GatedLinearAttentionLayerTests
         Assert.Equal(modelDim / numHeads, layer.HeadDimension);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_DefaultParameters_UsesCorrectDefaults()
     {
         var layer = new GatedLinearAttentionLayer<float>(16);
@@ -33,21 +33,21 @@ public class GatedLinearAttentionLayerTests
         Assert.Equal(32, layer.HeadDimension); // 256 / 8
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ThrowsWhenModelDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new GatedLinearAttentionLayer<float>(16, modelDimension: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ThrowsWhenNumHeadsNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new GatedLinearAttentionLayer<float>(16, modelDimension: 64, numHeads: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ThrowsWhenModelDimNotDivisibleByHeads()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -90,7 +90,7 @@ public class GatedLinearAttentionLayerTests
 
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetParameters_SetParameters_RoundTrip()
     {
         int seqLen = 4;
@@ -113,7 +113,7 @@ public class GatedLinearAttentionLayerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SetParameters_ThrowsOnWrongLength()
     {
         var layer = new GatedLinearAttentionLayer<float>(4, 32, 4);
@@ -122,7 +122,7 @@ public class GatedLinearAttentionLayerTests
         Assert.Throws<ArgumentException>(() => layer.SetParameters(wrongParams));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResetState_ClearsInternalState()
     {
         var layer = new GatedLinearAttentionLayer<float>(4, 32, 4);
@@ -145,7 +145,7 @@ public class GatedLinearAttentionLayerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Forward_DeterministicWithSameParameters()
     {
         int seqLen = 4;
@@ -171,14 +171,14 @@ public class GatedLinearAttentionLayerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SupportsTraining_ReturnsTrue()
     {
         var layer = new GatedLinearAttentionLayer<float>(4, 32, 4);
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetMetadata_ContainsExpectedKeys()
     {
         var layer = new GatedLinearAttentionLayer<float>(8, 64, 8);
@@ -193,7 +193,7 @@ public class GatedLinearAttentionLayerTests
         Assert.Equal("8", metadata["HeadDimension"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetQueryWeights_ReturnsValidTensor()
     {
         int modelDim = 64;
@@ -206,7 +206,7 @@ public class GatedLinearAttentionLayerTests
         Assert.Equal(new[] { modelDim, modelDim }, queryWeights.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Forward_Double_ProducesValidOutput()
     {
         int seqLen = 4;

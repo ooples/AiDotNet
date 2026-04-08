@@ -37,7 +37,7 @@ public class DeepAgentsIntegrationTests
     private const double LearningRate = 0.01;
     private const double DiscountFactor = 0.9;
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeepQAgents_RunBasicWorkflow()
     {
         var dqn = new DQNAgent<double>(new DQNOptions<double>
@@ -127,7 +127,7 @@ public class DeepAgentsIntegrationTests
         ExerciseReplayAgent(rainbow, DiscreteStateSize, DiscreteActionSize, true, 2, true);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActorCriticAgents_RunBasicWorkflow()
     {
         var a2c = new A2CAgent<double>(new A2COptions<double>
@@ -226,7 +226,7 @@ public class DeepAgentsIntegrationTests
         ExerciseTrajectoryAgent(reinforce, DiscreteStateSize, DiscreteActionSize, 1, true, true);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContinuousAgents_RunBasicWorkflow()
     {
         var ddpg = new DDPGAgent<double>(new DDPGOptions<double>
@@ -302,7 +302,7 @@ public class DeepAgentsIntegrationTests
             LearningRate));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OfflineAgents_RunBasicWorkflow()
     {
         var cql = new CQLAgent<double>(new CQLOptions<double>
@@ -370,7 +370,7 @@ public class DeepAgentsIntegrationTests
         AssertAgentState(decisionTransformer, true);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelBasedAgents_RunBasicWorkflow()
     {
         var muzero = new MuZeroAgent<double>(new MuZeroOptions<double>
@@ -434,7 +434,7 @@ public class DeepAgentsIntegrationTests
         ExerciseReplayAgent(worldModels, 4, ContinuousActionSize, false, 2, true);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiAgentAgents_RunBasicWorkflow()
     {
         var qmix = new QMIXAgent<double>(new QMIXOptions<double>

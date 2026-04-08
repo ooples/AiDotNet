@@ -17,7 +17,7 @@ public abstract class DocumentNNModelTestBase : NeuralNetworkModelTestBase
     // should produce finite output, not NaN or exceptions.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EmptyInput_ShouldNotCrash()
     {
         var network = CreateNetwork();
@@ -39,7 +39,7 @@ public abstract class DocumentNNModelTestBase : NeuralNetworkModelTestBase
     // Same input shape should always produce same output shape.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OutputDimensionality_Consistent()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -59,7 +59,7 @@ public abstract class DocumentNNModelTestBase : NeuralNetworkModelTestBase
     // different representations. A model ignoring content is broken.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DifferentDocuments_DifferentOutputs()
     {
         var network = CreateNetwork();
@@ -89,7 +89,7 @@ public abstract class DocumentNNModelTestBase : NeuralNetworkModelTestBase
     // Doubling input values should not cause overflow.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LargerInput_ShouldNotExplode()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

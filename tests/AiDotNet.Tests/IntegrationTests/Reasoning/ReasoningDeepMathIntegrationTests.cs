@@ -19,7 +19,7 @@ public class ReasoningDeepMathIntegrationTests
     // ReasoningConfig Default Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningConfig_Defaults_CorrectValues()
     {
         var config = new ReasoningConfig();
@@ -46,7 +46,7 @@ public class ReasoningDeepMathIntegrationTests
     // ThoughtNode: Tree Structure Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThoughtNode_Root_IsRootAndIsLeaf()
     {
         var root = new ThoughtNode<double> { Thought = "Root", Depth = 0 };
@@ -57,7 +57,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Empty(root.Children);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThoughtNode_WithChildren_NotLeaf()
     {
         var root = new ThoughtNode<double> { Thought = "Root", Depth = 0 };
@@ -69,7 +69,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.False(child.IsRoot());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThoughtNode_PathLength_EqualsDepthPlusOne()
     {
         var root = new ThoughtNode<double> { Depth = 0 };
@@ -81,7 +81,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Equal(4, child2.PathLength);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThoughtNode_GetPathFromRoot_ReturnsCorrectOrder()
     {
         var root = new ThoughtNode<double> { Thought = "Problem", Depth = 0 };
@@ -98,7 +98,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Equal("Answer", path[3]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThoughtNode_PathScores_ReturnsRootToCurrentScores()
     {
         var root = new ThoughtNode<double> { Depth = 0, EvaluationScore = 0.9 };
@@ -113,7 +113,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Equal(0.92, scores[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThoughtNode_PathScores_RootOnly_SingleElement()
     {
         var root = new ThoughtNode<double> { Depth = 0, EvaluationScore = 0.75 };
@@ -128,7 +128,7 @@ public class ReasoningDeepMathIntegrationTests
     // ThoughtNode: Terminal Heuristic Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CheckIsTerminalByHeuristic_ExplicitTerminal_ReturnsTrue()
     {
         var node = new ThoughtNode<double> { Thought = "Any content", IsTerminal = true };
@@ -160,7 +160,7 @@ public class ReasoningDeepMathIntegrationTests
     // ThoughtNode: ToString Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThoughtNode_ToString_IncludesDepthAndScore()
     {
         var node = new ThoughtNode<double>
@@ -176,7 +176,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Contains("Calculate area", str);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThoughtNode_ToString_Terminal_IncludesTerminalMarker()
     {
         var node = new ThoughtNode<double>
@@ -190,7 +190,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Contains("[TERMINAL]", str);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThoughtNode_ToString_IndentationProportionalToDepth()
     {
         var depth0 = new ThoughtNode<double> { Depth = 0, Thought = "root" };
@@ -208,7 +208,7 @@ public class ReasoningDeepMathIntegrationTests
     // ReasoningStep Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningStep_Defaults_ZeroScoreEmptyContent()
     {
         var step = new ReasoningStep<double>();
@@ -223,7 +223,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Empty(step.Metadata);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningStep_ToString_ShowsStepNumberAndContent()
     {
         var step = new ReasoningStep<double>
@@ -239,7 +239,7 @@ public class ReasoningDeepMathIntegrationTests
     // ReasoningChain Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningChain_Empty_ZeroScoresAndMetrics()
     {
         var chain = new ReasoningChain<double>();
@@ -252,7 +252,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.False(chain.IsFullyVerified);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningChain_AddStep_SetsStepNumber()
     {
         var chain = new ReasoningChain<double>();
@@ -267,14 +267,14 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Equal(3, chain.Steps[2].StepNumber);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningChain_AddStep_NullThrows()
     {
         var chain = new ReasoningChain<double>();
         Assert.Throws<ArgumentNullException>(() => chain.AddStep(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningChain_StepScores_ReturnsVectorOfScores()
     {
         var chain = new ReasoningChain<double>();
@@ -290,7 +290,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Equal(0.95, scores[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningChain_GetMinimumScore_ReturnsWeakestLink()
     {
         var chain = new ReasoningChain<double>();
@@ -301,7 +301,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Equal(0.6, chain.GetMinimumScore());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningChain_GetAverageScore_ComputesMean()
     {
         var chain = new ReasoningChain<double>();
@@ -313,7 +313,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Equal(0.9, chain.GetAverageScore(), 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningChain_IsFullyVerified_AllVerified_True()
     {
         var chain = new ReasoningChain<double>();
@@ -323,7 +323,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.True(chain.IsFullyVerified);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningChain_IsFullyVerified_OneUnverified_False()
     {
         var chain = new ReasoningChain<double>();
@@ -333,7 +333,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.False(chain.IsFullyVerified);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningChain_TotalRefinements_SumsAcrossSteps()
     {
         var chain = new ReasoningChain<double>();
@@ -344,7 +344,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Equal(4, chain.TotalRefinements);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningChain_Duration_ComputedFromStartAndComplete()
     {
         var chain = new ReasoningChain<double>();
@@ -361,7 +361,7 @@ public class ReasoningDeepMathIntegrationTests
     // ReasoningResult Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningResult_Defaults_SuccessWithZeroConfidence()
     {
         var result = new ReasoningResult<double>();
@@ -378,7 +378,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Empty(result.Metadata);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningResult_GetSummary_IncludesKeyInfo()
     {
         var result = new ReasoningResult<double>
@@ -400,7 +400,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Contains("Steps: 1", summary);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningResult_GetSummary_FailedIncludesError()
     {
         var result = new ReasoningResult<double>
@@ -415,7 +415,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Contains("Timeout after 60 seconds", summary);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningResult_GetSummary_WithToolsUsed()
     {
         var result = new ReasoningResult<double>
@@ -432,7 +432,7 @@ public class ReasoningDeepMathIntegrationTests
     // MajorityVotingAggregator Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MajorityVoting_ClearWinner_ReturnsCorrectAnswer()
     {
         var aggregator = new MajorityVotingAggregator<double>();
@@ -444,7 +444,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Equal("36", winner);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MajorityVoting_AllSameAnswer_ReturnsThatAnswer()
     {
         var aggregator = new MajorityVotingAggregator<double>();
@@ -454,7 +454,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Equal("42", aggregator.Aggregate(answers, scores));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MajorityVoting_EmptyAnswers_Throws()
     {
         var aggregator = new MajorityVotingAggregator<double>();
@@ -462,7 +462,7 @@ public class ReasoningDeepMathIntegrationTests
             aggregator.Aggregate(new List<string>(), new Vector<double>(0)));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MajorityVoting_CaseInsensitive()
     {
         var aggregator = new MajorityVotingAggregator<double>();
@@ -475,7 +475,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Equal("Yes", winner, ignoreCase: true);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MajorityVoting_IgnoresWhitespace()
     {
         var aggregator = new MajorityVotingAggregator<double>();
@@ -487,7 +487,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Equal("36", winner);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MajorityVoting_MethodName_Correct()
     {
         var aggregator = new MajorityVotingAggregator<double>();
@@ -498,7 +498,7 @@ public class ReasoningDeepMathIntegrationTests
     // WeightedAggregator Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeightedVoting_HighConfidenceWins()
     {
         var aggregator = new WeightedAggregator<double>();
@@ -514,7 +514,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Equal("36", winner);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeightedVoting_LowCountHighConfidence_CanWin()
     {
         var aggregator = new WeightedAggregator<double>();
@@ -531,7 +531,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Equal("A", winner);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeightedVoting_EqualWeights_BehavesLikeMajority()
     {
         var aggregator = new WeightedAggregator<double>();
@@ -545,7 +545,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Equal("36", winner);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeightedVoting_MismatchedLengths_Throws()
     {
         var aggregator = new WeightedAggregator<double>();
@@ -555,7 +555,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => aggregator.Aggregate(answers, scores));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeightedVoting_EmptyAnswers_Throws()
     {
         var aggregator = new WeightedAggregator<double>();
@@ -563,14 +563,14 @@ public class ReasoningDeepMathIntegrationTests
             aggregator.Aggregate(new List<string>(), new Vector<double>(0)));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeightedVoting_MethodName_Correct()
     {
         var aggregator = new WeightedAggregator<double>();
         Assert.Equal("Weighted Voting", aggregator.MethodName);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeightedVoting_CaseInsensitive()
     {
         var aggregator = new WeightedAggregator<double>();
@@ -587,7 +587,7 @@ public class ReasoningDeepMathIntegrationTests
     // Cross-Component Integration Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThoughtNode_TreeBuilding_MultiLevelConsistency()
     {
         // Build a 3-level tree
@@ -629,7 +629,7 @@ public class ReasoningDeepMathIntegrationTests
         Assert.Equal(0.95, scoresB[2]); // leaf2a
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReasoningChain_FullPipeline_ScoresAndVerification()
     {
         var chain = new ReasoningChain<double> { Query = "What is 15% of 240?" };

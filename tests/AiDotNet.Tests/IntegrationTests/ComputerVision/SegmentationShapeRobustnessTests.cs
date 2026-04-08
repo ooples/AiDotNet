@@ -529,7 +529,7 @@ public class SegmentationShapeRobustnessTests
 
     #region Single-Channel Inputs
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SegFormer_Predict_SingleChannel_ReturnsOutput()
     {
         var model = new SegFormer<double>(Arch(32, 32, 1), numClasses: 5, modelSize: SegFormerModelSize.B0);
@@ -538,7 +538,7 @@ public class SegmentationShapeRobustnessTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NnUNet_Predict_SingleChannel_ReturnsOutput()
     {
         // Medical images are often single-channel (grayscale CT/MRI)
@@ -548,7 +548,7 @@ public class SegmentationShapeRobustnessTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransUNet_Predict_SingleChannel_ReturnsOutput()
     {
         var model = new TransUNet<double>(Arch(32, 32, 1), numClasses: 5, modelSize: TransUNetModelSize.Base);
@@ -557,7 +557,7 @@ public class SegmentationShapeRobustnessTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MedSAM_Predict_SingleChannel_ReturnsOutput()
     {
         var model = new MedSAM<double>(Arch(32, 32, 1), numClasses: 5, modelSize: MedSAMModelSize.ViTBase);

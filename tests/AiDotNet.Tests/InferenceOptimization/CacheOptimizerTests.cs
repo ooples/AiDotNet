@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.InferenceOptimization;
 
 public class CacheOptimizerTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TransposeBlocked_Transposes2DMatrix()
     {
         // 2x3
@@ -19,7 +19,7 @@ public class CacheOptimizerTests
         Assert.Equal(expected, dst);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CopyWithPrefetch_CopiesPrefix()
     {
         float[] src = new float[] { 1f, 2f, 3f, 4f, 5f };

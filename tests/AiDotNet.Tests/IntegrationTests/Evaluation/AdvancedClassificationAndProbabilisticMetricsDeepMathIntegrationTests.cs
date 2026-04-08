@@ -26,7 +26,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
     // MCC = (TP*TN - FP*FN) / sqrt((TP+FP)(TP+FN)(TN+FP)(TN+FN))
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MCC_HandCalculated_TP3TN3FP2FN2()
     {
         // MCC = (3*3 - 2*2) / sqrt(5*5*5*5) = 5/25 = 0.2
@@ -35,7 +35,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(0.2, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MCC_PerfectPrediction_ReturnsOne()
     {
         var metric = new MatthewsCorrelationCoefficientMetric<double>();
@@ -45,7 +45,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MCC_InvertedPrediction_ReturnsNegativeOne()
     {
         // Every positive predicted as negative and vice versa
@@ -56,7 +56,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(-1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MCC_AllSameClass_ReturnsZero()
     {
         // Classifier predicts all positive - TP=3, FP=2, TN=0, FN=0
@@ -68,7 +68,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MCC_MultiClass_GorodkinFormula()
     {
         // 3-class confusion matrix:
@@ -92,7 +92,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
     // Kappa = (po - pe) / (1 - pe)
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CohensKappa_HandCalculated_TP3TN3FP2FN2()
     {
         // po = 6/10 = 0.6
@@ -103,7 +103,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(0.2, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CohensKappa_PerfectAgreement_ReturnsOne()
     {
         var metric = new CohensKappaMetric<double>();
@@ -113,7 +113,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CohensKappa_RandomAgreement_ReturnsZero()
     {
         // 50% accuracy on balanced classes = no better than chance
@@ -130,7 +130,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CohensKappa_MultiClass_ThreeClasses()
     {
         // Same confusion matrix as MCC multi-class test
@@ -149,7 +149,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
     // LogLoss = -1/N * Σ[y*log(p) + (1-y)*log(1-p)]
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogLoss_HandCalculated_BinaryClassification()
     {
         // prob  = [0.9, 0.8, 0.3, 0.1]
@@ -165,7 +165,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogLoss_PerfectProbabilities_NearZero()
     {
         // Near-perfect probabilities: 0.999 for correct class
@@ -176,7 +176,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.True(result < 0.01, $"LogLoss ({result}) should be near zero for perfect probabilities");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogLoss_ConfidentlyWrong_VeryHigh()
     {
         // High probability assigned to wrong class
@@ -188,7 +188,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.True(result > 3.0, $"LogLoss ({result}) should be very high for confidently wrong predictions");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogLoss_UniformProbabilities_IsLog2()
     {
         // Random guessing with p=0.5 gives LogLoss = -log(0.5) = log(2) ≈ 0.6931
@@ -204,7 +204,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
     // Brier = (1/N) * Σ(p - y)²
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BrierScore_HandCalculated()
     {
         // prob  = [0.9, 0.8, 0.3, 0.1]
@@ -218,7 +218,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(0.0375, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BrierScore_RandomGuessing_ReturnsQuarter()
     {
         // With p=0.5 for all: Brier = (0.5-y)^2 = 0.25 for all
@@ -229,7 +229,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(0.25, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BrierScore_PerfectProbabilities_ReturnsZero()
     {
         var metric = new BrierScoreMetric<double>();
@@ -239,7 +239,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BrierScore_WorstCase_ReturnsOne()
     {
         // Predicting 0 for all actual=1 and 1 for all actual=0
@@ -255,7 +255,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
     // Jaccard = TP / (TP + FP + FN) = Intersection / Union
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void JaccardScore_HandCalculated_TP3FP2FN2()
     {
         // Jaccard = 3/(3+2+2) = 3/7
@@ -264,7 +264,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(3.0 / 7.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void JaccardScore_PerfectPrediction_ReturnsOne()
     {
         var metric = new JaccardScoreMetric<double>();
@@ -274,7 +274,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void JaccardScore_NoOverlap_ReturnsZero()
     {
         // All predictions wrong
@@ -290,7 +290,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
     // TS = TP / (TP + FN + FP)
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThreatScore_EqualsJaccard_SameFormula()
     {
         // Both compute TP/(TP+FP+FN)
@@ -301,7 +301,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(jResult, tResult, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThreatScore_HandCalculated()
     {
         var metric = new ThreatScoreMetric<double>();
@@ -314,7 +314,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
     // FM = sqrt(Precision * Recall)
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FowlkesMallows_HandCalculated()
     {
         // PPV = 3/5 = 0.6, TPR = 3/5 = 0.6
@@ -324,7 +324,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(0.6, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FowlkesMallows_GeometricMeanProperty()
     {
         // For asymmetric precision/recall:
@@ -340,7 +340,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(Math.Sqrt(0.5 * 0.75), result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FowlkesMallows_BetweenF1AndArithmeticMean()
     {
         // AM-GM-HM inequality: HM <= GM <= AM
@@ -367,7 +367,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
     // Informedness = TPR + TNR - 1
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Informedness_HandCalculated()
     {
         // TPR = 0.6, TNR = 0.6
@@ -377,7 +377,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(0.2, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Informedness_PerfectClassifier_ReturnsOne()
     {
         var metric = new InformednessMetric<double>();
@@ -387,7 +387,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Informedness_RandomClassifier_ReturnsZero()
     {
         // TP=1, TN=1, FP=1, FN=1 => TPR=0.5, TNR=0.5 => J=0
@@ -403,7 +403,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
     // Markedness = PPV + NPV - 1
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Markedness_HandCalculated()
     {
         // PPV = 3/5 = 0.6, NPV = 3/5 = 0.6
@@ -413,7 +413,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(0.2, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Markedness_PerfectClassifier_ReturnsOne()
     {
         var metric = new MarkednessMetric<double>();
@@ -428,7 +428,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
     // DOR = (TP*TN)/(FP*FN) with Haldane-Anscombe correction (+0.5)
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOR_HandCalculated_WithCorrection()
     {
         // TP=3, TN=3, FP=2, FN=2
@@ -438,7 +438,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(1.96, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOR_PerfectClassifier_VeryHigh()
     {
         // TP=3, TN=2, FP=0, FN=0
@@ -450,7 +450,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(35.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DOR_WorstClassifier_VeryLow()
     {
         // All predictions inverted: TP=0, TN=0, FP=2, FN=3
@@ -467,7 +467,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
     // LR+ = TPR / FPR = Sensitivity / (1 - Specificity)
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LRPositive_HandCalculated()
     {
         // TPR = 0.6, FPR = 0.4
@@ -477,7 +477,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(1.5, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LRPositive_PerfectSpecificity_ReturnsMaxValue()
     {
         // No false positives => FPR = 0 => LR+ = infinity
@@ -493,7 +493,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
     // LR- = FNR / TNR = (1 - Sensitivity) / Specificity
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LRNegative_HandCalculated()
     {
         // FNR = 0.4, TNR = 0.6
@@ -503,7 +503,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(2.0 / 3.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LRNegative_PerfectSensitivity_ReturnsZero()
     {
         // No false negatives => FNR = 0 => LR- = 0
@@ -519,7 +519,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
     // F_beta = (1+β²)(P*R)/(β²P+R)
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FBeta_F1_MacroAverage_ThreeClasses()
     {
         // 3-class: pred=[0,0,1,1,2,2], actual=[0,1,1,2,2,0]
@@ -534,7 +534,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(0.5, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FBeta_F2_WeightsRecallMore()
     {
         // With β=2, recall is weighted 4x more than precision
@@ -549,7 +549,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(2.25 / 3.15, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FBeta_F05_WeightsPrecisionMore()
     {
         // With β=0.5, precision is weighted 4x more than recall
@@ -562,7 +562,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(0.625, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FBeta_HigherBeta_CloserToRecall()
     {
         // As β increases, FBeta approaches Recall
@@ -587,7 +587,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
     // CROSS-METRIC MATHEMATICAL IDENTITIES
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Identity_MCC_Squared_Equals_Informedness_Times_Markedness()
     {
         // Fundamental identity: MCC² = Informedness × Markedness
@@ -602,7 +602,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(mccVal * mccVal, informVal * markedVal, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Identity_MCC_Squared_Equals_Informedness_Times_Markedness_Asymmetric()
     {
         // Test with asymmetric confusion matrix (P ≠ R)
@@ -620,7 +620,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(mccVal * mccVal, informVal * markedVal, 1e-4);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Identity_Jaccard_F1_Relationship()
     {
         // Jaccard = F1 / (2 - F1)
@@ -634,7 +634,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(expected, jVal, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Identity_Jaccard_F1_Relationship_Asymmetric()
     {
         // Test with more asymmetric data
@@ -651,7 +651,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(expected, jVal, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Identity_DOR_Equals_LRPositive_Over_LRNegative_WithoutCorrection()
     {
         // DOR (without Haldane-Anscombe) = LR+ / LR-
@@ -666,7 +666,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(2.25, lrPlusVal / lrMinusVal, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Identity_Brier_Bounded_By_LogLoss()
     {
         // For binary classification with well-calibrated probabilities:
@@ -686,7 +686,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
             $"BrierScore ({brierVal}) should be < LogLoss ({logLossVal}) for uniform probabilities");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Identity_Informedness_Equals_1_Minus_FNR_Minus_FPR()
     {
         // Informedness = TPR + TNR - 1 = (1 - FNR) + (1 - FPR) - 1 = 1 - FNR - FPR
@@ -700,7 +700,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(1.0 - 2.0 * berVal, informVal, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Identity_FowlkesMallows_Squared_Equals_Precision_Times_Recall()
     {
         // FM = sqrt(P * R), so FM^2 = P * R
@@ -710,7 +710,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(0.6 * 0.6, fmVal * fmVal, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Identity_Kappa_LessThanOrEqual_MCC_ForBalancedClasses()
     {
         // For balanced marginals, Kappa <= |MCC|
@@ -725,7 +725,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(mccVal, kappaVal, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Identity_Jaccard_Reciprocal_Equals_PrecisionRecall_HarmonicReciprocal()
     {
         // 1/Jaccard = 1/TP * (TP + FP + FN) = (TP+FP)/TP + FN/TP = 1/P + 1/R - 1
@@ -736,7 +736,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(expected, 1.0 / jVal, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Identity_F1_GeometricMean_HarmonicMean_Ordering()
     {
         // For any P, R > 0: F1 <= FM <= (P+R)/2
@@ -762,7 +762,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
     // BOUNDARY/DEGENERATE CASES
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BrierScore_MultiClass_ThreeClasses()
     {
         // Multi-class Brier Score: (1/N*K) * ΣΣ (p_ik - y_ik)²
@@ -777,7 +777,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.Equal(0.28 / 6.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogLoss_ClipsExtremeProbabilities()
     {
         // LogLoss should clip probabilities to avoid log(0)
@@ -790,7 +790,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         Assert.True(result >= 0, $"LogLoss ({result}) should be non-negative");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MCC_RangeIsMinusOneToOne()
     {
         var metric = new MatthewsCorrelationCoefficientMetric<double>();
@@ -799,7 +799,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
             $"MCC ({result}) should be in [-1, 1]");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CohensKappa_RangeCheck()
     {
         var metric = new CohensKappaMetric<double>();
@@ -808,7 +808,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
             $"Kappa ({result}) should be in [-1, 1]");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FBeta_InvalidBeta_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new FBetaScoreMetric<double>(0.0));

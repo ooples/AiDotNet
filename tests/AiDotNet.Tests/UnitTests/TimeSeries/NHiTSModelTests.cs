@@ -11,7 +11,7 @@ public class NHiTSModelTests
 {
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithDefaultOptions_CreatesValidModel()
     {
         var model = new NHiTSModel<double>();
@@ -19,7 +19,7 @@ public class NHiTSModelTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithCustomOptions_CreatesValidModel()
     {
         var options = new NHiTSOptions<double>
@@ -37,7 +37,7 @@ public class NHiTSModelTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroStacks_ThrowsArgumentException()
     {
         var options = new NHiTSOptions<double>
@@ -49,7 +49,7 @@ public class NHiTSModelTests
         Assert.Throws<ArgumentException>(() => new NHiTSModel<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithNegativeStacks_ThrowsArgumentException()
     {
         var options = new NHiTSOptions<double>
@@ -61,7 +61,7 @@ public class NHiTSModelTests
         Assert.Throws<ArgumentException>(() => new NHiTSModel<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithMismatchedPoolingKernelSizes_ThrowsArgumentException()
     {
         var options = new NHiTSOptions<double>
@@ -73,7 +73,7 @@ public class NHiTSModelTests
         Assert.Throws<ArgumentException>(() => new NHiTSModel<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroLookbackWindow_ThrowsArgumentException()
     {
         var options = new NHiTSOptions<double>
@@ -86,7 +86,7 @@ public class NHiTSModelTests
         Assert.Throws<ArgumentException>(() => new NHiTSModel<double>(options));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroForecastHorizon_ThrowsArgumentException()
     {
         var options = new NHiTSOptions<double>
@@ -103,7 +103,7 @@ public class NHiTSModelTests
 
     #region Training Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Train_WithValidData_CompletesWithoutError()
     {
         var options = new NHiTSOptions<double>
@@ -126,7 +126,7 @@ public class NHiTSModelTests
         Assert.Null(exception);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Train_WithMinimalData_CompletesWithoutError()
     {
         var options = new NHiTSOptions<double>
@@ -153,7 +153,7 @@ public class NHiTSModelTests
 
     #region Prediction Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PredictSingle_AfterTraining_ReturnsValidPrediction()
     {
         var options = new NHiTSOptions<double>
@@ -184,7 +184,7 @@ public class NHiTSModelTests
         Assert.False(double.IsInfinity(prediction), "Prediction is Infinity");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PredictSingle_ReturnsFiniteValues()
     {
         var options = new NHiTSOptions<double>
@@ -215,7 +215,7 @@ public class NHiTSModelTests
         Assert.False(double.IsInfinity(prediction), "Prediction contains Infinity");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Predict_WithMatrix_ReturnsValidPredictions()
     {
         var options = new NHiTSOptions<double>
@@ -250,7 +250,7 @@ public class NHiTSModelTests
 
     #region Serialization Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Serialize_AndDeserialize_PreservesModel()
     {
         var options = new NHiTSOptions<double>
@@ -292,7 +292,7 @@ public class NHiTSModelTests
 
     #region Float Type Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithFloatType_CreatesValidModel()
     {
         var options = new NHiTSOptions<float>

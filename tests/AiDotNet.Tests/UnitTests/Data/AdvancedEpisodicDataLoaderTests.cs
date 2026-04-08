@@ -74,7 +74,7 @@ public class AdvancedEpisodicDataLoaderTests
 
     #region BalancedEpisodicDataLoader Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BalancedLoader_Constructor_InitializesSuccessfully()
     {
         // Arrange
@@ -87,7 +87,7 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.NotNull(loader);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BalancedLoader_GetNextTask_VerifyTaskDimensions()
     {
         // Arrange
@@ -109,7 +109,7 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.Equal(numFeatures, task.QuerySetX.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BalancedLoader_MultipleTasks_AchievesBalancedDistribution()
     {
         // Arrange
@@ -142,7 +142,7 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.True(true);  // If we get here without exceptions, balancing is working
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BalancedLoader_WithSeed_ProducesReproducibleTasks()
     {
         // Arrange
@@ -164,7 +164,7 @@ public class AdvancedEpisodicDataLoaderTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BalancedLoader_WithDefaultParameters_UsesIndustryStandards()
     {
         // Arrange - Create dataset with enough data for default 5-way 5-shot 15 queries
@@ -183,7 +183,7 @@ public class AdvancedEpisodicDataLoaderTests
 
     #region StratifiedEpisodicDataLoader Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StratifiedLoader_Constructor_InitializesSuccessfully()
     {
         // Arrange
@@ -196,7 +196,7 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.NotNull(loader);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StratifiedLoader_GetNextTask_VerifyTaskDimensions()
     {
         // Arrange
@@ -218,7 +218,7 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.Equal(numFeatures, task.QuerySetX.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StratifiedLoader_MultipleTasks_FavorsFrequentClasses()
     {
         // Arrange
@@ -247,7 +247,7 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.True(true);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StratifiedLoader_WithSeed_ProducesReproducibleTasks()
     {
         // Arrange
@@ -269,7 +269,7 @@ public class AdvancedEpisodicDataLoaderTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StratifiedLoader_WithDefaultParameters_UsesIndustryStandards()
     {
         // Arrange
@@ -288,7 +288,7 @@ public class AdvancedEpisodicDataLoaderTests
 
     #region CurriculumEpisodicDataLoader Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CurriculumLoader_Constructor_InitializesSuccessfully()
     {
         // Arrange
@@ -309,7 +309,7 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.Equal(0.0, loader.Progress);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CurriculumLoader_InitialProgress_GeneratesEasyTasks()
     {
         // Arrange
@@ -335,7 +335,7 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.Equal(20, task.QuerySetX.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CurriculumLoader_FinalProgress_GeneratesHardTasks()
     {
         // Arrange
@@ -361,7 +361,7 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.Equal(50, task.QuerySetX.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CurriculumLoader_MiddleProgress_GeneratesMediumTasks()
     {
         // Arrange
@@ -386,7 +386,7 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.Equal(10, task.SupportSetX.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CurriculumLoader_ProgressProgression_IncreasesDifficulty()
     {
         // Arrange
@@ -423,7 +423,7 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.True(easySupport > hardSupport, "Initial (easy) support set should be larger than final (hard) support set");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CurriculumLoader_SetProgress_ThrowsOnInvalidProgress()
     {
         // Arrange
@@ -443,7 +443,7 @@ public class AdvancedEpisodicDataLoaderTests
         Assert.Throws<ArgumentOutOfRangeException>(() => loader.SetProgress(1.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CurriculumLoader_Constructor_ValidatesParameters()
     {
         // Arrange
@@ -468,7 +468,7 @@ public class AdvancedEpisodicDataLoaderTests
             initialKShot: 5));  // Invalid: less than target
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CurriculumLoader_WithSeed_ProducesReproducibleTasks()
     {
         // Arrange
@@ -498,7 +498,7 @@ public class AdvancedEpisodicDataLoaderTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CurriculumLoader_WithDefaultParameters_UsesIndustryStandards()
     {
         // Arrange - Need enough data for initial difficulty: 2-way 10-shot + 15 queries

@@ -30,7 +30,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region Regression Metrics - Perfect Predictions
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void R2Score_PerfectPredictions_ReturnsOne()
     {
         var metric = new R2ScoreMetric<double>();
@@ -38,7 +38,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAE_PerfectPredictions_ReturnsZero()
     {
         var metric = new MAEMetric<double>();
@@ -46,7 +46,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_PerfectPredictions_ReturnsZero()
     {
         var metric = new MSEMetric<double>();
@@ -54,7 +54,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RMSE_PerfectPredictions_ReturnsZero()
     {
         var metric = new RMSEMetric<double>();
@@ -62,7 +62,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaxError_PerfectPredictions_ReturnsZero()
     {
         var metric = new MaxErrorMetric<double>();
@@ -70,7 +70,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MedianAbsoluteError_PerfectPredictions_ReturnsZero()
     {
         var metric = new MedianAbsoluteErrorMetric<double>();
@@ -78,7 +78,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExplainedVariance_PerfectPredictions_ReturnsOne()
     {
         var metric = new ExplainedVarianceMetric<double>();
@@ -90,7 +90,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region Regression Metrics - Known Values
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAE_KnownValues_ReturnsCorrectResult()
     {
         var metric = new MAEMetric<double>();
@@ -100,7 +100,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.1, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_KnownValues_ReturnsCorrectResult()
     {
         var metric = new MSEMetric<double>();
@@ -109,7 +109,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.01, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RMSE_KnownValues_IsSqrtOfMSE()
     {
         var mse = new MSEMetric<double>();
@@ -119,7 +119,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(Math.Sqrt(mseVal), rmseVal, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaxError_KnownValues_ReturnsMaxAbsError()
     {
         var metric = new MaxErrorMetric<double>();
@@ -129,7 +129,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void R2Score_MeanPredictions_ReturnsZero()
     {
         var metric = new R2ScoreMetric<double>();
@@ -139,7 +139,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void R2Score_BadPredictions_IsNegative()
     {
         var metric = new R2ScoreMetric<double>();
@@ -148,7 +148,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.True(result < 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeanBiasError_OverPredictions_IsPositive()
     {
         var metric = new MeanBiasErrorMetric<double>();
@@ -157,7 +157,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.True(result > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeanBiasError_UnderPredictions_IsNegative()
     {
         var metric = new MeanBiasErrorMetric<double>();
@@ -166,7 +166,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.True(result < 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PearsonCorrelation_PerfectPositive_ReturnsOne()
     {
         var metric = new PearsonCorrelationMetric<double>();
@@ -174,7 +174,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PearsonCorrelation_PerfectNegative_ReturnsMinusOne()
     {
         var metric = new PearsonCorrelationMetric<double>();
@@ -182,7 +182,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(-1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpearmanCorrelation_PerfectPositive_ReturnsOne()
     {
         var metric = new SpearmanCorrelationMetric<double>();
@@ -190,7 +190,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpearmanCorrelation_PerfectNegative_ReturnsMinusOne()
     {
         var metric = new SpearmanCorrelationMetric<double>();
@@ -198,7 +198,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(-1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuberLoss_PerfectPredictions_ReturnsZero()
     {
         var metric = new HuberLossMetric<double>();
@@ -206,7 +206,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogCoshLoss_PerfectPredictions_ReturnsZero()
     {
         var metric = new LogCoshLossMetric<double>();
@@ -218,7 +218,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region Regression Metrics - Non-Negative
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllNonNegativeRegressionMetrics_AlwaysNonNegative()
     {
         var metrics = new IRegressionMetric<double>[]
@@ -245,7 +245,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region Regression Metrics - MSE >= MAE^2 Property
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_AlwaysGreaterThanOrEqualTo_MAESquared()
     {
         var mse = new MSEMetric<double>();
@@ -262,7 +262,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region Classification Metrics - Perfect Predictions
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Accuracy_PerfectPredictions_ReturnsOne()
     {
         var metric = new AccuracyMetric<double>();
@@ -270,7 +270,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Accuracy_WorstPredictions_ReturnsZero()
     {
         var metric = new AccuracyMetric<double>();
@@ -278,7 +278,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ErrorRate_PerfectPredictions_ReturnsZero()
     {
         var metric = new ErrorRateMetric<double>();
@@ -286,7 +286,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Precision_PerfectPredictions_ReturnsOne()
     {
         var metric = new PrecisionMetric<double>();
@@ -294,7 +294,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Recall_PerfectPredictions_ReturnsOne()
     {
         var metric = new RecallMetric<double>();
@@ -302,7 +302,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void F1Score_PerfectPredictions_ReturnsOne()
     {
         var metric = new F1ScoreMetric<double>();
@@ -310,7 +310,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Specificity_PerfectPredictions_ReturnsOne()
     {
         var metric = new SpecificityMetric<double>();
@@ -318,7 +318,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatthewsCorrelation_PerfectPredictions_ReturnsOne()
     {
         var metric = new MatthewsCorrelationCoefficientMetric<double>();
@@ -326,7 +326,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CohensKappa_PerfectPredictions_ReturnsOne()
     {
         var metric = new CohensKappaMetric<double>();
@@ -334,7 +334,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HammingLoss_PerfectPredictions_ReturnsZero()
     {
         var metric = new HammingLossMetric<double>();
@@ -342,7 +342,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ZeroOneLoss_PerfectPredictions_ReturnsZero()
     {
         var metric = new ZeroOneLossMetric<double>();
@@ -354,7 +354,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region Classification Metrics - Known Values
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Accuracy_KnownValues_ReturnsCorrectResult()
     {
         var metric = new AccuracyMetric<double>();
@@ -363,7 +363,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.8, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AccuracyPlusErrorRate_SumsToOne()
     {
         var acc = new AccuracyMetric<double>();
@@ -373,7 +373,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, accVal + errVal, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void F1Score_IsHarmonicMeanOfPrecisionAndRecall()
     {
         var precision = new PrecisionMetric<double>();
@@ -388,7 +388,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(expectedF1, f1Val, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BalancedAccuracy_PerfectPredictions_ReturnsOne()
     {
         var metric = new BalancedAccuracyMetric<double>();
@@ -396,7 +396,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void JaccardScore_PerfectPredictions_ReturnsOne()
     {
         var metric = new JaccardScoreMetric<double>();
@@ -404,7 +404,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThreatScore_PerfectPredictions_ReturnsOne()
     {
         var metric = new ThreatScoreMetric<double>();
@@ -412,7 +412,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NPV_PerfectPredictions_ReturnsOne()
     {
         var metric = new NPVMetric<double>();
@@ -420,7 +420,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FalsePositiveRate_PerfectPredictions_ReturnsZero()
     {
         var metric = new FalsePositiveRateMetric<double>();
@@ -428,7 +428,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FalseNegativeRate_PerfectPredictions_ReturnsZero()
     {
         var metric = new FalseNegativeRateMetric<double>();
@@ -436,7 +436,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FalseDiscoveryRate_PerfectPredictions_ReturnsZero()
     {
         var metric = new FalseDiscoveryRateMetric<double>();
@@ -444,7 +444,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FalseOmissionRate_PerfectPredictions_ReturnsZero()
     {
         var metric = new FalseOmissionRateMetric<double>();
@@ -456,7 +456,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region Classification Metrics - Bounded [0, 1]
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllBoundedClassificationMetrics_InRange()
     {
         var metrics = new IClassificationMetric<double>[]
@@ -492,7 +492,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region Classification Metrics - Relationships
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sensitivity_EqualTo_Recall()
     {
         var recall = new RecallMetric<double>();
@@ -507,7 +507,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, recallVal + fnrVal, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpecificityPlusFPR_SumsToOne()
     {
         var spec = new SpecificityMetric<double>();
@@ -518,7 +518,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, specVal + fprVal, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrecisionPlusFDR_SumsToOne()
     {
         var prec = new PrecisionMetric<double>();
@@ -529,7 +529,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, precVal + fdrVal, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NPVPlusFOR_SumsToOne()
     {
         var npv = new NPVMetric<double>();
@@ -544,7 +544,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region Regression Metrics - Metadata Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllRegressionMetrics_HaveValidMetadata()
     {
         var metrics = new IRegressionMetric<double>[]
@@ -581,7 +581,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region Classification Metrics - Metadata Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllClassificationMetrics_HaveValidMetadata()
     {
         var metrics = new IClassificationMetric<double>[]
@@ -629,7 +629,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region Regression Metrics - MismatchedLengths
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAE_MismatchedLengths_Throws()
     {
         var metric = new MAEMetric<double>();
@@ -638,7 +638,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Throws<ArgumentException>(() => metric.Compute(preds, actuals));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Accuracy_MismatchedLengths_Throws()
     {
         var metric = new AccuracyMetric<double>();
@@ -651,7 +651,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region Regression Metrics - Empty Input
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAE_EmptyInput_ReturnsZero()
     {
         var metric = new MAEMetric<double>();
@@ -659,7 +659,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_EmptyInput_ReturnsZero()
     {
         var metric = new MSEMetric<double>();
@@ -671,7 +671,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region MAPE and SMAPE Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAPE_PerfectPredictions_ReturnsZero()
     {
         var metric = new MAPEMetric<double>();
@@ -679,7 +679,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SMAPE_PerfectPredictions_ReturnsZero()
     {
         var metric = new SymmetricMAPEMetric<double>();
@@ -687,7 +687,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SMAPE_IsSymmetric()
     {
         var metric = new SymmetricMAPEMetric<double>();
@@ -698,7 +698,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(r1, r2, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAPE_NonNegative()
     {
         var metric = new MAPEMetric<double>();
@@ -710,7 +710,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region Time Series Metrics
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SMAPE_TimeSeries_NonNegative()
     {
         var metric = new SMAPEMetric<double>();
@@ -720,7 +720,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.True(result >= 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WAPE_PerfectPredictions_ReturnsZero()
     {
         var metric = new WAPEMetric<double>();
@@ -728,7 +728,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TheilU_PerfectPredictions_ReturnsZero()
     {
         var metric = new TheilUMetric<double>();
@@ -740,7 +740,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region Confidence Intervals
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void R2Score_ComputeWithCI_ReturnsValidInterval()
     {
         var metric = new R2ScoreMetric<double>();
@@ -750,7 +750,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.True(result.Value <= result.UpperBound);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Accuracy_ComputeWithCI_ReturnsValidInterval()
     {
         var metric = new AccuracyMetric<double>();
@@ -764,7 +764,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region All Regression Metrics - No NaN on Valid Input
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllRegressionMetrics_ValidInput_NoNaN()
     {
         var metrics = new IRegressionMetric<double>[]
@@ -797,7 +797,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region All Classification Metrics - No NaN on Valid Input
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllClassificationMetrics_ValidInput_NoNaN()
     {
         var metrics = new IClassificationMetric<double>[]
@@ -843,7 +843,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region MeanDirectionalAccuracy Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeanDirectionalAccuracy_PerfectDirection_ReturnsOne()
     {
         var metric = new MeanDirectionalAccuracyMetric<double>();
@@ -858,7 +858,7 @@ public class EvaluationMetricsIntegrationTests
 
     #region AdjustedR2 Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdjustedR2_PerfectPredictions_ReturnsOne()
     {
         var metric = new AdjustedR2Metric<double>();
@@ -866,7 +866,7 @@ public class EvaluationMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdjustedR2_LessThanOrEqualToR2()
     {
         var r2 = new R2ScoreMetric<double>();

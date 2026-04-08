@@ -175,7 +175,7 @@ public class TridiagonalDecompositionIntegrationTests
             "T should be tridiagonal (non-zero only on main, sub, and super diagonals)");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TridiagonalDecomposition_SymmetricMatrix_TMatrixIsSymmetric()
     {
         // Arrange
@@ -194,7 +194,7 @@ public class TridiagonalDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TridiagonalDecomposition_IdentityMatrix_ValidDecomposition()
     {
         // Arrange
@@ -208,7 +208,7 @@ public class TridiagonalDecompositionIntegrationTests
             "Identity matrix T should be tridiagonal");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TridiagonalDecomposition_DiagonalMatrix_ValidDecomposition()
     {
         // Arrange - Diagonal matrices are already tridiagonal
@@ -223,7 +223,7 @@ public class TridiagonalDecompositionIntegrationTests
             "Diagonal matrix T should be tridiagonal");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TridiagonalDecomposition_ZeroMatrix_ValidDecomposition()
     {
         // Arrange
@@ -276,7 +276,7 @@ public class TridiagonalDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TridiagonalDecomposition_LargeMatrix_ValidDecomposition()
     {
         // Arrange
@@ -303,7 +303,7 @@ public class TridiagonalDecompositionIntegrationTests
 
     #region Validation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TridiagonalDecomposition_NonSquareMatrix_ThrowsException()
     {
         // Arrange

@@ -12,7 +12,7 @@ namespace AiDotNetTests.UnitTests.AutoML
     {
         #region Constructor Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithDefaultOptions_CreatesInstance()
         {
             // Arrange & Act
@@ -24,7 +24,7 @@ namespace AiDotNetTests.UnitTests.AutoML
             Assert.Empty(optimizer.TrialHistory);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithCustomOptions_CreatesInstance()
         {
             // Arrange
@@ -47,7 +47,7 @@ namespace AiDotNetTests.UnitTests.AutoML
 
         #region Options Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CompressionOptimizerOptions_DefaultValues_AreCorrect()
         {
             // Arrange & Act
@@ -67,7 +67,7 @@ namespace AiDotNetTests.UnitTests.AutoML
             Assert.Null(options.RandomSeed);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CompressionOptimizerOptions_CustomValues_AreSet()
         {
             // Arrange & Act
@@ -104,7 +104,7 @@ namespace AiDotNetTests.UnitTests.AutoML
 
         #region Optimize Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Optimize_WithNullWeights_ThrowsException()
         {
             // Arrange
@@ -116,7 +116,7 @@ namespace AiDotNetTests.UnitTests.AutoML
                 optimizer.Optimize(null!, evaluator));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Optimize_WithNullEvaluator_ThrowsException()
         {
             // Arrange
@@ -128,7 +128,7 @@ namespace AiDotNetTests.UnitTests.AutoML
                 optimizer.Optimize(weights, null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Optimize_WithValidInputs_ReturnsResult()
         {
             // Arrange
@@ -161,7 +161,7 @@ namespace AiDotNetTests.UnitTests.AutoML
             Assert.True(result.Success);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Optimize_RecordsTrialHistory()
         {
             // Arrange
@@ -189,7 +189,7 @@ namespace AiDotNetTests.UnitTests.AutoML
             Assert.True(optimizer.TrialHistory.Count <= 3);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Optimize_SetsBestTrial()
         {
             // Arrange
@@ -222,7 +222,7 @@ namespace AiDotNetTests.UnitTests.AutoML
 
         #region Trial Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CompressionTrial_DefaultValues_AreCorrect()
         {
             // Arrange & Act
@@ -237,7 +237,7 @@ namespace AiDotNetTests.UnitTests.AutoML
             Assert.Null(trial.ErrorMessage);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CompressionTrial_CanSetProperties()
         {
             // Arrange & Act
@@ -261,7 +261,7 @@ namespace AiDotNetTests.UnitTests.AutoML
 
         #region GetSummary Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetSummary_WithNoTrials_ReturnsValidSummary()
         {
             // Arrange
@@ -276,7 +276,7 @@ namespace AiDotNetTests.UnitTests.AutoML
             Assert.Contains("No successful trials completed", summary);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetSummary_WithTrials_ContainsDetails()
         {
             // Arrange
@@ -312,7 +312,7 @@ namespace AiDotNetTests.UnitTests.AutoML
 
         #region Type-Specific Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Optimize_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -343,7 +343,7 @@ namespace AiDotNetTests.UnitTests.AutoML
 
         #region Edge Case Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Optimize_WithOnlyQuantization_WorksCorrectly()
         {
             // Arrange
@@ -371,7 +371,7 @@ namespace AiDotNetTests.UnitTests.AutoML
             Assert.Equal(CompressionType.WeightClustering, result.Technique);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Optimize_WithOnlyEncoding_WorksCorrectly()
         {
             // Arrange

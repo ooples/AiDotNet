@@ -142,7 +142,7 @@ public class GraphLayersIntegrationTests
 
     #region GraphConvolutionalLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphConvolutionalLayer_ForwardPass_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -166,7 +166,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphConvolutionalLayer_ForwardPass_WithBatchedInput()
     {
         // Arrange
@@ -192,7 +192,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphConvolutionalLayer_WithActivation_AppliesActivation()
     {
         // Arrange
@@ -223,7 +223,7 @@ public class GraphLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphConvolutionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -244,7 +244,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(layer.OutputFeatures, typedClone.OutputFeatures);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphConvolutionalLayer_WithoutAdjacencyMatrix_ThrowsException()
     {
         // Arrange
@@ -258,7 +258,7 @@ public class GraphLayersIntegrationTests
         Assert.Throws<InvalidOperationException>(() => layer.Forward(nodeFeatures));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphConvolutionalLayer_AuxiliaryLoss_ComputesSmoothnessLoss()
     {
         // Arrange
@@ -286,7 +286,7 @@ public class GraphLayersIntegrationTests
 
     #region GraphAttentionLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphAttentionLayer_ForwardPass_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -313,7 +313,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphAttentionLayer_MultiHead_LearnsDifferentPatterns()
     {
         // Arrange
@@ -346,7 +346,7 @@ public class GraphLayersIntegrationTests
         Assert.True(hasNonZero, "GAT output should have non-zero values");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphAttentionLayer_WithDropout_AppliesDropoutDuringTraining()
     {
         // Arrange
@@ -375,7 +375,7 @@ public class GraphLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphAttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -398,7 +398,7 @@ public class GraphLayersIntegrationTests
 
     #region GraphSAGELayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphSAGELayer_MeanAggregator_ProducesCorrectOutput()
     {
         // Arrange
@@ -423,7 +423,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphSAGELayer_MaxPoolAggregator_ProducesCorrectOutput()
     {
         // Arrange
@@ -447,7 +447,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphSAGELayer_SumAggregator_ProducesCorrectOutput()
     {
         // Arrange
@@ -471,7 +471,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphSAGELayer_WithNormalization_NormalizesOutput()
     {
         // Arrange
@@ -511,7 +511,7 @@ public class GraphLayersIntegrationTests
 
     #region GraphIsomorphismLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphIsomorphismLayer_ForwardPass_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -535,7 +535,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphIsomorphismLayer_LearnableEpsilon_UpdatesDuringTraining()
     {
         // Arrange
@@ -559,7 +559,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphIsomorphismLayer_FixedEpsilon_UsesProvidedValue()
     {
         // Arrange
@@ -584,7 +584,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphIsomorphismLayer_WithMLP_ProcessesCorrectly()
     {
         // Arrange
@@ -613,7 +613,7 @@ public class GraphLayersIntegrationTests
 
     #region GraphTransformerLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphTransformerLayer_ForwardPass_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -640,7 +640,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphTransformerLayer_WithStructuralEncoding_UsesGraphStructure()
     {
         // Arrange
@@ -665,7 +665,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphTransformerLayer_WithDropout_AppliesDropout()
     {
         // Arrange
@@ -695,7 +695,7 @@ public class GraphLayersIntegrationTests
 
     #region DirectionalGraphLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DirectionalGraphLayer_ForwardPass_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -719,7 +719,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DirectionalGraphLayer_WithGating_AppliesGatingMechanism()
     {
         // Arrange
@@ -743,7 +743,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DirectionalGraphLayer_SeparatesIncomingOutgoing()
     {
         // Arrange
@@ -779,7 +779,7 @@ public class GraphLayersIntegrationTests
 
     #region HeterogeneousGraphLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HeterogeneousGraphLayer_ForwardPass_ProducesCorrectOutputShape()
     {
         // Arrange
@@ -838,7 +838,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HeterogeneousGraphLayer_WithBasisDecomposition_ReducesParameters()
     {
         // Arrange
@@ -902,7 +902,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HeterogeneousGraphLayer_SetAdjacencyMatrix_ThrowsNotSupportedException()
     {
         // Arrange
@@ -924,7 +924,7 @@ public class GraphLayersIntegrationTests
         Assert.Throws<NotSupportedException>(() => layer.SetAdjacencyMatrix(adj));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HeterogeneousGraphLayer_GetAdjacencyMatrix_ReturnsNull()
     {
         // Arrange
@@ -952,7 +952,7 @@ public class GraphLayersIntegrationTests
 
     #region Edge Cases and Error Handling
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphConvolutionalLayer_InvalidInputFeatures_ThrowsException()
     {
         // Act & Assert
@@ -963,7 +963,7 @@ public class GraphLayersIntegrationTests
             new GraphConvolutionalLayer<float>(-1, 16, (IActivationFunction<float>?)null));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphConvolutionalLayer_InvalidOutputFeatures_ThrowsException()
     {
         // Act & Assert
@@ -974,7 +974,7 @@ public class GraphLayersIntegrationTests
             new GraphConvolutionalLayer<float>(8, -1, (IActivationFunction<float>?)null));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphAttentionLayer_SingleNode_HandlesEdgeCase()
     {
         // Arrange
@@ -1000,7 +1000,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphSAGELayer_DisconnectedGraph_HandlesIsolatedNodes()
     {
         // Arrange
@@ -1035,7 +1035,7 @@ public class GraphLayersIntegrationTests
         Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphLayers_ParameterCount_ReturnsPositiveValue()
     {
         // Arrange
@@ -1054,7 +1054,7 @@ public class GraphLayersIntegrationTests
         Assert.True(gin.ParameterCount > 0, "GIN should have parameters");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphLayers_SupportsTraining_ReturnsTrue()
     {
         // Arrange
@@ -1075,7 +1075,7 @@ public class GraphLayersIntegrationTests
 
     #region Double Precision Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphConvolutionalLayer_DoublePrecision_WorksCorrectly()
     {
         // Arrange

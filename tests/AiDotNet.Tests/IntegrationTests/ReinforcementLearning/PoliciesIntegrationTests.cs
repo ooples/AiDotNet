@@ -16,7 +16,7 @@ public class PoliciesIntegrationTests
     private const int DiscreteActionSize = 3;
     private const int ContinuousActionSize = 2;
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiscretePolicy_SelectActionAndLogProb_ReturnValidOutputs()
     {
         var policy = new DiscretePolicy<double>(
@@ -36,7 +36,7 @@ public class PoliciesIntegrationTests
         policy.Dispose();
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContinuousPolicy_SelectActionAndLogProb_ReturnValidOutputs()
     {
         var policy = new ContinuousPolicy<double>(
@@ -57,7 +57,7 @@ public class PoliciesIntegrationTests
         policy.Dispose();
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeterministicPolicy_SelectActionAndLogProb_ReturnValidOutputs()
     {
         var policy = new DeterministicPolicy<double>(
@@ -77,7 +77,7 @@ public class PoliciesIntegrationTests
         policy.Dispose();
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeterministicPolicy_InvalidActionSize_Throws()
     {
         var policy = new DeterministicPolicy<double>(
@@ -90,7 +90,7 @@ public class PoliciesIntegrationTests
         Assert.Throws<ArgumentException>(() => policy.SelectAction(state, training: false));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BetaPolicy_SelectActionAndLogProb_ReturnValidOutputs()
     {
         var policy = new BetaPolicy<double>(
@@ -112,7 +112,7 @@ public class PoliciesIntegrationTests
         policy.Dispose();
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MixedPolicy_SelectActionAndLogProb_ReturnValidOutputs()
     {
         var policy = new MixedPolicy<double>(
@@ -138,7 +138,7 @@ public class PoliciesIntegrationTests
         policy.Dispose();
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiModalPolicy_SelectActionAndLogProb_ReturnValidOutputs()
     {
         int components = 2;
@@ -163,7 +163,7 @@ public class PoliciesIntegrationTests
         policy.Dispose();
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolicyOptions_CanStoreCustomValues()
     {
         var loss = new MeanSquaredErrorLoss<double>();
@@ -278,7 +278,7 @@ public class PoliciesIntegrationTests
         Assert.Equal(23, multiModal.Seed);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReinforcementLearningOptions_InitValues_AreStored()
     {
         var loss = new MeanSquaredErrorLoss<double>();

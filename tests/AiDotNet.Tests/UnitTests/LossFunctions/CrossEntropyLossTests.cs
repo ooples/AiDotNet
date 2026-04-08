@@ -8,7 +8,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
 {
     public class CrossEntropyLossTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithPerfectPredictions_ReturnsNearZero()
         {
             // Arrange
@@ -24,7 +24,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.True(result < 0.001);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithProbabilityDistribution_ReturnsCorrectValue()
         {
             // Arrange
@@ -43,7 +43,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.True(result < 1.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithMultipleClasses_ReturnsCorrectValue()
         {
             // Arrange
@@ -59,7 +59,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.True(result > 0.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithDifferentLengths_ThrowsArgumentException()
         {
             // Arrange
@@ -71,7 +71,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateLoss(predicted, actual));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithZeroProbabilities_HandlesNumericalStability()
         {
             // Arrange
@@ -88,7 +88,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.False(double.IsInfinity(result));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithPerfectPredictions_ReturnsNegativeValues()
         {
             // Arrange
@@ -105,7 +105,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.True(result[0] < 0.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithDifferentLengths_ThrowsArgumentException()
         {
             // Arrange
@@ -117,7 +117,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateDerivative(predicted, actual));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithZeroProbabilities_HandlesNumericalStability()
         {
             // Arrange
@@ -134,7 +134,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.All(result, item => Assert.False(double.IsInfinity(item)));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -151,7 +151,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.False(float.IsNaN(result));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -167,7 +167,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.All(result, item => Assert.False(float.IsNaN(item)));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithConfidentWrongPrediction_ReturnsHighLoss()
         {
             // Arrange
@@ -183,7 +183,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.True(result > 0.5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithSingleValue_ReturnsCorrectValue()
         {
             // Arrange
@@ -200,7 +200,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.False(double.IsNaN(result));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_ReturnsVectorOfCorrectLength()
         {
             // Arrange

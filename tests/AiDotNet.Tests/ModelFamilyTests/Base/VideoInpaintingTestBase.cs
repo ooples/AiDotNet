@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class VideoInpaintingTestBase : VideoNNModelTestBase
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InpaintedOutput_SameSizeAsInput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -20,7 +20,7 @@ public abstract class VideoInpaintingTestBase : VideoNNModelTestBase
         Assert.Equal(input.Length, output.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InpaintedValues_ShouldBeBounded()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

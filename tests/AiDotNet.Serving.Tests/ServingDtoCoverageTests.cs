@@ -6,7 +6,7 @@ namespace AiDotNet.Serving.Tests;
 
 public sealed class ServingDtoCoverageTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Serving_PublicDtos_AreConstructible_AndPropertiesAreAccessible()
     {
         var assembly = typeof(Program).Assembly;

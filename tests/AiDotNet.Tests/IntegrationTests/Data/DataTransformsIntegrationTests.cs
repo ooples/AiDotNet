@@ -11,28 +11,28 @@ public class DataTransformsIntegrationTests
 {
     #region IdentityTransform
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IdentityTransform_ReturnsInputUnchanged_Double()
     {
         var transform = new IdentityTransform<double>();
         Assert.Equal(42.0, transform.Apply(42.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IdentityTransform_ReturnsInputUnchanged_String()
     {
         var transform = new IdentityTransform<string>();
         Assert.Equal("hello", transform.Apply("hello"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IdentityTransform_Null_ReturnsNull()
     {
         var transform = new IdentityTransform<string>();
         Assert.Null(transform.Apply(null));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IdentityTransform_ReturnsInputUnchanged_Array()
     {
         var transform = new IdentityTransform<int[]>();
@@ -45,28 +45,28 @@ public class DataTransformsIntegrationTests
 
     #region LambdaTransform
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LambdaTransform_AppliesFunction()
     {
         var transform = new LambdaTransform<double, double>(x => x * 2.0);
         Assert.Equal(10.0, transform.Apply(5.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LambdaTransform_DifferentInputOutput()
     {
         var transform = new LambdaTransform<int, string>(x => x.ToString());
         Assert.Equal("42", transform.Apply(42));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LambdaTransform_NullFunc_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new LambdaTransform<int, int>(null));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LambdaTransform_ComplexTransformation()
     {
         var transform = new LambdaTransform<double[], double>(arr => arr.Sum());
@@ -77,7 +77,7 @@ public class DataTransformsIntegrationTests
 
     #region Compose
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Compose_SingleTransform_AppliesIt()
     {
         var doubler = new LambdaTransform<double, double>(x => x * 2.0);
@@ -86,7 +86,7 @@ public class DataTransformsIntegrationTests
         Assert.Equal(1, composed.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Compose_MultipleTransforms_AppliesInOrder()
     {
         var add1 = new LambdaTransform<int, int>(x => x + 1);
@@ -98,7 +98,7 @@ public class DataTransformsIntegrationTests
         Assert.Equal(2, composed.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Compose_OrderMatters()
     {
         var add1 = new LambdaTransform<int, int>(x => x + 1);
@@ -113,7 +113,7 @@ public class DataTransformsIntegrationTests
         Assert.Equal(11, mulFirst.Apply(5));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Compose_WithIdentity_NoEffect()
     {
         var identity = new IdentityTransform<int>();
@@ -124,7 +124,7 @@ public class DataTransformsIntegrationTests
         Assert.Equal(3, composed.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Compose_EmptyTransformArray_PassesThrough()
     {
         var composed = new Compose<int>(Array.Empty<ITransform<int, int>>());
@@ -132,14 +132,14 @@ public class DataTransformsIntegrationTests
         Assert.Equal(0, composed.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Compose_NullTransforms_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new Compose<int>((ITransform<int, int>[])null));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Compose_FromEnumerable_Works()
     {
         var transforms = new List<ITransform<int, int>>
@@ -153,14 +153,14 @@ public class DataTransformsIntegrationTests
         Assert.Equal(45, composed.Apply(5));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Compose_NullEnumerable_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new Compose<int>((IEnumerable<ITransform<int, int>>)null));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Compose_ChainedCompositions()
     {
         var inner = new Compose<int>(

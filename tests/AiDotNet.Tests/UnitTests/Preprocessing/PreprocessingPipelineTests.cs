@@ -8,7 +8,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
 {
     public class PreprocessingPipelineTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Pipeline_Add_AddsTransformerToSteps()
         {
             // Arrange
@@ -21,7 +21,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Single(pipeline.Steps);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Pipeline_AddWithName_AddsNamedStep()
         {
             // Arrange
@@ -35,7 +35,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Equal("scaler", pipeline.Steps[0].Name);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Pipeline_FitTransform_AppliesAllStepsInOrder()
         {
             // Arrange
@@ -58,7 +58,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(result[2, 0] - 1.0) < 0.0001);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Pipeline_MultipleSteps_AppliesSequentially()
         {
             // Arrange
@@ -82,7 +82,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Single(pipeline.Steps);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Pipeline_InverseTransform_ReversesAllStepsInReverseOrder()
         {
             // Arrange
@@ -106,7 +106,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(inversed[2, 0] - 50.0) < 0.0001);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Pipeline_FitThenTransform_WorksOnNewData()
         {
             // Arrange
@@ -135,7 +135,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(Math.Abs(result[1, 0] - 0.75) < 0.0001); // 75 is 75% between 0 and 100
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Pipeline_TransformBeforeFit_ThrowsException()
         {
             // Arrange
@@ -147,7 +147,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Throws<InvalidOperationException>(() => pipeline.Transform(data));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Pipeline_IsFitted_ReflectsFitStatus()
         {
             // Arrange
@@ -165,7 +165,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(pipeline.IsFitted);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Pipeline_SupportsInverseTransform_TrueWhenAllStepsSupport()
         {
             // Arrange
@@ -177,7 +177,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.True(pipeline.SupportsInverseTransform);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Pipeline_GetFeatureNamesOut_PassesThroughTransformers()
         {
             // Arrange
@@ -192,7 +192,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Equal(inputNames, outputNames);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Pipeline_FluentInterface_WorksCorrectly()
         {
             // Arrange & Act
@@ -204,7 +204,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Equal(2, pipeline.Steps.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Pipeline_EmptyPipeline_FitTransformReturnsOriginalData()
         {
             // Arrange
@@ -223,7 +223,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             Assert.Equal(data[1, 1], result[1, 1]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Pipeline_AddNullTransformer_ThrowsException()
         {
             // Arrange

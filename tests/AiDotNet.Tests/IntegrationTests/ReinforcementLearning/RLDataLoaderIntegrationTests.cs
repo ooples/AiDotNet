@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 
 public class RLDataLoaderIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EnvironmentDataLoader_RunEpisode_CollectsExperiences()
     {
         var environment = new DeterministicBanditEnvironment<double>(
@@ -34,7 +34,7 @@ public class RLDataLoaderIntegrationTests
         Assert.InRange(result.TotalReward, 0.0, 2.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EnvironmentDataLoader_RunEpisodes_ReturnsRequestedCount()
     {
         var environment = new DeterministicBanditEnvironment<double>(maxSteps: 1);
@@ -54,7 +54,7 @@ public class RLDataLoaderIntegrationTests
         Assert.Equal(3, loader.TotalSteps);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EnvironmentDataLoader_GetNextBatch_ReturnsExperience()
     {
         var environment = new DeterministicBanditEnvironment<double>(maxSteps: 1);
@@ -77,7 +77,7 @@ public class RLDataLoaderIntegrationTests
         Assert.Equal(1, batch.NextState.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EnvironmentDataLoader_TryGetNextBatch_FalseWhenEmpty()
     {
         var environment = new DeterministicBanditEnvironment<double>(maxSteps: 1);
@@ -97,7 +97,7 @@ public class RLDataLoaderIntegrationTests
         Assert.Equal(0, batch.NextState.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EnvironmentDataLoader_LoadAndUnload_TogglesLoadedState()
     {
         var environment = new DeterministicBanditEnvironment<double>(maxSteps: 1);
@@ -119,7 +119,7 @@ public class RLDataLoaderIntegrationTests
         Assert.False(loader.IsLoaded);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task EnvironmentDataLoader_GetBatchesAsync_ReturnsSamples()
     {
         var environment = new DeterministicBanditEnvironment<double>(maxSteps: 2);

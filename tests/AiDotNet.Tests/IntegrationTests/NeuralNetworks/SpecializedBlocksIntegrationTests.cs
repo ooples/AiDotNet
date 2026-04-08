@@ -12,7 +12,7 @@ public class SpecializedBlocksIntegrationTests
 {
     #region BasicBlock Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicBlock_ForwardPass_ProducesValidOutput()
     {
         // Arrange - ResNet basic block with same input/output channels
@@ -30,7 +30,7 @@ public class SpecializedBlocksIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicBlock_ForwardPass_WithDownsample_ProducesValidOutput()
     {
         // Arrange - Basic block with stride 2 (downsample)
@@ -53,7 +53,7 @@ public class SpecializedBlocksIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicBlock_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -73,7 +73,7 @@ public class SpecializedBlocksIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), clonedOutput.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicBlock_SkipConnection_WorksCorrectly()
     {
         // Arrange - When in/out channels match, skip connection is identity
@@ -95,7 +95,7 @@ public class SpecializedBlocksIntegrationTests
 
     #region BottleneckBlock Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BottleneckBlock_ForwardPass_ProducesValidOutput()
     {
         // Arrange - Bottleneck uses 1x1 -> 3x3 -> 1x1 pattern with expansion
@@ -117,7 +117,7 @@ public class SpecializedBlocksIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BottleneckBlock_ForwardPass_WithDownsample_ProducesValidOutput()
     {
         // Arrange - Bottleneck with stride 2
@@ -140,7 +140,7 @@ public class SpecializedBlocksIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BottleneckBlock_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -161,7 +161,7 @@ public class SpecializedBlocksIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), clonedOutput.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BottleneckBlock_ExpansionFactor_CorrectlyApplied()
     {
         // Arrange - default expansion is 4
@@ -183,7 +183,7 @@ public class SpecializedBlocksIntegrationTests
 
     #region InvertedResidualBlock Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvertedResidualBlock_ForwardPass_ProducesValidOutput()
     {
         // Arrange - MobileNetV2 inverted residual block
@@ -205,7 +205,7 @@ public class SpecializedBlocksIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvertedResidualBlock_ForwardPass_WithStride_ProducesValidOutput()
     {
         // Arrange - Inverted residual with stride 2
@@ -228,7 +228,7 @@ public class SpecializedBlocksIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvertedResidualBlock_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -249,7 +249,7 @@ public class SpecializedBlocksIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), clonedOutput.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvertedResidualBlock_ExpansionFactor_CorrectlyExpands()
     {
         // Arrange - expansion factor 6 is typical
@@ -269,7 +269,7 @@ public class SpecializedBlocksIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvertedResidualBlock_WithSqueezeExcite_ProducesValidOutput()
     {
         // Arrange - SE module is optional enhancement
@@ -292,7 +292,7 @@ public class SpecializedBlocksIntegrationTests
 
     #region DenseBlock Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DenseBlock_ForwardPass_ProducesValidOutput()
     {
         // Arrange - DenseNet block with growth rate
@@ -316,7 +316,7 @@ public class SpecializedBlocksIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DenseBlock_OutputChannels_CorrectlyCalculated()
     {
         // Arrange
@@ -334,7 +334,7 @@ public class SpecializedBlocksIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DenseBlock_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -356,7 +356,7 @@ public class SpecializedBlocksIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), clonedOutput.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DenseBlock_DenseConnectivity_AllLayersContributeToOutput()
     {
         // Arrange - In DenseBlock, each layer's output is concatenated
@@ -377,7 +377,7 @@ public class SpecializedBlocksIntegrationTests
         Assert.Equal(expectedChannels, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DenseBlock_ResetState_ClearsLayerOutputs()
     {
         // Arrange
@@ -403,7 +403,7 @@ public class SpecializedBlocksIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicBlock_SingleBatch_Works()
     {
         // Arrange
@@ -420,7 +420,7 @@ public class SpecializedBlocksIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BottleneckBlock_SingleBatch_Works()
     {
         // Arrange
@@ -437,7 +437,7 @@ public class SpecializedBlocksIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvertedResidualBlock_ExpansionOne_Works()
     {
         // Arrange - expansion 1 means no expansion (just depthwise)
@@ -455,7 +455,7 @@ public class SpecializedBlocksIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DenseBlock_SingleLayer_Works()
     {
         // Arrange - minimum layers
@@ -475,7 +475,7 @@ public class SpecializedBlocksIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DenseBlock_LargeGrowthRate_Works()
     {
         // Arrange - large growth rate

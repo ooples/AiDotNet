@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.InferenceOptimization;
 
 public class GemmKernelValidationTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Execute_MatchesNaiveGemm()
     {
         var kernel = new GemmKernel();
@@ -23,7 +23,7 @@ public class GemmKernelValidationTests
         Assert.Equal(expected.ToArray(), actual.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GemmTransposeB_MatchesNaive()
     {
         var kernel = new GemmKernel();

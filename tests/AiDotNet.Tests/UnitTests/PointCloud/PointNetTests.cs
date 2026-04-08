@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.UnitTests.PointCloud;
 /// </summary>
 public class PointNetTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PointNet_Construction_CreatesModel()
     {
         // Arrange & Act
@@ -20,7 +20,7 @@ public class PointNetTests
         Assert.NotNull(pointNet);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PointNet_ExtractGlobalFeatures_ReturnsFeatureVector()
     {
         // Arrange
@@ -35,7 +35,7 @@ public class PointNetTests
         Assert.True(features.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PointNet_ClassifyPointCloud_ReturnsClassProbabilities()
     {
         // Arrange
@@ -50,7 +50,7 @@ public class PointNetTests
         Assert.Equal(10, probabilities.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PointCloudData_FromCoordinates_CreatesPointCloud()
     {
         // Arrange
@@ -71,7 +71,7 @@ public class PointNetTests
         Assert.Equal(3, pointCloudData.NumFeatures);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PointCloudData_GetCoordinates_ExtractsPositions()
     {
         // Arrange
@@ -97,7 +97,7 @@ public class PointNetTests
         Assert.Equal(3, coordinates.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PointCloudData_GetFeatures_ExtractsAdditionalFeatures()
     {
         // Arrange

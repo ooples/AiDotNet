@@ -20,7 +20,7 @@ public class AugmentationExtendedIntegrationTests
 {
     #region AugmentationConfig
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationConfig_DefaultValues()
     {
         var config = new AugmentationConfig();
@@ -39,7 +39,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Null(config.VideoSettings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationConfig_ForImages_HasImageSettings()
     {
         var config = AugmentationConfig.ForImages();
@@ -49,7 +49,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Null(config.AudioSettings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationConfig_ForTabular_HasTabularSettings()
     {
         var config = AugmentationConfig.ForTabular();
@@ -58,7 +58,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Null(config.ImageSettings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationConfig_ForAudio_HasAudioSettings()
     {
         var config = AugmentationConfig.ForAudio();
@@ -67,7 +67,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Null(config.ImageSettings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationConfig_ForText_HasTextSettings()
     {
         var config = AugmentationConfig.ForText();
@@ -76,7 +76,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Null(config.ImageSettings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationConfig_ForVideo_HasVideoSettings()
     {
         var config = AugmentationConfig.ForVideo();
@@ -85,7 +85,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Null(config.ImageSettings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationConfig_GetConfiguration_ReturnsAllKeys()
     {
         var config = new AugmentationConfig
@@ -103,7 +103,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.True(dict.ContainsKey("imageSettings"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationConfig_CustomValues()
     {
         var config = new AugmentationConfig
@@ -130,7 +130,7 @@ public class AugmentationExtendedIntegrationTests
 
     #region ImageAugmentationSettings
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ImageAugmentationSettings_DefaultValues()
     {
         var settings = new ImageAugmentationSettings();
@@ -152,7 +152,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.False(settings.EnableCutMix);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ImageAugmentationSettings_GetConfiguration_ReturnsAllKeys()
     {
         var settings = new ImageAugmentationSettings();
@@ -168,7 +168,7 @@ public class AugmentationExtendedIntegrationTests
 
     #region TabularAugmentationSettings
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TabularAugmentationSettings_DefaultValues()
     {
         var settings = new TabularAugmentationSettings();
@@ -183,7 +183,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Equal(5, settings.SmoteK);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TabularAugmentationSettings_GetConfiguration_ReturnsAllKeys()
     {
         var settings = new TabularAugmentationSettings();
@@ -198,7 +198,7 @@ public class AugmentationExtendedIntegrationTests
 
     #region AudioAugmentationSettings
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AudioAugmentationSettings_DefaultValues()
     {
         var settings = new AudioAugmentationSettings();
@@ -216,7 +216,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Equal(0.1, settings.MaxTimeShift);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AudioAugmentationSettings_GetConfiguration_ReturnsAllKeys()
     {
         var settings = new AudioAugmentationSettings();
@@ -231,7 +231,7 @@ public class AugmentationExtendedIntegrationTests
 
     #region TextAugmentationSettings
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TextAugmentationSettings_DefaultValues()
     {
         var settings = new TextAugmentationSettings();
@@ -247,7 +247,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.False(settings.EnableBackTranslation);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TextAugmentationSettings_GetConfiguration_ReturnsAllKeys()
     {
         var settings = new TextAugmentationSettings();
@@ -262,7 +262,7 @@ public class AugmentationExtendedIntegrationTests
 
     #region VideoAugmentationSettings
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VideoAugmentationSettings_DefaultValues()
     {
         var settings = new VideoAugmentationSettings();
@@ -279,7 +279,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Null(settings.SpatialSettings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VideoAugmentationSettings_GetConfiguration_ReturnsAllKeys()
     {
         var settings = new VideoAugmentationSettings();
@@ -290,7 +290,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.True(dict.ContainsKey("enableSpeedChange"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VideoAugmentationSettings_WithSpatialSettings_IncludesInConfig()
     {
         var settings = new VideoAugmentationSettings
@@ -306,21 +306,21 @@ public class AugmentationExtendedIntegrationTests
 
     #region DataModalityDetector
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DataModalityDetector_String_ReturnsText()
     {
         var modality = DataModalityDetector.Detect<string>();
         Assert.Equal(DataModality.Text, modality);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DataModalityDetector_StringArray_ReturnsText()
     {
         var modality = DataModalityDetector.Detect<string[]>();
         Assert.Equal(DataModality.Text, modality);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DataModalityDetector_Tensor_ReturnsUnknown()
     {
         var modality = DataModalityDetector.Detect<Tensor<double>>();
@@ -331,14 +331,14 @@ public class AugmentationExtendedIntegrationTests
 
     #region AugmentationContext
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationContext_DefaultIsTraining()
     {
         var ctx = new AugmentationContext<double>();
         Assert.True(ctx.IsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationContext_SeedIsReproducible()
     {
         var ctx1 = new AugmentationContext<double>(isTraining: true, seed: 42);
@@ -350,7 +350,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Equal(val1, val2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationContext_ShouldApply_AlwaysForProbability1()
     {
         var ctx = new AugmentationContext<double>(seed: 42);
@@ -361,7 +361,7 @@ public class AugmentationExtendedIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationContext_ShouldApply_NeverForProbability0()
     {
         var ctx = new AugmentationContext<double>(seed: 42);
@@ -372,7 +372,7 @@ public class AugmentationExtendedIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationContext_GetRandomInt_InRange()
     {
         var ctx = new AugmentationContext<double>(seed: 42);
@@ -384,7 +384,7 @@ public class AugmentationExtendedIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationContext_GetRandomDouble_InRange()
     {
         var ctx = new AugmentationContext<double>(seed: 42);
@@ -396,7 +396,7 @@ public class AugmentationExtendedIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationContext_SampleGaussian_ReasonableValues()
     {
         var ctx = new AugmentationContext<double>(seed: 42);
@@ -412,7 +412,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.InRange(mean, 9.0, 11.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationContext_SampleBeta_InUnitInterval()
     {
         var ctx = new AugmentationContext<double>(seed: 42);
@@ -424,7 +424,7 @@ public class AugmentationExtendedIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationContext_CreateChildContext_SharesRandomState()
     {
         var ctx = new AugmentationContext<double>(seed: 42);
@@ -434,14 +434,14 @@ public class AugmentationExtendedIntegrationTests
         Assert.True(child.IsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationContext_InferenceMode()
     {
         var ctx = new AugmentationContext<double>(isTraining: false);
         Assert.False(ctx.IsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationContext_Metadata_Accessible()
     {
         var ctx = new AugmentationContext<double>();
@@ -453,7 +453,7 @@ public class AugmentationExtendedIntegrationTests
 
     #region AugmentationPipeline
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationPipeline_Construction()
     {
         var pipeline = new AugmentationPipeline<double, ImageTensor<double>>("TestPipeline");
@@ -463,7 +463,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Equal(AugmentationOrder.Sequential, pipeline.Order);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationPipeline_Add_IncreasesCount()
     {
         var pipeline = new AugmentationPipeline<double, ImageTensor<double>>();
@@ -474,7 +474,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Contains("HorizontalFlip", pipeline.AugmentationNames[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationPipeline_AddNull_Throws()
     {
         var pipeline = new AugmentationPipeline<double, ImageTensor<double>>();
@@ -482,7 +482,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Throws<ArgumentNullException>(() => pipeline.Add(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationPipeline_AddRange_AddsAll()
     {
         var pipeline = new AugmentationPipeline<double, ImageTensor<double>>();
@@ -496,7 +496,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Equal(2, pipeline.AugmentationCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationPipeline_EmptyPipeline_ReturnsOriginal()
     {
         var pipeline = new AugmentationPipeline<double, ImageTensor<double>>();
@@ -508,7 +508,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Same(image, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationPipeline_GetConfiguration_ReturnsInfo()
     {
         var pipeline = new AugmentationPipeline<double, ImageTensor<double>>("MyPipeline");
@@ -524,7 +524,7 @@ public class AugmentationExtendedIntegrationTests
 
     #region Compose
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Compose_Construction()
     {
         var compose = new Compose<double, ImageTensor<double>>(
@@ -540,7 +540,7 @@ public class AugmentationExtendedIntegrationTests
 
     #region OneOf
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OneOf_Construction()
     {
         var oneOf = new OneOf<double, ImageTensor<double>>(
@@ -556,7 +556,7 @@ public class AugmentationExtendedIntegrationTests
 
     #region SomeOf
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SomeOf_Construction()
     {
         var someOf = new SomeOf<double, ImageTensor<double>>(
@@ -574,7 +574,7 @@ public class AugmentationExtendedIntegrationTests
 
     #region Image Augmentations - Construction
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HorizontalFlip_Construction_DefaultProbability()
     {
         var aug = new HorizontalFlip<double>();
@@ -582,420 +582,420 @@ public class AugmentationExtendedIntegrationTests
         Assert.Equal("HorizontalFlip`1", aug.Name);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VerticalFlip_Construction()
     {
         var aug = new VerticalFlip<double>(0.3);
         Assert.Equal(0.3, aug.Probability);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Rotation_Construction()
     {
         var aug = new Rotation<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Brightness_Construction()
     {
         var aug = new Brightness<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Contrast_Construction()
     {
         var aug = new Contrast<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianNoise_Construction()
     {
         var aug = new GaussianNoise<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianBlur_Construction()
     {
         var aug = new GaussianBlur<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ColorJitter_Construction()
     {
         var aug = new ColorJitter<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterCrop_Construction()
     {
         var aug = new CenterCrop<double>(32, 32);
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomCrop_Construction()
     {
         var aug = new RandomCrop<double>(32, 32);
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Resize_Construction()
     {
         var aug = new Resize<double>(64, 64);
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Normalize_Construction()
     {
         var aug = new Normalize<double>(new[] { 0.485, 0.456, 0.406 }, new[] { 0.229, 0.224, 0.225 });
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Scale_Construction()
     {
         var aug = new Scale<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pad_Construction()
     {
         var aug = new Pad<double>(2, 2, 2, 2);
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticTransform_Construction()
     {
         var aug = new ElasticTransform<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Affine_Construction()
     {
         var aug = new Affine<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Perspective_Construction()
     {
         var aug = new Perspective<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Cutout_Construction()
     {
         var aug = new Cutout<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CoarseDropout_Construction()
     {
         var aug = new CoarseDropout<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MixUp_Construction()
     {
         var aug = new MixUp<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CutMix_Construction()
     {
         var aug = new CutMix<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandAugment_Construction()
     {
         var aug = new RandAugment<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AutoAugment_Construction()
     {
         var aug = new AutoAugment<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Solarize_Construction()
     {
         var aug = new Solarize<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Posterize_Construction()
     {
         var aug = new Posterize<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Equalize_Construction()
     {
         var aug = new Equalize<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sharpen_Construction()
     {
         var aug = new Sharpen<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Emboss_Construction()
     {
         var aug = new Emboss<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MotionBlur_Construction()
     {
         var aug = new MotionBlur<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MedianBlur_Construction()
     {
         var aug = new MedianBlur<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BoxBlur_Construction()
     {
         var aug = new BoxBlur<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Rain_Construction()
     {
         var aug = new Rain<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Snow_Construction()
     {
         var aug = new Snow<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Fog_Construction()
     {
         var aug = new Fog<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SunFlare_Construction()
     {
         var aug = new SunFlare<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Shadow_Construction()
     {
         var aug = new Shadow<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void JpegCompression_Construction()
     {
         var aug = new JpegCompression<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Downscale_Construction()
     {
         var aug = new Downscale<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RgbToGrayscale_Construction()
     {
         var aug = new RgbToGrayscale<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToFloat_Construction()
     {
         var aug = new ToFloat<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToTensor_Construction()
     {
         var aug = new ToTensor<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomErasing_Construction()
     {
         var aug = new RandomErasing<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GridDistortion_Construction()
     {
         var aug = new GridDistortion<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OpticalDistortion_Construction()
     {
         var aug = new OpticalDistortion<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChannelShuffle_Construction()
     {
         var aug = new ChannelShuffle<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChannelDropout_Construction()
     {
         var aug = new ChannelDropout<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonNoise_Construction()
     {
         var aug = new PoissonNoise<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SaltAndPepperNoise_Construction()
     {
         var aug = new SaltAndPepperNoise<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpeckleNoise_Construction()
     {
         var aug = new SpeckleNoise<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiplicativeNoise_Construction()
     {
         var aug = new MultiplicativeNoise<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GammaCorrection_Construction()
     {
         var aug = new GammaCorrection<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Saturation_Construction()
     {
         var aug = new Saturation<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HueSaturationValue_Construction()
     {
         var aug = new HueSaturationValue<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomBrightnessContrast_Construction()
     {
         var aug = new RandomBrightnessContrast<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UnsharpMask_Construction()
     {
         var aug = new UnsharpMask<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CLAHE_Construction()
     {
         var aug = new CLAHE<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FancyPCA_Construction()
     {
         var aug = new FancyPCA<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Superpixels_Construction()
     {
         var aug = new Superpixels<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PixelDropout_Construction()
     {
         var aug = new PixelDropout<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GridDropout_Construction()
     {
         var aug = new GridDropout<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Mosaic_Construction()
     {
         var aug = new Mosaic<double>();
@@ -1006,7 +1006,7 @@ public class AugmentationExtendedIntegrationTests
 
     #region Image Augmentations - Apply
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HorizontalFlip_Apply_ProducesResult()
     {
         var flip = new HorizontalFlip<double>(1.0);
@@ -1020,7 +1020,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Equal(8, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HorizontalFlip_Apply_FlipsPixels()
     {
         var flip = new HorizontalFlip<double>(1.0);
@@ -1035,7 +1035,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Equal(99.0, result.GetPixel(0, 3, 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VerticalFlip_Apply_FlipsPixels()
     {
         var flip = new VerticalFlip<double>(1.0);
@@ -1049,7 +1049,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Equal(77.0, result.GetPixel(3, 0, 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationBase_DisabledAugmentation_ReturnsOriginal()
     {
         var flip = new HorizontalFlip<double>(1.0);
@@ -1063,7 +1063,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Same(image, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationBase_InferenceMode_SkipsTrainingOnly()
     {
         var flip = new HorizontalFlip<double>(1.0);
@@ -1078,7 +1078,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.Same(image, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationBase_GetParameters_ReturnsInfo()
     {
         var flip = new HorizontalFlip<double>(0.7);
@@ -1089,14 +1089,14 @@ public class AugmentationExtendedIntegrationTests
         Assert.Equal(true, parameters["isEnabled"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationBase_InvalidProbability_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new HorizontalFlip<double>(-0.1));
         Assert.Throws<ArgumentOutOfRangeException>(() => new HorizontalFlip<double>(1.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationBase_OnAugmentationApplied_Event()
     {
         var flip = new HorizontalFlip<double>(1.0);
@@ -1115,42 +1115,42 @@ public class AugmentationExtendedIntegrationTests
 
     #region Audio Augmentations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AudioNoise_Construction()
     {
         var aug = new AudioNoise<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PitchShift_Construction()
     {
         var aug = new PitchShift<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeStretch_Construction()
     {
         var aug = new TimeStretch<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeShift_Construction()
     {
         var aug = new TimeShift<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VolumeChange_Construction()
     {
         var aug = new VolumeChange<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AudioNoise_Apply_ProducesResult()
     {
         var aug = new AudioNoise<double>(probability: 1.0);
@@ -1165,91 +1165,91 @@ public class AugmentationExtendedIntegrationTests
 
     #region Tabular Augmentations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FeatureNoise_Construction()
     {
         var aug = new FeatureNoise<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FeatureDropout_Construction()
     {
         var aug = new FeatureDropout<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RowShuffle_Construction()
     {
         var aug = new RowShuffle<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TabularMixUp_Construction()
     {
         var aug = new TabularMixUp<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SmoteAugmenter_Construction()
     {
         var aug = new SmoteAugmenter<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdasynAugmenter_Construction()
     {
         var aug = new AdasynAugmenter<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BorderlineSmoteAugmenter_Construction()
     {
         var aug = new BorderlineSmoteAugmenter<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SmoteEnnAugmenter_Construction()
     {
         var aug = new SmoteEnnAugmenter<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SmoteTomekAugmenter_Construction()
     {
         var aug = new SmoteTomekAugmenter<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SvmSmoteAugmenter_Construction()
     {
         var aug = new SvmSmoteAugmenter<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TomekLinksAugmenter_Construction()
     {
         var aug = new TomekLinksAugmenter<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomUnderSampler_Construction()
     {
         var aug = new RandomUnderSampler<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NearMissUnderSampler_Construction()
     {
         var aug = new NearMissUnderSampler<double>();
@@ -1260,35 +1260,35 @@ public class AugmentationExtendedIntegrationTests
 
     #region Text Augmentations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SynonymReplacement_Construction()
     {
         var aug = new SynonymReplacement<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomDeletion_Construction()
     {
         var aug = new RandomDeletion<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomInsertion_Construction()
     {
         var aug = new RandomInsertion<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomSwap_Construction()
     {
         var aug = new RandomSwap<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SynonymReplacement_Apply_ProducesResult()
     {
         var aug = new SynonymReplacement<double>(probability: 1.0, replacementFraction: 1.0);
@@ -1301,7 +1301,7 @@ public class AugmentationExtendedIntegrationTests
         Assert.True(result.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomDeletion_Apply_ReducesWords()
     {
         var aug = new RandomDeletion<double>(deletionProbability: 0.5, probability: 1.0);
@@ -1319,42 +1319,42 @@ public class AugmentationExtendedIntegrationTests
 
     #region Video Augmentations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FrameDropout_Construction()
     {
         var aug = new FrameDropout<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TemporalCrop_Construction()
     {
         var aug = new TemporalCrop<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TemporalFlip_Construction()
     {
         var aug = new TemporalFlip<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpeedChange_Construction()
     {
         var aug = new SpeedChange<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VideoColorJitter_Construction()
     {
         var aug = new VideoColorJitter<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpatialTransform_Construction()
     {
         var aug = new SpatialTransform<double>();
@@ -1365,42 +1365,42 @@ public class AugmentationExtendedIntegrationTests
 
     #region Additional Image Augmentations - Weather & Corruption
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clouds_Construction()
     {
         var aug = new Clouds<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Frost_Construction()
     {
         var aug = new Frost<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spatter_Construction()
     {
         var aug = new Spatter<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ZoomBlur_Construction()
     {
         var aug = new ZoomBlur<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GlassBlur_Construction()
     {
         var aug = new GlassBlur<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Defocus_Construction()
     {
         var aug = new Defocus<double>();
@@ -1411,35 +1411,35 @@ public class AugmentationExtendedIntegrationTests
 
     #region Additional Image Augmentations - Morphological
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dilate_Construction()
     {
         var aug = new Dilate<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Erode_Construction()
     {
         var aug = new Erode<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Opening_Construction()
     {
         var aug = new Opening<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Closing_Construction()
     {
         var aug = new Closing<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MorphologicalGradient_Construction()
     {
         var aug = new MorphologicalGradient<double>();
@@ -1450,42 +1450,42 @@ public class AugmentationExtendedIntegrationTests
 
     #region Additional Image Augmentations - Color Space
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RgbToHsv_Construction()
     {
         var aug = new RgbToHsv<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RgbToLab_Construction()
     {
         var aug = new RgbToLab<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RgbToBgr_Construction()
     {
         var aug = new RgbToBgr<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToGray_Construction()
     {
         var aug = new ToGray<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToSepia_Construction()
     {
         var aug = new ToSepia<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Denormalize_Construction()
     {
         var aug = new Denormalize<double>(new[] { 0.485, 0.456, 0.406 }, new[] { 0.229, 0.224, 0.225 });
@@ -1496,77 +1496,77 @@ public class AugmentationExtendedIntegrationTests
 
     #region Additional Image Augmentations - Advanced Mixing
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FMix_Construction()
     {
         var aug = new FMix<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GridMask_Construction()
     {
         var aug = new GridMask<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HideAndSeek_Construction()
     {
         var aug = new HideAndSeek<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SamplePairing_Construction()
     {
         var aug = new SamplePairing<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResizeMix_Construction()
     {
         var aug = new ResizeMix<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SaliencyMix_Construction()
     {
         var aug = new SaliencyMix<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PuzzleMix_Construction()
     {
         var aug = new PuzzleMix<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SnapMix_Construction()
     {
         var aug = new SnapMix<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StyleMix_Construction()
     {
         var aug = new StyleMix<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TokenMix_Construction()
     {
         var aug = new TokenMix<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransMix_Construction()
     {
         var aug = new TransMix<double>();
@@ -1577,35 +1577,35 @@ public class AugmentationExtendedIntegrationTests
 
     #region Additional Image Augmentations - Auto Augmentation Policies
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrivialAugment_Construction()
     {
         var aug = new TrivialAugment<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniformAugment_Construction()
     {
         var aug = new UniformAugment<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FastAutoAugment_Construction()
     {
         var aug = new FastAutoAugment<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugMax_Construction()
     {
         var aug = new AugMax<double>();
         Assert.NotNull(aug);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DADA_Construction()
     {
         var aug = new DADA<double>();

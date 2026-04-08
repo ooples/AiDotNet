@@ -13,7 +13,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed.ScientificML;
 
 public class ScientificMLTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HamiltonianNeuralNetwork_ComputeTimeDerivative_UsesHamiltonianGradient()
     {
         var layer = CreateLinearLayer(inputSize: 2, outputSize: 1);
@@ -29,7 +29,7 @@ public class ScientificMLTests
         Assert.InRange(derivative[1], -1.001, -0.999);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HamiltonianNeuralNetwork_TrainUpdatesParameters()
     {
         var layer = CreateLinearLayer(inputSize: 2, outputSize: 1);
@@ -52,7 +52,7 @@ public class ScientificMLTests
         Assert.False(before.SequenceEqual(after));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LagrangianNeuralNetwork_ComputeAcceleration_ConstantLagrangianReturnsZero()
     {
         var layer = CreateLinearLayer(inputSize: 2, outputSize: 1);
@@ -67,7 +67,7 @@ public class ScientificMLTests
         Assert.InRange(Math.Abs(acceleration[0]), 0.0, 1e-6);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LagrangianNeuralNetwork_TrainUpdatesParameters()
     {
         var layer = CreateLinearLayer(inputSize: 2, outputSize: 1);
@@ -90,7 +90,7 @@ public class ScientificMLTests
         Assert.False(before.SequenceEqual(after));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void UniversalDifferentialEquation_RungeKutta4ImprovesAccuracy()
     {
         var layer = CreateLinearLayer(inputSize: 2, outputSize: 1);
@@ -112,7 +112,7 @@ public class ScientificMLTests
         Assert.True(rk4Error < eulerError);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void UniversalDifferentialEquation_TrainUpdatesParameters()
     {
         var layer = CreateLinearLayer(inputSize: 2, outputSize: 1);
@@ -138,7 +138,7 @@ public class ScientificMLTests
         Assert.False(before.SequenceEqual(after));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SymbolicPhysicsLearner_DiscoversSimpleLinearRelationship()
     {
         var learner = new SymbolicPhysicsLearner<double>();

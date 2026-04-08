@@ -17,14 +17,14 @@ public sealed class RobustFullModelAggregationStrategyBaseTests
 
     public override string GetStrategyName() => "TestRobustBase";
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetReferenceModelOrThrow_ThrowsForNullOrEmpty()
     {
         Assert.Throws<ArgumentException>(() => GetReferenceModelOrThrow(null!));
         Assert.Throws<ArgumentException>(() => GetReferenceModelOrThrow(new Dictionary<int, IFullModel<double, Matrix<double>, Vector<double>>>()));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetClientParametersOrThrow_ThrowsForParameterLengthMismatch()
     {
         var model1 = new MockFullModel(_ => new Vector<double>(1), parameterCount: 2);
@@ -39,7 +39,7 @@ public sealed class RobustFullModelAggregationStrategyBaseTests
         Assert.Throws<ArgumentException>(() => GetClientParametersOrThrow(models, expectedParameterCount: 2));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeSquaredL2Distance_ThrowsForLengthMismatch()
     {
         var a = new Vector<double>(new[] { 1.0, 2.0 });
@@ -48,7 +48,7 @@ public sealed class RobustFullModelAggregationStrategyBaseTests
         Assert.Throws<ArgumentException>(() => ComputeSquaredL2Distance(a, b));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void WeightedAverageOrUnweightedAverage_ComputesExpectedValues()
     {
         var selected = new List<int> { 1, 2 };
@@ -79,7 +79,7 @@ public sealed class RobustFullModelAggregationStrategyBaseTests
         Assert.Equal((3.0 * 1.0 + 7.0 * 3.0) / 4.0, weighted[1], precision: 12);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void WeightedAverageOrUnweightedAverage_ThrowsWhenClientsMissing()
     {
         Assert.Throws<ArgumentException>(() => WeightedAverageOrUnweightedAverage(

@@ -30,7 +30,7 @@ public class TensorBoardWriterTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TensorBoardWriter_CreatesEventFile()
     {
         // Arrange & Act
@@ -44,7 +44,7 @@ public class TensorBoardWriterTests : IDisposable
         Assert.Single(files);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TensorBoardWriter_WriteScalar_CreatesValidRecord()
     {
         // Arrange & Act
@@ -62,7 +62,7 @@ public class TensorBoardWriterTests : IDisposable
         Assert.True(fileInfo.Length > 0, "Event file should not be empty");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TensorBoardWriter_WriteScalars_GroupsMultipleValues()
     {
         // Arrange
@@ -84,7 +84,7 @@ public class TensorBoardWriterTests : IDisposable
         Assert.Single(files);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TensorBoardWriter_WriteHistogram_CreatesValidRecord()
     {
         // Arrange
@@ -104,7 +104,7 @@ public class TensorBoardWriterTests : IDisposable
         Assert.True(new FileInfo(files[0]).Length > 100);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TensorBoardWriter_WriteImage_CreatesValidRecord()
     {
         // Arrange - Create a simple 10x10 red image
@@ -128,7 +128,7 @@ public class TensorBoardWriterTests : IDisposable
         Assert.Single(files);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TensorBoardWriter_WriteText_CreatesValidRecord()
     {
         // Act
@@ -143,7 +143,7 @@ public class TensorBoardWriterTests : IDisposable
         Assert.Single(files);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TensorBoardWriter_WriteEmbedding_CreatesFiles()
     {
         // Arrange
@@ -171,7 +171,7 @@ public class TensorBoardWriterTests : IDisposable
         Assert.True(File.Exists(Path.Combine(_testDir, "projector_config.pbtxt")));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TensorBoardWriter_Flush_WritesToDisk()
     {
         // Arrange
@@ -187,7 +187,7 @@ public class TensorBoardWriterTests : IDisposable
         Assert.True(new FileInfo(files[0]).Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TensorBoardWriter_MultipleWrites_IncreasesFileSize()
     {
         // Arrange
@@ -232,7 +232,7 @@ public class SummaryWriterTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SummaryWriter_CreatesLogDirectory()
     {
         // Act
@@ -242,7 +242,7 @@ public class SummaryWriterTests : IDisposable
         Assert.True(Directory.Exists(_testDir));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SummaryWriter_DefaultLogDir_CreatesRunsDirectory()
     {
         // Arrange
@@ -268,7 +268,7 @@ public class SummaryWriterTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SummaryWriter_AddScalar_Works()
     {
         // Arrange
@@ -285,7 +285,7 @@ public class SummaryWriterTests : IDisposable
         Assert.Single(files);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SummaryWriter_AddScalar_AutoIncrementsStep()
     {
         // Arrange
@@ -300,7 +300,7 @@ public class SummaryWriterTests : IDisposable
         Assert.Equal(3, writer.DefaultStep);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SummaryWriter_AddScalars_GroupsMetrics()
     {
         // Arrange
@@ -320,7 +320,7 @@ public class SummaryWriterTests : IDisposable
         Assert.Single(files);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SummaryWriter_AddHistogram_FromArray()
     {
         // Arrange
@@ -341,7 +341,7 @@ public class SummaryWriterTests : IDisposable
         Assert.Single(files);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SummaryWriter_AddHistogram_From2DArray()
     {
         // Arrange
@@ -365,7 +365,7 @@ public class SummaryWriterTests : IDisposable
         Assert.Single(files);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SummaryWriter_AddImage_FromFloatArray()
     {
         // Arrange
@@ -392,7 +392,7 @@ public class SummaryWriterTests : IDisposable
         Assert.Single(files);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SummaryWriter_AddImages_CreatesGrid()
     {
         // Arrange
@@ -419,7 +419,7 @@ public class SummaryWriterTests : IDisposable
         Assert.Single(files);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SummaryWriter_AddText_Works()
     {
         // Arrange
@@ -434,7 +434,7 @@ public class SummaryWriterTests : IDisposable
         Assert.Single(files);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SummaryWriter_AddHparams_LogsConfig()
     {
         // Arrange
@@ -460,7 +460,7 @@ public class SummaryWriterTests : IDisposable
         Assert.Single(files);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SummaryWriter_AddEmbedding_CreatesFiles()
     {
         // Arrange
@@ -485,7 +485,7 @@ public class SummaryWriterTests : IDisposable
         Assert.True(File.Exists(Path.Combine(_testDir, "word_vectors_metadata.tsv")));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SummaryWriter_AddPrCurve_Works()
     {
         // Arrange
@@ -503,7 +503,7 @@ public class SummaryWriterTests : IDisposable
         Assert.Single(files);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SummaryWriter_LogTrainingStep_LogsAllMetrics()
     {
         // Arrange
@@ -525,7 +525,7 @@ public class SummaryWriterTests : IDisposable
         Assert.Single(files);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SummaryWriter_LogValidationStep_Works()
     {
         // Arrange
@@ -540,7 +540,7 @@ public class SummaryWriterTests : IDisposable
         Assert.Single(files);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SummaryWriter_LogWeights_LogsStatistics()
     {
         // Arrange
@@ -594,7 +594,7 @@ public class TensorBoardTrainingContextTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TensorBoardTrainingContext_CreatesFiles()
     {
         // Arrange & Act
@@ -613,7 +613,7 @@ public class TensorBoardTrainingContextTests : IDisposable
         Assert.Single(files);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TensorBoardTrainingContext_TracksGlobalStep()
     {
         // Arrange
@@ -627,7 +627,7 @@ public class TensorBoardTrainingContextTests : IDisposable
         Assert.Equal(2, ctx.GlobalStep);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TensorBoardTrainingContext_LogsHparams()
     {
         // Arrange
@@ -646,7 +646,7 @@ public class TensorBoardTrainingContextTests : IDisposable
         Assert.Single(files);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TensorBoardTrainingContext_LogsElapsedTime()
     {
         // Arrange
@@ -660,7 +660,7 @@ public class TensorBoardTrainingContextTests : IDisposable
         Assert.True(ctx.Elapsed.TotalMilliseconds >= 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TensorBoardTrainingContext_LogsModelWeights()
     {
         // Arrange
@@ -703,7 +703,7 @@ public class TensorBoardExtensionsTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateTensorBoardWriter_CreatesInRunsDirectory()
     {
         // Act
@@ -715,7 +715,7 @@ public class TensorBoardExtensionsTests : IDisposable
         Assert.Contains("run_1", writer.LogDir);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LogMetrics_WritesAllMetrics()
     {
         // Arrange

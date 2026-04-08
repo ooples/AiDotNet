@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.Pruning;
 /// </summary>
 public class PruningStrategyTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MagnitudePruning_50Percent_PrunesSmallestWeights()
     {
         // Arrange
@@ -35,7 +35,7 @@ public class PruningStrategyTests
         Assert.Equal(0.8, pruned[1, 1]); // Kept
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MagnitudePruning_70Percent_PrunesMostWeights()
     {
         // Arrange
@@ -61,7 +61,7 @@ public class PruningStrategyTests
         Assert.Equal(0.7, mask.GetSparsity(), precision: 1);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MagnitudePruning_RequiresGradients_ReturnsFalse()
     {
         // Arrange
@@ -71,7 +71,7 @@ public class PruningStrategyTests
         Assert.False(strategy.RequiresGradients);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GradientPruning_RequiresGradients()
     {
         // Arrange
@@ -81,7 +81,7 @@ public class PruningStrategyTests
         Assert.True(strategy.RequiresGradients);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GradientPruning_PrunesLowSensitivityWeights()
     {
         // Arrange
@@ -109,7 +109,7 @@ public class PruningStrategyTests
         Assert.Equal(0.5, pruned[0, 1]); // High gradient → kept
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GradientPruning_WithoutGradients_ThrowsException()
     {
         // Arrange
@@ -121,7 +121,7 @@ public class PruningStrategyTests
             strategy.ComputeImportanceScores(weights, null));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LotteryTicket_StoresAndRestoresInitialWeights()
     {
         // Arrange
@@ -161,7 +161,7 @@ public class PruningStrategyTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LotteryTicket_WithoutStoredWeights_ThrowsException()
     {
         // Arrange
@@ -174,7 +174,7 @@ public class PruningStrategyTests
             strategy.ResetToInitialWeights("nonexistent", weights, mask));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StructuredPruning_PrunesEntireNeurons()
     {
         // Arrange
@@ -220,7 +220,7 @@ public class PruningStrategyTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StructuredPruning_IsStructured_ReturnsTrue()
     {
         // Arrange
@@ -231,7 +231,7 @@ public class PruningStrategyTests
         Assert.True(strategy.IsStructured);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PruningMask_GetSparsity_CalculatesCorrectly()
     {
         // Arrange
@@ -250,7 +250,7 @@ public class PruningStrategyTests
         Assert.Equal(0.75, sparsity);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PruningMask_CombineWith_LogicalAND()
     {
         // Arrange
@@ -279,7 +279,7 @@ public class PruningStrategyTests
         Assert.Equal(1.0, result[1, 1]); // true AND true
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PruningMask_Apply_EnforcesShapeMatching()
     {
         // Arrange
@@ -290,7 +290,7 @@ public class PruningStrategyTests
         Assert.Throws<ArgumentException>(() => mask.Apply(weights));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MagnitudePruning_ApplyPruning_ModifiesWeightsInPlace()
     {
         // Arrange
@@ -314,7 +314,7 @@ public class PruningStrategyTests
         Assert.Equal(0.8, weights[1, 1]); // Kept
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PruningMask_InitializedWithAllOnes()
     {
         // Arrange & Act
@@ -324,7 +324,7 @@ public class PruningStrategyTests
         Assert.Equal(0.0, mask.GetSparsity());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateMask_InvalidSparsity_ThrowsException()
     {
         // Arrange
@@ -336,7 +336,7 @@ public class PruningStrategyTests
         Assert.Throws<ArgumentException>(() => strategy.CreateMask(scores, 1.5));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LotteryTicket_IterativePruning_AchievesTargetSparsity()
     {
         // Arrange

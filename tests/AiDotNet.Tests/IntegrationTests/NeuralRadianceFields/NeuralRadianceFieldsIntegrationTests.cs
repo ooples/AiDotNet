@@ -12,7 +12,7 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralRadianceFields;
 /// </summary>
 public class NeuralRadianceFieldsIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InstantNGP_RenderRays_ProducesFiniteColors()
     {
         var options = new InstantNGPOptions<double>
@@ -58,7 +58,7 @@ public class NeuralRadianceFieldsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InstantNGP_Train_ChangesSerializedState()
     {
         var options = new InstantNGPOptions<double>
@@ -103,7 +103,7 @@ public class NeuralRadianceFieldsIntegrationTests
         Assert.Equal(3, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NeRF_Train_ProducesFiniteOutput()
     {
         // Create NeRF with individual parameters (golden standard pattern)
@@ -133,7 +133,7 @@ public class NeuralRadianceFieldsIntegrationTests
         AssertAllFinite(output);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianSplatting_Train_ChangesRenderOutput()
     {
         var pointCloud = new Matrix<double>(2, 3);

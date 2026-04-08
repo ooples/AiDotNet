@@ -15,7 +15,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
     // PCA - Mean centering
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PCA_Mean_ComputedCorrectly()
     {
         // Data: [1, 2], [3, 4], [5, 6]
@@ -33,7 +33,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
         Assert.Equal(4.0, pca.Mean![1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PCA_ExplainedVarianceRatio_SumsToOne()
     {
         // For any dataset, explained variance ratios should sum to 1.0
@@ -53,7 +53,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
         Assert.Equal(1.0, sum, 1e-3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PCA_ExplainedVariance_Descending()
     {
         // Eigenvalues (explained variance) should be in descending order
@@ -75,7 +75,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PCA_ReduceComponents_KeepsRequested()
     {
         // Request 1 component from 3-feature data
@@ -96,7 +96,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
         Assert.Equal(1, pca.NComponentsOut);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PCA_CorrelatedFeatures_FirstComponentCaptures()
     {
         // Two perfectly correlated features: y = 2*x + 1
@@ -117,7 +117,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
             $"First component should explain >99.9% for perfectly correlated data, got {pca.ExplainedVarianceRatio[0]:P2}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PCA_TwoFeatures_BothVariancesPositive()
     {
         // Two features with distinct, independent variation
@@ -141,7 +141,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
         Assert.Equal(1.0, totalRatio, 1e-3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PCA_TransformInverse_Roundtrip()
     {
         // Transform and inverse transform should recover original data
@@ -172,7 +172,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PCA_Components_AreOrthogonal()
     {
         // Principal components should be orthogonal to each other
@@ -202,7 +202,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PCA_Components_AreUnitLength()
     {
         // Each principal component vector should have unit length
@@ -229,7 +229,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PCA_VarianceRatio_SelectsMinComponents()
     {
         // When variance ratio is set, should keep minimum number of components
@@ -249,7 +249,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
         Assert.Equal(1, pca.NComponentsOut);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PCA_TransformedData_UncorrelatedColumns()
     {
         // Transformed data columns should be uncorrelated
@@ -302,7 +302,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
     // PCA - Whitening
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PCA_Whitening_UnitVariance()
     {
         // With whitening, each component should have unit variance
@@ -348,7 +348,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
     // PCA - Edge cases
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PCA_SingleFeature_KeepsAllVariance()
     {
         // With a single feature, PCA should keep 100% of variance
@@ -367,7 +367,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
         Assert.Equal(1.0, pca.ExplainedVarianceRatio![0], 1e-3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PCA_NComponentsLargerThanFeatures_CapsAtFeatureCount()
     {
         // Requesting more components than features should cap at feature count
@@ -389,7 +389,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
     // TruncatedSVD
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TruncatedSVD_ReducesDimensions()
     {
         var svd = new TruncatedSVD<double>(nComponents: 1);
@@ -407,7 +407,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
         Assert.Equal(1, transformed.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TruncatedSVD_ExplainedVarianceDescending()
     {
         var svd = new TruncatedSVD<double>();
@@ -436,7 +436,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
     // NMF (Non-negative Matrix Factorization)
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NMF_OutputIsNonnegative()
     {
         // NMF should produce non-negative output
@@ -461,7 +461,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NMF_ReducesDimensions()
     {
         var nmf = new NMF<double>(nComponents: 2, maxIterations: 50);
@@ -483,7 +483,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
     // RandomProjection - Johnson-Lindenstrauss lemma
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomProjection_PreservesApproximateDistances()
     {
         // Johnson-Lindenstrauss: random projection approximately preserves pairwise distances

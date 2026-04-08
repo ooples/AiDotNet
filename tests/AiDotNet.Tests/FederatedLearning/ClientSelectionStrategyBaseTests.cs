@@ -5,7 +5,7 @@ using Xunit;
 
 public class ClientSelectionStrategyBaseTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetDesiredClientCount_Throws_WhenCandidatesNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
@@ -22,7 +22,7 @@ public class ClientSelectionStrategyBaseTests
             ClientSelectionStrategyBaseAccessor.CallGetDesiredClientCount(candidates: new[] { 1, 2, 3 }, fraction: fraction));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetDesiredClientCount_ReturnsCeilingWithMinimumOne()
     {
         var candidates = Enumerable.Range(0, 10).ToArray();
@@ -33,14 +33,14 @@ public class ClientSelectionStrategyBaseTests
         Assert.Equal(10, ClientSelectionStrategyBaseAccessor.CallGetDesiredClientCount(candidates, fraction: 1.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ShuffleAndTake_Throws_WhenItemsNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
             ClientSelectionStrategyBaseAccessor.CallShuffleAndTake(items: null!, count: 1, random: RandomHelper.CreateSeededRandom(1)));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ShuffleAndTake_Throws_WhenRandomNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
@@ -56,7 +56,7 @@ public class ClientSelectionStrategyBaseTests
             ClientSelectionStrategyBaseAccessor.CallShuffleAndTake(items: new[] { 1, 2 }, count: count, random: RandomHelper.CreateSeededRandom(1)));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ShuffleAndTake_ReturnsSortedItems_WhenCountAtLeastItemCount()
     {
         var items = new[] { 3, 1, 2 };
@@ -69,7 +69,7 @@ public class ClientSelectionStrategyBaseTests
         Assert.Equal(new[] { 1, 2, 3 }, selected);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ShuffleAndTake_ReturnsSortedSubset_WhenCountLessThanItemCount()
     {
         var items = new[] { 1, 2, 3, 4, 5 };

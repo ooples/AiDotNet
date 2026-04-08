@@ -94,7 +94,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Basic Retrieval Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithoutExpansion_ReturnsOnlyVectorResults()
         {
             // Arrange
@@ -110,7 +110,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("alice", results[0].NodeId); // Most similar
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithExpansion_IncludesGraphNeighbors()
         {
             // Arrange
@@ -125,7 +125,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains(results, r => r.NodeId == "bob" && r.Source == RetrievalSource.GraphTraversal);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithDepth2_ReachesDistantNodes()
         {
             // Arrange
@@ -146,7 +146,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Depth Penalty Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_AppliesDepthPenalty_CloserNodesRankHigher()
         {
             // Arrange
@@ -171,7 +171,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Relationship-Aware Retrieval Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RetrieveWithRelationships_UsesRelationshipWeights()
         {
             // Arrange
@@ -191,7 +191,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.All(traversedResults, r => Assert.Equal("KNOWS", r.RelationType));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RetrieveWithRelationships_IncludesRelationshipInfo()
         {
             // Arrange
@@ -211,7 +211,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region MaxResults Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_RespectsMaxResults()
         {
             // Arrange
@@ -224,7 +224,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_SortsByScore()
         {
             // Arrange
@@ -244,7 +244,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Error Handling Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_NullEmbedding_ThrowsException()
         {
             // Act & Assert
@@ -252,7 +252,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 _retriever.Retrieve(null!, topK: 5));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_EmptyEmbedding_ThrowsException()
         {
             // Act & Assert
@@ -260,7 +260,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 _retriever.Retrieve(new Vector<double>(Array.Empty<double>()), topK: 5));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_InvalidTopK_ThrowsException()
         {
             // Arrange
@@ -274,7 +274,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 _retriever.Retrieve(query, topK: -1));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_NegativeExpansionDepth_ThrowsException()
         {
             // Arrange
@@ -289,7 +289,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Result Properties Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_PopulatesResultProperties()
         {
             // Arrange
@@ -318,7 +318,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             });
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_IncludesEmbeddings()
         {
             // Arrange
@@ -335,7 +335,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Complex Scenario Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ComplexGraph_ProducesCoherentResults()
         {
             // Arrange - Add more complex graph structure
@@ -379,7 +379,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Async Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task RetrieveAsync_WorksCorrectly()
         {
             // Arrange

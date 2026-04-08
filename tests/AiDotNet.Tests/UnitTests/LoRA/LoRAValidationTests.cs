@@ -14,7 +14,7 @@ public class LoRAValidationTests
 {
     #region LoRALayer Input/Output Validation Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoRALayer_InvalidInputSize_Zero_ThrowsArgumentOutOfRangeException()
     {
         // Arrange & Act & Assert
@@ -24,7 +24,7 @@ public class LoRAValidationTests
         Assert.Contains("Input size", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoRALayer_InvalidInputSize_Negative_ThrowsArgumentOutOfRangeException()
     {
         // Arrange & Act & Assert
@@ -34,7 +34,7 @@ public class LoRAValidationTests
         Assert.Contains("Input size", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoRALayer_InvalidOutputSize_Zero_ThrowsArgumentOutOfRangeException()
     {
         // Arrange & Act & Assert
@@ -44,7 +44,7 @@ public class LoRAValidationTests
         Assert.Contains("Output size", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoRALayer_InvalidOutputSize_Negative_ThrowsArgumentOutOfRangeException()
     {
         // Arrange & Act & Assert
@@ -54,7 +54,7 @@ public class LoRAValidationTests
         Assert.Contains("Output size", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoRALayer_InvalidRank_Zero_ThrowsArgumentOutOfRangeException()
     {
         // Arrange & Act & Assert
@@ -64,7 +64,7 @@ public class LoRAValidationTests
         Assert.Contains("Rank", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoRALayer_InvalidRank_Negative_ThrowsArgumentOutOfRangeException()
     {
         // Arrange & Act & Assert
@@ -74,7 +74,7 @@ public class LoRAValidationTests
         Assert.Contains("Rank", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoRALayer_InvalidRank_ExceedsMinDimension_ThrowsArgumentOutOfRangeException()
     {
         // Rank cannot exceed min(inputSize, outputSize)
@@ -85,7 +85,7 @@ public class LoRAValidationTests
         Assert.Contains("cannot exceed", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoRALayer_ValidParameters_CreatesSuccessfully()
     {
         // Arrange & Act
@@ -100,7 +100,7 @@ public class LoRAValidationTests
 
     #region AdaLoRAAdapter PruningInterval Validation Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AdaLoRAAdapter_InvalidPruningInterval_Zero_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
@@ -114,7 +114,7 @@ public class LoRAValidationTests
         Assert.Contains("Pruning interval", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AdaLoRAAdapter_InvalidPruningInterval_Negative_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
@@ -128,7 +128,7 @@ public class LoRAValidationTests
         Assert.Contains("Pruning interval", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AdaLoRAAdapter_ValidPruningInterval_CreatesSuccessfully()
     {
         // Arrange
@@ -146,7 +146,7 @@ public class LoRAValidationTests
 
     #region DefaultLoRAConfiguration CreateAdapter Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DefaultLoRAConfiguration_StandardLoRAAdapter_CreatesSuccessfully()
     {
         // Arrange
@@ -160,7 +160,7 @@ public class LoRAValidationTests
         Assert.IsType<StandardLoRAAdapter<double>>(adaptedLayer);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DefaultLoRAConfiguration_DoRAAdapter_CreatesSuccessfully()
     {
         // Arrange - DoRA has matching constructor signature (ILayer<T>, int, double, bool)
@@ -175,7 +175,7 @@ public class LoRAValidationTests
         Assert.IsType<DoRAAdapter<double>>(adaptedLayer);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DefaultLoRAConfiguration_AdaLoRAAdapter_CreatesSuccessfully()
     {
         // Arrange - AdaLoRA has compatible constructor (4th param is bool, rest have defaults)
@@ -190,7 +190,7 @@ public class LoRAValidationTests
         Assert.IsType<AdaLoRAAdapter<double>>(adaptedLayer);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DefaultLoRAConfiguration_QLoRAAdapter_ThrowsInvalidOperationException()
     {
         // QLoRA has incompatible constructor signature (4th param is QuantizationType, not bool)
@@ -205,7 +205,7 @@ public class LoRAValidationTests
         Assert.Contains("compatible constructor", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DefaultLoRAConfiguration_NonAdaptableLayers_PassThrough()
     {
         // Layers without trainable weights should pass through unchanged
@@ -224,7 +224,7 @@ public class LoRAValidationTests
 
     #region Matrix Indexing Bug Fix Verification Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoRAAdapterBase_MergeWeights_ReturnsCorrectShape()
     {
         // Verify that MergeWeights() returns [inputSize, outputSize]
@@ -242,7 +242,7 @@ public class LoRAValidationTests
         Assert.Equal(outputSize, merged.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StandardLoRAAdapter_MergeToOriginalLayer_DoesNotThrow()
     {
         // This tests that the matrix indexing fix works correctly
@@ -259,7 +259,7 @@ public class LoRAValidationTests
         Assert.NotNull(merged);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DoRAAdapter_MergeToOriginalLayer_DoesNotThrow()
     {
         // This tests that the matrix indexing fix works correctly
@@ -275,7 +275,7 @@ public class LoRAValidationTests
         Assert.NotNull(merged);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void QLoRAAdapter_MergeToOriginalLayer_DoesNotThrow()
     {
         // This tests that the matrix indexing fix works correctly
@@ -291,7 +291,7 @@ public class LoRAValidationTests
         Assert.NotNull(merged);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VeRAAdapter_MergeToOriginalLayer_DoesNotThrow()
     {
         // This tests that VeRA's matrix indexing is correct
@@ -323,7 +323,7 @@ public class LoRAValidationTests
 
     #region DoRAAdapter Forward Pass Bug Fix Verification Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DoRAAdapter_Forward_DoesNotThrowWithAsymmetricDimensions()
     {
         // This tests that the matrix indexing fix in Forward() works correctly

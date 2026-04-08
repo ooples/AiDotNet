@@ -14,7 +14,7 @@ public class NestedLearningDeepMathIntegrationTests
 
     #region AssociativeMemory - Hebbian Learning
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AssociativeMemory_SingleAssociation_MatrixIsScaledOuterProduct()
     {
         // Hebbian rule: W += lr * target * input^T
@@ -34,7 +34,7 @@ public class NestedLearningDeepMathIntegrationTests
         Assert.Equal(0.0, W[1, 1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AssociativeMemory_TwoAssociations_MatrixAccumulatesOuterProducts()
     {
         // First: W += 0.01 * [0,1]^T * [1,0] = [[0,0],[0.01,0]]
@@ -56,7 +56,7 @@ public class NestedLearningDeepMathIntegrationTests
         Assert.Equal(0.0, W[1, 1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AssociativeMemory_SameInputTarget_DiagonalUpdate()
     {
         // Associate [1,0] with [1,0]: W += 0.01 * [1,0]^T * [1,0] = [[0.01, 0], [0, 0]]
@@ -82,7 +82,7 @@ public class NestedLearningDeepMathIntegrationTests
 
     #region AssociativeMemory - Retrieval
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AssociativeMemory_Retrieve_MatrixMultiply_HandComputed()
     {
         // After associations building W = [[0, 0.01], [0.01, 0]]:
@@ -110,7 +110,7 @@ public class NestedLearningDeepMathIntegrationTests
         Assert.Equal(0.01, result[1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AssociativeMemory_Retrieve_ExactMatch_TriggersBlending()
     {
         // Associate [1,0] with [0,1], so memory stores input=[1,0], target=[0,1]
@@ -130,7 +130,7 @@ public class NestedLearningDeepMathIntegrationTests
         Assert.Equal(0.307, result[1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AssociativeMemory_Retrieve_OrthogonalQuery_NoBlending()
     {
         // Associate [1,0] with [0,1]
@@ -152,7 +152,7 @@ public class NestedLearningDeepMathIntegrationTests
 
     #region AssociativeMemory - Update and Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AssociativeMemory_Update_CustomLearningRate_HandComputed()
     {
         // Update with lr=0.5: W += 0.5 * [1,0]^T * [1,0] = [[0.5, 0], [0, 0]]
@@ -169,7 +169,7 @@ public class NestedLearningDeepMathIntegrationTests
         Assert.Equal(0.0, W[1, 1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AssociativeMemory_CapacityLimit_FIFOEviction()
     {
         var mem = new AssociativeMemory<double>(dimension: 2, capacity: 2);
@@ -185,7 +185,7 @@ public class NestedLearningDeepMathIntegrationTests
         Assert.Equal(2, mem.MemoryCount); // Oldest evicted
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AssociativeMemory_Clear_ResetsMatrixToZero()
     {
         var mem = new AssociativeMemory<double>(dimension: 2);
@@ -206,7 +206,7 @@ public class NestedLearningDeepMathIntegrationTests
         Assert.Equal(0, mem.MemoryCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AssociativeMemory_DimensionMismatch_Throws()
     {
         var mem = new AssociativeMemory<double>(dimension: 2);
@@ -218,7 +218,7 @@ public class NestedLearningDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => mem.Retrieve(wrong));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AssociativeMemory_IdentityRetrieval_AfterStandardBasisAssociations()
     {
         // Associate each standard basis vector with itself using Update(lr=1.0)
@@ -257,7 +257,7 @@ public class NestedLearningDeepMathIntegrationTests
 
     #region ContextFlow - EMA Propagation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContextFlow_FirstPropagation_IsScaledTransformation()
     {
         // First propagation from zero context:
@@ -280,7 +280,7 @@ public class NestedLearningDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContextFlow_SecondPropagation_EMAUpdate()
     {
         // First propagation: ctx1 = 0.1 * W * input1
@@ -305,7 +305,7 @@ public class NestedLearningDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContextFlow_PropagateContext_DifferentLevels_Independent()
     {
         // Propagation at level 0 should not affect level 1
@@ -326,7 +326,7 @@ public class NestedLearningDeepMathIntegrationTests
 
     #region ContextFlow - Gradient Computation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContextFlow_ComputeContextGradients_TransposeProduct()
     {
         // gradient = W^T * upstream_gradient
@@ -343,7 +343,7 @@ public class NestedLearningDeepMathIntegrationTests
         Assert.Equal(W[0, 1], result[1], 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContextFlow_ComputeContextGradients_LinearInUpstream()
     {
         // Gradient is linear: grad(a*v) = a * grad(v)
@@ -365,7 +365,7 @@ public class NestedLearningDeepMathIntegrationTests
 
     #region ContextFlow - Reset and Validation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContextFlow_Reset_ZerosAllContextStates()
     {
         var dim = 2;
@@ -385,7 +385,7 @@ public class NestedLearningDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContextFlow_InvalidLevel_Throws()
     {
         var flow = new ContextFlow<double>(contextDimension: 2, numLevels: 3);
@@ -399,14 +399,14 @@ public class NestedLearningDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => flow.GetContextState(3));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContextFlow_NumberOfLevels_MatchesConstructor()
     {
         var flow = new ContextFlow<double>(contextDimension: 4, numLevels: 5);
         Assert.Equal(5, flow.NumberOfLevels);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContextFlow_UpdateFlow_ChangesTransformationMatrix()
     {
         // UpdateFlow uses outer product: W -= lr * grad @ context^T

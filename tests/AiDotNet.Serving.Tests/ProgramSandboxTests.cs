@@ -36,7 +36,7 @@ public class ProgramSandboxTests : IClassFixture<ProgramSandboxTestFactory>
         return JsonConvert.DeserializeObject<T>(json, JsonSettings);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ExecuteProgram_WithMissingSource_ReturnsBadRequest()
     {
         var request = new ProgramExecuteRequest
@@ -56,7 +56,7 @@ public class ProgramSandboxTests : IClassFixture<ProgramSandboxTestFactory>
         Assert.Contains("SourceCode is required", result.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ExecuteProgram_WithValidRequest_ReturnsOk()
     {
         var request = new ProgramExecuteRequest
@@ -77,7 +77,7 @@ public class ProgramSandboxTests : IClassFixture<ProgramSandboxTestFactory>
         Assert.Equal("ok", result.StdOut);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ExecuteProgram_WithCompileOnly_ReturnsCompilationMetadata()
     {
         var request = new ProgramExecuteRequest

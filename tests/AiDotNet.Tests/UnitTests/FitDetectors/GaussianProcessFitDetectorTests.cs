@@ -25,7 +25,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 features: features);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithDefaultOptions_CreatesInstance()
         {
             // Act
@@ -35,7 +35,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithCustomOptions_CreatesInstance()
         {
             // Arrange
@@ -53,7 +53,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithPerfectPredictions_ReturnsValidResult()
         {
             // Arrange
@@ -71,7 +71,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithPoorPredictions_ReturnsValidResult()
         {
             // Arrange
@@ -88,7 +88,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithReasonablePredictions_ReturnsConfidenceLevel()
         {
             // Arrange
@@ -104,7 +104,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_GeneratesRecommendationsBasedOnFitType()
         {
             // Arrange
@@ -120,7 +120,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.All(result.Recommendations, r => Assert.False(string.IsNullOrWhiteSpace(r)));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithVariousDataSizes_HandlesCorrectly()
         {
             // Arrange
@@ -134,7 +134,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithHighDimensionalFeatures_HandlesCorrectly()
         {
             // Arrange
@@ -153,7 +153,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithCustomThresholds_UsesThresholdsCorrectly()
         {
             // Arrange
@@ -175,7 +175,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ResultContainsAllRequiredFields()
         {
             // Arrange
@@ -191,7 +191,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result.AdditionalInfo);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithSlightlyOffPredictions_ReturnsModerateConfidence()
         {
             // Arrange

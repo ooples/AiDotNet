@@ -17,7 +17,7 @@ public class FinanceDataPreprocessorIntegrationTests
 
     #region MarketDataPoint Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MarketDataPoint_ConstructsWithCorrectValues()
     {
         var ts = new DateTime(2024, 1, 15, 9, 30, 0);
@@ -31,7 +31,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(50000.0, point.Volume);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MarketDataPoint_Float_ConstructsCorrectly()
     {
         var ts = new DateTime(2024, 6, 1);
@@ -48,7 +48,7 @@ public class FinanceDataPreprocessorIntegrationTests
 
     #region MarketDataProvider Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MarketDataProvider_Add_IncreasesCount()
     {
         var provider = new MarketDataProvider<double>();
@@ -62,7 +62,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(2, provider.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MarketDataProvider_AddRange_AddsAllPoints()
     {
         var provider = new MarketDataProvider<double>();
@@ -73,7 +73,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(10, provider.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MarketDataProvider_Clear_ResetsCount()
     {
         var provider = new MarketDataProvider<double>();
@@ -85,7 +85,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(0, provider.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MarketDataProvider_GetAll_ReturnsAllPoints()
     {
         var provider = new MarketDataProvider<double>();
@@ -100,7 +100,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(102.0, all[2].Close);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MarketDataProvider_GetRange_FiltersCorrectly()
     {
         var provider = new MarketDataProvider<double>();
@@ -118,7 +118,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(106.0, range[3].Close);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MarketDataProvider_GetRange_EmptyWhenNoMatch()
     {
         var provider = new MarketDataProvider<double>();
@@ -130,7 +130,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(0, range.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MarketDataProvider_GetWindow_ReturnsCorrectSlice()
     {
         var provider = new MarketDataProvider<double>();
@@ -144,7 +144,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(104.0, window[2].Close);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MarketDataProvider_GetWindow_ClampedAtEnd()
     {
         var provider = new MarketDataProvider<double>();
@@ -156,7 +156,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(2, window.Count); // only indices 3 and 4
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MarketDataProvider_GetWindow_InvalidIndex_Throws()
     {
         var provider = new MarketDataProvider<double>();
@@ -167,7 +167,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => provider.GetWindow(0, 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MarketDataProvider_ToTensor_WithVolume_GoldenReference()
     {
         var provider = new MarketDataProvider<double>();
@@ -191,7 +191,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(600.0, tensor[1, 4], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MarketDataProvider_ToTensor_WithoutVolume_HasFourColumns()
     {
         var provider = new MarketDataProvider<double>();
@@ -205,7 +205,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(11.0, tensor[0, 3], Tolerance); // Close
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MarketDataProvider_AddNull_Throws()
     {
         var provider = new MarketDataProvider<double>();
@@ -213,7 +213,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Throws<ArgumentNullException>(() => provider.Add(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MarketDataProvider_AddRangeNull_Throws()
     {
         var provider = new MarketDataProvider<double>();
@@ -225,7 +225,7 @@ public class FinanceDataPreprocessorIntegrationTests
 
     #region FinancialPreprocessor Feature Tensor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_GetFeatureCount_OHLCV()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -236,7 +236,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(6, preprocessor.GetFeatureCount(includeVolume: true, includeReturns: true));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_CreateFeatureTensor_GoldenReference_OHLCV()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -259,7 +259,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(5000.0, tensor[0 * 5 + 4], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_CreateFeatureTensor_WithReturns_GoldenReference()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -285,7 +285,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(-5.0 / 110.0, tensor[2 * 6 + 5], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_CreateFeatureTensor_WithoutVolume_OHLC()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -302,7 +302,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(52.0, tensor[3], Tolerance); // Close
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_CreateFeatureTensor_EmptySeries_Throws()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -311,7 +311,7 @@ public class FinanceDataPreprocessorIntegrationTests
             preprocessor.CreateFeatureTensor(new List<MarketDataPoint<double>>()));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_CreateFeatureTensor_NullSeries_Throws()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -324,7 +324,7 @@ public class FinanceDataPreprocessorIntegrationTests
 
     #region Supervised Learning Tensor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_CreateSupervisedTensors_GoldenReference()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -350,7 +350,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(109.0, targets[6], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_CreateSupervisedTensors_MultiHorizon()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -373,7 +373,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(104.0, targets[0 * 3 + 2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_CreateSupervisedTensors_TooFewPoints_EmptyResult()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -388,7 +388,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(0, targets.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_CreateSupervisedTensors_InvalidWindow_Throws()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -404,7 +404,7 @@ public class FinanceDataPreprocessorIntegrationTests
             preprocessor.CreateSupervisedLearningTensors(points, -1, 1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_CreateSupervisedTensors_PredictReturns_GoldenReference()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -426,7 +426,7 @@ public class FinanceDataPreprocessorIntegrationTests
 
     #region NormalizeMinMax Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_NormalizeMinMax_GoldenReference()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -453,7 +453,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(30.0, stats.Max[1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_NormalizeMinMax_ConstantFeature_SafeRange()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -469,7 +469,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(0.0, normalized[2 * 2 + 0], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_NormalizeMinMax_AllInRange01()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -485,7 +485,7 @@ public class FinanceDataPreprocessorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_NormalizeMinMax_EmptyTensor_ReturnsEmpty()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -498,7 +498,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(0, stats.Max.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_NormalizeMinMax_NullInput_Throws()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -511,7 +511,7 @@ public class FinanceDataPreprocessorIntegrationTests
 
     #region NormalizeZScore Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_NormalizeZScore_GoldenReference()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -530,7 +530,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(1.0, normalized[2], Tolerance);   // (6 - 4) / 2
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_NormalizeZScore_ConstantFeature_SafeStd()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -549,7 +549,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(0.0, normalized[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_NormalizeZScore_MeanApproximatelyZero()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -576,7 +576,7 @@ public class FinanceDataPreprocessorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_NormalizeZScore_EmptyTensor_ReturnsEmpty()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -588,7 +588,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(0, stats.Mean.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_NormalizeZScore_NullInput_Throws()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -601,7 +601,7 @@ public class FinanceDataPreprocessorIntegrationTests
 
     #region Returns Computation Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_Returns_NearZeroClose_DoesNotDivideByZero()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -619,7 +619,7 @@ public class FinanceDataPreprocessorIntegrationTests
             "Return should be finite even with zero-close previous bar");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_Returns_FirstBarAlwaysZero()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -635,7 +635,7 @@ public class FinanceDataPreprocessorIntegrationTests
 
     #region End-to-End Pipeline Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pipeline_MarketData_ToTensor_ToNormalized_RoundTrip()
     {
         var provider = new MarketDataProvider<double>();
@@ -661,7 +661,7 @@ public class FinanceDataPreprocessorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pipeline_PreprocessorToSupervisedLearning_ShapesConsistent()
     {
         var preprocessor = new FinancialPreprocessor<double>();
@@ -682,7 +682,7 @@ public class FinanceDataPreprocessorIntegrationTests
         Assert.Equal(horizon, targets.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Preprocessor_CreateFeatureTensor_Float_Works()
     {
         var preprocessor = new FinancialPreprocessor<float>();

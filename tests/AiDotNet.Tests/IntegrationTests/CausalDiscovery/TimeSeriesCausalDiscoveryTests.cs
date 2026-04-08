@@ -27,7 +27,7 @@ public class TimeSeriesCausalDiscoveryTests
 
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GrangerCausality_FindsCausalStructure()
     {
         var algo = new GrangerCausalityAlgorithm<double>();
@@ -36,7 +36,7 @@ public class TimeSeriesCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PCMCI_FindsCausalStructure()
     {
         var algo = new PCMCIAlgorithm<double>();
@@ -45,7 +45,7 @@ public class TimeSeriesCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PCMCIPlus_FindsCausalStructure()
     {
         var algo = new PCMCIPlusAlgorithm<double>();
@@ -54,7 +54,7 @@ public class TimeSeriesCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DYNOTEARS_FindsCausalStructure()
     {
         var algo = new DYNOTEARSAlgorithm<double>();
@@ -63,7 +63,7 @@ public class TimeSeriesCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NTSNOTEARS_FindsCausalStructure()
     {
         var algo = new NTSNOTEARSAlgorithm<double>();
@@ -72,7 +72,7 @@ public class TimeSeriesCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CCM_FindsCausalStructure()
     {
         var algo = new CCMAlgorithm<double>();
@@ -81,7 +81,7 @@ public class TimeSeriesCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TSFCI_FindsCausalStructure()
     {
         var algo = new TSFCIAlgorithm<double>();
@@ -90,7 +90,7 @@ public class TimeSeriesCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LPCMCI_FindsCausalStructure()
     {
         var algo = new LPCMCIAlgorithm<double>();
@@ -99,7 +99,7 @@ public class TimeSeriesCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TiMINo_FindsCausalStructure()
     {
         var algo = new TiMINoAlgorithm<double>();
@@ -108,7 +108,7 @@ public class TimeSeriesCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NeuralGranger_FindsCausalStructure()
     {
         var algo = new NeuralGrangerAlgorithm<double>();

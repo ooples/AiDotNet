@@ -10,7 +10,7 @@ public class PNDMSchedulerTests
 {
     #region Construction Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithValidConfig_CreatesScheduler()
     {
         // Arrange
@@ -24,7 +24,7 @@ public class PNDMSchedulerTests
         Assert.Equal(1000, scheduler.TrainTimesteps);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithNullConfig_ThrowsArgumentNullException()
     {
         // Arrange & Act & Assert
@@ -35,7 +35,7 @@ public class PNDMSchedulerTests
 
     #region SetTimesteps Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SetTimesteps_WithValidSteps_ProducesDescendingSequence()
     {
         // Arrange
@@ -73,7 +73,7 @@ public class PNDMSchedulerTests
         Assert.True(scheduler.Timesteps.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SetTimesteps_ResetsInternalState()
     {
         // Arrange
@@ -101,7 +101,7 @@ public class PNDMSchedulerTests
 
     #region Step Tests - PRK Phase
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_InPrkPhase_ReturnsFiniteValues()
     {
         // Arrange
@@ -129,7 +129,7 @@ public class PNDMSchedulerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_First4StepsArePrkMode()
     {
         // Arrange
@@ -159,7 +159,7 @@ public class PNDMSchedulerTests
 
     #region Step Tests - PLMS Phase
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_InPlmsPhase_ReturnsFiniteValues()
     {
         // Arrange
@@ -192,7 +192,7 @@ public class PNDMSchedulerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_PlmsPhaseUsesHistoryOfPredictions()
     {
         // Arrange
@@ -218,7 +218,7 @@ public class PNDMSchedulerTests
 
     #region Step Tests - Validation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_WithNullModelOutput_ThrowsArgumentNullException()
     {
         // Arrange
@@ -231,7 +231,7 @@ public class PNDMSchedulerTests
             scheduler.Step(null!, scheduler.Timesteps[0], sample, 0.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_WithNullSample_ThrowsArgumentNullException()
     {
         // Arrange
@@ -244,7 +244,7 @@ public class PNDMSchedulerTests
             scheduler.Step(modelOutput, scheduler.Timesteps[0], null!, 0.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_WithMismatchedLengths_ThrowsArgumentException()
     {
         // Arrange
@@ -262,7 +262,7 @@ public class PNDMSchedulerTests
 
     #region Step Tests - Deterministic Behavior
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_IsDeterministic()
     {
         // Arrange
@@ -309,7 +309,7 @@ public class PNDMSchedulerTests
 
     #region State Management Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetState_ReturnsCounterAndEtsCount()
     {
         // Arrange
@@ -326,7 +326,7 @@ public class PNDMSchedulerTests
         Assert.Equal(0, (int)etsCount!);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetState_AfterSteps_ReflectsProgress()
     {
         // Arrange
@@ -350,7 +350,7 @@ public class PNDMSchedulerTests
         Assert.True((int)state["ets_count"] > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LoadState_ResetsCounterToZero()
     {
         // Arrange
@@ -384,7 +384,7 @@ public class PNDMSchedulerTests
 
     #region Integration Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullDenoisingLoop_ProducesFiniteResults()
     {
         // Arrange
@@ -419,7 +419,7 @@ public class PNDMSchedulerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullDenoisingLoop_WithFewSteps_WorksCorrectly()
     {
         // Arrange - PNDM is designed for fast inference with few steps
@@ -447,7 +447,7 @@ public class PNDMSchedulerTests
 
     #region Comparison with DDIM
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PNDMAndDDIM_ProduceDifferentResults()
     {
         // Arrange

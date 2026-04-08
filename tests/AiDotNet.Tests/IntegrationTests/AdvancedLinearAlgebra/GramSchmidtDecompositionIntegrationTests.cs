@@ -234,7 +234,7 @@ public class GramSchmidtDecompositionIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GramSchmidt_2x2Matrix_CorrectDecomposition()
     {
         // Arrange
@@ -253,7 +253,7 @@ public class GramSchmidtDecompositionIntegrationTests
             $"2x2 decomposition failed. Max difference: {maxDiff}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GramSchmidt_TallMatrix_ValidDecomposition()
     {
         // Arrange - More rows than columns
@@ -270,7 +270,7 @@ public class GramSchmidtDecompositionIntegrationTests
             $"Tall matrix decomposition failed. Max difference: {maxDiff}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GramSchmidt_IdentityMatrix_DecomposesToIdentities()
     {
         // Arrange
@@ -293,7 +293,7 @@ public class GramSchmidtDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GramSchmidt_Modified_HandlesIllConditionedMatrix()
     {
         // Arrange - Create a Hilbert-like matrix that can cause numerical issues
@@ -318,7 +318,7 @@ public class GramSchmidtDecompositionIntegrationTests
             $"Modified Gram-Schmidt on ill-conditioned matrix. Max difference: {maxDiff}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GramSchmidt_Q_Columns_AreUnitVectors()
     {
         // Arrange
@@ -342,7 +342,7 @@ public class GramSchmidtDecompositionIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GramSchmidt_Q_Columns_AreMutuallyOrthogonal()
     {
         // Arrange

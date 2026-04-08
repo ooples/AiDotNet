@@ -125,7 +125,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange
@@ -142,7 +142,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(retriever);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_NullDocumentStore_ThrowsArgumentNullException()
         {
             // Act & Assert
@@ -156,7 +156,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("documentStore", ex.ParamName);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_NullModelPath_ThrowsArgumentNullException()
         {
             // Arrange
@@ -173,7 +173,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("modelPath", ex.ParamName);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_ZeroMaxDocLength_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -191,7 +191,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("positive", ex.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_NegativeMaxDocLength_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -208,7 +208,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("maxDocLength", ex.ParamName);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_ZeroMaxQueryLength_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -226,7 +226,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("positive", ex.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_NegativeMaxQueryLength_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -243,7 +243,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("maxQueryLength", ex.ParamName);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_SmallMaxLengths_CreatesInstance()
         {
             // Arrange
@@ -260,7 +260,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(retriever);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_LargeMaxLengths_CreatesInstance()
         {
             // Arrange
@@ -281,7 +281,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Retrieve Method Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_EmptyStore_ReturnsEmptyResults()
         {
             // Arrange
@@ -296,7 +296,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_MatchingTokens_ReturnsDocuments()
         {
             // Arrange
@@ -313,7 +313,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_NoMatchingTokens_ReturnsDocumentsBasedOnStoreResults()
         {
             // Arrange
@@ -329,7 +329,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_MultipleDocuments_ReturnsRankedResults()
         {
             // Arrange
@@ -347,7 +347,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results.Count >= 1);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithTopK_ReturnsLimitedResults()
         {
             // Arrange
@@ -367,7 +367,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results.Count <= 3);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_CaseInsensitive_MatchesDifferentCases()
         {
             // Arrange
@@ -384,7 +384,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_NullQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -397,7 +397,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve(null!).ToList());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_EmptyQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -410,7 +410,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("").ToList());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WhitespaceQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -423,7 +423,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("   ").ToList());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -436,7 +436,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 retriever.Retrieve("test", topK: 0).ToList());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_NegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
@@ -453,7 +453,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Token Overlap Scoring Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_HighTokenOverlap_ScoresHigher()
         {
             // Arrange
@@ -472,7 +472,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[1].HasRelevanceScore);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_DocumentsHaveRelevanceScores()
         {
             // Arrange
@@ -489,7 +489,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[0].HasRelevanceScore);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_AllQueryTokensMatch_HighScore()
         {
             // Arrange
@@ -510,7 +510,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Metadata Filtering Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithMetadataFilter_ReturnsOnlyMatchingDocuments()
         {
             // Arrange
@@ -529,7 +529,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("doc1", results[0].Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_NoMatchingMetadata_ReturnsEmpty()
         {
             // Arrange
@@ -546,7 +546,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_EmptyMetadataFilter_ReturnsAllMatches()
         {
             // Arrange
@@ -564,7 +564,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_NullMetadataFilter_ThrowsArgumentNullException()
         {
             // Arrange
@@ -582,7 +582,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_SingleWordQuery_Works()
         {
             // Arrange
@@ -597,7 +597,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_SingleWordDocument_Works()
         {
             // Arrange
@@ -612,7 +612,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_LongDocument_HandlesCorrectly()
         {
             // Arrange
@@ -629,7 +629,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(results[0].HasRelevanceScore);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_LongQuery_HandlesCorrectly()
         {
             // Arrange
@@ -645,7 +645,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_SpecialCharactersInQuery_HandlesCorrectly()
         {
             // Arrange
@@ -660,7 +660,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_PunctuationInDocument_TokenizedCorrectly()
         {
             // Arrange
@@ -676,7 +676,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_RepeatedCalls_ProduceSameResults()
         {
             // Arrange
@@ -698,7 +698,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_TopKGreaterThanDocCount_ReturnsAllDocuments()
         {
             // Arrange
@@ -715,7 +715,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_NewlinesInDocument_TokenizedCorrectly()
         {
             // Arrange
@@ -731,7 +731,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_TabsInDocument_TokenizedCorrectly()
         {
             // Arrange
@@ -751,7 +751,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region MaxLength Truncation Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_QueryExceedsMaxLength_TruncatedCorrectly()
         {
             // Arrange
@@ -767,7 +767,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_SmallMaxQueryLength_StillWorks()
         {
             // Arrange
@@ -782,7 +782,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Single(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_SmallMaxDocLength_StillWorks()
         {
             // Arrange

@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class SequenceLabelingNERTestBase : NERModelTestBase
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequenceLabels_ShouldMatchInputLength()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -23,7 +23,7 @@ public abstract class SequenceLabelingNERTestBase : NERModelTestBase
         Assert.True(output.Length > 0, "Sequence labeling produced empty output.");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequenceLabeling_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

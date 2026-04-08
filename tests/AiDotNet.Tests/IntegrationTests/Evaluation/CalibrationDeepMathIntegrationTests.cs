@@ -17,7 +17,7 @@ public class CalibrationDeepMathIntegrationTests
 
     // ===== Brier Score Tests =====
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BrierScore_PerfectPredictions_ReturnsZero()
     {
         // Perfect predictions: predict 1.0 for positive, 0.0 for negative
@@ -30,7 +30,7 @@ public class CalibrationDeepMathIntegrationTests
         Assert.Equal(0.0, brier, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BrierScore_WorstPredictions_ReturnsOne()
     {
         // Worst predictions: predict 0.0 for positive, 1.0 for negative
@@ -44,7 +44,7 @@ public class CalibrationDeepMathIntegrationTests
         Assert.Equal(1.0, brier, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BrierScore_HandComputed()
     {
         // scores = [0.8, 0.3, 0.9, 0.1], labels = [1, 0, 1, 0]
@@ -59,7 +59,7 @@ public class CalibrationDeepMathIntegrationTests
         Assert.Equal(0.0375, brier, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BrierScore_AllZeroPointFive_ReturnsZeroPointTwoFive()
     {
         // All predictions = 0.5
@@ -75,7 +75,7 @@ public class CalibrationDeepMathIntegrationTests
         Assert.Equal(0.25, brier, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BrierScore_IsNonNegative()
     {
         var calibrator = new ProbabilityCalibrator<double>();
@@ -87,7 +87,7 @@ public class CalibrationDeepMathIntegrationTests
         Assert.True(brier >= 0, $"Brier score should be non-negative, got {brier}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BrierScore_AtMostOne()
     {
         var calibrator = new ProbabilityCalibrator<double>();
@@ -101,7 +101,7 @@ public class CalibrationDeepMathIntegrationTests
 
     // ===== Expected Calibration Error (ECE) Tests =====
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ECE_PerfectCalibration_ReturnsZero()
     {
         // Perfectly calibrated: in each bin, avg probability = fraction positive
@@ -122,7 +122,7 @@ public class CalibrationDeepMathIntegrationTests
         Assert.True(ece >= 0, $"ECE should be non-negative, got {ece}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ECE_IsNonNegative()
     {
         var calibrator = new ProbabilityCalibrator<double>();
@@ -134,7 +134,7 @@ public class CalibrationDeepMathIntegrationTests
         Assert.True(ece >= 0, $"ECE should be non-negative, got {ece}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ECE_AtMostOne()
     {
         var calibrator = new ProbabilityCalibrator<double>();
@@ -146,7 +146,7 @@ public class CalibrationDeepMathIntegrationTests
         Assert.True(ece <= 1.0 + Tolerance, $"ECE should be at most 1, got {ece}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ECE_HandComputed_SingleBin()
     {
         // All scores in one bin [0.7, 0.8) with 10 bins (0-0.1, 0.1-0.2, ..., 0.7-0.8, ...)
@@ -165,7 +165,7 @@ public class CalibrationDeepMathIntegrationTests
 
     // ===== Maximum Calibration Error (MCE) Tests =====
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MCE_IsGreaterThanOrEqualToECE()
     {
         // MCE >= ECE since MCE takes the max while ECE takes weighted average
@@ -180,7 +180,7 @@ public class CalibrationDeepMathIntegrationTests
             $"MCE ({mce}) should be >= ECE ({ece})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MCE_IsNonNegative()
     {
         var calibrator = new ProbabilityCalibrator<double>();
@@ -194,7 +194,7 @@ public class CalibrationDeepMathIntegrationTests
 
     // ===== Reliability Diagram Tests =====
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReliabilityDiagram_BinCountsSumToTotal()
     {
         var calibrator = new ProbabilityCalibrator<double>();
@@ -206,7 +206,7 @@ public class CalibrationDeepMathIntegrationTests
         Assert.Equal(scores.Length, binCounts.Sum());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReliabilityDiagram_MeanPredictedInBinRange()
     {
         var calibrator = new ProbabilityCalibrator<double>();
@@ -227,7 +227,7 @@ public class CalibrationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReliabilityDiagram_FractionPositivesInZeroOneRange()
     {
         var calibrator = new ProbabilityCalibrator<double>();
@@ -248,7 +248,7 @@ public class CalibrationDeepMathIntegrationTests
 
     // ===== Platt Scaling Tests =====
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PlattScaling_TransformProducesValuesInZeroOne()
     {
         var options = new ProbabilityCalibratorOptions
@@ -272,7 +272,7 @@ public class CalibrationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PlattScaling_SigmoidMonotonicity()
     {
         // Platt scaling uses sigmoid(Ax + B), which is monotonic in x
@@ -300,7 +300,7 @@ public class CalibrationDeepMathIntegrationTests
 
     // ===== Temperature Scaling Tests =====
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TemperatureScaling_TransformProducesValuesInZeroOne()
     {
         var options = new ProbabilityCalibratorOptions
@@ -324,7 +324,7 @@ public class CalibrationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TemperatureScaling_PreservesOrdering()
     {
         // Temperature scaling: sigmoid(logit / T) preserves ordering since T > 0
@@ -349,7 +349,7 @@ public class CalibrationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TemperatureScaling_TemperatureIsPositive()
     {
         var options = new ProbabilityCalibratorOptions
@@ -371,7 +371,7 @@ public class CalibrationDeepMathIntegrationTests
 
     // ===== Histogram Binning Tests =====
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HistogramBinning_TransformProducesValuesInZeroOne()
     {
         var options = new ProbabilityCalibratorOptions
@@ -398,7 +398,7 @@ public class CalibrationDeepMathIntegrationTests
 
     // ===== FitTransform Tests =====
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FitTransform_EquivalentToFitThenTransform()
     {
         var options1 = new ProbabilityCalibratorOptions
@@ -430,7 +430,7 @@ public class CalibrationDeepMathIntegrationTests
 
     // ===== Not Fitted Error =====
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Transform_BeforeFit_ThrowsInvalidOperationException()
     {
         var calibrator = new ProbabilityCalibrator<double>();
@@ -441,7 +441,7 @@ public class CalibrationDeepMathIntegrationTests
 
     // ===== Brier Score Decomposition Properties =====
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BrierScore_ImproveWithCalibration()
     {
         // After calibration, Brier score should not increase (typically decreases)
@@ -470,7 +470,7 @@ public class CalibrationDeepMathIntegrationTests
 
     // ===== Brier Score Mathematical Properties =====
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BrierScore_IsSymmetricInBinaryLabels()
     {
         // Brier(p, y) = (p-y)^2 is symmetric: swapping 0/1 and 1-p gives same score
@@ -488,7 +488,7 @@ public class CalibrationDeepMathIntegrationTests
         Assert.Equal(brier1, brier2, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ECE_MoreBins_CanOnlyIncreaseOrStaySame()
     {
         // With finer binning, calibration error can only increase or stay the same

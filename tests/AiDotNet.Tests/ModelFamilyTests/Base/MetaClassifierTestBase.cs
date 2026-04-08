@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class MetaClassifierTestBase : ClassificationModelTestBase
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MetaPredictions_ShouldBeValidLabels()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -28,7 +28,7 @@ public abstract class MetaClassifierTestBase : ClassificationModelTestBase
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MetaClassifier_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

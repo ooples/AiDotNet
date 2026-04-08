@@ -17,7 +17,7 @@ public abstract class ProbabilisticClassifierTestBase : ClassificationModelTestB
     // Violating this means the probability model is broken.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Probabilities_SumToOne()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -48,7 +48,7 @@ public abstract class ProbabilisticClassifierTestBase : ClassificationModelTestB
     // predictions (most predictions should be correct).
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HighConfidence_OnSeparableData()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -90,7 +90,7 @@ public abstract class ProbabilisticClassifierTestBase : ClassificationModelTestB
     // Predictions outside this range indicate a broken decision function.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Predictions_AreValidClassIndices()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

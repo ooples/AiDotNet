@@ -10,21 +10,21 @@ public class ModelLoadingIntegrationTests
 {
     #region SafeTensorsLoader Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SafeTensorsLoader_Construction()
     {
         var loader = new SafeTensorsLoader<double>();
         Assert.NotNull(loader);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SafeTensorsLoader_Load_NonexistentFile_Throws()
     {
         var loader = new SafeTensorsLoader<double>();
         Assert.ThrowsAny<Exception>(() => loader.Load("nonexistent_file.safetensors"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SafeTensorsLoader_GetTensorInfo_NonexistentFile_Throws()
     {
         var loader = new SafeTensorsLoader<double>();
@@ -35,14 +35,14 @@ public class ModelLoadingIntegrationTests
 
     #region WeightMapping Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeightMapping_Construction_WithDefaults()
     {
         var mapping = new WeightMapping();
         Assert.NotNull(mapping);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeightMapping_Construction_WithMappings_PreservesMappings()
     {
         var mappings = new Dictionary<string, string>
@@ -58,7 +58,7 @@ public class ModelLoadingIntegrationTests
         Assert.Equal("target.layer2.bias", mapping.Map("source.layer2.bias"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeightMapping_AddMapping_CanBeLookedUp()
     {
         var mapping = new WeightMapping();
@@ -68,7 +68,7 @@ public class ModelLoadingIntegrationTests
         Assert.Equal("new_name", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeightMapping_Map_ReturnsNullForUnknown()
     {
         var mapping = new WeightMapping();
@@ -76,7 +76,7 @@ public class ModelLoadingIntegrationTests
         Assert.Null(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeightMapping_AddPatternMapping_MatchesRegex()
     {
         var mapping = new WeightMapping();
@@ -90,7 +90,7 @@ public class ModelLoadingIntegrationTests
 
     #region ParameterRegistry Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterRegistry_Construction_EmptyRegistry()
     {
         var registry = new ParameterRegistry<double>();
@@ -99,7 +99,7 @@ public class ModelLoadingIntegrationTests
         Assert.Empty(registry.GetNames());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterRegistry_Register_IncrementsCount()
     {
         var registry = new ParameterRegistry<double>();
@@ -115,7 +115,7 @@ public class ModelLoadingIntegrationTests
         Assert.Contains("layer1.weight", registry.GetNames());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterRegistry_TryGet_ReturnsTensorFromGetter()
     {
         var registry = new ParameterRegistry<double>();
@@ -134,7 +134,7 @@ public class ModelLoadingIntegrationTests
         Assert.Equal(42.0, result[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterRegistry_TryGet_ReturnsFalseForUnknown()
     {
         var registry = new ParameterRegistry<double>();
@@ -143,7 +143,7 @@ public class ModelLoadingIntegrationTests
         Assert.Null(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterRegistry_TrySet_InvokesSetter()
     {
         var registry = new ParameterRegistry<double>();
@@ -164,7 +164,7 @@ public class ModelLoadingIntegrationTests
         Assert.Equal(99.0, storedTensor[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterRegistry_TrySet_ShapeMismatch_ThrowsArgumentException()
     {
         var registry = new ParameterRegistry<double>();
@@ -180,7 +180,7 @@ public class ModelLoadingIntegrationTests
         Assert.Throws<ArgumentException>(() => registry.TrySet("layer1.weight", wrongShape));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterRegistry_TrySet_UnknownName_ReturnsFalse()
     {
         var registry = new ParameterRegistry<double>();
@@ -189,7 +189,7 @@ public class ModelLoadingIntegrationTests
         Assert.False(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterRegistry_GetShape_ReturnsRegisteredShape()
     {
         var registry = new ParameterRegistry<double>();
@@ -200,14 +200,14 @@ public class ModelLoadingIntegrationTests
         Assert.Equal(new[] { 5, 10 }, shape);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterRegistry_GetShape_UnknownName_ReturnsNull()
     {
         var registry = new ParameterRegistry<double>();
         Assert.Null(registry.GetShape("nonexistent"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterRegistry_CaseInsensitive_LookupWorks()
     {
         var registry = new ParameterRegistry<double>();
@@ -223,7 +223,7 @@ public class ModelLoadingIntegrationTests
         Assert.Equal(7.0, result[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterRegistry_RegisterChild_PrefixesNames()
     {
         var parent = new ParameterRegistry<double>();
@@ -239,7 +239,7 @@ public class ModelLoadingIntegrationTests
         Assert.Contains("encoder.layer1.bias", parent.GetNames());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterRegistry_Validate_IdentifiesMatchedAndMissing()
     {
         var registry = new ParameterRegistry<double>();
@@ -257,7 +257,7 @@ public class ModelLoadingIntegrationTests
         Assert.Contains("extra.param", validation.UnmatchedWeights);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterRegistry_Load_SetsParameters()
     {
         var registry = new ParameterRegistry<double>();
@@ -287,7 +287,7 @@ public class ModelLoadingIntegrationTests
         Assert.Equal(0.5, storedBias[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterRegistry_Load_Strict_FailsOnMissingParameter()
     {
         var registry = new ParameterRegistry<double>();
@@ -308,14 +308,14 @@ public class ModelLoadingIntegrationTests
 
     #region ONNXImporter Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ONNXImporter_Construction_WithDefaults()
     {
         var importer = new ONNXImporter<double>();
         Assert.NotNull(importer);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ONNXImporter_Construction_Verbose()
     {
         var importer = new ONNXImporter<double>(verbose: true);
@@ -326,14 +326,14 @@ public class ModelLoadingIntegrationTests
 
     #region PretrainedModelLoader Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PretrainedModelLoader_Construction_WithDefaults()
     {
         var loader = new PretrainedModelLoader<double>();
         Assert.NotNull(loader);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PretrainedModelLoader_Construction_Verbose()
     {
         var loader = new PretrainedModelLoader<double>(verbose: true);
@@ -344,14 +344,14 @@ public class ModelLoadingIntegrationTests
 
     #region HuggingFaceModelLoader Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuggingFaceModelLoader_Construction_WithDefaults()
     {
         var loader = new HuggingFaceModelLoader<double>();
         Assert.NotNull(loader);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuggingFaceModelLoader_Construction_WithCacheDir()
     {
         var tempDir = Path.GetTempPath();

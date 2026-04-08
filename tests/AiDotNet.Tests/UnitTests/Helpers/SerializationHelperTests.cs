@@ -8,7 +8,7 @@ namespace AiDotNetTests.UnitTests.Helpers
 {
     public class SerializationHelperTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SerializeNode_WithNullNode_WritesCorrectly()
         {
             // Arrange
@@ -24,7 +24,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.False(reader.ReadBoolean());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SerializeNode_WithLeafNode_WritesCorrectly()
         {
             // Arrange
@@ -47,7 +47,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(42.0, reader.ReadDouble());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DeserializeNode_WithNullNode_ReturnsNull()
         {
             // Arrange
@@ -64,7 +64,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Null(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DeserializeNode_WithLeafNode_ReturnsCorrectNode()
         {
             // Arrange
@@ -88,7 +88,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(3.14, result.Prediction);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SerializeDeserializeNode_WithComplexTree_PreservesStructure()
         {
             // Arrange
@@ -122,7 +122,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(2.0, result.Right.Prediction);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void WriteValue_WithDouble_WritesCorrectly()
         {
             // Arrange
@@ -138,7 +138,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(123.456, reader.ReadDouble());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ReadValue_WithDouble_ReadsCorrectly()
         {
             // Arrange
@@ -155,7 +155,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(789.012, result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void WriteValue_WithFloat_WritesCorrectly()
         {
             // Arrange
@@ -171,7 +171,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(12.34f, reader.ReadSingle());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ReadValue_WithFloat_ReadsCorrectly()
         {
             // Arrange
@@ -188,7 +188,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(56.78f, result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void WriteValue_WithInt_WritesCorrectly()
         {
             // Arrange
@@ -204,7 +204,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(42, reader.ReadInt32());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ReadValue_WithInt_ReadsCorrectly()
         {
             // Arrange
@@ -221,7 +221,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(99, result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SerializeMatrix_WithSmallMatrix_SerializesCorrectly()
         {
             // Arrange
@@ -245,7 +245,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(3, reader.ReadInt32()); // columns
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DeserializeMatrix_WithValidData_ReturnsCorrectMatrix()
         {
             // Arrange
@@ -272,7 +272,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(4.0, result[1, 1]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DeserializeMatrix_WithWrongDimensions_ThrowsException()
         {
             // Arrange
@@ -288,7 +288,7 @@ namespace AiDotNetTests.UnitTests.Helpers
                 SerializationHelper<double>.DeserializeMatrix(reader, 3, 3));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SerializeMatrix_ToByteArray_WorksCorrectly()
         {
             // Arrange
@@ -306,7 +306,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.NotEmpty(bytes);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DeserializeMatrix_FromByteArray_ReturnsCorrectMatrix()
         {
             // Arrange
@@ -333,7 +333,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(6.0, result[2, 1]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SerializeVector_WithSmallVector_SerializesCorrectly()
         {
             // Arrange
@@ -350,7 +350,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(3, reader.ReadInt32()); // length
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DeserializeVector_WithValidData_ReturnsCorrectVector()
         {
             // Arrange
@@ -372,7 +372,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(4.0, result[3]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DeserializeVector_WithWrongLength_ThrowsException()
         {
             // Arrange
@@ -388,7 +388,7 @@ namespace AiDotNetTests.UnitTests.Helpers
                 SerializationHelper<double>.DeserializeVector(reader, 5));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SerializeVector_ToByteArray_WorksCorrectly()
         {
             // Arrange
@@ -402,7 +402,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.NotEmpty(bytes);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DeserializeVector_FromByteArray_ReturnsCorrectVector()
         {
             // Arrange
@@ -421,7 +421,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(5.0f, result[4]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SerializeTensor_WithSmallTensor_SerializesCorrectly()
         {
             // Arrange - use 1D tensor for simple index access
@@ -440,7 +440,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(1, reader.ReadInt32()); // rank (1D tensor)
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DeserializeTensor_WithValidData_ReturnsCorrectTensor()
         {
             // Arrange - use 1D tensor for simple index access
@@ -467,7 +467,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(4.0, result[3]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SerializeInterface_WithNullInstance_WritesEmptyString()
         {
             // Arrange
@@ -483,7 +483,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(string.Empty, reader.ReadString());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SerializeInterface_WithNonNullInstance_WritesTypeName()
         {
             // Arrange
@@ -501,7 +501,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Contains("String", typeName);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SerializeDeserialize_Matrix_RoundTrip_PreservesData()
         {
             // Arrange
@@ -522,7 +522,7 @@ namespace AiDotNetTests.UnitTests.Helpers
                     Assert.Equal(original[i, j], result[i, j]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SerializeDeserialize_Vector_RoundTrip_PreservesData()
         {
             // Arrange
@@ -538,7 +538,7 @@ namespace AiDotNetTests.UnitTests.Helpers
                 Assert.Equal(original[i], result[i]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SerializeDeserialize_Tensor_RoundTrip_PreservesData()
         {
             // Arrange - use 1D tensor for simple index access
@@ -561,7 +561,7 @@ namespace AiDotNetTests.UnitTests.Helpers
                 Assert.Equal(original[i], result[i]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void WriteValue_WithDecimal_WritesCorrectly()
         {
             // Arrange
@@ -577,7 +577,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(123.456m, reader.ReadDecimal());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ReadValue_WithDecimal_ReadsCorrectly()
         {
             // Arrange
@@ -594,7 +594,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(789.012m, result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void WriteValue_WithLong_WritesCorrectly()
         {
             // Arrange
@@ -610,7 +610,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(123456789L, reader.ReadInt64());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ReadValue_WithLong_ReadsCorrectly()
         {
             // Arrange

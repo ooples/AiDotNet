@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class NaiveBayesTestBase : ProbabilisticClassifierTestBase
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ZeroVarianceFeature_ShouldNotCrash()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -46,7 +46,7 @@ public abstract class NaiveBayesTestBase : ProbabilisticClassifierTestBase
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Predictions_ShouldBeValidLabels()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

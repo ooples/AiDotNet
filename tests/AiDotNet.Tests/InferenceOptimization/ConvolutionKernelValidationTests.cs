@@ -7,7 +7,7 @@ namespace AiDotNet.Tests.InferenceOptimization;
 
 public class ConvolutionKernelValidationTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Conv2D_Throws_WhenKernelInChannelsMismatch()
     {
         var kernel = new ConvolutionKernel();

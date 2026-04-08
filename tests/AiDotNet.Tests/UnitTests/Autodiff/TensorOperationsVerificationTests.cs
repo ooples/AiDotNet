@@ -39,7 +39,7 @@ public class TensorOperationsVerificationTests
             Epsilon = 1e-4
         };
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifyReLU_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
@@ -48,7 +48,7 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"ReLU gradient verification failed: {result}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifySigmoid_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
@@ -57,7 +57,7 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Sigmoid gradient verification failed: {result}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifyTanh_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
@@ -66,7 +66,7 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Tanh gradient verification failed: {result}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifyNegate_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
@@ -75,7 +75,7 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Negate gradient verification failed: {result}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifyExp_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
@@ -84,7 +84,7 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Exp gradient verification failed: {result}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifyLog_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
@@ -93,7 +93,7 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Log gradient verification failed: {result}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifySqrt_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
@@ -102,7 +102,7 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Sqrt gradient verification failed: {result}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifySquare_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
@@ -111,7 +111,7 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Square gradient verification failed: {result}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifyLeakyReLU_Float_Passes()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
@@ -120,7 +120,7 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"LeakyReLU gradient verification failed: {result}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifyAdd_Float_BothInputs_Pass()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
@@ -130,7 +130,7 @@ public class TensorOperationsVerificationTests
         Assert.True(result2.Passed, $"Add gradient (input2) verification failed: {result2}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifySubtract_Float_BothInputs_Pass()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
@@ -140,7 +140,7 @@ public class TensorOperationsVerificationTests
         Assert.True(result2.Passed, $"Subtract gradient (input2) verification failed: {result2}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifyElementwiseMultiply_Float_BothInputs_Pass()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
@@ -150,7 +150,7 @@ public class TensorOperationsVerificationTests
         Assert.True(result2.Passed, $"Multiply gradient (input2) verification failed: {result2}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifyElementwiseDivide_Float_BothInputs_Pass()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
@@ -160,7 +160,7 @@ public class TensorOperationsVerificationTests
         Assert.True(result2.Passed, $"Divide gradient (input2) verification failed: {result2}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifyAllOperations_Float_AllPass()
     {
         var verifier = new TensorOperationsVerification<float>(FloatConfig);
@@ -184,7 +184,7 @@ public class TensorOperationsVerificationTests
             Epsilon = 1e-5
         };
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifyReLU_Double_Passes()
     {
         var verifier = new TensorOperationsVerification<double>(DoubleConfig);
@@ -193,7 +193,7 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"ReLU gradient verification failed: {result}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifySigmoid_Double_Passes()
     {
         var verifier = new TensorOperationsVerification<double>(DoubleConfig);
@@ -202,7 +202,7 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Sigmoid gradient verification failed: {result}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifyTanh_Double_Passes()
     {
         var verifier = new TensorOperationsVerification<double>(DoubleConfig);
@@ -211,7 +211,7 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Passed, $"Tanh gradient verification failed: {result}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void VerifyAllOperations_Double_AllPass()
     {
         var verifier = new TensorOperationsVerification<double>(DoubleConfig);
@@ -224,7 +224,7 @@ public class TensorOperationsVerificationTests
 
     #region Configuration Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CustomConfiguration_UsesCorrectTolerances()
     {
         // Float tests require larger tolerances due to inherent precision limitations
@@ -261,7 +261,7 @@ public class TensorOperationsVerificationTests
 
     #region NumericalGradient Utility Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void NumericalGradient_ComputeForScalarFunction_CorrectForSquare()
     {
         // f(x) = sum(x^2), df/dx = 2x
@@ -287,7 +287,7 @@ public class TensorOperationsVerificationTests
         Assert.True(Math.Abs(gradient[2] - 6.0f) < 1e-2f, $"Expected 6.0, got {gradient[2]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void NumericalGradient_Compare_IdenticalTensors_Passes()
     {
         var tensor1 = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 3 });
@@ -303,7 +303,7 @@ public class TensorOperationsVerificationTests
         Assert.Equal(0.0, result.MaxRelativeError);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void NumericalGradient_Compare_DifferentTensors_FailsWithDetails()
     {
         var expected = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 3 });
@@ -320,7 +320,7 @@ public class TensorOperationsVerificationTests
         Assert.True(result.Errors.Count > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void NumericalGradient_Compare_ShapeMismatch_Fails()
     {
         var tensor1 = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 3 });

@@ -15,7 +15,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Mean Squared Error (MSE)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_HandComputed()
     {
         // MSE = (1/n) * sum((pred - actual)^2)
@@ -30,7 +30,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.25, mse, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_PerfectPrediction_IsZero()
     {
         var pred = new double[] { 1, 2, 3, 4, 5 };
@@ -38,7 +38,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.0, mse, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_Symmetry()
     {
         // MSE(a, b) = MSE(b, a)
@@ -48,7 +48,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(ComputeMSE(a, b), ComputeMSE(b, a), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_NonNegative()
     {
         var pred = new double[] { -5, 10, 0.5 };
@@ -58,7 +58,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.True(mse >= 0, $"MSE should be non-negative: {mse}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_LargerErrorsDominateSmaller()
     {
         // MSE penalizes large errors more heavily
@@ -77,7 +77,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Mean Absolute Error (MAE)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAE_HandComputed()
     {
         // MAE = (1/n) * sum(|pred - actual|)
@@ -91,7 +91,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(4.0 / 3.0, mae, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAE_PerfectPrediction_IsZero()
     {
         var pred = new double[] { 1, 2, 3 };
@@ -99,7 +99,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.0, mae, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAE_LessAffectedByOutliers_ThanMSE()
     {
         // With one outlier, MSE increases much more than MAE
@@ -120,7 +120,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Root Mean Squared Error (RMSE)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RMSE_HandComputed()
     {
         // RMSE = sqrt(MSE)
@@ -132,7 +132,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(1.0, rmse, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RMSE_SameUnitsAsPredictions()
     {
         // If predictions are in meters and error is 2m, RMSE should be close to 2
@@ -147,7 +147,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Huber Loss
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuberLoss_SmallError_EqualsHalfSquaredError()
     {
         // For |error| <= delta: L = 0.5 * error^2
@@ -159,7 +159,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.125, huber, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuberLoss_LargeError_IsLinear()
     {
         // For |error| > delta: L = delta * (|error| - 0.5 * delta)
@@ -171,7 +171,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(2.5, huber, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuberLoss_AtDelta_BothFormulasAgree()
     {
         // At error = delta, both formulas should give same result
@@ -187,7 +187,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.5, ComputeHuberLoss(error, delta), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuberLoss_AlwaysLessThanOrEqualToMSE()
     {
         // Huber loss is always <= 0.5 * error^2 (MSE per sample / 2)
@@ -203,7 +203,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuberLoss_NegativeError_SymmetricWithPositive()
     {
         double delta = 1.5;
@@ -219,7 +219,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Cross-Entropy Loss
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossEntropy_HandComputed()
     {
         // CE = -sum(actual * log(pred)) / n
@@ -233,7 +233,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(-Math.Log(0.7), ce, 1e-5);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossEntropy_PerfectPrediction_IsZero()
     {
         // If predicted prob for true class = 1.0, CE = -log(1) = 0
@@ -244,7 +244,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.0, ce, 1e-5);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossEntropy_WorstPrediction_IsHigh()
     {
         // If predicted prob for true class ≈ 0, CE is very high
@@ -256,7 +256,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.True(ce > 10, $"CE for worst prediction should be very high, got {ce}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossEntropy_UniformPrediction_EqualsLogK()
     {
         // Uniform distribution over K classes: CE = log(K)
@@ -272,7 +272,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Binary Cross-Entropy Loss
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryCE_HandComputed()
     {
         // BCE = -(y*log(p) + (1-y)*log(1-p))
@@ -284,7 +284,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(-Math.Log(0.9), bce, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryCE_NegativeCase_HandComputed()
     {
         // y=0, p=0.2 -> -(0*log(0.2) + 1*log(0.8)) = -log(0.8) ≈ 0.22314
@@ -295,7 +295,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(-Math.Log(0.8), bce, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryCE_PerfectPrediction_NearZero()
     {
         // y=1, p≈1 -> BCE ≈ 0
@@ -303,7 +303,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.True(bce < 1e-8, $"Perfect prediction BCE should be near zero: {bce}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BinaryCE_Symmetric_UnderLabelSwap()
     {
         // BCE(p, 1) + BCE(1-p, 0) should equal BCE(p, 1) + BCE(p, 0) ... not quite
@@ -319,7 +319,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Focal Loss
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FocalLoss_Gamma0_EqualsCrossEntropy()
     {
         // When gamma=0, focal loss = -alpha * log(p_t) = alpha * CE
@@ -334,7 +334,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(alpha * ce, focal, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FocalLoss_DownWeightsEasyExamples()
     {
         // For easy example (high p_t), focal loss is much smaller than CE
@@ -356,7 +356,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
             $"Easy example ratio {ratioEasy} should be less than hard example ratio {ratioHard}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FocalLoss_HandComputed()
     {
         // FL = -alpha * (1-p_t)^gamma * log(p_t)
@@ -375,7 +375,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(expected, focal, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FocalLoss_HigherGamma_MoreDownWeighting()
     {
         // Higher gamma -> more down-weighting of easy examples
@@ -394,7 +394,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Dice Loss
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiceLoss_PerfectOverlap_IsZero()
     {
         // Dice coefficient = 2*|A∩B| / (|A|+|B|) = 2*sum(pred*actual) / (sum(pred)+sum(actual))
@@ -405,7 +405,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.0, diceLoss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiceLoss_NoOverlap_IsOne()
     {
         // No overlap: pred ∩ actual = 0 -> Dice = 0, loss = 1
@@ -416,7 +416,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(1.0, diceLoss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiceLoss_HandComputed()
     {
         // pred = [0.8, 0.2, 0.9, 0.1], actual = [1, 0, 1, 0]
@@ -432,7 +432,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.15, diceLoss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiceLoss_BoundedBetween0And1()
     {
         // Dice loss is always in [0, 1] for non-negative inputs
@@ -455,7 +455,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region KL Divergence
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KLDivergence_IdenticalDistributions_IsZero()
     {
         // KL(P || P) = 0
@@ -464,7 +464,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.0, kl, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KLDivergence_HandComputed()
     {
         // KL(P || Q) = sum(P(i) * log(P(i)/Q(i)))
@@ -482,7 +482,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(expected, kl, 1e-5);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KLDivergence_NonNegative()
     {
         // Gibbs' inequality: KL(P||Q) >= 0 for all valid distributions P, Q
@@ -521,7 +521,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KLDivergence_Asymmetric()
     {
         // KL(P||Q) != KL(Q||P) in general
@@ -538,7 +538,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Hinge Loss
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HingeLoss_CorrectlyClassified_WithMargin()
     {
         // Hinge = max(0, 1 - y*f(x))
@@ -547,7 +547,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.0, hinge, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HingeLoss_MisclassifiedExample()
     {
         // y=1, f(x)=-0.5 -> max(0, 1-(-0.5)) = max(0, 1.5) = 1.5
@@ -555,7 +555,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(1.5, hinge, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HingeLoss_OnMargin()
     {
         // y=1, f(x)=1 -> max(0, 1-1) = 0
@@ -563,7 +563,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.0, hinge, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HingeLoss_NegativeClass()
     {
         // y=-1, f(x)=-2 -> max(0, 1-(-1)*(-2)) = max(0, 1-2) = 0 (correct)
@@ -579,7 +579,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Cosine Similarity Loss
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CosineSimilarityLoss_ParallelVectors_IsZero()
     {
         // Cosine similarity loss = 1 - cos(pred, actual)
@@ -591,7 +591,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CosineSimilarityLoss_OrthogonalVectors_IsOne()
     {
         // Orthogonal: cos = 0, loss = 1
@@ -602,7 +602,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(1.0, loss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CosineSimilarityLoss_OppositeVectors_IsTwo()
     {
         // Opposite: cos = -1, loss = 2
@@ -617,7 +617,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region R-Squared (Coefficient of Determination)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RSquared_PerfectPrediction_IsOne()
     {
         // R^2 = 1 - SS_res/SS_tot
@@ -627,7 +627,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(1.0, r2, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RSquared_MeanPrediction_IsZero()
     {
         // If pred = mean(actual) for all, SS_res = SS_tot, R^2 = 0
@@ -639,7 +639,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.0, r2, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RSquared_HandComputed()
     {
         // actual = [1, 2, 3], pred = [1.1, 2.2, 2.7]
@@ -654,7 +654,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.93, r2, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RSquared_CanBeNegative()
     {
         // R^2 < 0 when predictions are worse than the mean
@@ -669,7 +669,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Adjusted R-Squared
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdjustedRSquared_PenalizesMorePredictors()
     {
         // Adj R^2 = 1 - (1-R^2)(n-1)/(n-p-1) where p = number of predictors
@@ -684,7 +684,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
             $"Fewer predictors should give higher Adj R^2: {adjR2_5} vs {adjR2_20}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdjustedRSquared_HandComputed()
     {
         // R^2 = 0.9, n = 50, p = 4
@@ -703,7 +703,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Log-Cosh Loss
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogCoshLoss_HandComputed()
     {
         // log(cosh(x)) ≈ x^2/2 for small x, ≈ |x| - log(2) for large x
@@ -714,7 +714,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
             $"Small error: log(cosh({smallError})) = {logCoshSmall} should be close to {smallError * smallError / 2}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogCoshLoss_LargeError_ApproximatesAbsMinusLog2()
     {
         // For large |x|: log(cosh(x)) ≈ |x| - log(2)
@@ -726,7 +726,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
             $"Large error: log(cosh({largeError})) = {logCosh} should approximate |x|-log(2) = {approx}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogCoshLoss_Symmetric()
     {
         double error = 2.5;
@@ -735,7 +735,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(pos, neg, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogCoshLoss_SmoothTransition()
     {
         // LogCosh transitions smoothly between quadratic and linear behavior
@@ -758,7 +758,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Quantile Loss
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantileLoss_Median_EqualsHalfMAE()
     {
         // At quantile 0.5 (median), quantile loss = 0.5 * |error|
@@ -769,7 +769,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.5 * Math.Abs(error), qLoss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantileLoss_Overestimate_Vs_Underestimate()
     {
         // q > 0.5: penalizes underestimation more (wants to predict high)
@@ -793,7 +793,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
             $"q=0.1: overest {overestLossLow} should > underest {underestLossLow}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantileLoss_HandComputed()
     {
         // q=0.75, error=2.0 (actual - pred > 0: underestimate)
@@ -808,7 +808,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Elastic Net Loss
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNet_PureL1_IsMAEPenalty()
     {
         // ElasticNet = MSE + alpha * (l1_ratio * L1 + (1-l1_ratio) * L2)
@@ -822,7 +822,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.6, elastic, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNet_PureL2_IsRidgePenalty()
     {
         // With l1_ratio=0.0, it's MSE + alpha * L2
@@ -835,7 +835,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(1.4, elastic, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNet_Mixture_HandComputed()
     {
         // weights = [1, -2, 3], alpha = 0.5, l1_ratio = 0.5
@@ -857,7 +857,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Poisson Loss
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonLoss_HandComputed()
     {
         // Poisson loss = pred - actual * log(pred)
@@ -871,7 +871,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(expected, poissonLoss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonLoss_MinimizedAtPred_EqualsActual()
     {
         // The Poisson loss L = pred - actual*log(pred) is minimized when pred = actual
@@ -893,7 +893,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Jaccard Loss
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void JaccardLoss_PerfectOverlap_IsZero()
     {
         // Jaccard = |A∩B| / |A∪B|, Jaccard loss = 1 - Jaccard
@@ -903,7 +903,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void JaccardLoss_NoOverlap_IsOne()
     {
         var pred = new double[] { 1, 1, 0, 0 };
@@ -913,7 +913,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(1.0, loss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void JaccardLoss_HandComputed()
     {
         // pred = [0.8, 0.2, 0.9, 0.1], actual = [1, 0, 1, 0]
@@ -929,7 +929,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(1 - expectedJaccard, loss, 1e-4);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void JaccardLoss_AlwaysGreaterOrEqualToDiceLoss()
     {
         // For same inputs, Jaccard loss >= Dice loss (since Jaccard index <= Dice coefficient)
@@ -954,7 +954,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Contrastive Loss
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContrastiveLoss_SimilarPair_SmallDistance()
     {
         // L = y * d^2 + (1-y) * max(0, margin-d)^2
@@ -968,7 +968,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.25, loss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContrastiveLoss_DissimilarPair_LargeDistance()
     {
         // y=0 (dissimilar), d=2.0, margin=1.0
@@ -981,7 +981,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContrastiveLoss_DissimilarPair_SmallDistance()
     {
         // y=0 (dissimilar), d=0.3, margin=1.0
@@ -998,7 +998,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Triplet Loss
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TripletLoss_LargeNegativeMargin_IsZero()
     {
         // L = max(0, d(a,p) - d(a,n) + margin)
@@ -1011,7 +1011,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TripletLoss_ViolatesMargin()
     {
         // d(a,p)=2, d(a,n)=1.5, margin=1.0
@@ -1024,7 +1024,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(1.5, loss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TripletLoss_AtExactMargin_IsZero()
     {
         // d(a,p)=1, d(a,n)=2, margin=1
@@ -1041,7 +1041,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Squared Hinge Loss
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SquaredHingeLoss_HandComputed()
     {
         // Squared hinge = max(0, 1 - y*f(x))^2
@@ -1050,7 +1050,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(2.25, sqHinge, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SquaredHingeLoss_CorrectlyClassifiedWithMargin_IsZero()
     {
         // y=1, f(x)=2 -> max(0, 1-2)^2 = 0
@@ -1062,7 +1062,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
 
     #region Loss Function Comparison Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllLosses_ZeroError_ProducesMinimalLoss()
     {
         // Zero error should produce zero or minimal loss for most loss functions
@@ -1074,7 +1074,7 @@ public class FitnessCalculatorsDeepMathIntegrationTests
         Assert.Equal(0.0, ComputeJaccardLoss([1, 0, 1], [1, 0, 1]), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_AlwaysGreaterThanOrEqualTo_MAE_Squared_Over_N()
     {
         // By Jensen's inequality: MSE >= MAE^2 / n (not exactly, but MSE >= MAE^2)

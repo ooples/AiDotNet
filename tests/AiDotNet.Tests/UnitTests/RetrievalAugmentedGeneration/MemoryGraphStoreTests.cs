@@ -30,7 +30,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_InitializesEmptyStore()
         {
             // Arrange & Act
@@ -45,7 +45,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region AddNode Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddNode_WithValidNode_IncreasesNodeCount()
         {
             // Arrange
@@ -59,7 +59,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1, store.NodeCount);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddNode_WithNullNode_ThrowsArgumentNullException()
         {
             // Arrange
@@ -69,7 +69,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Throws<ArgumentNullException>(() => store.AddNode(null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddNode_WithDuplicateId_UpdatesExistingNode()
         {
             // Arrange
@@ -88,7 +88,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("Alice Updated", retrieved.GetProperty<string>("name"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddNode_WithMultipleLabels_IndexesCorrectly()
         {
             // Arrange
@@ -112,7 +112,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region AddEdge Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddEdge_WithValidEdge_IncreasesEdgeCount()
         {
             // Arrange
@@ -130,7 +130,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1, store.EdgeCount);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddEdge_WithNullEdge_ThrowsArgumentNullException()
         {
             // Arrange
@@ -140,7 +140,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Throws<ArgumentNullException>(() => store.AddEdge(null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddEdge_WithNonexistentSourceNode_ThrowsInvalidOperationException()
         {
             // Arrange
@@ -154,7 +154,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains("Source node 'nonexistent' does not exist", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddEdge_WithNonexistentTargetNode_ThrowsInvalidOperationException()
         {
             // Arrange
@@ -172,7 +172,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GetNode Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetNode_WithExistingId_ReturnsNode()
         {
             // Arrange
@@ -189,7 +189,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("PERSON", retrieved.Label);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetNode_WithNonexistentId_ReturnsNull()
         {
             // Arrange
@@ -206,7 +206,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GetEdge Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetEdge_WithExistingId_ReturnsEdge()
         {
             // Arrange
@@ -228,7 +228,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("node2", retrieved.TargetId);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetEdge_WithNonexistentId_ReturnsNull()
         {
             // Arrange
@@ -245,7 +245,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region RemoveNode Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RemoveNode_WithExistingNode_RemovesNodeAndReturnsTrue()
         {
             // Arrange
@@ -262,7 +262,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Null(store.GetNode("node1"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RemoveNode_WithNonexistentNode_ReturnsFalse()
         {
             // Arrange
@@ -275,7 +275,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.False(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RemoveNode_RemovesAllConnectedEdges()
         {
             // Arrange
@@ -305,7 +305,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(store.GetEdge(edge2.Id));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RemoveNode_RemovesFromLabelIndex()
         {
             // Arrange
@@ -328,7 +328,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region RemoveEdge Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RemoveEdge_WithExistingEdge_RemovesEdgeAndReturnsTrue()
         {
             // Arrange
@@ -349,7 +349,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Null(store.GetEdge(edge.Id));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RemoveEdge_WithNonexistentEdge_ReturnsFalse()
         {
             // Arrange
@@ -362,7 +362,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.False(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RemoveEdge_DoesNotRemoveNodes()
         {
             // Arrange
@@ -387,7 +387,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GetOutgoingEdges Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetOutgoingEdges_WithExistingEdges_ReturnsCorrectEdges()
         {
             // Arrange
@@ -415,7 +415,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains(outgoing, e => e.Id == edge2.Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetOutgoingEdges_WithNoEdges_ReturnsEmpty()
         {
             // Arrange
@@ -430,7 +430,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(outgoing);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetOutgoingEdges_WithNonexistentNode_ReturnsEmpty()
         {
             // Arrange
@@ -447,7 +447,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GetIncomingEdges Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetIncomingEdges_WithExistingEdges_ReturnsCorrectEdges()
         {
             // Arrange
@@ -475,7 +475,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains(incoming, e => e.Id == edge2.Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetIncomingEdges_WithNoEdges_ReturnsEmpty()
         {
             // Arrange
@@ -490,7 +490,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(incoming);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetIncomingEdges_WithNonexistentNode_ReturnsEmpty()
         {
             // Arrange
@@ -507,7 +507,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GetNodesByLabel Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetNodesByLabel_WithMatchingNodes_ReturnsCorrectNodes()
         {
             // Arrange
@@ -528,7 +528,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains(persons, n => n.Id == "person2");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetNodesByLabel_WithNoMatches_ReturnsEmpty()
         {
             // Arrange
@@ -543,7 +543,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(companies);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetNodesByLabel_WithNonexistentLabel_ReturnsEmpty()
         {
             // Arrange
@@ -560,7 +560,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GetAllNodes Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetAllNodes_WithMultipleNodes_ReturnsAllNodes()
         {
             // Arrange
@@ -582,7 +582,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains(allNodes, n => n.Id == "node3");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetAllNodes_WithEmptyStore_ReturnsEmpty()
         {
             // Arrange
@@ -599,7 +599,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GetAllEdges Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetAllEdges_WithMultipleEdges_ReturnsAllEdges()
         {
             // Arrange
@@ -628,7 +628,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Contains(allEdges, e => e.Id == edge3.Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetAllEdges_WithEmptyStore_ReturnsEmpty()
         {
             // Arrange
@@ -645,7 +645,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Clear Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Clear_RemovesAllNodesAndEdges()
         {
             // Arrange
@@ -667,7 +667,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(store.GetAllEdges());
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Clear_OnEmptyStore_DoesNotThrow()
         {
             // Arrange
@@ -683,7 +683,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Integration Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ComplexGraph_WithMultipleOperations_MaintainsConsistency()
         {
             // Arrange

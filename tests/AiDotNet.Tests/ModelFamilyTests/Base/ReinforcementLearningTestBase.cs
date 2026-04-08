@@ -27,7 +27,7 @@ public abstract class ReinforcementLearningTestBase
         return state;
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ActionSelection_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -48,7 +48,7 @@ public abstract class ReinforcementLearningTestBase
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Policy_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -63,7 +63,7 @@ public abstract class ReinforcementLearningTestBase
             Assert.Equal(action1[i], action2[i]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DifferentStates_DifferentActions()
     {
         var model = CreateModel();
@@ -93,7 +93,7 @@ public abstract class ReinforcementLearningTestBase
             "RL agent produces identical actions for different states — policy is degenerate.");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Training_ShouldChangeParameters()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -122,7 +122,7 @@ public abstract class ReinforcementLearningTestBase
         Assert.True(anyChanged, "RL agent parameters unchanged after training.");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Clone_ShouldProduceSamePolicy()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -136,7 +136,7 @@ public abstract class ReinforcementLearningTestBase
             Assert.Equal(action1[i], action2[i]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Metadata_ShouldExistAfterTraining()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -147,7 +147,7 @@ public abstract class ReinforcementLearningTestBase
         Assert.NotNull(model.GetModelMetadata());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Parameters_ShouldBeNonEmpty()
     {
         var model = CreateModel();

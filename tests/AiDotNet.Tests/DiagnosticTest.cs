@@ -15,7 +15,7 @@ public class DiagnosticTest
         _output = output;
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DiagnoseNumericOperations()
     {
         // Test MathHelper directly
@@ -39,7 +39,7 @@ public class DiagnosticTest
         Assert.Equal(0.001, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DiagnoseIsValid()
     {
         var config = new ContinualLearnerConfig<double>();

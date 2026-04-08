@@ -12,7 +12,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
 {
     #region Determinism Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_SameInputs_ProducesSameKey()
     {
         // Arrange
@@ -27,7 +27,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Equal(key1, key2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_MultipleCalls_AlwaysSameResult()
     {
         // Arrange
@@ -45,7 +45,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Single(keys);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_ReturnsValidSha256HexString()
     {
         // Arrange
@@ -66,7 +66,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
 
     #region Uniqueness Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_DifferentParameters_ProducesDifferentKeys()
     {
         // Arrange
@@ -82,7 +82,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.NotEqual(key1, key2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_DifferentDescriptors_ProducesDifferentKeys()
     {
         // Arrange
@@ -98,7 +98,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.NotEqual(key1, key2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_DifferentParameterCounts_ProducesDifferentKeys()
     {
         // Arrange
@@ -114,7 +114,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.NotEqual(key1, key2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_LargeDataset_KeysAreUnique()
     {
         // Arrange - Generate 1000 different parameter sets
@@ -136,7 +136,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
 
     #region Null Validation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_NullParameters_ThrowsArgumentNullException()
     {
         // Arrange
@@ -147,7 +147,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
             DeterministicCacheKeyGenerator.GenerateKey<double>(null!, inputDescriptor));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_NullDescriptor_ThrowsArgumentNullException()
     {
         // Arrange
@@ -162,7 +162,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
 
     #region CreateInputDataDescriptor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateInputDataDescriptor_TrainOnly_ReturnsCorrectFormat()
     {
         // Arrange
@@ -179,7 +179,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Contains("Vector(100)", descriptor);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateInputDataDescriptor_WithValidation_IncludesValidationInfo()
     {
         // Arrange
@@ -198,7 +198,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Contains("Matrix(20,10)", descriptor);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateInputDataDescriptor_WithAllDatasets_IncludesAllInfo()
     {
         // Arrange
@@ -219,7 +219,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Contains("test:", descriptor);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateInputDataDescriptor_SameInputs_ProducesSameDescriptor()
     {
         // Arrange
@@ -238,7 +238,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Equal(descriptor1, descriptor2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateInputDataDescriptor_DifferentShapes_ProducesDifferentDescriptors()
     {
         // Arrange
@@ -261,7 +261,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_EmptyParameters_StillGeneratesValidKey()
     {
         // Arrange
@@ -276,7 +276,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Equal(64, key.Length); // Still valid SHA-256
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_VeryLargeParameters_GeneratesValidKey()
     {
         // Arrange - Create a large parameter vector
@@ -296,7 +296,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Equal(64, key.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_ExtremeValues_HandlesCorrectly()
     {
         // Arrange - Test with extreme values
@@ -318,7 +318,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Equal(64, key.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_NaNAndInfinity_ProducesConsistentKeys()
     {
         // Arrange
@@ -334,7 +334,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
         Assert.Equal(key1, key2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_WhitespaceInDescriptor_HandlesCorrectly()
     {
         // Arrange
@@ -354,7 +354,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
 
     #region Culture Invariance Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerateKey_FloatingPointValues_CultureInvariant()
     {
         // Arrange - Values that might format differently in different cultures

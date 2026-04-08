@@ -97,7 +97,7 @@ namespace AiDotNet.Tests.Audio.Classification
 
         // ==================== GenreClassifier Tests ====================
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GenreClassifier_Classify_ReturnsResult()
         {
             // Arrange
@@ -113,7 +113,7 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.True(result.Confidence >= 0 && result.Confidence <= 1);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GenreClassifier_Classify_HasAllProbabilities()
         {
             // Arrange
@@ -132,7 +132,7 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.True(Math.Abs(sum - 1.0) < 0.01, $"Probabilities sum {sum} should be ~1");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GenreClassifier_Classify_TopPredictionsAreOrdered()
         {
             // Arrange
@@ -153,7 +153,7 @@ namespace AiDotNet.Tests.Audio.Classification
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GenreClassifier_Genres_HasStandardGenres()
         {
             // Arrange
@@ -167,7 +167,7 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.Contains("classical", classifier.Genres);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GenreClassifier_Features_AreExtracted()
         {
             // Arrange
@@ -186,7 +186,7 @@ namespace AiDotNet.Tests.Audio.Classification
 
         // ==================== AudioEventDetector Tests ====================
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AudioEventDetector_Detect_ReturnsEvents()
         {
             // Arrange
@@ -201,7 +201,7 @@ namespace AiDotNet.Tests.Audio.Classification
             // Should detect at least something (the threshold is 0.3 by default)
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AudioEventDetector_Events_HaveValidTimestamps()
         {
             // Arrange
@@ -223,7 +223,7 @@ namespace AiDotNet.Tests.Audio.Classification
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AudioEventDetector_DetectFrame_ReturnsScores()
         {
             // Arrange
@@ -244,7 +244,7 @@ namespace AiDotNet.Tests.Audio.Classification
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AudioEventDetector_DetectTopK_ReturnsCorrectCount()
         {
             // Arrange
@@ -259,7 +259,7 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.True(topK.Count <= 5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AudioEventDetector_EventLabels_HasCommonEvents()
         {
             // Arrange
@@ -273,7 +273,7 @@ namespace AiDotNet.Tests.Audio.Classification
 
         // ==================== SceneClassifier Tests ====================
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SceneClassifier_Classify_ReturnsResult()
         {
             // Arrange
@@ -290,7 +290,7 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.True(result.Confidence >= 0 && result.Confidence <= 1);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SceneClassifier_Classify_HasAllProbabilities()
         {
             // Arrange
@@ -309,7 +309,7 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.True(Math.Abs(sum - 1.0) < 0.01, $"Probabilities sum {sum} should be ~1");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SceneClassifier_ClassifyCategory_ReturnsCategory()
         {
             // Arrange
@@ -324,7 +324,7 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.True(confidence >= 0 && confidence <= 1);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SceneClassifier_Scenes_HasStandardScenes()
         {
             // Arrange
@@ -335,7 +335,7 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.True(classifier.Scenes.Count >= 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SceneClassifier_Features_AreExtracted()
         {
             // Arrange
@@ -352,7 +352,7 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.NotNull(result.Features.BandEnergies);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SceneClassifier_TopPredictions_AreOrdered()
         {
             // Arrange
@@ -375,7 +375,7 @@ namespace AiDotNet.Tests.Audio.Classification
 
         // ==================== Dispose Tests ====================
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GenreClassifier_Dispose_DoesNotThrow()
         {
             // Arrange
@@ -386,7 +386,7 @@ namespace AiDotNet.Tests.Audio.Classification
             // Should not throw
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AudioEventDetector_Dispose_DoesNotThrow()
         {
             // Arrange
@@ -397,7 +397,7 @@ namespace AiDotNet.Tests.Audio.Classification
             // Should not throw
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SceneClassifier_Dispose_DoesNotThrow()
         {
             // Arrange
@@ -408,7 +408,7 @@ namespace AiDotNet.Tests.Audio.Classification
             // Should not throw
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GenreClassifier_AfterDispose_ThrowsObjectDisposedException()
         {
             // Arrange
@@ -420,7 +420,7 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.Throws<ObjectDisposedException>(() => classifier.Classify(audio));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AudioEventDetector_AfterDispose_ThrowsObjectDisposedException()
         {
             // Arrange
@@ -432,7 +432,7 @@ namespace AiDotNet.Tests.Audio.Classification
             Assert.Throws<ObjectDisposedException>(() => detector.Detect(audio));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SceneClassifier_AfterDispose_ThrowsObjectDisposedException()
         {
             // Arrange

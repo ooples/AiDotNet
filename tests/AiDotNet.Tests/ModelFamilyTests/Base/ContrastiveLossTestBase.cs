@@ -20,7 +20,7 @@ public abstract class ContrastiveLossTestBase
     // INVARIANT 1: Loss is finite for normal inputs
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void Calculate_ShouldBeFinite()
     {
         var loss = CreateLoss();
@@ -48,7 +48,7 @@ public abstract class ContrastiveLossTestBase
     // INVARIANT 2: Loss is non-negative
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void Calculate_ShouldBeNonNegative()
     {
         var loss = CreateLoss();
@@ -73,7 +73,7 @@ public abstract class ContrastiveLossTestBase
     // INVARIANT 3: Higher target logits should reduce loss
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void Calculate_HigherTargetLogits_ShouldReduceLoss()
     {
         var loss = CreateLoss();
@@ -97,7 +97,7 @@ public abstract class ContrastiveLossTestBase
     // INVARIANT 4: Gradients are finite
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateDerivative_ShouldBeFinite()
     {
         var loss = CreateLoss();
@@ -130,7 +130,7 @@ public abstract class ContrastiveLossTestBase
     // INVARIANT 5: Dimension validation
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void Calculate_MismatchedDimensions_ShouldThrow()
     {
         var loss = CreateLoss();

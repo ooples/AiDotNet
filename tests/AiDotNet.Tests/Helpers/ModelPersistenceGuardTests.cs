@@ -86,7 +86,7 @@ public class ModelPersistenceGuardTests : IDisposable
         manager.Reset();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EnforceBeforeSave_WithLicenseKey_DoesNotThrow()
     {
         Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
@@ -95,7 +95,7 @@ public class ModelPersistenceGuardTests : IDisposable
         ModelPersistenceGuard.EnforceBeforeSave();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EnforceBeforeLoad_WithLicenseKey_DoesNotThrow()
     {
         Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
@@ -103,7 +103,7 @@ public class ModelPersistenceGuardTests : IDisposable
         ModelPersistenceGuard.EnforceBeforeLoad();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EnforceBeforeSerialize_WithLicenseKey_DoesNotThrow()
     {
         Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
@@ -111,7 +111,7 @@ public class ModelPersistenceGuardTests : IDisposable
         ModelPersistenceGuard.EnforceBeforeSerialize();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EnforceBeforeDeserialize_WithLicenseKey_DoesNotThrow()
     {
         Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
@@ -119,7 +119,7 @@ public class ModelPersistenceGuardTests : IDisposable
         ModelPersistenceGuard.EnforceBeforeDeserialize();
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EnforceBeforeSave_WithoutLicense_CountsTrialOperation()
     {
         ClearAllLicenseSources();
@@ -134,7 +134,7 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.Equal(1, status.OperationsUsed);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EnforceBeforeLoad_WithoutLicense_CountsTrialOperation()
     {
         ClearAllLicenseSources();
@@ -147,7 +147,7 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.Equal(1, status.OperationsUsed);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EnforceBeforeSave_ExhaustedTrial_ThrowsLicenseRequiredException()
     {
         ClearAllLicenseSources();
@@ -164,7 +164,7 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSave());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EnforceBeforeLoad_ExhaustedTrial_ThrowsLicenseRequiredException()
     {
         ClearAllLicenseSources();
@@ -179,7 +179,7 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeLoad());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EnforceBeforeSerialize_ExhaustedTrial_ThrowsLicenseRequiredException()
     {
         ClearAllLicenseSources();
@@ -194,7 +194,7 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSerialize());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EnforceBeforeDeserialize_ExhaustedTrial_ThrowsLicenseRequiredException()
     {
         ClearAllLicenseSources();
@@ -209,7 +209,7 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeDeserialize());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InternalOperation_SuppressesSerializeEnforcement()
     {
         ClearAllLicenseSources();
@@ -230,7 +230,7 @@ public class ModelPersistenceGuardTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InternalOperation_SuppressesDeserializeEnforcement()
     {
         ClearAllLicenseSources();
@@ -248,7 +248,7 @@ public class ModelPersistenceGuardTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InternalOperation_DoesNotSuppressSaveEnforcement()
     {
         ClearAllLicenseSources();
@@ -267,7 +267,7 @@ public class ModelPersistenceGuardTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InternalOperation_DoesNotSuppressLoadEnforcement()
     {
         ClearAllLicenseSources();
@@ -285,7 +285,7 @@ public class ModelPersistenceGuardTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InternalOperation_ScopeResetsOnDispose()
     {
         ClearAllLicenseSources();
@@ -308,7 +308,7 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSerialize());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InternalOperation_ThreadIsolation()
     {
         ClearAllLicenseSources();
@@ -347,7 +347,7 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.True(otherThreadThrew, "InternalOperation flag leaked to another thread");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LicenseKey_BypassesTrial_NoOperationCounted()
     {
         ClearAllLicenseSources();
@@ -373,7 +373,7 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.False(status.IsExpired);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EnforceBeforeSave_AlwaysEnforces_EvenInInternalScope()
     {
         ClearAllLicenseSources();
@@ -399,7 +399,7 @@ public class ModelPersistenceGuardTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EnforceBeforeSerialize_OutsideScope_CountsOperation()
     {
         ClearAllLicenseSources();
@@ -421,7 +421,7 @@ public class ModelPersistenceGuardTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EnforceBeforeSerialize_InsideScope_DoesNotCountOperation()
     {
         ClearAllLicenseSources();
@@ -449,7 +449,7 @@ public class ModelPersistenceGuardTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void WhitespaceOnlyLicenseKey_TreatedAsNoKey()
     {
         ClearAllLicenseSources();
@@ -468,7 +468,7 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSave());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EmptyLicenseKey_TreatedAsNoKey()
     {
         ClearAllLicenseSources();

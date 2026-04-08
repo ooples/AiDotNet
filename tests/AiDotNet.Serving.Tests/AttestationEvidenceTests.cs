@@ -5,7 +5,7 @@ namespace AiDotNet.Serving.Tests;
 
 public class AttestationEvidenceTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Defaults_AreEmptyStrings()
     {
         var evidence = new AttestationEvidence();
@@ -16,7 +16,7 @@ public class AttestationEvidenceTests
         Assert.Equal(string.Empty, evidence.AttestationToken);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Properties_CanBeSet()
     {
         var evidence = new AttestationEvidence

@@ -17,7 +17,7 @@ public class LossFunctionDeepMathIntegrationTests3
     // L = (1/n) * Σ(d²) - (λ/n²) * (Σd)²  where d = log(pred) - log(actual)
     // ====================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScaleInvariantDepth_PerfectPrediction_ReturnsZero()
     {
         var loss = new ScaleInvariantDepthLoss<double>(0.5);
@@ -27,7 +27,7 @@ public class LossFunctionDeepMathIntegrationTests3
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScaleInvariantDepth_HandCalculated()
     {
         var loss = new ScaleInvariantDepthLoss<double>(0.5);
@@ -45,7 +45,7 @@ public class LossFunctionDeepMathIntegrationTests3
         Assert.Equal(expected, result, 1e-4);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScaleInvariantDepth_ScaleInvariant_WithLambda1()
     {
         // With lambda=1.0, uniform scaling should not affect the loss
@@ -60,7 +60,7 @@ public class LossFunctionDeepMathIntegrationTests3
         Assert.Equal(loss1, loss2, 1e-4);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScaleInvariantDepth_NonNegative()
     {
         var loss = new ScaleInvariantDepthLoss<double>(0.5);
@@ -70,7 +70,7 @@ public class LossFunctionDeepMathIntegrationTests3
         Assert.True(result >= -Tol, $"ScaleInvariantDepth loss should be >= 0, got {result}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScaleInvariantDepth_NumericalGradient()
     {
         var loss = new ScaleInvariantDepthLoss<double>(0.5);
@@ -100,7 +100,7 @@ public class LossFunctionDeepMathIntegrationTests3
     // QuantumLoss
     // ====================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Quantum_PerfectPrediction_ReturnsZero()
     {
         var loss = new QuantumLoss<double>();
@@ -111,7 +111,7 @@ public class LossFunctionDeepMathIntegrationTests3
         Assert.Equal(0.0, result, 1e-4);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Quantum_NonNegative()
     {
         var loss = new QuantumLoss<double>();
@@ -126,7 +126,7 @@ public class LossFunctionDeepMathIntegrationTests3
     // RealESRGANLoss: combination of L1 + perceptual + adversarial
     // ====================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RealESRGAN_PerfectPrediction_ReturnsZero()
     {
         var loss = new RealESRGANLoss<double>();
@@ -136,7 +136,7 @@ public class LossFunctionDeepMathIntegrationTests3
         Assert.Equal(0.0, result, 1e-4);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RealESRGAN_NonNegative()
     {
         var loss = new RealESRGANLoss<double>();

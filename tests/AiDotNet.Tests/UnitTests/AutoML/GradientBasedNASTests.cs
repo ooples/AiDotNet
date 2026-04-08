@@ -13,7 +13,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
 {
     public class GradientBasedNASTests
     {
-        [Fact]
+        [Fact(Timeout = 300000)]
         public void SuperNet_Constructor_Initializes_Correctly()
         {
             // Arrange & Act
@@ -27,7 +27,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.True(supernet.ParameterCount > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 300000)]
         public void SuperNet_Implements_IFullModel_Interface()
         {
             // Arrange
@@ -48,7 +48,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.NotSame(supernet, clone);
         }
 
-        [Fact]
+        [Fact(Timeout = 300000)]
         public void SuperNet_Predict_Returns_Valid_Output()
         {
             // Arrange
@@ -66,7 +66,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         }
 
-        [Fact]
+        [Fact(Timeout = 300000)]
         public void SuperNet_GetArchitectureParameters_Returns_Valid_Alphas()
         {
             // Arrange
@@ -85,7 +85,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.True(alphas[3].Rows == 4); // Fourth node has 4 previous nodes
         }
 
-        [Fact]
+        [Fact(Timeout = 300000)]
         public void SuperNet_DeriveArchitecture_Returns_Valid_Architecture()
         {
             // Arrange
@@ -103,7 +103,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.Contains("Architecture with", description);
         }
 
-        [Fact]
+        [Fact(Timeout = 300000)]
         public void SuperNet_ComputeValidationLoss_Returns_Numeric_Value()
         {
             // Arrange
@@ -124,7 +124,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.True(loss >= 0.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 300000)]
         public void SuperNet_BackwardArchitecture_Updates_Gradients()
         {
             // Arrange
@@ -147,7 +147,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.Equal(2, gradients.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 300000)]
         public void SuperNet_BackwardWeights_Updates_Weight_Gradients()
         {
             // Arrange
@@ -172,7 +172,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.NotNull(weightGrads);
         }
 
-        [Fact]
+        [Fact(Timeout = 300000)]
         public async Task NeuralArchitectureSearch_GradientBased_Completes_Successfully()
         {
             // Arrange
@@ -210,7 +210,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.True(nas.BestScore >= 0.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 300000)]
         public async Task NeuralArchitectureSearch_RandomSearch_Completes_Successfully()
         {
             // Arrange
@@ -246,7 +246,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.Equal(AutoMLStatus.Completed, nas.Status);
         }
 
-        [Fact]
+        [Fact(Timeout = 300000)]
         public void SearchSpace_Has_Valid_Default_Operations()
         {
             // Arrange & Act
@@ -259,7 +259,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.True(searchSpace.MaxNodes > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 300000)]
         public void Architecture_AddOperation_Increases_NodeCount()
         {
             // Arrange
@@ -275,7 +275,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.Equal(3, arch.NodeCount);
         }
 
-        [Fact]
+        [Fact(Timeout = 300000)]
         public void Architecture_GetDescription_Returns_Valid_String()
         {
             // Arrange
@@ -293,7 +293,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.Contains("maxpool", description);
         }
 
-        [Fact]
+        [Fact(Timeout = 300000)]
         public void SuperNet_SetParameters_And_GetParameters_Roundtrip()
         {
             // Arrange
@@ -317,7 +317,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 300000)]
         public void SuperNet_WithParameters_Creates_New_Instance()
         {
             // Arrange
@@ -333,7 +333,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             Assert.NotSame(supernet, newSupernet);
         }
 
-        [Fact]
+        [Fact(Timeout = 300000)]
         public void SuperNet_Clone_Creates_Independent_Copy()
         {
             // Arrange

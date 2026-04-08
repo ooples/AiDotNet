@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public sealed class ProgramSynthesisOptionsTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Defaults_AreIndustryStandardAndStable()
     {
         var options = new ProgramSynthesisOptions();

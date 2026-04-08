@@ -38,7 +38,7 @@ public class TargetEncoderDeepMathIntegrationTests
     /// Category 2: count=2, sum=70, mean=35
     ///   smoothed = (2*35 + 1*25) / (2+1) = (70+25)/3 = 95/3 ≈ 31.666...
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_SimpleSmoothing_HandComputed()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0);
@@ -60,7 +60,7 @@ public class TargetEncoderDeepMathIntegrationTests
     /// With smoothing=0, encoding should equal the exact category mean (no smoothing).
     /// Formula: (count * mean + 0 * global) / (count + 0) = mean
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_SmoothingZero_ExactCategoryMean()
     {
         var encoder = new TargetEncoder<double>(smoothing: 0.0);
@@ -81,7 +81,7 @@ public class TargetEncoderDeepMathIntegrationTests
     /// With very large smoothing, encoding should approach global mean.
     /// As smoothing → ∞: smoothed = (count*mean + smoothing*global) / (count+smoothing) → global
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_VeryLargeSmoothing_ApproachesGlobalMean()
     {
         var encoder = new TargetEncoder<double>(smoothing: 10000.0);
@@ -101,7 +101,7 @@ public class TargetEncoderDeepMathIntegrationTests
     /// Category 1: mean=25, Category 2: mean=25, global=25
     /// smoothed = (2*25 + 1*25) / (2+1) = 75/3 = 25
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_SameTargetMean_EncodedEqualsGlobalMean()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0);
@@ -133,7 +133,7 @@ public class TargetEncoderDeepMathIntegrationTests
     /// Category 3: count=1, sum=60, mean=60
     ///   smoothed = (1*60 + 2*35) / (1+2) = (60+70)/3 = 130/3 ≈ 43.333...
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_3Categories_Smoothing2_HandComputed()
     {
         var encoder = new TargetEncoder<double>(smoothing: 2.0);
@@ -157,7 +157,7 @@ public class TargetEncoderDeepMathIntegrationTests
     /// Weight of global_mean = smoothing/(count+smoothing)
     /// These weights always sum to 1.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_WeightsSumToOne()
     {
         double smoothing = 3.0;
@@ -199,7 +199,7 @@ public class TargetEncoderDeepMathIntegrationTests
     /// Categories with fewer samples than minSamplesLeaf should use global mean.
     /// With minSamplesLeaf=3: category with count=1 uses global mean.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_MinSamplesLeaf_RareCategoryUsesGlobalMean()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0, minSamplesLeaf: 3);
@@ -226,7 +226,7 @@ public class TargetEncoderDeepMathIntegrationTests
     /// <summary>
     /// Unknown category with UseGlobalMean mode should return global target mean.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_UnknownCategory_UseGlobalMean()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0, handleUnknown: TargetEncoderHandleUnknown.UseGlobalMean);
@@ -244,7 +244,7 @@ public class TargetEncoderDeepMathIntegrationTests
     /// <summary>
     /// Unknown category with Error mode should throw.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_UnknownCategory_Error_Throws()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0, handleUnknown: TargetEncoderHandleUnknown.Error);
@@ -265,7 +265,7 @@ public class TargetEncoderDeepMathIntegrationTests
     /// global_mean = category_mean = some value
     /// smoothed = (count * mean + smoothing * mean) / (count + smoothing) = mean
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_SingleCategory_SmoothedEqualsGlobalMean()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0);
@@ -289,7 +289,7 @@ public class TargetEncoderDeepMathIntegrationTests
     /// Cat 1 smoothed = (3 * 2/3 + 1 * 0.5) / (3+1) = (2 + 0.5) / 4 = 2.5/4 = 0.625
     /// Cat 2 smoothed = (3 * 1/3 + 1 * 0.5) / (3+1) = (1 + 0.5) / 4 = 1.5/4 = 0.375
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_BinaryTarget_SmoothedProbabilities()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0);
@@ -308,7 +308,7 @@ public class TargetEncoderDeepMathIntegrationTests
     /// <summary>
     /// Target length must match data rows.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_MismatchedLength_Throws()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0);
@@ -320,7 +320,7 @@ public class TargetEncoderDeepMathIntegrationTests
     /// <summary>
     /// Negative smoothing should throw.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_NegativeSmoothing_Throws()
     {
         Assert.Throws<ArgumentException>(() => new TargetEncoder<double>(smoothing: -1.0));
@@ -329,7 +329,7 @@ public class TargetEncoderDeepMathIntegrationTests
     /// <summary>
     /// Pass-through column should preserve original values.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TargetEncoder_PassThroughColumn_PreservesValues()
     {
         var encoder = new TargetEncoder<double>(smoothing: 1.0, columnIndices: new[] { 0 });

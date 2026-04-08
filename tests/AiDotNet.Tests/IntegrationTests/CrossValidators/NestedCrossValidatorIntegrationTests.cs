@@ -67,7 +67,7 @@ public class NestedCrossValidatorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithValidators_CreatesNestedValidator()
     {
         // Arrange
@@ -84,7 +84,7 @@ public class NestedCrossValidatorIntegrationTests
         Assert.NotNull(nestedValidator);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithOptions_CreatesNestedValidator()
     {
         // Arrange
@@ -106,7 +106,7 @@ public class NestedCrossValidatorIntegrationTests
 
     #region Outer Loop Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_ReturnsCorrectNumberOfOuterFolds()
     {
         // Arrange
@@ -135,7 +135,7 @@ public class NestedCrossValidatorIntegrationTests
 
     #region No Data Leakage Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_OuterFoldsHaveNoOverlap()
     {
         // Arrange
@@ -172,7 +172,7 @@ public class NestedCrossValidatorIntegrationTests
 
     #region Result Structure Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_ReturnsValidFoldResults()
     {
         // Arrange
@@ -206,7 +206,7 @@ public class NestedCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_RecordsTotalTimeIncludingInnerLoops()
     {
         // Arrange
@@ -240,7 +240,7 @@ public class NestedCrossValidatorIntegrationTests
 
     #region Model Selection Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_UsesModelSelectorForEachOuterFold()
     {
         // Arrange
@@ -277,7 +277,7 @@ public class NestedCrossValidatorIntegrationTests
 
     #region Different Validator Combinations Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_WorksWithDifferentValidatorTypes()
     {
         // Arrange - Use KFold for outer and Standard for inner
@@ -306,7 +306,7 @@ public class NestedCrossValidatorIntegrationTests
 
     #region Training Index Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_TrainingIndicesAreFromOuterFold()
     {
         // Arrange

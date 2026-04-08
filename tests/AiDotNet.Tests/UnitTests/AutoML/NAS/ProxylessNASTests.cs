@@ -12,7 +12,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class ProxylessNASTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ProxylessNAS_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
@@ -23,7 +23,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(proxyless);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ProxylessNAS_GetArchitectureParameters_ReturnsValidList()
         {
             // Arrange
@@ -38,7 +38,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(4, params_.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ProxylessNAS_GetArchitectureParameters_HasCorrectShape()
         {
             // Arrange
@@ -54,7 +54,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(3, params_[2].Rows); // Third node connects to 3 previous nodes
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ProxylessNAS_GetArchitectureGradients_MatchesParameterCount()
         {
             // Arrange
@@ -74,7 +74,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ProxylessNAS_BinarizePaths_WithBinarization_ReturnsOneHotVectors()
         {
             // Arrange
@@ -109,7 +109,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ProxylessNAS_BinarizePaths_WithoutBinarization_ReturnsSoftmax()
         {
             // Arrange
@@ -140,7 +140,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ProxylessNAS_ComputeExpectedLatency_ReturnsNonNegativeValue()
         {
             // Arrange
@@ -154,7 +154,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(latency >= 0.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ProxylessNAS_ComputeTotalLoss_IncludesLatencyPenalty()
         {
             // Arrange
@@ -169,7 +169,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(totalLoss >= taskLoss - 0.01); // Should include latency term
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ProxylessNAS_DeriveArchitecture_ReturnsValidArchitecture()
         {
             // Arrange
@@ -184,7 +184,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(architecture.Operations.Count > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ProxylessNAS_DeriveArchitecture_SelectsTopTwoEdges()
         {
             // Arrange
@@ -198,7 +198,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(architecture.Operations.Count <= 8); // 4 nodes * 2 edges max
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ProxylessNAS_EstimateArchitectureCost_ReturnsValidCost()
         {
             // Arrange
@@ -214,7 +214,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(cost.Memory >= 0.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ProxylessNAS_SetBinarizationTemperature_UpdatesTemperature()
         {
             // Arrange
@@ -237,7 +237,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(resultHigh);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ProxylessNAS_WithDifferentPlatforms_InitializesCorrectly()
         {
             // Arrange & Act
@@ -252,7 +252,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(proxylessEdge);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ProxylessNAS_WithDifferentLatencyWeights_AffectsTotalLoss()
         {
             // Arrange
@@ -269,7 +269,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(totalLossHigh >= totalLossLow);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ProxylessNAS_MultipleDeriveArchitecture_ProducesConsistentResults()
         {
             // Arrange

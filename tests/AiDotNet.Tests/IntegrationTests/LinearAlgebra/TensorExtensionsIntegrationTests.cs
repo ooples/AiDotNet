@@ -13,7 +13,7 @@ public class TensorExtensionsIntegrationTests
 
     #region ConvertToMatrix Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrix_2DTensor_CorrectDimensions()
     {
         var tensor = new Tensor<double>([2, 3]);
@@ -32,7 +32,7 @@ public class TensorExtensionsIntegrationTests
         Assert.Equal(6, matrix[1, 2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrix_1DTensor_ReturnsColumnMatrix()
     {
         var tensor = new Tensor<double>([3]);
@@ -47,7 +47,7 @@ public class TensorExtensionsIntegrationTests
         Assert.Equal(3, matrix[2, 0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrix_3DTensor_ThrowsException()
     {
         var tensor = new Tensor<double>([2, 3, 4]);
@@ -59,7 +59,7 @@ public class TensorExtensionsIntegrationTests
 
     #region Unflatten Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Unflatten_FlatVector_RestoresShape()
     {
         var shape = new[] { 2, 3 };
@@ -77,7 +77,7 @@ public class TensorExtensionsIntegrationTests
         Assert.Equal(6, result[[1, 2]]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Unflatten_WrongSize_ThrowsException()
     {
         var tensor = new Tensor<double>([2, 3]); // Size 6
@@ -90,7 +90,7 @@ public class TensorExtensionsIntegrationTests
 
     #region ForEachPosition Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForEachPosition_VisitsAllPositions()
     {
         var tensor = new Tensor<double>([2, 3]);
@@ -109,7 +109,7 @@ public class TensorExtensionsIntegrationTests
         Assert.Contains(visited, v => v.Item1.SequenceEqual(new[] { 1, 2 }) && v.Item2 == 6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForEachPosition_EarlyStop_StopsIteration()
     {
         var tensor = new Tensor<double>([3, 3]);
@@ -128,7 +128,7 @@ public class TensorExtensionsIntegrationTests
 
     #region TensorEquals Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorEquals_IdenticalTensors_ReturnsTrue()
     {
         var a = new Tensor<double>([2, 2]);
@@ -140,7 +140,7 @@ public class TensorExtensionsIntegrationTests
         Assert.True(a.TensorEquals(b));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorEquals_DifferentValues_ReturnsFalse()
     {
         var a = new Tensor<double>([2, 2]);
@@ -152,7 +152,7 @@ public class TensorExtensionsIntegrationTests
         Assert.False(a.TensorEquals(b));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorEquals_DifferentShapes_ReturnsFalse()
     {
         var a = new Tensor<double>([2, 3]);
@@ -165,7 +165,7 @@ public class TensorExtensionsIntegrationTests
 
     #region ConcatenateTensors Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConcatenateTensors_2D_ConcatenatesAlongLastDimension()
     {
         var a = new Tensor<double>([2, 2]);
@@ -186,7 +186,7 @@ public class TensorExtensionsIntegrationTests
         Assert.Equal(7, result[[0, 4]]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConcatenateTensors_DifferentRanks_ThrowsException()
     {
         var a = new Tensor<double>([2, 2]);
@@ -199,7 +199,7 @@ public class TensorExtensionsIntegrationTests
 
     #region CreateXavierInitializedTensor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateXavierInitializedTensor_CorrectShape()
     {
         var shape = new[] { 3, 4 };
@@ -212,7 +212,7 @@ public class TensorExtensionsIntegrationTests
         Assert.Equal(12, tensor.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateXavierInitializedTensor_ValuesBoundedByStddev()
     {
         var shape = new[] { 100, 100 };
@@ -232,7 +232,7 @@ public class TensorExtensionsIntegrationTests
 
     #region CreateOnesTensor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateOnesTensor_AllOnes()
     {
         var tensor = TensorExtensions.CreateOnesTensor<double>(5);
@@ -248,7 +248,7 @@ public class TensorExtensionsIntegrationTests
 
     #region HeStddev Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HeStddev_CalculatesCorrectly()
     {
         // He initialization: sqrt(2 / fanIn)
@@ -262,7 +262,7 @@ public class TensorExtensionsIntegrationTests
 
     #region XavierStddev Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void XavierStddev_CalculatesCorrectly()
     {
         // Xavier initialization: sqrt(2 / (fanIn + fanOut))

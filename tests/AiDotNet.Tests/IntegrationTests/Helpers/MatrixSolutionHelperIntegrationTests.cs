@@ -15,7 +15,7 @@ public class MatrixSolutionHelperIntegrationTests
 
     #region SolveLinearSystem with DecompositionType Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithLuDecomposition_ReturnsCorrectSolution()
     {
         // Arrange - Simple 3x3 system: Ax = b
@@ -41,7 +41,7 @@ public class MatrixSolutionHelperIntegrationTests
         Assert.True(Math.Abs(result[2] - (-1.0)) < Tolerance, $"Expected z=-1, got {result[2]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithCholeskyDecomposition_ReturnsCorrectSolution()
     {
         // Arrange - Symmetric positive-definite matrix (required for Cholesky)
@@ -66,7 +66,7 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithQrDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
@@ -90,7 +90,7 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithSvdDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
@@ -114,7 +114,7 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithCramerDecomposition_ReturnsCorrectSolution()
     {
         // Arrange - Small system (Cramer's rule is O(n!) so only practical for small systems)
@@ -142,7 +142,7 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithGramSchmidtDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
@@ -166,7 +166,7 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithNormalDecomposition_ReturnsCorrectSolution()
     {
         // Arrange - Symmetric positive-definite result after A^T*A
@@ -192,7 +192,7 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithLqDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
@@ -216,7 +216,7 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithHessenbergDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
@@ -240,7 +240,7 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithSchurDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
@@ -264,7 +264,7 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithEigenDecomposition_ReturnsCorrectSolution()
     {
         // Arrange - Symmetric matrix for reliable eigenvalue decomposition
@@ -290,7 +290,7 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithTakagiDecomposition_ThrowsNotSupportedException()
     {
         // Arrange
@@ -306,7 +306,7 @@ public class MatrixSolutionHelperIntegrationTests
             MatrixSolutionHelper.SolveLinearSystem(A, b, MatrixDecompositionType.Takagi));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithUnsupportedDecomposition_ThrowsArgumentException()
     {
         // Arrange
@@ -327,7 +327,7 @@ public class MatrixSolutionHelperIntegrationTests
 
     #region SolveLinearSystem with Pre-computed Decomposition Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithPreComputedLuDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
@@ -349,7 +349,7 @@ public class MatrixSolutionHelperIntegrationTests
         Assert.True(Math.Abs(result[2] - (-1.0)) < Tolerance, $"Expected z=-1, got {result[2]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithPreComputedQrDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
@@ -374,7 +374,7 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithPreComputedSvdDecomposition_ReturnsCorrectSolution()
     {
         // Arrange
@@ -399,7 +399,7 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithPreComputedCholeskyDecomposition_ReturnsCorrectSolution()
     {
         // Arrange - Symmetric positive-definite matrix
@@ -424,7 +424,7 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_PreComputedDecomposition_SolvesMultipleSystems()
     {
         // Arrange - Test efficiency of pre-computed decomposition
@@ -462,7 +462,7 @@ public class MatrixSolutionHelperIntegrationTests
 
     #region Edge Cases and Special Matrix Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_2x2Matrix_ReturnsCorrectSolution()
     {
         // Arrange - Simple 2x2 system
@@ -486,7 +486,7 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_4x4Matrix_ReturnsCorrectSolution()
     {
         // Arrange - 4x4 system
@@ -511,7 +511,7 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_DiagonalMatrix_ReturnsCorrectSolution()
     {
         // Arrange - Diagonal matrix (simplest case)
@@ -533,7 +533,7 @@ public class MatrixSolutionHelperIntegrationTests
         Assert.True(Math.Abs(result[2] - 4.0) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_IdentityMatrix_ReturnsSameVector()
     {
         // Arrange - Identity matrix: Ix = b => x = b
@@ -551,7 +551,7 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_TridiagonalMatrix_ReturnsCorrectSolution()
     {
         // Arrange - Tridiagonal matrix (common in numerical methods)
@@ -576,7 +576,7 @@ public class MatrixSolutionHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_AllDecompositions_ProduceSimilarResults()
     {
         // Arrange - Test that all decompositions give the same solution for a well-conditioned matrix
@@ -607,7 +607,7 @@ public class MatrixSolutionHelperIntegrationTests
 
     #region Float Type Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SolveLinearSystem_WithFloatType_ReturnsCorrectSolution()
     {
         // Arrange

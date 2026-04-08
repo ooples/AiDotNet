@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class LinearClassifierTestBase : ProbabilisticClassifierTestBase
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LinearSeparable_HighAccuracy()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -45,7 +45,7 @@ public abstract class LinearClassifierTestBase : ProbabilisticClassifierTestBase
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Predictions_ShouldBeValidLabels()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

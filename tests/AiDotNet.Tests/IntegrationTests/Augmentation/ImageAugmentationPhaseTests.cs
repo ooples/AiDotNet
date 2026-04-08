@@ -61,7 +61,7 @@ public class ImageAugmentationPhaseTests
 
     #region Phase 1 - Basic Preprocessing
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterCrop_Apply_ProducesCorrectDimensions()
     {
         var image = CreateTestImage(32, 32);
@@ -75,7 +75,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(3, result.Channels);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FiveCrop_Apply_ReturnsFiveCrops()
     {
         var image = CreateTestImage(32, 32);
@@ -91,7 +91,7 @@ public class ImageAugmentationPhaseTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TenCrop_Apply_ReturnsTenCrops()
     {
         var image = CreateTestImage(32, 32);
@@ -107,7 +107,7 @@ public class ImageAugmentationPhaseTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PadToSquare_Apply_ProducesResult()
     {
         var image = CreateTestImage(20, 30);
@@ -122,7 +122,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(3, result.Channels);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResizeWithAspectRatio_Apply_ResizesImage()
     {
         var image = CreateTestImage(20, 40);
@@ -137,7 +137,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(3, result.Channels);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Normalize_Apply_CentersValues()
     {
         var image = CreateTestImage(10, 10, initialValue: 0.5);
@@ -153,7 +153,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(10, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Denormalize_Reverses_Normalize()
     {
         var image = CreateTestImage(10, 10, initialValue: 0.5);
@@ -173,7 +173,7 @@ public class ImageAugmentationPhaseTests
             $"Expected ~{origVal}, got {restoredVal}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToTensor_Apply_ScalesValues()
     {
         // Create an image with values in [0, 255] range
@@ -193,7 +193,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(Math.Abs(val - 128.0 / 255.0) < 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToFloat_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(10, 10);
@@ -206,7 +206,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(10, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pad_Apply_ExpandsDimensions()
     {
         var image = CreateTestImage(10, 10);
@@ -227,7 +227,7 @@ public class ImageAugmentationPhaseTests
 
     #region Phase 2 - Color Space Conversions
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RgbToGrayscale_Apply_ReducesToOneChannel()
     {
         var image = CreateTestImage(10, 10, channels: 3);
@@ -241,7 +241,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(10, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GrayscaleToRgb_Apply_ExpandsToThreeChannels()
     {
         var image = CreateTestImage(10, 10, channels: 1);
@@ -253,7 +253,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(3, result.Channels);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RgbToBgr_Apply_SwapsRedAndBlue()
     {
         var image = CreateTestImage(10, 10);
@@ -268,7 +268,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(origB, result.GetPixel(5, 5, 0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RgbToHsv_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(10, 10);
@@ -281,7 +281,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(10, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RgbToHls_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(10, 10);
@@ -293,7 +293,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(3, result.Channels);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RgbToLab_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(10, 10);
@@ -305,7 +305,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(3, result.Channels);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RgbToYuv_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(10, 10);
@@ -317,7 +317,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(3, result.Channels);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RgbToXyz_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(10, 10);
@@ -337,7 +337,7 @@ public class ImageAugmentationPhaseTests
 
     #region Phase 3 - Geometric Transforms
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Resize_Apply_ChangeDimensions()
     {
         var image = CreateTestImage(20, 30);
@@ -350,7 +350,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(50, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Perspective_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(32, 32);
@@ -363,7 +363,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticTransform_Apply_PreservesDimensionsAndModifiesContent()
     {
         var image = CreateTestImage(20, 20);
@@ -378,7 +378,7 @@ public class ImageAugmentationPhaseTests
         Assert.NotEqual(image.GetPixel(10, 10, 0), result.GetPixel(10, 10, 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GridDistortion_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(32, 32);
@@ -391,7 +391,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OpticalDistortion_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(32, 32);
@@ -404,7 +404,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PiecewiseAffine_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(32, 32);
@@ -417,7 +417,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThinPlateSpline_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(32, 32);
@@ -430,7 +430,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomResizedCrop_Apply_ProducesTargetDimensions()
     {
         var image = CreateTestImage(64, 64);
@@ -443,7 +443,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CenterCropOrPad_Apply_ProducesTargetDimensions()
     {
         var image = CreateTestImage(20, 30);
@@ -456,7 +456,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(25, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LongestMaxSize_Apply_ConstrainsLongestSide()
     {
         var image = CreateTestImage(20, 40);
@@ -468,7 +468,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(Math.Max(result.Height, result.Width) <= 30);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SmallestMaxSize_Apply_ConstrainsSmallestSide()
     {
         var image = CreateTestImage(20, 40);
@@ -488,7 +488,7 @@ public class ImageAugmentationPhaseTests
 
     #region Phase 4 - Pixel-Level Transforms
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HistogramEqualization_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(16, 16);
@@ -501,7 +501,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CLAHE_Apply_ModifiesImageContrast()
     {
         var image = CreateTestImage(16, 16, initialValue: 0.3);
@@ -515,7 +515,7 @@ public class ImageAugmentationPhaseTests
         Assert.NotEqual(image.GetPixel(8, 8, 0), result.GetPixel(8, 8, 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Posterize_Apply_ReducesBitDepth()
     {
         var image = CreateTestImage(10, 10);
@@ -528,7 +528,7 @@ public class ImageAugmentationPhaseTests
         AssertPixelsInRange(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Solarize_Apply_InvertsAboveThreshold()
     {
         var image = CreateTestImage(10, 10, initialValue: 0.8);
@@ -542,7 +542,7 @@ public class ImageAugmentationPhaseTests
         AssertPixelsInRange(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Equalize_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(16, 16);
@@ -555,7 +555,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AutoContrast_Apply_StretchesHistogram()
     {
         var image = CreateTestImage(10, 10, initialValue: 0.4);
@@ -567,7 +567,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(10, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Invert_Apply_InvertsAllPixels()
     {
         var image = CreateTestImage(10, 10, initialValue: 0.3);
@@ -583,7 +583,7 @@ public class ImageAugmentationPhaseTests
             $"Expected ~{1.0 - original}, got {inverted}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GammaCorrection_Apply_ModifiesValues()
     {
         var image = CreateTestImage(10, 10, initialValue: 0.5);
@@ -595,7 +595,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(10, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RgbShift_Apply_ShiftsChannels()
     {
         var image = CreateTestImage(10, 10);
@@ -608,7 +608,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(3, result.Channels);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HueSaturationValue_Apply_ModifiesHSV()
     {
         var image = CreateTestImage(10, 10);
@@ -621,7 +621,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(3, result.Channels);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChannelShuffle_Apply_PreservesPixelValues()
     {
         var image = CreateTestImage(10, 10);
@@ -634,7 +634,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(3, result.Channels);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChannelDropout_Apply_ZerosOneChannel()
     {
         var image = CreateTestImage(10, 10, initialValue: 0.5);
@@ -658,7 +658,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(hasZeroChannel, "ChannelDropout should zero out at least one channel");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToGray_Apply_ConvertsBrightness()
     {
         var image = CreateTestImage(10, 10);
@@ -670,7 +670,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(10, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToSepia_Apply_ProducesSepiaEffect()
     {
         var image = CreateTestImage(10, 10);
@@ -691,7 +691,7 @@ public class ImageAugmentationPhaseTests
 
     #region Phase 5 - Blur and Noise
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MedianBlur_Apply_SmoothsImage()
     {
         var image = CreateTestImage(16, 16);
@@ -704,7 +704,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MotionBlur_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(16, 16);
@@ -716,7 +716,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GlassBlur_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(16, 16);
@@ -728,7 +728,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ZoomBlur_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(16, 16);
@@ -740,7 +740,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Defocus_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(16, 16);
@@ -752,7 +752,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BoxBlur_Apply_SmoothsImage()
     {
         var image = CreateTestImage(16, 16);
@@ -764,7 +764,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ISONoise_Apply_AddsNoise()
     {
         var image = CreateTestImage(16, 16, initialValue: 0.5);
@@ -781,7 +781,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(changed > 50, "ISONoise should modify most pixels");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SaltAndPepperNoise_Apply_AddsBinaryNoise()
     {
         var image = CreateTestImage(20, 20, initialValue: 0.5);
@@ -793,7 +793,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(20, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpeckleNoise_Apply_AddsMultiplicativeNoise()
     {
         var image = CreateTestImage(16, 16, initialValue: 0.5);
@@ -805,7 +805,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonNoise_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(16, 16);
@@ -817,7 +817,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiplicativeNoise_Apply_ScalesValues()
     {
         var image = CreateTestImage(16, 16, initialValue: 0.5);
@@ -837,7 +837,7 @@ public class ImageAugmentationPhaseTests
 
     #region Phase 6 - Compression and Dropout
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void JpegCompression_Apply_ReducesQuality()
     {
         var image = CreateTestImage(16, 16);
@@ -849,7 +849,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WebPCompression_Apply_ReducesQuality()
     {
         var image = CreateTestImage(16, 16);
@@ -861,7 +861,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Downscale_Apply_ReducesAndRestoresResolution()
     {
         var image = CreateTestImage(32, 32);
@@ -874,7 +874,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ImageCompression_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(16, 16);
@@ -886,7 +886,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CoarseDropout_Apply_CreatesHoles()
     {
         var image = CreateTestImage(32, 32, initialValue: 0.5);
@@ -907,7 +907,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(zeros > 0, "CoarseDropout should create zero regions");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GridDropout_Apply_CreatesRegularDropoutPattern()
     {
         var image = CreateTestImage(32, 32, initialValue: 0.5);
@@ -919,7 +919,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomErasing_Apply_ErasesRegion()
     {
         var image = CreateTestImage(32, 32, initialValue: 0.5);
@@ -931,7 +931,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GridMask_Apply_CreatesGridPattern()
     {
         var image = CreateTestImage(32, 32, initialValue: 0.5);
@@ -943,7 +943,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HideAndSeek_Apply_HidesPatches()
     {
         var image = CreateTestImage(32, 32, initialValue: 0.5);
@@ -955,7 +955,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PixelDropout_Apply_DropsRandomPixels()
     {
         var image = CreateTestImage(16, 16, initialValue: 0.5);
@@ -975,7 +975,7 @@ public class ImageAugmentationPhaseTests
 
     #region Phase 7 - Weather Effects
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Fog_Apply_AddsWhitishEffect()
     {
         var image = CreateTestImage(16, 16, initialValue: 0.3);
@@ -997,7 +997,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(foggedMean >= originalMean - 1, "Fog should not significantly darken the image");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Rain_Apply_AddsRainEffect()
     {
         var image = CreateTestImage(16, 16);
@@ -1009,7 +1009,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Snow_Apply_AddsSnowEffect()
     {
         var image = CreateTestImage(16, 16);
@@ -1021,7 +1021,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Frost_Apply_AddsFrostOverlay()
     {
         var image = CreateTestImage(16, 16);
@@ -1033,7 +1033,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Shadow_Apply_CreatesShaderRegion()
     {
         var image = CreateTestImage(16, 16);
@@ -1045,7 +1045,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SunFlare_Apply_AddsBrightFlare()
     {
         var image = CreateTestImage(16, 16);
@@ -1057,7 +1057,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clouds_Apply_AddsCloudEffect()
     {
         var image = CreateTestImage(16, 16);
@@ -1069,7 +1069,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spatter_Apply_AddsDirtEffect()
     {
         var image = CreateTestImage(16, 16);
@@ -1089,7 +1089,7 @@ public class ImageAugmentationPhaseTests
 
     #region Phase 8 - Advanced Color and Sharpness
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomBrightnessContrast_Apply_ModifiesBrightnessAndContrast()
     {
         var image = CreateTestImage(16, 16, initialValue: 0.5);
@@ -1101,7 +1101,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomGamma_Apply_AdjustsGamma()
     {
         var image = CreateTestImage(16, 16, initialValue: 0.5);
@@ -1113,7 +1113,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomToneCurve_Apply_ModifiesToneCurve()
     {
         var image = CreateTestImage(16, 16);
@@ -1125,7 +1125,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FancyPCA_Apply_ModifiesColorChannels()
     {
         var image = CreateTestImage(16, 16);
@@ -1138,7 +1138,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(3, result.Channels);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ColorConstancy_Apply_NormalizesColor()
     {
         var image = CreateTestImage(16, 16);
@@ -1150,7 +1150,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UnsharpMask_Apply_SharpensImage()
     {
         var image = CreateTestImage(16, 16);
@@ -1162,7 +1162,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sharpen_Apply_IncreasesEdgeContrast()
     {
         var image = CreateTestImage(16, 16);
@@ -1174,7 +1174,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Emboss_Apply_CreatesEmbossEffect()
     {
         var image = CreateTestImage(16, 16);
@@ -1186,7 +1186,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Superpixels_Apply_CreatesPatchedImage()
     {
         var image = CreateTestImage(16, 16);
@@ -1198,7 +1198,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TextureOverlay_Apply_BlendTexture()
     {
         var image = CreateTestImage(16, 16);
@@ -1210,7 +1210,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PlasmaTransform_Apply_GeneratesPlasmaEffect()
     {
         var image = CreateTestImage(16, 16);
@@ -1230,7 +1230,7 @@ public class ImageAugmentationPhaseTests
 
     #region Phase 9 - Mixing Augmenters
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FMix_ApplyFMix_MixesImages()
     {
         var image1 = CreateTestImage(16, 16, initialValue: 0.2);
@@ -1247,7 +1247,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(val >= 0.0 && val <= 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FMix_LabelMixing_RaisesEvent()
     {
         var image1 = CreateTestImage(16, 16, initialValue: 0.2);
@@ -1266,7 +1266,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(lambda >= 0.0 && lambda <= 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SaliencyMix_ApplySaliencyMix_MixesImages()
     {
         var image1 = CreateTestImage(16, 16, initialValue: 0.2);
@@ -1279,7 +1279,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SaliencyMix_LabelMixing_SetsLambda()
     {
         var image1 = CreateTestImage(16, 16, initialValue: 0.2);
@@ -1295,7 +1295,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(lambda >= 0.0 && lambda <= 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PuzzleMix_ApplyPuzzleMix_MixesImages()
     {
         var image1 = CreateTestImage(16, 16, initialValue: 0.2);
@@ -1308,7 +1308,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SnapMix_ApplySnapMix_UsesSemanticMixing()
     {
         var image1 = CreateTestImage(16, 16, initialValue: 0.2);
@@ -1321,7 +1321,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResizeMix_ApplyResizeMix_PastesResizedImage()
     {
         var image1 = CreateTestImage(32, 32, initialValue: 0.3);
@@ -1338,7 +1338,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(lambda >= 0.0 && lambda <= 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransMix_ApplyTransMix_PatchLevelMixing()
     {
         var image1 = CreateTestImage(32, 32, initialValue: 0.2);
@@ -1351,7 +1351,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TokenMix_ApplyTokenMix_ReplacesPatches()
     {
         var image1 = CreateTestImage(32, 32, initialValue: 0.2);
@@ -1366,7 +1366,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(lambda >= 0.0 && lambda <= 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SamplePairing_ApplyPairing_AveragesImages()
     {
         var image1 = CreateTestImage(16, 16, initialValue: 0.2);
@@ -1382,7 +1382,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(Math.Abs(result.GetPixel(0, 0, 0) - expected) < 0.05);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MixingAugmenters_ResizeMismatchedImages()
     {
         var image1 = CreateTestImage(16, 16, initialValue: 0.3);
@@ -1405,7 +1405,7 @@ public class ImageAugmentationPhaseTests
 
     #region Phase 10 - Object Detection Augmenters
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BBoxSafeRandomCrop_Apply_ProducesValidDimensions()
     {
         var image = CreateTestImage(32, 32);
@@ -1420,7 +1420,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(result.Width <= 32);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BBoxSafeRandomCrop_ApplyWithTargets_TransformsBBox()
     {
         var image = CreateTestImage(100, 100);
@@ -1438,7 +1438,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(result.BoundingBoxes!.Count >= 1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MinIoURandomCrop_Apply_CropsImage()
     {
         var image = CreateTestImage(32, 32);
@@ -1451,7 +1451,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(result.Width > 0 && result.Width <= 32);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomSizedBBoxSafeCrop_Apply_ProducesTargetSize()
     {
         var image = CreateTestImage(64, 64);
@@ -1464,7 +1464,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CropNonEmptyMaskIfExists_Apply_CropsImage()
     {
         var image = CreateTestImage(32, 32);
@@ -1476,7 +1476,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(result.Height > 0 && result.Height <= 32);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BBoxClipToImage_Apply_PreservesDimensions()
     {
         var image = CreateTestImage(32, 32);
@@ -1489,7 +1489,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaskDropout_Apply_DropsObjectMasks()
     {
         var image = CreateTestImage(16, 16, channels: 1, initialValue: 0.0);
@@ -1509,7 +1509,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CopyPaste_ApplyCopyPaste_PastesPatches()
     {
         var target = CreateTestImage(32, 32, initialValue: 0.2);
@@ -1523,7 +1523,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Mosaic_ApplyMosaic_CombinesFourImages()
     {
         var img1 = CreateTestImage(16, 16, initialValue: 0.1);
@@ -1547,7 +1547,7 @@ public class ImageAugmentationPhaseTests
 
     #region Phase 11 - AutoAugment Policies
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AutoAugment_Apply_TransformsImage()
     {
         var image = CreateTestImage(32, 32);
@@ -1560,7 +1560,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandAugment_Apply_AppliesNTransforms()
     {
         var image = CreateTestImage(32, 32);
@@ -1572,7 +1572,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TrivialAugment_Apply_AppliesOneTransform()
     {
         var image = CreateTestImage(32, 32);
@@ -1584,7 +1584,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugMax_Apply_TransformsImage()
     {
         var image = CreateTestImage(32, 32);
@@ -1604,7 +1604,7 @@ public class ImageAugmentationPhaseTests
 
     #region Phase 12 - Infrastructure
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationPolicy_AppliesAllTransforms()
     {
         var image = CreateTestImage(32, 32);
@@ -1620,7 +1620,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(2, policy.Entries.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationPolicy_GetParameters_SerializesAll()
     {
         var policy = new AugmentationPolicy<double>();
@@ -1632,7 +1632,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(parameters.ContainsKey("entry_0_type"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationScheduler_LinearSchedule_InterpolatesCorrectly()
     {
         var flip = new HorizontalFlip<double>(probability: 1.0);
@@ -1649,7 +1649,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(Math.Abs(scheduler.CurrentStrength - 1.0) < 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationScheduler_CosineSchedule_FollowsCosine()
     {
         var flip = new HorizontalFlip<double>(probability: 1.0);
@@ -1662,7 +1662,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(Math.Abs(scheduler.CurrentStrength - 0.5) < 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationScheduler_StepSchedule_SwitchesAtMidpoint()
     {
         var flip = new HorizontalFlip<double>(probability: 1.0);
@@ -1677,7 +1677,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(Math.Abs(scheduler.CurrentStrength - 1.0) < 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationScheduler_Step_IncrementsEpoch()
     {
         var flip = new HorizontalFlip<double>(probability: 1.0);
@@ -1691,7 +1691,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(Math.Abs(scheduler.CurrentStrength - 0.5) < 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ImagePreprocessor_Process_ChainsTransforms()
     {
         var pipeline = new ImagePreprocessor<double>()
@@ -1708,7 +1708,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ImagePreprocessor_Add_AcceptsAnyAugmenter()
     {
         var pipeline = new ImagePreprocessor<double>()
@@ -1719,7 +1719,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(3, pipeline.Transforms.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ImagePresets_ImageNet_CreatesValidPipeline()
     {
         var trainingPipeline = ImagePresets<double>.ImageNet(training: true);
@@ -1736,7 +1736,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(224, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ImagePresets_COCO_CreatesValidPipeline()
     {
         var pipeline = ImagePresets<double>.COCO(targetSize: 320);
@@ -1744,7 +1744,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(pipeline.Transforms.Count > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ImagePresets_CLIP_CreatesValidPipeline()
     {
         var pipeline = ImagePresets<double>.CLIP();
@@ -1758,7 +1758,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(224, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolicyRegistry_GetLightPolicy_CreatesPolicy()
     {
         var policy = PolicyRegistry<double>.Get("light_augmentation");
@@ -1767,7 +1767,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(policy.Entries.Count > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolicyRegistry_GetMediumPolicy_CreatesPolicy()
     {
         var policy = PolicyRegistry<double>.Get("medium_augmentation");
@@ -1776,7 +1776,7 @@ public class ImageAugmentationPhaseTests
         Assert.True(policy.Entries.Count > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolicyRegistry_GetHeavyPolicy_CreatesPolicy()
     {
         var policy = PolicyRegistry<double>.Get("heavy_augmentation");
@@ -1785,14 +1785,14 @@ public class ImageAugmentationPhaseTests
         Assert.True(policy.Entries.Count > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolicyRegistry_GetNonExistent_Throws()
     {
         Assert.Throws<KeyNotFoundException>(() =>
             PolicyRegistry<double>.Get("nonexistent_policy"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolicyRegistry_Register_AddsCustomPolicy()
     {
         PolicyRegistry<double>.Register("my_custom", () =>
@@ -1807,7 +1807,7 @@ public class ImageAugmentationPhaseTests
         Assert.Single(policy.Entries);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolicyRegistry_GetNames_ReturnsRegisteredPolicies()
     {
         var names = PolicyRegistry<double>.GetNames().ToList();
@@ -1817,7 +1817,7 @@ public class ImageAugmentationPhaseTests
         Assert.Contains("heavy_augmentation", names);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolicyRegistry_ApplyPolicy_TransformsImage()
     {
         var policy = PolicyRegistry<double>.Get("heavy_augmentation");
@@ -1837,7 +1837,7 @@ public class ImageAugmentationPhaseTests
 
     #region Cross-Phase Integration
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pipeline_MixesPhases_InSinglePipeline()
     {
         var image = CreateTestImage(64, 64);
@@ -1853,7 +1853,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Width);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Compose_AcceptsAllAugmenterTypes()
     {
         var compose = new Compose<double, ImageTensor<double>>(
@@ -1869,7 +1869,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AugmentationPipeline_AcceptsAllPhaseAugmenters()
     {
         var pipeline = new AugmentationPipeline<double, ImageTensor<double>>("cross-phase");
@@ -1888,7 +1888,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllNewAugmenters_RespectProbabilityZero()
     {
         var image = CreateTestImage(16, 16);
@@ -1913,7 +1913,7 @@ public class ImageAugmentationPhaseTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllNewAugmenters_DoNotModifyOriginal()
     {
         var image = CreateTestImage(16, 16);
@@ -1936,7 +1936,7 @@ public class ImageAugmentationPhaseTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllNewAugmenters_ReturnCorrectChannelCount()
     {
         var image = CreateTestImage(16, 16, channels: 3);
@@ -1960,7 +1960,7 @@ public class ImageAugmentationPhaseTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllNewAugmenters_HandleSmallImages()
     {
         var image = CreateTestImage(2, 2);
@@ -1984,7 +1984,7 @@ public class ImageAugmentationPhaseTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllNewAugmenters_ProduceReproducibleResults()
     {
         var image = CreateTestImage(16, 16);
@@ -1998,7 +1998,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(result1.GetPixel(8, 8, 0), result2.GetPixel(8, 8, 0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetParameters_ReturnsExpectedKeys_ForAllPhases()
     {
         // Phase 4
@@ -2032,7 +2032,7 @@ public class ImageAugmentationPhaseTests
 
     #region Medical Imaging Augmenters
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dilate_Apply_ExpandsBrightRegions()
     {
         var image = CreateTestImage(16, 16, initialValue: 0.0);
@@ -2045,7 +2045,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Erode_Apply_ShrinksBrightRegions()
     {
         var image = CreateTestImage(16, 16, initialValue: 1.0);
@@ -2057,7 +2057,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Opening_Apply_ErodesAndDilates()
     {
         var image = CreateTestImage(16, 16);
@@ -2069,7 +2069,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Closing_Apply_DilatesAndErodes()
     {
         var image = CreateTestImage(16, 16);
@@ -2081,7 +2081,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MorphologicalGradient_Apply_ExtractsEdges()
     {
         var image = CreateTestImage(16, 16);
@@ -2093,7 +2093,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HistogramColorTransfer_Apply_TransfersHistogram()
     {
         var image = CreateTestImage(16, 16);
@@ -2105,7 +2105,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HistogramMatching_Apply_MatchesHistogram()
     {
         var image = CreateTestImage(16, 16);
@@ -2117,7 +2117,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BiasFieldCorrection_Apply_CorrectsBias()
     {
         var image = CreateTestImage(16, 16);
@@ -2129,7 +2129,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GhostingArtifact_Apply_AddsGhosting()
     {
         var image = CreateTestImage(16, 16);
@@ -2141,7 +2141,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpikeArtifact_Apply_AddsSpikeNoise()
     {
         var image = CreateTestImage(16, 16);
@@ -2153,7 +2153,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KSpaceMotion_Apply_SimulatesMotionArtifact()
     {
         var image = CreateTestImage(16, 16);
@@ -2165,7 +2165,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntensityNormalization_Apply_NormalizesIntensity()
     {
         var image = CreateTestImage(16, 16);
@@ -2177,7 +2177,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WindowLevel_Apply_AdjustsWindowLevel()
     {
         var image = CreateTestImage(16, 16);
@@ -2189,7 +2189,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SliceSelection_Apply_SelectsSlice()
     {
         var image = CreateTestImage(16, 16);
@@ -2201,7 +2201,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StackSlices_Apply_ProcessesSlices()
     {
         var image = CreateTestImage(16, 16);
@@ -2221,7 +2221,7 @@ public class ImageAugmentationPhaseTests
 
     #region Style Transfer and Advanced Mixing
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StyleMix_Apply_TransfersStyle()
     {
         var image = CreateTestImage(16, 16);
@@ -2233,7 +2233,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdaIN_Apply_AppliesAdaptiveInstanceNorm()
     {
         var image = CreateTestImage(16, 16);
@@ -2245,7 +2245,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(16, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FDA_Apply_PerformsFrequencyDomainAdaptation()
     {
         var image = CreateTestImage(16, 16);
@@ -2265,7 +2265,7 @@ public class ImageAugmentationPhaseTests
 
     #region AutoAugment Variants
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FastAutoAugment_Apply_TransformsImage()
     {
         var image = CreateTestImage(32, 32);
@@ -2277,7 +2277,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DADA_Apply_TransformsImage()
     {
         var image = CreateTestImage(32, 32);
@@ -2289,7 +2289,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniformAugment_Apply_TransformsImage()
     {
         var image = CreateTestImage(32, 32);
@@ -2301,7 +2301,7 @@ public class ImageAugmentationPhaseTests
         Assert.Equal(32, result.Height);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Mosaic9_ApplyMosaic9_CombinesNineImages()
     {
         var images = new ImageTensor<double>[9];

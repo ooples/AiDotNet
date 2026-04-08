@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 /// </summary>
 public class MixtureOfExpertsNeuralNetworkTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithValidOptions_CreatesModel()
     {
         // Arrange
@@ -38,7 +38,7 @@ public class MixtureOfExpertsNeuralNetworkTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
         // Arrange
@@ -54,7 +54,7 @@ public class MixtureOfExpertsNeuralNetworkTests
             new MixtureOfExpertsNeuralNetwork<float>(null!, architecture));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithInvalidOptions_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
@@ -78,7 +78,7 @@ public class MixtureOfExpertsNeuralNetworkTests
             new MixtureOfExpertsNeuralNetwork<float>(options, architecture));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Predict_WithValidInput_ReturnsOutput()
     {
         // Arrange
@@ -109,7 +109,7 @@ public class MixtureOfExpertsNeuralNetworkTests
         Assert.Equal(new[] { 1, 1 }, output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Train_WithValidData_UpdatesModel()
     {
         // Arrange
@@ -146,7 +146,7 @@ public class MixtureOfExpertsNeuralNetworkTests
         Assert.NotEqual(0f, model.LastLoss);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Train_MultipleIterations_ReducesLoss()
     {
         // Arrange
@@ -206,7 +206,7 @@ public class MixtureOfExpertsNeuralNetworkTests
             $"Expected finalLoss ({finalLoss}) < initialLoss ({initialLoss})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetModelMetadata_ReturnsCorrectInformation()
     {
         // Arrange
@@ -244,7 +244,7 @@ public class MixtureOfExpertsNeuralNetworkTests
         Assert.Equal(true, useLoadBalancing);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateNewInstance_CreatesNewModelWithSameConfiguration()
     {
         // Arrange
@@ -274,7 +274,7 @@ public class MixtureOfExpertsNeuralNetworkTests
         Assert.Equal(model.Architecture.TaskType, newInstance!.Architecture.TaskType);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Classification_SimpleTask_ConvergesToSolution()
     {
         // Arrange - Create a simple binary classification problem
@@ -318,7 +318,7 @@ public class MixtureOfExpertsNeuralNetworkTests
             $"Expected finalLoss ({finalLoss}) to be less than half of initialLoss ({initialLoss})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiClassClassification_ConvergesToSolution()
     {
         // Arrange
@@ -374,7 +374,7 @@ public class MixtureOfExpertsNeuralNetworkTests
             $"Expected finalLoss ({finalLoss}) < initialLoss ({initialLoss})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LoadBalancing_WhenEnabled_IncludesAuxiliaryLoss()
     {
         // Arrange
@@ -421,7 +421,7 @@ public class MixtureOfExpertsNeuralNetworkTests
         Assert.NotEqual(modelWithLB.LastLoss, modelWithoutLB.LastLoss);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TopK_DifferentValues_AffectComputation()
     {
         // Arrange - Test that different TopK values produce different results
@@ -465,7 +465,7 @@ public class MixtureOfExpertsNeuralNetworkTests
         Assert.NotNull(outputTopK2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParameterCount_IsGreaterThanZero()
     {
         // Arrange
@@ -493,7 +493,7 @@ public class MixtureOfExpertsNeuralNetworkTests
         Assert.True(parameterCount > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RandomSeed_ProducesReproducibleResults()
     {
         // Arrange

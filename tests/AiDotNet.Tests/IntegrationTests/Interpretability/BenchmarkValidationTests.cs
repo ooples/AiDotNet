@@ -24,7 +24,7 @@ public class BenchmarkValidationTests
     /// f(x) = E[f(X)] + sum(SHAP values)
     /// Reference: Lundberg & Lee 2017
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SHAPExplainer_CompletenessAxiom_SumOfShapValuesEqualsPredictionDifference()
     {
         // Create simple linear model: f(x) = 2*x0 + 3*x1 + x2 + 0.5*x3 + x4
@@ -138,7 +138,7 @@ public class BenchmarkValidationTests
     /// sum(attributions) = f(x) - f(baseline)
     /// Reference: Sundararajan et al. 2017
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntegratedGradients_CompletenessAxiom_AttributionsSumToPredictionDifference()
     {
         // Simple quadratic function: f(x) = sum(x_i^2)
@@ -194,7 +194,7 @@ public class BenchmarkValidationTests
     /// Validates Integrated Gradients sensitivity axiom:
     /// If x_i != baseline_i and f depends on x_i, then attribution_i != 0
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntegratedGradients_SensitivityAxiom_NonzeroAttributionForRelevantFeatures()
     {
         // Function that only depends on first two features: f(x) = x0 + x1
@@ -239,7 +239,7 @@ public class BenchmarkValidationTests
     /// Validates DeepLIFT produces correct attributions for linear models.
     /// For linear f(x) = w^T x, DeepLIFT attribution = w_i * (x_i - baseline_i)
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeepLIFT_LinearModel_AttributionsMatchWeightedDifference()
     {
         var weights = new double[] { 2.0, -1.0, 0.5, 3.0, -0.5 };
@@ -286,7 +286,7 @@ public class BenchmarkValidationTests
     /// Validates that GradCAM produces non-negative heatmaps (due to ReLU).
     /// Reference: Selvaraju et al. 2017
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GradCAM_HeatmapValuesAreNonNegative()
     {
         int layerHeight = 7;
@@ -349,7 +349,7 @@ public class BenchmarkValidationTests
     /// Validates TreeSHAP with a simple decision tree matches expected SHAP values.
     /// For a single-split tree, SHAP values can be computed analytically.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TreeSHAP_SingleSplitTree_MatchesAnalyticalValues()
     {
         // Create a simple tree: if x0 < 0.5 then predict 0, else predict 1
@@ -404,7 +404,7 @@ public class BenchmarkValidationTests
     /// Validates that occlusion-based explanations work with tensor inputs.
     /// Uses the actual OcclusionExplainer API.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OcclusionExplainer_TensorInput_ProducesSensitivityMap()
     {
         // Simulated image where only bottom-right quadrant matters
@@ -455,7 +455,7 @@ public class BenchmarkValidationTests
     /// <summary>
     /// Validates that NoiseTunnel produces smoothed attributions.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NoiseTunnel_SmoothGrad_ProducesAttributions()
     {
         // Noisy gradient function that adds random noise
@@ -511,7 +511,7 @@ public class BenchmarkValidationTests
     /// <summary>
     /// Validates that removing important features causes proportional prediction changes.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FeatureAblation_ImportantFeatures_ShowHigherAttribution()
     {
         // Linear model: f(x) = 5*x0 + 1*x1 + 0*x2 + 0*x3 + 0*x4
@@ -558,7 +558,7 @@ public class BenchmarkValidationTests
     /// Validates that GuidedBackprop only produces non-negative gradients.
     /// Reference: Springenberg et al. 2015
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GuidedBackprop_ProducesNonNegativeGradients()
     {
         // Simple prediction function

@@ -15,7 +15,7 @@ public class AdvancedLossFunctionsIntegrationTests
 
     #region CTCLoss Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CTCLoss_BasicLossComputation_ReturnsPositiveLoss()
     {
         // Arrange
@@ -46,7 +46,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.True(loss > 0, "CTC loss should be positive for non-trivial sequences");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CTCLoss_HighProbabilityPath_ReturnsLowerLoss()
     {
         // Arrange
@@ -93,7 +93,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.True(lossHigh < lossLow, "High probability path should have lower loss");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CTCLoss_BlankTokenHandling_WorksCorrectly()
     {
         // Arrange
@@ -124,7 +124,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.False(double.IsInfinity(loss), "CTC loss should not be infinity");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CTCLoss_Gradient_ReturnsCorrectShape()
     {
         // Arrange
@@ -156,7 +156,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(logProbs.Shape[2], gradient.Shape[2]); // classes
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CTCLoss_InvalidInputs_ThrowsArgumentException()
     {
         // Arrange
@@ -173,14 +173,14 @@ public class AdvancedLossFunctionsIntegrationTests
             ctcLoss.CalculateLoss(logProbs, targets, inputLengths, targetLengths));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CTCLoss_NegativeBlankIndex_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() => new CTCLoss<double>(blankIndex: -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CTCLossAdapter_BasicUsage_ReturnsPositiveLoss()
     {
         // Arrange
@@ -211,7 +211,7 @@ public class AdvancedLossFunctionsIntegrationTests
 
     #region NoiseContrastiveEstimationLoss Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NCELoss_BasicComputation_ReturnsPositiveLoss()
     {
         // Arrange
@@ -239,7 +239,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.False(double.IsNaN(loss), "NCE loss should not be NaN");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NCELoss_HighTargetLowNoise_ReturnsLowLoss()
     {
         // Arrange
@@ -277,7 +277,7 @@ public class AdvancedLossFunctionsIntegrationTests
             "High target / low noise should have lower loss than low target / high noise");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NCELoss_Gradient_ReturnsCorrectShapes()
     {
         // Arrange
@@ -303,7 +303,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(noiseLogits.Columns, noiseGradient.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NCELoss_VaryingNoiseSamples_WorksCorrectly()
     {
         // Arrange & Act & Assert
@@ -328,7 +328,7 @@ public class AdvancedLossFunctionsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NCELoss_StandardInterface_ThrowsNotSupportedException()
     {
         // Arrange
@@ -341,7 +341,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Throws<NotSupportedException>(() => nceLoss.CalculateDerivative(predicted, actual));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NCELoss_DimensionMismatch_ThrowsArgumentException()
     {
         // Arrange
@@ -357,7 +357,7 @@ public class AdvancedLossFunctionsIntegrationTests
 
     #region PerceptualLoss Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PerceptualLoss_IdenticalImages_ReturnsZeroLoss()
     {
         // Arrange
@@ -397,7 +397,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PerceptualLoss_DifferentImages_ReturnsPositiveLoss()
     {
         // Arrange
@@ -438,7 +438,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.True(loss > 0, "Perceptual loss should be positive for different images");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PerceptualLoss_MultipleFeatureLayers_WeightsAppliedCorrectly()
     {
         // Arrange
@@ -473,7 +473,7 @@ public class AdvancedLossFunctionsIntegrationTests
             "Equal weights should give higher loss than first-only weights");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PerceptualLoss_StandardInterface_ThrowsNotSupportedException()
     {
         // Arrange
@@ -489,7 +489,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Throws<NotSupportedException>(() => perceptualLoss.CalculateDerivative(predicted, actual));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PerceptualLoss_NullFeatureExtractor_ThrowsArgumentNullException()
     {
         // Act & Assert
@@ -501,7 +501,7 @@ public class AdvancedLossFunctionsIntegrationTests
 
     #region QuantumLoss Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantumLoss_IdenticalStates_ReturnsZeroLoss()
     {
         // Arrange
@@ -517,7 +517,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantumLoss_OrthogonalStates_ReturnsPositiveLoss()
     {
         // Arrange
@@ -541,7 +541,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.False(double.IsNaN(loss), "Loss should not be NaN");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantumLoss_SuperpositionStates_ReturnsCorrectLoss()
     {
         // Arrange
@@ -562,7 +562,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.True(loss < 1, "Non-orthogonal states should have loss less than 1");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantumLoss_Gradient_ReturnsCorrectShape()
     {
         // Arrange
@@ -579,7 +579,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(predicted.Length, gradient.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantumLoss_ComplexAmplitudes_HandledCorrectly()
     {
         // Arrange
@@ -597,7 +597,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(0.0, loss, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantumLoss_DimensionMismatch_ThrowsArgumentException()
     {
         // Arrange
@@ -613,7 +613,7 @@ public class AdvancedLossFunctionsIntegrationTests
 
     #region RotationPredictionLoss Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RotationPredictionLoss_TensorInput_Creates4RotationsPerImage()
     {
         // Arrange
@@ -637,7 +637,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(4, augmentedY.Shape[1]); // 4-class one-hot
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RotationPredictionLoss_MatrixInput_Creates4RotationsPerImage()
     {
         // Arrange
@@ -663,7 +663,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(4, augmentedY.Columns); // 4-class one-hot
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RotationPredictionLoss_0DegreeRotation_PreservesImage()
     {
         // Arrange
@@ -685,7 +685,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(4.0, augmentedX[0, 1, 1, 0], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RotationPredictionLoss_180DegreeRotation_FlipsImage()
     {
         // Arrange
@@ -708,7 +708,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(1.0, augmentedX[2, 1, 1, 0], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RotationPredictionLoss_OneHotLabels_CorrectlyEncoded()
     {
         // Arrange
@@ -738,7 +738,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.Equal(1.0, augmentedY[3, 3], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RotationPredictionLoss_NonSquareMatrix_ThrowsArgumentException()
     {
         // Arrange
@@ -752,7 +752,7 @@ public class AdvancedLossFunctionsIntegrationTests
             rotationLoss.CreateTask<Matrix<double>, Matrix<double>>(input));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RotationPredictionLoss_TooFewDimensions_ThrowsArgumentException()
     {
         // Arrange
@@ -766,7 +766,7 @@ public class AdvancedLossFunctionsIntegrationTests
             rotationLoss.CreateTask<Tensor<double>, Tensor<double>>(input));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RotationPredictionLoss_MatrixToVectorOutput_ReturnsClassIndices()
     {
         // Arrange
@@ -789,7 +789,7 @@ public class AdvancedLossFunctionsIntegrationTests
 
     #region Edge Case Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CTCLoss_SingleCharacterTarget_WorksCorrectly()
     {
         // Arrange
@@ -814,7 +814,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.False(double.IsNaN(loss), "Loss should not be NaN");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NCELoss_SingleSample_WorksCorrectly()
     {
         // Arrange
@@ -833,7 +833,7 @@ public class AdvancedLossFunctionsIntegrationTests
         Assert.True(loss >= 0, "Loss should be non-negative");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantumLoss_NormalizedState_WorksCorrectly()
     {
         // Arrange

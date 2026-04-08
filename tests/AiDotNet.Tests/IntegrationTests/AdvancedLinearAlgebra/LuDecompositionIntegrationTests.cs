@@ -206,7 +206,7 @@ public class LuDecompositionIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LuDecomposition_2x2Matrix_CorrectDecomposition()
     {
         // Arrange - Simple 2x2 matrix
@@ -226,7 +226,7 @@ public class LuDecompositionIntegrationTests
             $"2x2 decomposition failed. Max difference: {maxDiff}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LuDecomposition_SymmetricMatrix_ValidDecomposition()
     {
         // Arrange - Symmetric positive definite matrix
@@ -247,7 +247,7 @@ public class LuDecompositionIntegrationTests
             $"Symmetric matrix decomposition failed. Max difference: {maxDiff}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LuDecomposition_NonSquareMatrix_ThrowsArgumentException()
     {
         // Arrange
@@ -261,7 +261,7 @@ public class LuDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LuDecomposition_IllConditionedMatrix_StillDecomposes()
     {
         // Arrange - Create a moderately ill-conditioned matrix (Hilbert-like)
@@ -288,7 +288,7 @@ public class LuDecompositionIntegrationTests
             $"Ill-conditioned matrix decomposition failed. Max difference: {maxDiff}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LuDecomposition_LargeMatrix_CorrectDecomposition()
     {
         // Arrange

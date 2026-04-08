@@ -17,7 +17,7 @@ public abstract class EmbeddingModelTestBase : NeuralNetworkModelTestBase
     // This tests the local Lipschitz continuity of the embedding function.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SimilarInputs_ProduceSimilarEmbeddings()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -57,7 +57,7 @@ public abstract class EmbeddingModelTestBase : NeuralNetworkModelTestBase
     // extreme values are numerically unstable and unusable downstream.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Embeddings_ShouldBeFiniteAndBounded()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -83,7 +83,7 @@ public abstract class EmbeddingModelTestBase : NeuralNetworkModelTestBase
     // (product of OutputShape dimensions).
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OutputDimensionality_MatchesEmbeddingDim()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

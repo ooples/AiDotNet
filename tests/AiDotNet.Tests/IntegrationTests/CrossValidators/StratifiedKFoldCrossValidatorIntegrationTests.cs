@@ -61,7 +61,7 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithDefaultOptions_CreatesValidator()
     {
         // Act
@@ -71,7 +71,7 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
         Assert.NotNull(validator);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithCustomOptions_CreatesValidator()
     {
         // Arrange
@@ -93,7 +93,7 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
 
     #region Class Proportion Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_PreservesClassProportionsInEachFold()
     {
         // Arrange - 60 class 0, 40 class 1 (60%/40% split)
@@ -127,7 +127,7 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_WorksWithMultipleClasses()
     {
         // Arrange - 3 classes
@@ -168,7 +168,7 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
 
     #region Imbalanced Class Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_HandlesImbalancedClasses()
     {
         // Arrange - Highly imbalanced: 90% class 0, 10% class 1
@@ -204,7 +204,7 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
 
     #region No Data Leakage Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_NoOverlapBetweenTrainAndValidation()
     {
         // Arrange
@@ -268,7 +268,7 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
 
     #region Reproducibility Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_WithSameSeed_ProducesReproducibleResults()
     {
         // Arrange
@@ -311,7 +311,7 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
 
     #region Result Structure Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_ReturnsValidFoldResults()
     {
         // Arrange

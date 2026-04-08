@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.UnitTests.Inference;
 [Collection(AiDotNet.Tests.TestInfrastructure.DiagnosticsEnvironmentCollection.Name)]
 public class InferenceOptimizerTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceOptimizer_WhenDiagnosticsEnabled_RecordsDecisions()
     {
         var original = Environment.GetEnvironmentVariable("AIDOTNET_DIAGNOSTICS");
@@ -42,7 +42,7 @@ public class InferenceOptimizerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceOptimizer_RewritesMultiHeadAttention_ToFlashAttention_WhenEnabled()
     {
         var model = CreateTinyTransformer(taskType: NeuralNetworkTaskType.Regression);
@@ -64,7 +64,7 @@ public class InferenceOptimizerTests
         Assert.DoesNotContain(optimized.Layers, l => l is MultiHeadAttentionLayer<float>);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceOptimizer_RewritesMultiHeadAttention_ToCachedAttention_ForTextGeneration_WhenKVCacheEnabled()
     {
         var model = CreateTinyTransformer(taskType: NeuralNetworkTaskType.TextGeneration);
@@ -95,7 +95,7 @@ public class InferenceOptimizerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceOptimizer_RewritesSelfAttention_ToCachedAttention_WhenKVCacheEnabled()
     {
         var model = CreateTinySelfAttentionModel(taskType: NeuralNetworkTaskType.TextGeneration);
@@ -120,7 +120,7 @@ public class InferenceOptimizerTests
         Assert.DoesNotContain(model.Layers, l => l is SelfAttentionLayer<float>);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceOptimizer_SpeculativeDecoding_FallsBackToNGram_WhenSmallNeuralUnavailable()
     {
         var model = CreateTinyTransformer(taskType: NeuralNetworkTaskType.TextGeneration);
@@ -144,7 +144,7 @@ public class InferenceOptimizerTests
         Assert.True(optimizer.DraftModel!.VocabSize > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceOptimizer_SpeculativeDecoding_FallsBackToNGram_WhenCustomNotProvided()
     {
         var model = CreateTinyTransformer(taskType: NeuralNetworkTaskType.TextGeneration);
@@ -167,7 +167,7 @@ public class InferenceOptimizerTests
         Assert.True(optimizer.DraftModel!.VocabSize > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceOptimizer_WeightOnlyQuantization_RewritesDenseLayer_OnClonedModel_AndPreservesOutputs()
     {
         var model = CreateTinyDenseModel();
@@ -203,7 +203,7 @@ public class InferenceOptimizerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceOptimizer_Skips_AttentionLayer_WhenKVCacheEnabled()
     {
         var model = CreateTinyAttentionLayerModel();
@@ -223,7 +223,7 @@ public class InferenceOptimizerTests
         Assert.Contains(optimized.Layers, l => l is AttentionLayer<float>);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceOptimizer_Skips_GraphAttentionLayer_WhenKVCacheEnabled()
     {
         var model = CreateTinyGraphAttentionModel();

@@ -7,7 +7,7 @@ namespace AiDotNet.Tests.UnitTests.Helpers;
 [Collection(AiDotNet.Tests.TestInfrastructure.DiagnosticsEnvironmentCollection.Name)]
 public class InferenceDiagnosticsTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceDiagnostics_Disabled_DoesNotRecord()
     {
         var original = Environment.GetEnvironmentVariable("AIDOTNET_DIAGNOSTICS");
@@ -27,7 +27,7 @@ public class InferenceDiagnosticsTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceDiagnostics_Enabled_Records()
     {
         var original = Environment.GetEnvironmentVariable("AIDOTNET_DIAGNOSTICS");

@@ -26,7 +26,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
 
         #region Multi-Scale PDE Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MultiScalePDE_TwoScaleHeatEquation_HasCorrectProperties()
         {
             // Arrange
@@ -44,7 +44,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.True(scales[0] > scales[1], "Coarse scale should be larger than fine scale");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MultiScalePDE_ComputeScaleResidual_ReturnsValueForEachScale()
         {
             // Arrange
@@ -62,7 +62,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.True(!double.IsNaN(fineResidual) && !double.IsInfinity(fineResidual), "Fine scale residual should be finite");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MultiScalePDE_ComputeScaleCoupling_ReturnsCouplingResidual()
         {
             // Arrange
@@ -81,7 +81,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.True(!double.IsNaN(couplingResidual) && !double.IsInfinity(couplingResidual), "Coupling residual should be finite");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MultiScalePDE_GetScaleLossWeight_ReturnsPositiveWeights()
         {
             // Arrange
@@ -95,7 +95,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MultiScaleTrainingOptions_DefaultValues_AreReasonable()
         {
             // Arrange & Act
@@ -111,7 +111,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
 
         #region Inverse Problem Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void InverseProblem_ParameterIdentification_HasCorrectProperties()
         {
             // Arrange
@@ -136,7 +136,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.Equal(3, inverseProblem.Observations.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void InverseProblem_ValidateParameters_ChecksBounds()
         {
             // Arrange
@@ -159,7 +159,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.False(inverseProblem.ValidateParameters(new double[] { -1.0 })); // Negative
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void InverseProblem_CreateParameterizedPDE_ReturnsValidPDE()
         {
             // Arrange
@@ -184,7 +184,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.Contains("2.5", pde.Name); // Name should contain the parameter value
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void InverseProblemOptions_DefaultValues_AreReasonable()
         {
             // Arrange & Act
@@ -198,7 +198,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.False(options.EstimateUncertainty);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void InverseProblemResult_CanStoreResults()
         {
             // Arrange & Act
@@ -225,7 +225,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
 
         #region Integration Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MultiScalePINN_CanBeCreated_WithValidConfiguration()
         {
             // Arrange
@@ -255,7 +255,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.True(pinn.SupportsTraining);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void InverseProblemPINN_CanBeCreated_WithValidConfiguration()
         {
             // Arrange
@@ -293,7 +293,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.True(pinn.SupportsTraining);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void InverseProblemPINN_Parameters_CanBeUpdatedDuringTraining()
         {
             // Arrange

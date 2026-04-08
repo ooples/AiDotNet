@@ -28,7 +28,7 @@ public class InstanceSegmentationIntegrationTests
 
     #region YOLOv8Seg
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLOv8Seg_Construction_Succeeds()
     {
         var model = new YOLOv8Seg<double>(Arch(), modelSize: YOLOv8SegModelSize.N);
@@ -36,7 +36,7 @@ public class InstanceSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLOv8Seg_Predict_ReturnsOutput()
     {
         var model = new YOLOv8Seg<double>(Arch(), modelSize: YOLOv8SegModelSize.N);
@@ -45,7 +45,7 @@ public class InstanceSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLOv8Seg_Train_DoesNotThrow()
     {
         var model = new YOLOv8Seg<double>(Arch(), modelSize: YOLOv8SegModelSize.N);
@@ -55,7 +55,7 @@ public class InstanceSegmentationIntegrationTests
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLOv8Seg_Dispose_DoesNotThrow()
     {
         var model = new YOLOv8Seg<double>(Arch());
@@ -66,7 +66,7 @@ public class InstanceSegmentationIntegrationTests
 
     #region YOLOv9Seg
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLOv9Seg_Construction_Succeeds()
     {
         var model = new YOLOv9Seg<double>(Arch(), modelSize: YOLOv9SegModelSize.C);
@@ -74,7 +74,7 @@ public class InstanceSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLOv9Seg_Predict_ReturnsOutput()
     {
         var model = new YOLOv9Seg<double>(Arch(), modelSize: YOLOv9SegModelSize.C);
@@ -83,7 +83,7 @@ public class InstanceSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLOv9Seg_Dispose_DoesNotThrow()
     {
         var model = new YOLOv9Seg<double>(Arch());
@@ -94,7 +94,7 @@ public class InstanceSegmentationIntegrationTests
 
     #region YOLO11Seg
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLO11Seg_Construction_Succeeds()
     {
         var model = new YOLO11Seg<double>(Arch(), modelSize: YOLO11SegModelSize.N);
@@ -102,7 +102,7 @@ public class InstanceSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLO11Seg_Predict_ReturnsOutput()
     {
         var model = new YOLO11Seg<double>(Arch(), modelSize: YOLO11SegModelSize.N);
@@ -111,7 +111,7 @@ public class InstanceSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLO11Seg_Dispose_DoesNotThrow()
     {
         var model = new YOLO11Seg<double>(Arch());
@@ -122,7 +122,7 @@ public class InstanceSegmentationIntegrationTests
 
     #region YOLO26Seg
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLO26Seg_Construction_Succeeds()
     {
         var model = new YOLO26Seg<double>(Arch(), modelSize: YOLO26SegModelSize.N);
@@ -130,7 +130,7 @@ public class InstanceSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLO26Seg_Predict_ReturnsOutput()
     {
         var model = new YOLO26Seg<double>(Arch(), modelSize: YOLO26SegModelSize.N);
@@ -139,7 +139,7 @@ public class InstanceSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLO26Seg_Dispose_DoesNotThrow()
     {
         var model = new YOLO26Seg<double>(Arch());
@@ -150,7 +150,7 @@ public class InstanceSegmentationIntegrationTests
 
     #region YOLOv12Seg
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLOv12Seg_Construction_Succeeds()
     {
         var model = new YOLOv12Seg<double>(Arch(), modelSize: YOLOv12SegModelSize.N);
@@ -158,7 +158,7 @@ public class InstanceSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLOv12Seg_Predict_ReturnsOutput()
     {
         var model = new YOLOv12Seg<double>(Arch(), modelSize: YOLOv12SegModelSize.N);
@@ -167,7 +167,7 @@ public class InstanceSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLOv12Seg_Dispose_DoesNotThrow()
     {
         var model = new YOLOv12Seg<double>(Arch());
@@ -178,7 +178,7 @@ public class InstanceSegmentationIntegrationTests
 
     #region MaskRCNN
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaskRCNN_Construction_Succeeds()
     {
         var options = new InstanceSegmentationOptions<double>
@@ -190,7 +190,7 @@ public class InstanceSegmentationIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaskRCNN_Segment_ReturnsResult()
     {
         var options = new InstanceSegmentationOptions<double>
@@ -203,7 +203,7 @@ public class InstanceSegmentationIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaskRCNN_GetParameterCount_ReturnsPositive()
     {
         var options = new InstanceSegmentationOptions<double>
@@ -219,7 +219,7 @@ public class InstanceSegmentationIntegrationTests
 
     #region SOLOv2
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SOLOv2_Construction_Succeeds()
     {
         var options = new InstanceSegmentationOptions<double>
@@ -231,7 +231,7 @@ public class InstanceSegmentationIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SOLOv2_Segment_ReturnsResult()
     {
         var options = new InstanceSegmentationOptions<double>
@@ -244,7 +244,7 @@ public class InstanceSegmentationIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SOLOv2_GetParameterCount_ReturnsPositive()
     {
         var options = new InstanceSegmentationOptions<double>
@@ -260,7 +260,7 @@ public class InstanceSegmentationIntegrationTests
 
     #region YOLOSeg
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLOSeg_Construction_Succeeds()
     {
         var options = new InstanceSegmentationOptions<double>
@@ -272,7 +272,7 @@ public class InstanceSegmentationIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLOSeg_Segment_ReturnsResult()
     {
         var options = new InstanceSegmentationOptions<double>
@@ -285,7 +285,7 @@ public class InstanceSegmentationIntegrationTests
         Assert.NotNull(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void YOLOSeg_GetParameterCount_ReturnsPositive()
     {
         var options = new InstanceSegmentationOptions<double>

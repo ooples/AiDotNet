@@ -9,7 +9,7 @@ namespace AiDotNetTests.UnitTests.Helpers
 {
     public class TextProcessingHelperTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SplitIntoSentences_WithNull_ReturnsEmptyList()
         {
             // Act
@@ -20,7 +20,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Empty(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SplitIntoSentences_WithEmptyString_ReturnsEmptyList()
         {
             // Act
@@ -31,7 +31,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Empty(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SplitIntoSentences_WithWhitespace_ReturnsEmptyList()
         {
             // Act
@@ -42,7 +42,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Empty(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SplitIntoSentences_WithSingleSentence_ReturnsSingleItem()
         {
             // Arrange
@@ -56,7 +56,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("This is a sentence.", result[0]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SplitIntoSentences_WithMultipleSentences_SplitsCorrectly()
         {
             // Arrange
@@ -72,7 +72,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("Third sentence.", result[2]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SplitIntoSentences_WithExclamationMark_SplitsCorrectly()
         {
             // Arrange
@@ -87,7 +87,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("How are you?", result[1]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SplitIntoSentences_WithQuestionMark_SplitsCorrectly()
         {
             // Arrange
@@ -103,7 +103,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("Really?", result[2]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SplitIntoSentences_WithNewlines_SplitsCorrectly()
         {
             // Arrange
@@ -119,7 +119,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("Third line.", result[2]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SplitIntoSentences_WithMixedPunctuation_SplitsCorrectly()
         {
             // Arrange
@@ -135,7 +135,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("Exclamation three!", result[2]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SplitIntoSentences_WithNoTrailingPunctuation_IncludesLastSentence()
         {
             // Arrange
@@ -150,7 +150,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("Second sentence", result[1]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_WithNull_ReturnsEmptyList()
         {
             // Act
@@ -161,7 +161,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Empty(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_WithEmptyString_ReturnsEmptyList()
         {
             // Act
@@ -172,7 +172,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Empty(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_WithSingleWord_ReturnsSingleToken()
         {
             // Arrange
@@ -186,7 +186,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("hello", result[0]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_WithMultipleWords_ReturnsAllTokens()
         {
             // Arrange
@@ -202,7 +202,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("test", result[2]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_WithPunctuation_SplitsCorrectly()
         {
             // Arrange
@@ -217,7 +217,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("world", result[1]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_WithUpperCase_ConvertsToLowerCase()
         {
             // Arrange
@@ -232,7 +232,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("world", result[1]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_WithMixedCase_ConvertsToLowerCase()
         {
             // Arrange
@@ -247,7 +247,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("world", result[1]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_WithTabs_SplitsCorrectly()
         {
             // Arrange
@@ -263,7 +263,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("test", result[2]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_WithNewlines_SplitsCorrectly()
         {
             // Arrange
@@ -279,7 +279,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("test", result[2]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_WithMultipleSpaces_IgnoresEmptyTokens()
         {
             // Arrange
@@ -295,7 +295,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("test", result[2]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_WithSentence_RemovesPunctuation()
         {
             // Arrange
@@ -314,7 +314,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("works", result[5]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_WithQuestionMarks_RemovesThem()
         {
             // Arrange
@@ -329,7 +329,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("why", result[1]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_WithCommas_RemovesThem()
         {
             // Arrange
@@ -345,7 +345,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("three", result[2]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SplitIntoSentences_WithLongText_HandlesCorrectly()
         {
             // Arrange
@@ -363,7 +363,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Contains("fourth sentence", result[3]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_WithNumbers_IncludesThem()
         {
             // Arrange
@@ -380,7 +380,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Contains("456", result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SplitIntoSentences_WithConsecutivePunctuation_HandlesCorrectly()
         {
             // Arrange
@@ -394,7 +394,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.All(result, sentence => Assert.False(string.IsNullOrWhiteSpace(sentence)));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_WithHyphenatedWords_PreservesHyphenatedWords()
         {
             // Arrange
@@ -409,7 +409,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Contains("technology", result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SplitIntoSentences_WithExtraSpaces_TrimsCorrectly()
         {
             // Arrange
@@ -424,7 +424,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.All(result, sentence => Assert.False(sentence.EndsWith("  ")));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_WithCarriageReturn_SplitsCorrectly()
         {
             // Arrange

@@ -14,7 +14,7 @@ public class PrototypesDeepMathIntegrationTests
     // PrototypeVector: Construction
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_FromLength_AllZeros()
     {
         var vec = new PrototypeVector<double>(5);
@@ -25,7 +25,7 @@ public class PrototypesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_FromArray_CopiesValues()
     {
         var data = new double[] { 1.0, 2.0, 3.0 };
@@ -36,7 +36,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Equal(3.0, vec[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_FromArray_DoesNotMutateSource()
     {
         var data = new double[] { 1.0, 2.0, 3.0 };
@@ -49,7 +49,7 @@ public class PrototypesDeepMathIntegrationTests
     // PrototypeVector: Factory Methods
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Zeros_AllZero()
     {
         var vec = PrototypeVector<double>.Zeros(10);
@@ -60,7 +60,7 @@ public class PrototypesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Ones_AllOne()
     {
         var vec = PrototypeVector<double>.Ones(5);
@@ -71,7 +71,7 @@ public class PrototypesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_FromArray_Factory()
     {
         var vec = PrototypeVector<double>.FromArray(new double[] { 4.0, 5.0, 6.0 });
@@ -85,7 +85,7 @@ public class PrototypesDeepMathIntegrationTests
     // PrototypeVector: Indexer
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Indexer_SetAndGet()
     {
         var vec = new PrototypeVector<double>(3);
@@ -102,7 +102,7 @@ public class PrototypesDeepMathIntegrationTests
     // PrototypeVector: Arithmetic Operations
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Add_ElementWise()
     {
         var a = PrototypeVector<double>.FromArray(new double[] { 1.0, 2.0, 3.0 });
@@ -115,7 +115,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Equal(9.0, result[2], 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Subtract_ElementWise()
     {
         var a = PrototypeVector<double>.FromArray(new double[] { 10.0, 20.0, 30.0 });
@@ -127,7 +127,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Equal(20.0, result[2], 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Multiply_ElementWise()
     {
         var a = PrototypeVector<double>.FromArray(new double[] { 2.0, 3.0, 4.0 });
@@ -139,7 +139,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Equal(28.0, result[2], 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Multiply_Scalar()
     {
         var a = PrototypeVector<double>.FromArray(new double[] { 1.0, 2.0, 3.0 });
@@ -149,7 +149,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Equal(9.0, result[2], 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Divide_ElementWise()
     {
         var a = PrototypeVector<double>.FromArray(new double[] { 10.0, 20.0, 30.0 });
@@ -161,7 +161,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Equal(3.0, result[2], 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Divide_Scalar()
     {
         var a = PrototypeVector<double>.FromArray(new double[] { 6.0, 12.0, 18.0 });
@@ -171,7 +171,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Equal(6.0, result[2], 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Sqrt_ElementWise()
     {
         var a = PrototypeVector<double>.FromArray(new double[] { 4.0, 9.0, 16.0 });
@@ -181,7 +181,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Equal(4.0, result[2], 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Power_ElementWise()
     {
         var a = PrototypeVector<double>.FromArray(new double[] { 2.0, 3.0, 4.0 });
@@ -195,7 +195,7 @@ public class PrototypesDeepMathIntegrationTests
     // PrototypeVector: Arithmetic Identities
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_AddZero_Identity()
     {
         var a = PrototypeVector<double>.FromArray(new double[] { 1.0, 2.0, 3.0 });
@@ -206,7 +206,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Equal(3.0, result[2], 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_MultiplyByOne_Identity()
     {
         var a = PrototypeVector<double>.FromArray(new double[] { 5.0, 10.0, 15.0 });
@@ -216,7 +216,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Equal(15.0, result[2], 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_MultiplyByZero_AllZero()
     {
         var a = PrototypeVector<double>.FromArray(new double[] { 5.0, 10.0, 15.0 });
@@ -226,7 +226,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Equal(0.0, result[2], 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_SubtractSelf_AllZero()
     {
         var a = PrototypeVector<double>.FromArray(new double[] { 7.0, 14.0, 21.0 });
@@ -240,7 +240,7 @@ public class PrototypesDeepMathIntegrationTests
     // PrototypeVector: ToArray and ToVector
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_ToArray_ReturnsCorrectValues()
     {
         var vec = PrototypeVector<double>.FromArray(new double[] { 1.0, 2.0, 3.0 });
@@ -248,7 +248,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Equal(new double[] { 1.0, 2.0, 3.0 }, arr);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_ToVector_ReturnsVector()
     {
         var vec = PrototypeVector<double>.FromArray(new double[] { 1.0, 2.0 });
@@ -262,7 +262,7 @@ public class PrototypesDeepMathIntegrationTests
     // PrototypeVector: ToString
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_ToString_Short()
     {
         var vec = PrototypeVector<double>.FromArray(new double[] { 1.0, 2.0, 3.0 });
@@ -273,7 +273,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Contains("3", str);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_ToString_Long_ShowsEllipsis()
     {
         var data = new double[20];
@@ -288,7 +288,7 @@ public class PrototypesDeepMathIntegrationTests
     // PrototypeVector: Float Type
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PrototypeVector_Float_BasicArithmetic()
     {
         var a = PrototypeVector<float>.FromArray(new float[] { 1.0f, 2.0f, 3.0f });
@@ -303,7 +303,7 @@ public class PrototypesDeepMathIntegrationTests
     // SimpleLinearRegression: Construction
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_Construction_Properties()
     {
         var model = new SimpleLinearRegression<double>(5);
@@ -311,13 +311,13 @@ public class PrototypesDeepMathIntegrationTests
         Assert.True(model.IsTrained); // Initialized with zeros, so technically "trained"
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_ZeroFeatures_Throws()
     {
         Assert.Throws<ArgumentException>(() => new SimpleLinearRegression<double>(0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_NegativeFeatures_Throws()
     {
         Assert.Throws<ArgumentException>(() => new SimpleLinearRegression<double>(-1));
@@ -327,7 +327,7 @@ public class PrototypesDeepMathIntegrationTests
     // SimpleLinearRegression: Initial Weights and Bias
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_InitialWeights_AllZero()
     {
         var model = new SimpleLinearRegression<double>(3);
@@ -339,7 +339,7 @@ public class PrototypesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_InitialBias_Zero()
     {
         var model = new SimpleLinearRegression<double>(3);
@@ -352,7 +352,7 @@ public class PrototypesDeepMathIntegrationTests
     // SimpleLinearRegression: Prediction (untrained = zeros)
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_PredictUntrained_ReturnsZero()
     {
         var model = new SimpleLinearRegression<double>(2);
@@ -362,7 +362,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Equal(0.0, prediction, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_Predict_WrongFeatureCount_Throws()
     {
         var model = new SimpleLinearRegression<double>(3);
@@ -374,7 +374,7 @@ public class PrototypesDeepMathIntegrationTests
     // SimpleLinearRegression: ComputeMSE
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_ComputeMSE_PerfectPrediction_Zero()
     {
         var model = new SimpleLinearRegression<double>(1);
@@ -385,7 +385,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Equal(0.0, mse, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_ComputeMSE_KnownValues()
     {
         var model = new SimpleLinearRegression<double>(1);
@@ -398,7 +398,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Equal(1.0, mse, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_ComputeMSE_NonNegative()
     {
         var model = new SimpleLinearRegression<double>(1);
@@ -413,7 +413,7 @@ public class PrototypesDeepMathIntegrationTests
     // SimpleLinearRegression: ComputeR2Score
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_ComputeR2_PerfectPrediction_IsOne()
     {
         var model = new SimpleLinearRegression<double>(1);
@@ -424,7 +424,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Equal(1.0, r2, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_ComputeR2_MeanPrediction_IsZero()
     {
         var model = new SimpleLinearRegression<double>(1);
@@ -441,7 +441,7 @@ public class PrototypesDeepMathIntegrationTests
     // SimpleLinearRegression: Training
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_Train_SimpleLine()
     {
         // y = 2*x + 1
@@ -475,7 +475,7 @@ public class PrototypesDeepMathIntegrationTests
             $"Bias should be near 1.0, got {bias}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_Train_ReducesLoss()
     {
         var model = new SimpleLinearRegression<double>(1);
@@ -507,7 +507,7 @@ public class PrototypesDeepMathIntegrationTests
             $"Training should reduce loss: initial={initialLoss}, final={finalLoss}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_Train_WrongXLength_Throws()
     {
         var model = new SimpleLinearRegression<double>(2);
@@ -517,7 +517,7 @@ public class PrototypesDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => model.Train(X, y, 2, learningRate: 0.01, numEpochs: 1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_Train_WrongYLength_Throws()
     {
         var model = new SimpleLinearRegression<double>(1);
@@ -531,7 +531,7 @@ public class PrototypesDeepMathIntegrationTests
     // SimpleLinearRegression: PredictBatch
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_PredictBatch_WrongLength_Throws()
     {
         var model = new SimpleLinearRegression<double>(2);
@@ -544,7 +544,7 @@ public class PrototypesDeepMathIntegrationTests
     // SimpleLinearRegression: ToString
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_ToString_ContainsFeatureCount()
     {
         var model = new SimpleLinearRegression<double>(3);
@@ -557,7 +557,7 @@ public class PrototypesDeepMathIntegrationTests
     // SimpleLinearRegression: Float Type
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SimpleLinearRegression_Float_ConstructAndPredict()
     {
         var model = new SimpleLinearRegression<float>(2);

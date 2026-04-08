@@ -14,7 +14,7 @@ public class ExpressionTreeIntegrationTests
 
     #region Node Type Construction
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_ConstantNode_CreatesCorrectly()
     {
         var tree = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -24,7 +24,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(5.0, tree.Value, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_VariableNode_CreatesCorrectly()
     {
         // Variable x[2]
@@ -35,7 +35,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(2.0, tree.Value, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_AddNode_WithChildren()
     {
         // Create: 3 + 5
@@ -74,7 +74,7 @@ public class ExpressionTreeIntegrationTests
 
     #region Evaluation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Evaluate_ConstantReturnsValue()
     {
         var tree = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -86,7 +86,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(42.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Evaluate_VariableReturnsInputValue()
     {
         // Variable x[1]
@@ -99,7 +99,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(20.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Evaluate_Addition()
     {
         // Create: 3 + 5 = 8
@@ -116,7 +116,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(8.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Evaluate_Subtraction()
     {
         // Create: 10 - 3 = 7
@@ -133,7 +133,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(7.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Evaluate_Multiplication()
     {
         // Create: 4 * 6 = 24
@@ -150,7 +150,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(24.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Evaluate_Division()
     {
         // Create: 12 / 4 = 3
@@ -167,7 +167,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(3.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Evaluate_ComplexExpression()
     {
         // Create: (x[0] * 2) + x[1] = (3 * 2) + 4 = 10
@@ -188,7 +188,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(10.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Evaluate_NestedExpression()
     {
         // Create: ((2 + 3) * (6 - 1)) = 5 * 5 = 25
@@ -219,7 +219,7 @@ public class ExpressionTreeIntegrationTests
 
     #region Complexity
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Complexity_SingleNode()
     {
         var tree = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -228,7 +228,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(1, tree.Complexity);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Complexity_TwoLevelTree()
     {
         // Tree: (a + b) has complexity 3
@@ -242,7 +242,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(3, add.Complexity);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Complexity_NestedTree()
     {
         // Tree: ((a + b) * c) has complexity 5
@@ -264,7 +264,7 @@ public class ExpressionTreeIntegrationTests
 
     #region Feature Count
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_FeatureCount_ConstantOnly()
     {
         var tree = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -273,7 +273,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(0, tree.FeatureCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_FeatureCount_SingleVariable()
     {
         var tree = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -282,7 +282,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(1, tree.FeatureCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_FeatureCount_MultipleVariables()
     {
         // x[0] + x[2] (uses variables at index 0 and 2)
@@ -297,7 +297,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(2, add.FeatureCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_FeatureCount_RepeatedVariable()
     {
         // x[0] + x[0] (same variable twice)
@@ -312,7 +312,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(1, add.FeatureCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_IsFeatureUsed_ReturnsTrue()
     {
         // x[0] + x[2]
@@ -327,7 +327,7 @@ public class ExpressionTreeIntegrationTests
         Assert.True(add.IsFeatureUsed(2));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_IsFeatureUsed_ReturnsFalse()
     {
         // x[0] + x[2]
@@ -342,7 +342,7 @@ public class ExpressionTreeIntegrationTests
         Assert.False(add.IsFeatureUsed(3)); // x[3] not used
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_RequiredFeatureCount_ConstantOnly()
     {
         var tree = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -352,7 +352,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(0, tree.RequiredFeatureCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_RequiredFeatureCount_SingleVariable()
     {
         // Uses x[0] - requires at least 1 column
@@ -362,7 +362,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(1, tree.RequiredFeatureCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_RequiredFeatureCount_SparseVariables()
     {
         // x[0] + x[5] - FeatureCount is 2 (unique variables), but RequiredFeatureCount is 6 (max index + 1)
@@ -380,7 +380,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(6, add.RequiredFeatureCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_RequiredFeatureCount_ValidatesInputCorrectly()
     {
         // Tree uses only x[5] - requires 6 columns (indices 0-5)
@@ -407,7 +407,7 @@ public class ExpressionTreeIntegrationTests
 
     #region ToString
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_ToString_Constant()
     {
         var tree = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -416,7 +416,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal("5", tree.ToString());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_ToString_Variable()
     {
         var tree = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -425,7 +425,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal("x[2]", tree.ToString());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_ToString_Addition()
     {
         var left = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -438,7 +438,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal("(3 + 5)", add.ToString());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_ToString_ComplexExpression()
     {
         // (x[0] * 2)
@@ -456,7 +456,7 @@ public class ExpressionTreeIntegrationTests
 
     #region Get All Nodes
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_GetAllNodes_SingleNode()
     {
         var tree = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -467,7 +467,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Single(nodes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_GetAllNodes_TreeWithChildren()
     {
         var left = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -486,7 +486,7 @@ public class ExpressionTreeIntegrationTests
 
     #region Coefficients
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Coefficients_SingleConstant()
     {
         var tree = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -498,7 +498,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(5.0, coeffs[0], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Coefficients_MultipleConstants()
     {
         // 3 + 5
@@ -516,7 +516,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(5.0, coeffs[1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_ParameterCount_EqualsConstantCount()
     {
         // (2 * x[0]) + 5
@@ -538,7 +538,7 @@ public class ExpressionTreeIntegrationTests
 
     #region SetType and SetValue
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_SetType_ChangesNodeType()
     {
         var tree = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -549,7 +549,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(ExpressionNodeType.Variable, tree.Type);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_SetValue_ChangesValue()
     {
         var tree = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -564,7 +564,7 @@ public class ExpressionTreeIntegrationTests
 
     #region SetLeft and SetRight
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_SetLeft_UpdatesParent()
     {
         var parent = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -578,7 +578,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Same(parent, child.Parent);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_SetRight_UpdatesParent()
     {
         var parent = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -596,7 +596,7 @@ public class ExpressionTreeIntegrationTests
 
     #region Predict
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Predict_SingleSample()
     {
         // y = 2 * x[0] + 3
@@ -618,7 +618,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(13.0, predictions[0], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Predict_MultipleSamples()
     {
         // y = x[0] + x[1]
@@ -643,7 +643,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(11.0, predictions[2], Tolerance); // 5 + 6
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Predict_InsufficientFeatures_Throws()
     {
         // Tree uses x[2] - requires at least 3 columns (indices 0, 1, 2)
@@ -661,7 +661,7 @@ public class ExpressionTreeIntegrationTests
 
     #region Copy and Clone
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Copy_CreatesIndependentTree()
     {
         var original = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -674,7 +674,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(original.Value, copy.Value, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_Clone_DeepCopiesChildren()
     {
         var left = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -695,7 +695,7 @@ public class ExpressionTreeIntegrationTests
 
     #region Serialization
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_SerializeDeserialize_PreservesStructure()
     {
         // Create: 3 + 5
@@ -724,7 +724,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(5.0, deserialized.Right.Value, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_SerializeDeserialize_PreservesEvaluation()
     {
         // Create: 2 * x[0] + 3
@@ -757,7 +757,7 @@ public class ExpressionTreeIntegrationTests
 
     #region Unique IDs
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_EachNode_HasUniqueId()
     {
         var left = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -774,7 +774,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(3, ids.Distinct().Count()); // All IDs should be unique
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_FindNodeById_ReturnsCorrectNode()
     {
         var left = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -790,7 +790,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(5.0, foundNode.Value, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_FindNodeById_NonExistent_ReturnsNull()
     {
         var tree = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -805,7 +805,7 @@ public class ExpressionTreeIntegrationTests
 
     #region Feature Importance
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_GetFeatureImportance_SingleVariable()
     {
         var x0 = new ExpressionTree<double, Matrix<double>, Vector<double>>(
@@ -818,7 +818,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(1.0, importance["x[0]"], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_GetFeatureImportance_MultipleVariables()
     {
         // x[0] + x[1]
@@ -836,7 +836,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Equal(0.5, importance["x[1]"], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_GetFeatureImportance_RepeatedVariable()
     {
         // x[0] + x[0] (x[0] appears twice, x[1] once)
@@ -862,7 +862,7 @@ public class ExpressionTreeIntegrationTests
 
     #region Active Feature Indices
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_GetActiveFeatureIndices_ReturnsUsedIndices()
     {
         // x[0] + x[2]
@@ -880,7 +880,7 @@ public class ExpressionTreeIntegrationTests
         Assert.Contains(2, indices);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_SetActiveFeatureIndices_DeactivatesUnused()
     {
         // x[0] + x[1] + x[2]
@@ -917,7 +917,7 @@ public class ExpressionTreeIntegrationTests
 
     #region Metadata
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpressionTree_GetModelMetadata_ReturnsCorrectInfo()
     {
         // 2 * x[0] + 3

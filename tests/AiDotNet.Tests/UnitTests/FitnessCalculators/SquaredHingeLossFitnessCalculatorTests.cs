@@ -11,7 +11,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
 public class SquaredHingeLossFitnessCalculatorTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
     {
         // Arrange
@@ -29,7 +29,7 @@ public class SquaredHingeLossFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithConfidentCorrectPredictions_ReturnsZero()
     {
         // Arrange
@@ -47,7 +47,7 @@ public class SquaredHingeLossFitnessCalculatorTests
         Assert.Equal(0.0, result, 10);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithIncorrectPredictions_ReturnsPositiveValue()
     {
         // Arrange
@@ -65,7 +65,7 @@ public class SquaredHingeLossFitnessCalculatorTests
         Assert.True(result > 0.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithMixedPredictions_HandlesCorrectly()
     {
         // Arrange
@@ -83,7 +83,7 @@ public class SquaredHingeLossFitnessCalculatorTests
         Assert.True(result >= 0.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_SquaresPenalty_LargeErrorsMorePenalized()
     {
         // Arrange
@@ -111,7 +111,7 @@ public class SquaredHingeLossFitnessCalculatorTests
         Assert.True(result2 > result1 * 4); // Squared relationship
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IsHigherScoreBetter_ReturnsFalse()
     {
         // Arrange
@@ -121,7 +121,7 @@ public class SquaredHingeLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IsBetterFitness_WithLowerScore_ReturnsTrue()
     {
         // Arrange
@@ -134,7 +134,7 @@ public class SquaredHingeLossFitnessCalculatorTests
         Assert.True(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IsBetterFitness_WithHigherScore_ReturnsFalse()
     {
         // Arrange
@@ -147,7 +147,7 @@ public class SquaredHingeLossFitnessCalculatorTests
         Assert.False(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
     {
         // Arrange
@@ -165,7 +165,7 @@ public class SquaredHingeLossFitnessCalculatorTests
         Assert.Equal(0.0f, result, 5);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
     {
         // Arrange
@@ -175,7 +175,7 @@ public class SquaredHingeLossFitnessCalculatorTests
         Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -186,7 +186,7 @@ public class SquaredHingeLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithTestDataSetType_SetsCorrectly()
     {
         // Arrange & Act
@@ -197,7 +197,7 @@ public class SquaredHingeLossFitnessCalculatorTests
         Assert.False(calculator.IsHigherScoreBetter);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithBinaryClassification_WorksCorrectly()
     {
         // Arrange
@@ -215,7 +215,7 @@ public class SquaredHingeLossFitnessCalculatorTests
         Assert.True(result > 0.0); // One misclassification
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithUncertainPredictions_PenalizesCorrectly()
     {
         // Arrange
@@ -243,7 +243,7 @@ public class SquaredHingeLossFitnessCalculatorTests
         Assert.True(result2 > result1);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateFitnessScore_WithAllCorrectPredictions_ReturnsZero()
     {
         // Arrange

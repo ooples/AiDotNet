@@ -7,7 +7,7 @@ namespace AiDotNetTests.UnitTests.Training
 {
     public class TrainingConfigTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void LoadFromString_FullRecipe_DeserializesAllSections()
         {
             // Arrange
@@ -72,7 +72,7 @@ trainer:
             Assert.Equal(42, config.Trainer.Seed);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void LoadFromString_MinimalRecipe_UsesDefaults()
         {
             // Arrange
@@ -93,7 +93,7 @@ model:
             Assert.Null(config.Trainer);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void LoadFromString_EmptyYaml_ThrowsArgumentException()
         {
             // Act & Assert
@@ -101,7 +101,7 @@ model:
                 YamlConfigLoader.LoadFromString<TrainingRecipeConfig>(""));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void TrainingRecipeConfig_DefaultValues_AreCorrect()
         {
             // Act
@@ -115,7 +115,7 @@ model:
             Assert.Null(config.Trainer);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DatasetConfig_DefaultValues_AreCorrect()
         {
             // Act
@@ -129,7 +129,7 @@ model:
             Assert.Equal(-1, config.LabelColumn);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void TrainerSettings_DefaultValues_AreCorrect()
         {
             // Act
@@ -141,7 +141,7 @@ model:
             Assert.Null(config.Seed);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OptimizerConfig_DefaultValues_AreCorrect()
         {
             // Act
@@ -154,7 +154,7 @@ model:
             Assert.Empty(config.Params);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void LossFunctionConfig_DefaultValues_AreCorrect()
         {
             // Act
@@ -166,7 +166,7 @@ model:
             Assert.Empty(config.Params);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ModelConfig_DefaultValues_AreCorrect()
         {
             // Act
@@ -178,7 +178,7 @@ model:
             Assert.Empty(config.Params);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void LoadFromString_WithOnlyTrainerSection_DeserializesCorrectly()
         {
             // Arrange
@@ -200,7 +200,7 @@ trainer:
             Assert.True(config.Trainer.EnableLogging); // default
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void LoadFromString_WithLossFunctionParams_DeserializesParamsDictionary()
         {
             // Arrange
@@ -224,7 +224,7 @@ lossFunction:
             Assert.True(config.LossFunction.Params.ContainsKey("alpha"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void LoadFromString_WithOptimizerSection_DeserializesCorrectly()
         {
             // Arrange

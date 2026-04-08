@@ -13,7 +13,7 @@ public class AdvancedAlgebraNetworkTests
 {
     #region OctonionNeuralNetwork Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OctonionNeuralNetwork_Construction_CreatesValidNetwork()
     {
         // Arrange - Create architecture with custom octonion layers
@@ -38,7 +38,7 @@ public class AdvancedAlgebraNetworkTests
         Assert.True(network.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OctonionNeuralNetwork_Predict_ReturnsCorrectShape()
     {
         // Arrange
@@ -65,7 +65,7 @@ public class AdvancedAlgebraNetworkTests
         Assert.Equal(8, output.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OctonionNeuralNetwork_Train_CompletesWithoutError()
     {
         // Arrange
@@ -91,7 +91,7 @@ public class AdvancedAlgebraNetworkTests
         network.Train(input, target);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OctonionNeuralNetwork_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -117,7 +117,7 @@ public class AdvancedAlgebraNetworkTests
         Assert.True((int)metadata.AdditionalInfo["ParameterCount"] > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OctonionNeuralNetwork_MultiLayer_CreatesCorrectLayers()
     {
         // Arrange
@@ -146,7 +146,7 @@ public class AdvancedAlgebraNetworkTests
 
     #region HyperbolicNeuralNetwork Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HyperbolicNeuralNetwork_Construction_CreatesValidNetwork()
     {
         // Arrange
@@ -171,7 +171,7 @@ public class AdvancedAlgebraNetworkTests
         Assert.True(network.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HyperbolicNeuralNetwork_Construction_RejectsPositiveCurvature()
     {
         // Arrange
@@ -192,7 +192,7 @@ public class AdvancedAlgebraNetworkTests
             new HyperbolicNeuralNetwork<double>(architecture, curvature: 1.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HyperbolicNeuralNetwork_Predict_ReturnsCorrectShape()
     {
         // Arrange
@@ -222,7 +222,7 @@ public class AdvancedAlgebraNetworkTests
         Assert.Equal(5, output.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HyperbolicNeuralNetwork_Train_CompletesWithoutError()
     {
         // Arrange
@@ -248,7 +248,7 @@ public class AdvancedAlgebraNetworkTests
         network.Train(input, target);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HyperbolicNeuralNetwork_GetModelMetadata_IncludesCurvature()
     {
         // Arrange
@@ -273,7 +273,7 @@ public class AdvancedAlgebraNetworkTests
         Assert.Equal(-2.0, (double)metadata.AdditionalInfo["Curvature"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HyperbolicNeuralNetwork_MultiLayer_CreatesCorrectLayers()
     {
         // Arrange
@@ -302,7 +302,7 @@ public class AdvancedAlgebraNetworkTests
 
     #region SparseNeuralNetwork Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SparseNeuralNetwork_Construction_CreatesValidNetwork()
     {
         // Arrange
@@ -327,7 +327,7 @@ public class AdvancedAlgebraNetworkTests
         Assert.True(network.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SparseNeuralNetwork_Construction_RejectsInvalidSparsity()
     {
         // Arrange
@@ -352,7 +352,7 @@ public class AdvancedAlgebraNetworkTests
             new SparseNeuralNetwork<double>(architecture, sparsity: 1.5));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SparseNeuralNetwork_Predict_ReturnsCorrectShape()
     {
         // Arrange
@@ -381,7 +381,7 @@ public class AdvancedAlgebraNetworkTests
         Assert.Equal(10, output.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SparseNeuralNetwork_ParameterCount_ReflectsSparsity()
     {
         // Arrange
@@ -409,7 +409,7 @@ public class AdvancedAlgebraNetworkTests
             $"Sparse network should have at least bias parameters. Got: {paramCount}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SparseNeuralNetwork_Train_CompletesWithoutError()
     {
         // Arrange
@@ -435,7 +435,7 @@ public class AdvancedAlgebraNetworkTests
         network.Train(input, target);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SparseNeuralNetwork_GetModelMetadata_IncludesSparsity()
     {
         // Arrange
@@ -460,7 +460,7 @@ public class AdvancedAlgebraNetworkTests
         Assert.Equal(0.95, (double)metadata.AdditionalInfo["Sparsity"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SparseNeuralNetwork_MultiLayer_CreatesCorrectLayers()
     {
         // Arrange

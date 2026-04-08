@@ -27,7 +27,7 @@ public class AesGcmModelArtifactProtectorTests
         Assert.Equal(expectedParamName, ex.ParamName);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ProtectToFile_WritesHeaderAndReturnsArtifact()
     {
         var protector = new AesGcmModelArtifactProtector();

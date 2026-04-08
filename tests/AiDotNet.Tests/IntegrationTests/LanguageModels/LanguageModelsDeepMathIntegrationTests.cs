@@ -18,7 +18,7 @@ public class LanguageModelsDeepMathIntegrationTests
     // OpenAIChatModel: Construction
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OpenAIChatModel_DefaultModelName()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey);
@@ -35,33 +35,33 @@ public class LanguageModelsDeepMathIntegrationTests
         Assert.Equal(modelName, model.ModelName);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OpenAIChatModel_MaxContextTokens_Positive()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey);
         Assert.True(model.MaxContextTokens > 0, "MaxContextTokens should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OpenAIChatModel_MaxGenerationTokens_Positive()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey);
         Assert.True(model.MaxGenerationTokens > 0, "MaxGenerationTokens should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OpenAIChatModel_NullApiKey_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new OpenAIChatModel<double>(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OpenAIChatModel_EmptyApiKey_Throws()
     {
         Assert.Throws<ArgumentException>(() => new OpenAIChatModel<double>(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OpenAIChatModel_WhitespaceApiKey_Throws()
     {
         Assert.Throws<ArgumentException>(() => new OpenAIChatModel<double>("   "));
@@ -71,7 +71,7 @@ public class LanguageModelsDeepMathIntegrationTests
     // AzureOpenAIChatModel: Construction
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AzureOpenAIChatModel_ValidConstruction()
     {
         var model = new AzureOpenAIChatModel<double>(
@@ -81,14 +81,14 @@ public class LanguageModelsDeepMathIntegrationTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AzureOpenAIChatModel_NullEndpoint_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
             new AzureOpenAIChatModel<double>(ValidApiKey, null!, "deployment"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AzureOpenAIChatModel_NullDeploymentName_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -136,7 +136,7 @@ public class LanguageModelsDeepMathIntegrationTests
         Assert.Equal(expectedCost, cost, 1e-3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LLMMath_CostScaling_BatchVsSingle()
     {
         // Batch processing should cost the same as individual calls (same token count)
@@ -206,7 +206,7 @@ public class LanguageModelsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LLMMath_TemperatureSampling_LowTempMoreFocused()
     {
         double[] logits = { 2.0, 1.0, 0.5, 0.1 };
@@ -225,7 +225,7 @@ public class LanguageModelsDeepMathIntegrationTests
             "High temperature should have higher entropy");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LLMMath_TemperatureZero_ApproachesArgmax()
     {
         double[] logits = { 2.0, 1.0, 0.5, 0.1 };
@@ -313,7 +313,7 @@ public class LanguageModelsDeepMathIntegrationTests
         Assert.Equal(expectedPerplexity, perplexity, 1e-2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LLMMath_Perplexity_PerfectPrediction()
     {
         // If the model always predicts with probability 1 (log_prob = 0), perplexity = 1
@@ -322,7 +322,7 @@ public class LanguageModelsDeepMathIntegrationTests
         Assert.Equal(1.0, perplexity, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LLMMath_Perplexity_LowerIsBetter()
     {
         double[] goodLogProbs = { -0.1, -0.2, -0.1, -0.15 };
@@ -339,7 +339,7 @@ public class LanguageModelsDeepMathIntegrationTests
     // LLM Math: Attention Mechanism
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LLMMath_ScaledDotProductAttention()
     {
         // Attention(Q, K, V) = softmax(QK^T / sqrt(d_k)) * V
@@ -394,7 +394,7 @@ public class LanguageModelsDeepMathIntegrationTests
     // LLM Math: Positional Encoding
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LLMMath_SinusoidalPositionalEncoding()
     {
         // PE(pos, 2i) = sin(pos / 10000^(2i/d_model))

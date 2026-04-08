@@ -40,7 +40,7 @@ public abstract class DiffusionModelTestBase
     // should move closer to the target — verifying gradient flow works.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Training_ShouldReducePredictionError()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -73,7 +73,7 @@ public abstract class DiffusionModelTestBase
     // ignores its input is fundamentally broken.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DifferentInputs_ShouldProduceDifferentOutputs()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -103,7 +103,7 @@ public abstract class DiffusionModelTestBase
     // f(x) ≠ f(10x) — the model should be sensitive to magnitude.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScaledInput_ShouldChangeOutput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -137,7 +137,7 @@ public abstract class DiffusionModelTestBase
     // (denoising maps noisy input → clean output of same dimensions).
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OutputShape_ShouldMatchInputShape()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -152,7 +152,7 @@ public abstract class DiffusionModelTestBase
     // MATHEMATICAL INVARIANT: Finite Output Before and After Training
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForwardPass_ShouldProduceFiniteOutput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -168,7 +168,7 @@ public abstract class DiffusionModelTestBase
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForwardPass_ShouldBeFinite_AfterTraining()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -193,7 +193,7 @@ public abstract class DiffusionModelTestBase
     // This verifies the noise schedule is properly configured.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NoiseSchedule_ShouldBeMonotonic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -237,7 +237,7 @@ public abstract class DiffusionModelTestBase
     // Generated output should be bounded — no exploding values.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OutputRange_ShouldBeValid()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -258,7 +258,7 @@ public abstract class DiffusionModelTestBase
     // BASIC CONTRACTS: Determinism, Clone, Metadata, Parameters, Scheduler
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Predict_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -272,7 +272,7 @@ public abstract class DiffusionModelTestBase
             Assert.Equal(out1[i], out2[i], 12); // Tensors 0.16.0 deterministic BLAS — exact match expected
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clone_ShouldProduceIdenticalOutput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -288,7 +288,7 @@ public abstract class DiffusionModelTestBase
             Assert.Equal(original[i], clonedOutput[i]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Metadata_ShouldExist()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -299,7 +299,7 @@ public abstract class DiffusionModelTestBase
         Assert.NotNull(model.GetModelMetadata());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Parameters_ShouldBeNonEmpty()
     {
         var model = CreateModel();
@@ -307,7 +307,7 @@ public abstract class DiffusionModelTestBase
             "Diffusion model should have learnable parameters.");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Scheduler_ShouldBeNonNull()
     {
         var model = CreateModel();

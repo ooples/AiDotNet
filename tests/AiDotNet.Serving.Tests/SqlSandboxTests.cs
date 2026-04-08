@@ -36,7 +36,7 @@ public class SqlSandboxTests : IClassFixture<SqlSandboxTestFactory>
         return JsonConvert.DeserializeObject<T>(json, JsonSettings);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ExecuteSql_WithSQLiteAndRequestScopedSchema_ReturnsRows()
     {
         var request = new SqlExecuteRequest
@@ -67,7 +67,7 @@ public class SqlSandboxTests : IClassFixture<SqlSandboxTestFactory>
         Assert.Equal("a", row["name"].TextValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ExecuteSql_WithPostgresWithoutConfiguration_ReturnsBadRequest()
     {
         var request = new SqlExecuteRequest

@@ -19,7 +19,7 @@ public class IntervalBoundPropagationTests
 
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_Default_CreatesInstance()
     {
         // Act
@@ -32,7 +32,7 @@ public class IntervalBoundPropagationTests
         Assert.Equal("IBP", options.CertificationMethod);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithOptions_UsesOptions()
     {
         // Arrange
@@ -55,7 +55,7 @@ public class IntervalBoundPropagationTests
         Assert.Equal("IBP", returnedOptions.CertificationMethod);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
         // Act & Assert
@@ -66,7 +66,7 @@ public class IntervalBoundPropagationTests
 
     #region CertifyPrediction Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CertifyPrediction_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange
@@ -77,7 +77,7 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentNullException>(() => ibp.CertifyPrediction(null!, mockModel));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CertifyPrediction_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -88,7 +88,7 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentNullException>(() => ibp.CertifyPrediction(input, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CertifyPrediction_WithValidInput_ReturnsCertification()
     {
         // Arrange
@@ -111,7 +111,7 @@ public class IntervalBoundPropagationTests
         Assert.True(result.Confidence >= 0.0 && result.Confidence <= 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CertifyPrediction_WithSmallEpsilon_MayCertify()
     {
         // Arrange
@@ -133,7 +133,7 @@ public class IntervalBoundPropagationTests
         Assert.True(result.IsCertified);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CertifyPrediction_ReturnsBoundsForPredictedClass()
     {
         // Arrange
@@ -158,7 +158,7 @@ public class IntervalBoundPropagationTests
 
     #region CertifyBatch Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CertifyBatch_WithNullInputs_ThrowsArgumentNullException()
     {
         // Arrange
@@ -169,7 +169,7 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentNullException>(() => ibp.CertifyBatch(null!, mockModel));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CertifyBatch_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -180,7 +180,7 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentNullException>(() => ibp.CertifyBatch(inputs, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CertifyBatch_ReturnsCorrectNumberOfResults()
     {
         // Arrange
@@ -215,7 +215,7 @@ public class IntervalBoundPropagationTests
 
     #region ComputeCertifiedRadius Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeCertifiedRadius_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange
@@ -226,7 +226,7 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentNullException>(() => ibp.ComputeCertifiedRadius(null!, mockModel));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeCertifiedRadius_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -237,7 +237,7 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentNullException>(() => ibp.ComputeCertifiedRadius(input, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeCertifiedRadius_ReturnsNonNegativeRadius()
     {
         // Arrange
@@ -257,7 +257,7 @@ public class IntervalBoundPropagationTests
         Assert.True(radius >= 0.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeCertifiedRadius_WithLargeMarginModel_ReturnsLargerRadius()
     {
         // Arrange
@@ -288,7 +288,7 @@ public class IntervalBoundPropagationTests
 
     #region EvaluateCertifiedAccuracy Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EvaluateCertifiedAccuracy_WithNullTestData_ThrowsArgumentNullException()
     {
         // Arrange
@@ -301,7 +301,7 @@ public class IntervalBoundPropagationTests
             ibp.EvaluateCertifiedAccuracy(null!, labels, mockModel, 0.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EvaluateCertifiedAccuracy_WithNullLabels_ThrowsArgumentNullException()
     {
         // Arrange
@@ -314,7 +314,7 @@ public class IntervalBoundPropagationTests
             ibp.EvaluateCertifiedAccuracy(testData, null!, mockModel, 0.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EvaluateCertifiedAccuracy_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -327,7 +327,7 @@ public class IntervalBoundPropagationTests
             ibp.EvaluateCertifiedAccuracy(testData, labels, null!, 0.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EvaluateCertifiedAccuracy_WithMismatchedDimensions_ThrowsArgumentException()
     {
         // Arrange
@@ -345,7 +345,7 @@ public class IntervalBoundPropagationTests
             ibp.EvaluateCertifiedAccuracy(testData, labels, mockModel, 0.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EvaluateCertifiedAccuracy_ReturnsValidMetrics()
     {
         // Arrange
@@ -386,7 +386,7 @@ public class IntervalBoundPropagationTests
 
     #region Serialization Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Serialize_ReturnsNonEmptyBytes()
     {
         // Arrange
@@ -406,7 +406,7 @@ public class IntervalBoundPropagationTests
         Assert.True(bytes.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Deserialize_WithNullData_ThrowsArgumentNullException()
     {
         // Arrange
@@ -416,7 +416,7 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentNullException>(() => ibp.Deserialize(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SerializeDeserialize_PreservesOptions()
     {
         // Arrange
@@ -452,7 +452,7 @@ public class IntervalBoundPropagationTests
 
     #region SaveModel/LoadModel Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SaveModel_WithNullPath_ThrowsArgumentException()
     {
         // Arrange
@@ -462,7 +462,7 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentException>(() => ibp.SaveModel(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SaveModel_WithEmptyPath_ThrowsArgumentException()
     {
         // Arrange
@@ -472,7 +472,7 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentException>(() => ibp.SaveModel(string.Empty));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadModel_WithNullPath_ThrowsArgumentException()
     {
         // Arrange
@@ -482,7 +482,7 @@ public class IntervalBoundPropagationTests
         Assert.Throws<ArgumentException>(() => ibp.LoadModel(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadModel_WithNonExistentFile_ThrowsFileNotFoundException()
     {
         // Arrange
@@ -492,7 +492,7 @@ public class IntervalBoundPropagationTests
         Assert.Throws<FileNotFoundException>(() => ibp.LoadModel("nonexistent_ibp_model_12345.json"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SaveAndLoadModel_RoundTrip_PreservesOptions()
     {
         // Arrange
@@ -531,7 +531,7 @@ public class IntervalBoundPropagationTests
 
     #region Reset Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Reset_ResetsToDefaultOptions()
     {
         // Arrange
@@ -554,7 +554,7 @@ public class IntervalBoundPropagationTests
 
     #region Float Type Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CertifyPrediction_FloatType_WorksCorrectly()
     {
         // Arrange

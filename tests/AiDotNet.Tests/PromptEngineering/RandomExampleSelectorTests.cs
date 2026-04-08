@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.PromptEngineering;
 
 public class RandomExampleSelectorTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithSeed_CreatesReproducibleSelector()
     {
         var selector1 = new RandomExampleSelector<double>(seed: 42);
@@ -29,7 +29,7 @@ public class RandomExampleSelectorTests
         Assert.Equal(examples1[1].Input, examples2[1].Input);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SelectExamples_ReturnsRequestedCount()
     {
         var selector = new RandomExampleSelector<double>();
@@ -43,7 +43,7 @@ public class RandomExampleSelectorTests
         Assert.Equal(2, examples.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SelectExamples_WithCountGreaterThanAvailable_ReturnsAllExamples()
     {
         var selector = new RandomExampleSelector<double>();
@@ -56,7 +56,7 @@ public class RandomExampleSelectorTests
         Assert.Equal(2, examples.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AddExample_IncreasesExampleCount()
     {
         var selector = new RandomExampleSelector<double>();
@@ -66,7 +66,7 @@ public class RandomExampleSelectorTests
         Assert.Equal(1, selector.ExampleCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AddExample_WithNullExample_ThrowsArgumentNullException()
     {
         var selector = new RandomExampleSelector<double>();
@@ -74,7 +74,7 @@ public class RandomExampleSelectorTests
         Assert.Throws<ArgumentNullException>(() => selector.AddExample(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RemoveExample_DecreasesExampleCount()
     {
         var selector = new RandomExampleSelector<double>();
@@ -87,7 +87,7 @@ public class RandomExampleSelectorTests
         Assert.Equal(0, selector.ExampleCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetAllExamples_ReturnsAllAddedExamples()
     {
         var selector = new RandomExampleSelector<double>();

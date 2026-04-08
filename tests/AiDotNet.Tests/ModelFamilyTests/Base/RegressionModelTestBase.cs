@@ -23,7 +23,7 @@ public abstract class RegressionModelTestBase
     // Any regression model violating this has a bias bug.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TranslationEquivariance_ShiftingTargets_ShiftsPredictions()
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
@@ -63,7 +63,7 @@ public abstract class RegressionModelTestBase
     // Scaling all targets by factor K must scale predictions by K.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ScalingEquivariance_ScalingTargets_ScalesPredictions()
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
@@ -107,7 +107,7 @@ public abstract class RegressionModelTestBase
     // Violation indicates a bug in Train or Predict.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TrainingError_ShouldNotExceedTestError_OnAverage()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -136,7 +136,7 @@ public abstract class RegressionModelTestBase
     // Doubling training data should not make R² worse by more than noise.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MoreData_ShouldNotDegrade_R2()
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
@@ -174,7 +174,7 @@ public abstract class RegressionModelTestBase
     // Adding a random noise feature should not improve predictions.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IrrelevantFeature_ShouldNotImprove_Predictions()
     {
         if (Features < 2)
@@ -233,7 +233,7 @@ public abstract class RegressionModelTestBase
     // must increase prediction. Tests the model learned correct sign/direction.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MonotonicResponse_IncreasingFeature_IncreasesPrediction()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -274,7 +274,7 @@ public abstract class RegressionModelTestBase
     // Large residual mean indicates systematic bias in the model.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ResidualMean_ShouldBeNearZero()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -311,7 +311,7 @@ public abstract class RegressionModelTestBase
     // both features have positive effect on prediction.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CoefficientSigns_ShouldMatchDataGeneratingProcess()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -360,7 +360,7 @@ public abstract class RegressionModelTestBase
     // structure should give equivalent predictions.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FeaturePermutation_ShouldGiveConsistentPredictions()
     {
         if (Features < 2)
@@ -418,7 +418,7 @@ public abstract class RegressionModelTestBase
     // that is actually linear. R²≤0 means the model is worse than guessing the mean.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void R2_ShouldBePositive_OnLinearData()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -443,7 +443,7 @@ public abstract class RegressionModelTestBase
     // No NaN, no Infinity. Violations indicate numerical instability.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Predictions_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -469,7 +469,7 @@ public abstract class RegressionModelTestBase
     // Same trained model + same input = same output. Always.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Predict_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -490,7 +490,7 @@ public abstract class RegressionModelTestBase
     // Predict(N×F matrix) must return length-N vector.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OutputDimension_ShouldMatchInputRows()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -512,7 +512,7 @@ public abstract class RegressionModelTestBase
     // CONTRACT: Clone Produces Identical Predictions
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Clone_ShouldProduceIdenticalPredictions()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -534,7 +534,7 @@ public abstract class RegressionModelTestBase
     // CONTRACT: Metadata Should Exist After Training
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Metadata_ShouldExistAfterTraining()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -549,7 +549,7 @@ public abstract class RegressionModelTestBase
     // CONTRACT: Parameters Should Be Non-Empty After Training
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Parameters_ShouldBeNonEmpty_AfterTraining()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -570,7 +570,7 @@ public abstract class RegressionModelTestBase
     // CONTRACT: Active Feature Indices Should Be Valid
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ActiveFeatureIndices_ShouldBeValid()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -599,7 +599,7 @@ public abstract class RegressionModelTestBase
     // If not, the bias/intercept term is broken.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InterceptRecovery_ConstantTarget_ShouldPredictConstant()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -636,7 +636,7 @@ public abstract class RegressionModelTestBase
     // Perfectly correlated features should not cause NaN/Infinity.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CollinearFeatures_ShouldNotCrash()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -670,7 +670,7 @@ public abstract class RegressionModelTestBase
     // Regression model should handle 1-dimensional input.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SingleFeature_ShouldWork()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -700,7 +700,7 @@ public abstract class RegressionModelTestBase
     // INTEGRATION: Builder Pipeline Produces Valid Result
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Builder_ShouldProduceResult()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -717,7 +717,7 @@ public abstract class RegressionModelTestBase
         Assert.NotNull(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Builder_R2ShouldBePositive()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

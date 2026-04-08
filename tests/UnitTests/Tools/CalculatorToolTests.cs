@@ -8,7 +8,7 @@ namespace AiDotNetTests.UnitTests.Tools;
 /// </summary>
 public class CalculatorToolTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Name_ReturnsCalculator()
     {
         // Arrange
@@ -21,7 +21,7 @@ public class CalculatorToolTests
         Assert.Equal("Calculator", name);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Description_ReturnsNonEmptyString()
     {
         // Arrange
@@ -85,7 +85,7 @@ public class CalculatorToolTests
         Assert.Equal(expected, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Execute_EmptyInput_ReturnsError()
     {
         // Arrange
@@ -99,7 +99,7 @@ public class CalculatorToolTests
         Assert.Contains("empty", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Execute_WhitespaceInput_ReturnsError()
     {
         // Arrange
@@ -191,7 +191,7 @@ public class CalculatorToolTests
         Assert.Equal(expected, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Execute_LargeNumbers_HandlesCorrectly()
     {
         // Arrange

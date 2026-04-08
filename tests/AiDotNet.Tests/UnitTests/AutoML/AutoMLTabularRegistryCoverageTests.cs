@@ -9,7 +9,7 @@ namespace AiDotNetTests.UnitTests.AutoML
 {
     public class AutoMLTabularRegistryCoverageTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AutoMLTabularModelFactory_CanCreate_DefaultRegressionCandidates_ForAllBudgets()
         {
             foreach (AutoMLBudgetPreset preset in Enum.GetValues(typeof(AutoMLBudgetPreset)))
@@ -29,7 +29,7 @@ namespace AiDotNetTests.UnitTests.AutoML
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AutoMLTabularModelFactory_CanCreate_DefaultBinaryCandidates_ForAllBudgets()
         {
             foreach (AutoMLBudgetPreset preset in Enum.GetValues(typeof(AutoMLBudgetPreset)))
@@ -49,7 +49,7 @@ namespace AiDotNetTests.UnitTests.AutoML
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AutoMLTabularModelFactory_CanCreate_DefaultMultiClassCandidates_ForAllBudgets()
         {
             foreach (AutoMLBudgetPreset preset in Enum.GetValues(typeof(AutoMLBudgetPreset)))
@@ -69,7 +69,7 @@ namespace AiDotNetTests.UnitTests.AutoML
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AutoMLTabularSearchSpaceRegistry_ReturnsSpaces_ForDefaultCandidates()
         {
             foreach (AutoMLBudgetPreset preset in Enum.GetValues(typeof(AutoMLBudgetPreset)))

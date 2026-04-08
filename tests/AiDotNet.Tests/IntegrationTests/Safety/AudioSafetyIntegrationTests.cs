@@ -16,7 +16,7 @@ public class AudioSafetyIntegrationTests
 {
     #region SpectralDeepfakeDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spectral_SineWave_ProcessesWithoutError()
     {
         var detector = new SpectralDeepfakeDetector<double>();
@@ -26,7 +26,7 @@ public class AudioSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spectral_MultiFrequency_ProcessesWithoutError()
     {
         var detector = new SpectralDeepfakeDetector<double>();
@@ -36,7 +36,7 @@ public class AudioSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spectral_ShortAudio_HandlesGracefully()
     {
         var detector = new SpectralDeepfakeDetector<double>();
@@ -46,7 +46,7 @@ public class AudioSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spectral_DifferentSampleRates_Work()
     {
         var detector = new SpectralDeepfakeDetector<double>();
@@ -63,7 +63,7 @@ public class AudioSafetyIntegrationTests
 
     #region VoiceprintDeepfakeDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Voiceprint_SineWave_ProcessesWithoutError()
     {
         var detector = new VoiceprintDeepfakeDetector<double>();
@@ -73,7 +73,7 @@ public class AudioSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Voiceprint_LongerAudio_ProcessesWithoutError()
     {
         var detector = new VoiceprintDeepfakeDetector<double>();
@@ -87,7 +87,7 @@ public class AudioSafetyIntegrationTests
 
     #region WatermarkDeepfakeDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WatermarkDeepfake_SineWave_ProcessesWithoutError()
     {
         var detector = new WatermarkDeepfakeDetector<double>();
@@ -97,7 +97,7 @@ public class AudioSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WatermarkDeepfake_CustomThreshold_Works()
     {
         var detector = new WatermarkDeepfakeDetector<double>(threshold: 0.3);
@@ -111,7 +111,7 @@ public class AudioSafetyIntegrationTests
 
     #region TranscriptionToxicityDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Transcription_SineWave_ProcessesWithoutError()
     {
         var detector = new TranscriptionToxicityDetector<double>();
@@ -121,7 +121,7 @@ public class AudioSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Transcription_CustomThreshold_Works()
     {
         var detector = new TranscriptionToxicityDetector<double>(threshold: 0.3);
@@ -135,7 +135,7 @@ public class AudioSafetyIntegrationTests
 
     #region AcousticToxicityDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Acoustic_SineWave_ProcessesWithoutError()
     {
         var detector = new AcousticToxicityDetector<double>();
@@ -145,7 +145,7 @@ public class AudioSafetyIntegrationTests
         Assert.NotNull(findings);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Acoustic_MultiFrequency_ProcessesWithoutError()
     {
         var detector = new AcousticToxicityDetector<double>();
@@ -159,7 +159,7 @@ public class AudioSafetyIntegrationTests
 
     #region Cross-Module Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllDeepfakeDetectors_SameAudio_ProduceResults()
     {
         var audio = GenerateSineWave(16000, 440.0, 16000);
@@ -169,7 +169,7 @@ public class AudioSafetyIntegrationTests
         Assert.NotNull(new WatermarkDeepfakeDetector<double>().EvaluateAudio(audio, 16000));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllToxicityDetectors_SameAudio_ProduceResults()
     {
         var audio = GenerateSineWave(16000, 440.0, 16000);

@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class OnceForAllTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
@@ -22,7 +22,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(ofa);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_Constructor_WithCustomElasticDimensions_InitializesCorrectly()
         {
             // Arrange & Act
@@ -38,7 +38,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(ofa);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_SampleSubNetwork_ReturnsValidConfig()
         {
             // Arrange
@@ -56,7 +56,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.ExpansionRatio > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_SampleSubNetwork_Stage0_ReturnsLargestConfig()
         {
             // Arrange
@@ -77,7 +77,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(1.25, config.WidthMultiplier);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_SetTrainingStage_UpdatesStage()
         {
             // Arrange
@@ -103,7 +103,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(depths.Count >= 1);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_SetTrainingStage_AtStage4_AllDimensionsElastic()
         {
             // Arrange
@@ -138,7 +138,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(kernels.Count >= 1);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_SpecializeForHardware_ReturnsValidConfig()
         {
             // Arrange
@@ -164,7 +164,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.KernelSize > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_SpecializeForHardware_RespectsConstraints()
         {
             // Arrange
@@ -205,7 +205,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(configLoose);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_GetSharedWeights_ReturnsWeights()
         {
             // Arrange
@@ -221,7 +221,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(32, weights.Columns);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_GetSharedWeights_SameKey_ReturnsSameWeights()
         {
             // Arrange
@@ -236,7 +236,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Same(weights1, weights2);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_GetSharedWeights_DifferentKeys_ReturnsDifferentWeights()
         {
             // Arrange
@@ -251,7 +251,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotSame(weights1, weights2);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_SampleSubNetwork_ProducesVariedConfigs()
         {
             // Arrange
@@ -276,7 +276,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(kernelSizes.Count > 1);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_SubNetworkConfig_HasValidDefaults()
         {
             // Arrange
@@ -289,7 +289,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(0, config.ExpansionRatio);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_TrainingStages_ProgressivelyUnlockDimensions()
         {
             // Arrange
@@ -315,7 +315,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 
         #region Edge Case Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_SingleElementElasticLists_SamplesOnlyValue()
         {
             // Arrange - single element in each elastic list
@@ -341,7 +341,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_SetTrainingStage_BeyondMax_ClampsToMax()
         {
             // Arrange
@@ -358,7 +358,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.KernelSize > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_SpecializeForHardware_MinimalPopulationAndGenerations_Works()
         {
             // Arrange
@@ -383,7 +383,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.Depth > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_SpecializeForHardware_NoConstraints_ReturnsConfig()
         {
             // Arrange
@@ -404,7 +404,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(config.Depth > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_SpecializeForHardware_VeryTightConstraints_StillReturnsConfig()
         {
             // Arrange
@@ -428,7 +428,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(config);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_GetSharedWeights_LargeDimensions_Works()
         {
             // Arrange
@@ -444,7 +444,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(256, weights.Columns);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_GetSharedWeights_SmallDimensions_Works()
         {
             // Arrange
@@ -460,7 +460,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(1, weights.Columns);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OnceForAll_SetTrainingStage_NegativeValue_HandledAsStage0()
         {
             // Arrange

@@ -10,7 +10,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
     {
         #region Constructor Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithDefaultParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -20,7 +20,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(compression);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithCustomParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -39,7 +39,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Compress Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Compress_WithValidWeights_ReturnsCompressedData()
         {
             // Arrange
@@ -58,7 +58,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(metadata);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Compress_WithNullWeights_ThrowsException()
         {
             // Arrange
@@ -68,7 +68,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentNullException>(() => compression.Compress(null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Compress_WithEmptyWeights_ThrowsException()
         {
             // Arrange
@@ -79,7 +79,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentException>(() => compression.Compress(weights));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Compress_ProducesHybridMetadata()
         {
             // Arrange
@@ -103,7 +103,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Decompress Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Decompress_ReconstructsWeights()
         {
             // Arrange
@@ -122,7 +122,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(originalWeights.Length, decompressedWeights.Length);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Decompress_WithNullWeights_ThrowsException()
         {
             // Arrange
@@ -136,7 +136,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.Decompress(null!, metadata));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Decompress_WithNullMetadata_ThrowsException()
         {
             // Arrange
@@ -152,7 +152,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region GetCompressedSize Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetCompressedSize_ReturnsPositiveSize()
         {
             // Arrange
@@ -170,7 +170,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(compressedSize > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetCompressedSize_WithNullWeights_ThrowsException()
         {
             // Arrange
@@ -184,7 +184,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.GetCompressedSize((Vector<double>)null!, metadata));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetCompressedSize_WithNullMetadata_ThrowsException()
         {
             // Arrange
@@ -200,7 +200,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Round-Trip Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CompressAndDecompress_RoundTrip_PreservesApproximateValues()
         {
             // Arrange
@@ -230,7 +230,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Type-Specific Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Compress_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -252,7 +252,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
         #region Metadata Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void HybridCompressionMetadata_Generic_Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange
@@ -272,7 +272,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(10, metadata.OriginalLength);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void HybridCompressionMetadata_Generic_WithNullClustering_ThrowsException()
         {
             // Arrange
@@ -285,7 +285,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new HybridCompressionMetadata<double>(null!, huffmanMetadata, 10));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void HybridCompressionMetadata_Generic_WithNullHuffman_ThrowsException()
         {
             // Arrange
@@ -297,7 +297,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new HybridCompressionMetadata<double>(clusteringMetadata, null!, 10));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void HybridCompressionMetadata_Generic_GetMetadataSize_ReturnsPositiveValue()
         {
             // Arrange
@@ -317,7 +317,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         }
 
 #pragma warning disable CS0618
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void HybridCompressionMetadata_Legacy_Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -330,7 +330,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(metadata.HuffmanMetadata);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void HybridCompressionMetadata_Legacy_WithNullClustering_ThrowsException()
         {
             // Act & Assert
@@ -338,7 +338,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new HybridCompressionMetadata(null!, new object()));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void HybridCompressionMetadata_Legacy_WithNullHuffman_ThrowsException()
         {
             // Act & Assert

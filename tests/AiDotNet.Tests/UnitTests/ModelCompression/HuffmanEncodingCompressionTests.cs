@@ -7,7 +7,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 {
     public class HuffmanEncodingCompressionTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithValidPrecision_CreatesInstance()
         {
             // Arrange & Act
@@ -17,7 +17,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.NotNull(compression);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNegativePrecision_ThrowsException()
         {
             // Arrange, Act & Assert
@@ -25,7 +25,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 new HuffmanEncodingCompression<double>(precision: -1));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Compress_WithValidWeights_ReturnsCompressedData()
         {
             // Arrange
@@ -41,7 +41,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.IsType<HuffmanEncodingMetadata<double>>(metadata);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Compress_WithNullWeights_ThrowsException()
         {
             // Arrange
@@ -51,7 +51,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentNullException>(() => compression.Compress(null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Compress_WithEmptyWeights_ThrowsException()
         {
             // Arrange
@@ -61,7 +61,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Throws<ArgumentException>(() => compression.Compress(new Vector<double>(Array.Empty<double>())));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Decompress_ReconstructsExactWeights()
         {
             // Arrange
@@ -82,7 +82,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Decompress_WithNullWeights_ThrowsException()
         {
             // Arrange
@@ -105,7 +105,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 compression.Decompress(null!, metadata));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Compress_WithFrequentValues_AchievesBetterCompression()
         {
             // Arrange
@@ -127,7 +127,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(compressedSize < originalSize);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetCompressedSize_ReturnsPositiveValue()
         {
             // Arrange
@@ -142,7 +142,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(compressedSize > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Compress_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -161,7 +161,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Compress_WithDifferentPrecisions_ProducesDifferentResults()
         {
             // Arrange
@@ -180,7 +180,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.True(huffmanMetadata2.EncodingTable.Count >= huffmanMetadata1.EncodingTable.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Compress_IsLosslessWithinPrecision()
         {
             // Arrange
@@ -200,7 +200,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateCompressionRatio_WithValidSizes_ReturnsCorrectRatio()
         {
             // Arrange
@@ -215,7 +215,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             Assert.Equal(5.0, ratio);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Compress_WithSingleUniqueValue_HandlesDegenerateCase()
         {
             // Arrange

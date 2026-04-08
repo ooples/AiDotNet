@@ -11,7 +11,7 @@ public class ControlModelContractTests
 {
     #region Guidance Method Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PerturbedAttentionGuidance_DefaultConstructor_CreatesValid()
     {
         var guidance = new PerturbedAttentionGuidance<double>();
@@ -19,7 +19,7 @@ public class ControlModelContractTests
         Assert.NotNull(guidance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelfAttentionGuidance_DefaultConstructor_CreatesValid()
     {
         var guidance = new SelfAttentionGuidance<double>();
@@ -27,7 +27,7 @@ public class ControlModelContractTests
         Assert.NotNull(guidance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DynamicCFGScheduler_DefaultConstructor_CreatesValid()
     {
         var scheduler = new DynamicCFGScheduler<double>();
@@ -35,7 +35,7 @@ public class ControlModelContractTests
         Assert.NotNull(scheduler);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RescaledCFG_DefaultConstructor_CreatesValid()
     {
         var cfg = new RescaledCFG<double>();
@@ -43,7 +43,7 @@ public class ControlModelContractTests
         Assert.NotNull(cfg);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdaptiveProjectedGuidance_DefaultConstructor_CreatesValid()
     {
         var guidance = new AdaptiveProjectedGuidance<double>();
@@ -55,7 +55,7 @@ public class ControlModelContractTests
 
     #region New Control Model Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ControlNetPlusPlusModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new ControlNetPlusPlusModel<double>();
@@ -67,7 +67,7 @@ public class ControlModelContractTests
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ControlNetFluxModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new ControlNetFluxModel<double>();
@@ -78,7 +78,7 @@ public class ControlModelContractTests
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ControlNetSD3Model_DefaultConstructor_CreatesValidModel()
     {
         var model = new ControlNetSD3Model<double>();
@@ -89,7 +89,7 @@ public class ControlModelContractTests
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ControlNetUnionProModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new ControlNetUnionProModel<double>();
@@ -100,7 +100,7 @@ public class ControlModelContractTests
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IPAdapterPlusModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new IPAdapterPlusModel<double>();
@@ -111,7 +111,7 @@ public class ControlModelContractTests
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IPAdapterFaceIDPlusModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new IPAdapterFaceIDPlusModel<double>();
@@ -122,7 +122,7 @@ public class ControlModelContractTests
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ControlNetLiteModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new ControlNetLiteModel<double>();
@@ -133,7 +133,7 @@ public class ControlModelContractTests
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ControlNetQRModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new ControlNetQRModel<double>();
@@ -144,7 +144,7 @@ public class ControlModelContractTests
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReferenceOnlyModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new ReferenceOnlyModel<double>();
@@ -155,7 +155,7 @@ public class ControlModelContractTests
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StyleAlignedModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new StyleAlignedModel<double>();
@@ -166,7 +166,7 @@ public class ControlModelContractTests
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ControlNetTileModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new ControlNetTileModel<double>();
@@ -177,7 +177,7 @@ public class ControlModelContractTests
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ControlNetInpaintingModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new ControlNetInpaintingModel<double>();
@@ -188,7 +188,7 @@ public class ControlModelContractTests
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ControlNeXtModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new ControlNeXtModel<double>();
@@ -199,7 +199,7 @@ public class ControlModelContractTests
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ControlARModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new ControlARModel<double>();
@@ -210,7 +210,7 @@ public class ControlModelContractTests
         Assert.True(model.ParameterCount > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ControlNetPlusPlusFluxModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new ControlNetPlusPlusFluxModel<double>();
@@ -225,7 +225,7 @@ public class ControlModelContractTests
 
     #region Clone Contract Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ControlNetPlusPlusModel_Clone_CreatesIndependentCopy()
     {
         var model = new ControlNetPlusPlusModel<double>();
@@ -236,7 +236,7 @@ public class ControlModelContractTests
         Assert.Equal(model.ParameterCount, clone.ParameterCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ControlNetFluxModel_Clone_CreatesIndependentCopy()
     {
         var model = new ControlNetFluxModel<double>();
@@ -251,7 +251,7 @@ public class ControlModelContractTests
 
     #region Missing Model Coverage Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IPAdapterModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new IPAdapterModel<double>();

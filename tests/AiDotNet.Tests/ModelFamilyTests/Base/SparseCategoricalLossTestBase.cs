@@ -17,7 +17,7 @@ public abstract class SparseCategoricalLossTestBase
     // INVARIANT 1: Loss is finite for valid inputs
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateLoss_ShouldBeFinite()
     {
         var loss = CreateLoss();
@@ -35,7 +35,7 @@ public abstract class SparseCategoricalLossTestBase
     // INVARIANT 2: Loss is non-negative
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateLoss_ShouldBeNonNegative()
     {
         var loss = CreateLoss();
@@ -51,7 +51,7 @@ public abstract class SparseCategoricalLossTestBase
     // INVARIANT 3: Higher probability at correct class → lower loss
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateLoss_HigherConfidence_ShouldReduceLoss()
     {
         var loss = CreateLoss();
@@ -71,7 +71,7 @@ public abstract class SparseCategoricalLossTestBase
     // INVARIANT 4: Perfect prediction → near-zero loss
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateLoss_PerfectPrediction_ShouldBeNearZero()
     {
         var loss = CreateLoss();
@@ -88,7 +88,7 @@ public abstract class SparseCategoricalLossTestBase
     // INVARIANT 5: Derivative is finite
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateDerivative_ShouldBeFinite()
     {
         var loss = CreateLoss();
@@ -109,7 +109,7 @@ public abstract class SparseCategoricalLossTestBase
     // INVARIANT 6: Gradient at correct class should be negative (push probability up)
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateDerivative_CorrectClass_ShouldBeNegative()
     {
         var loss = CreateLoss();
@@ -127,7 +127,7 @@ public abstract class SparseCategoricalLossTestBase
     // INVARIANT 7: Invalid class index should throw
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateLoss_InvalidClassIndex_ShouldThrow()
     {
         var loss = CreateLoss();
@@ -141,7 +141,7 @@ public abstract class SparseCategoricalLossTestBase
     // INVARIANT 8: Multiple samples in batch
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateLoss_BatchInput_ShouldBeFinite()
     {
         var loss = CreateLoss();

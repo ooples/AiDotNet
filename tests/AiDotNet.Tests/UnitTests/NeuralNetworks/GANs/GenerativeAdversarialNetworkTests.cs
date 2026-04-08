@@ -16,7 +16,7 @@ public class GenerativeAdversarialNetworkTests
 {
     #region Base GAN Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerativeAdversarialNetwork_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
@@ -32,7 +32,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(gan.Discriminator);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerativeAdversarialNetwork_GenerateRandomNoiseTensor_ReturnsCorrectShape()
     {
         // Arrange
@@ -49,7 +49,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(100, noise.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerativeAdversarialNetwork_GenerateRandomNoiseTensor_WithZeroBatchSize_ReturnsEmptyTensor()
     {
         // Arrange
@@ -65,7 +65,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(2, noise.Shape.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerativeAdversarialNetwork_GenerateRandomNoiseTensor_WithZeroNoiseSize_ThrowsException()
     {
         // Arrange
@@ -77,7 +77,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Throws<ArgumentOutOfRangeException>(() => gan.GenerateRandomNoiseTensor(4, 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerativeAdversarialNetwork_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -92,7 +92,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(metadata);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerativeAdversarialNetwork_GetDiagnostics_ReturnsDictionary()
     {
         // Arrange
@@ -107,7 +107,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(diagnostics);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerativeAdversarialNetwork_EnableGradientPenalty_SetsFlag()
     {
         // Arrange
@@ -123,7 +123,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(gan);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerativeAdversarialNetwork_EnableFeatureMatching_SetsFlag()
     {
         // Arrange
@@ -143,7 +143,7 @@ public class GenerativeAdversarialNetworkTests
 
     #region DCGAN Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DCGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange & Act
@@ -159,7 +159,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(dcgan.Discriminator);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DCGAN_Constructor_WithCustomFeatureMaps_InitializesCorrectly()
     {
         // Arrange & Act
@@ -177,7 +177,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(dcgan.Discriminator);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DCGAN_GenerateRandomNoiseTensor_ReturnsCorrectShape()
     {
         // Arrange
@@ -192,7 +192,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(100, noise.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DCGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -209,7 +209,7 @@ public class GenerativeAdversarialNetworkTests
 
     #region InfoGAN Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InfoGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
@@ -231,7 +231,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(infogan.Discriminator);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InfoGAN_GenerateRandomNoiseTensor_WithValidBatchSize_ReturnsCorrectShape()
     {
         // Arrange
@@ -249,7 +249,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(100, noise.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InfoGAN_GenerateRandomNoiseTensor_WithInvalidBatchSize_ThrowsException()
     {
         // Arrange
@@ -263,7 +263,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Throws<ArgumentOutOfRangeException>(() => infogan.GenerateRandomNoiseTensor(-1, 100));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InfoGAN_GenerateRandomNoiseTensor_WithInvalidNoiseSize_ThrowsException()
     {
         // Arrange
@@ -277,7 +277,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Throws<ArgumentOutOfRangeException>(() => infogan.GenerateRandomNoiseTensor(4, -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InfoGAN_GenerateRandomLatentCodes_ReturnsCorrectShape()
     {
         // Arrange
@@ -295,7 +295,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(10, codes.Shape[1]); // latentCodeSize = 10
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InfoGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -315,7 +315,7 @@ public class GenerativeAdversarialNetworkTests
 
     #region Pix2Pix Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pix2Pix_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
@@ -334,7 +334,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(pix2pix.Discriminator);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pix2Pix_Constructor_WithCustomL1Lambda_InitializesCorrectly()
     {
         // Arrange
@@ -352,7 +352,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(pix2pix);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pix2Pix_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -371,7 +371,7 @@ public class GenerativeAdversarialNetworkTests
 
     #region SAGAN Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SAGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
@@ -394,7 +394,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(128, sagan.LatentSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SAGAN_Constructor_WithConditionalGeneration_InitializesCorrectly()
     {
         // Arrange
@@ -416,7 +416,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(10, sagan.NumClasses);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SAGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -435,7 +435,7 @@ public class GenerativeAdversarialNetworkTests
 
     #region WGAN Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
@@ -454,7 +454,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(wgan.Critic);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WGAN_Constructor_WithCustomClipValue_InitializesCorrectly()
     {
         // Arrange
@@ -472,7 +472,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(wgan);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WGAN_GenerateRandomNoiseTensor_ReturnsCorrectShape()
     {
         // Arrange
@@ -489,7 +489,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(100, noise.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -508,7 +508,7 @@ public class GenerativeAdversarialNetworkTests
 
     #region WGANGP Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WGANGP_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
@@ -527,7 +527,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(wgangp.Critic);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WGANGP_Constructor_WithCustomGradientPenalty_InitializesCorrectly()
     {
         // Arrange
@@ -545,7 +545,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(wgangp);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WGANGP_GenerateRandomNoiseTensor_WithValidParameters_ReturnsCorrectShape()
     {
         // Arrange
@@ -562,7 +562,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(100, noise.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WGANGP_GenerateRandomNoiseTensor_WithMinimalBatchSize_ReturnsTensor()
     {
         // Arrange
@@ -578,7 +578,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(2, noise.Shape.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WGANGP_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -597,7 +597,7 @@ public class GenerativeAdversarialNetworkTests
 
     #region StyleGAN Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StyleGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
@@ -621,7 +621,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(stylegan.Discriminator);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StyleGAN_GenerateRandomLatentCodes_WithValidBatchSize_ReturnsCorrectShape()
     {
         // Arrange
@@ -640,7 +640,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(512, latentCodes.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StyleGAN_GenerateRandomLatentCodes_WithSingleSample_ReturnsCorrectShape()
     {
         // Arrange
@@ -659,7 +659,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(256, latentCodes.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StyleGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -680,7 +680,7 @@ public class GenerativeAdversarialNetworkTests
 
     #region CycleGAN Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CycleGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
@@ -705,7 +705,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(cyclegan.DiscriminatorB);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CycleGAN_Constructor_WithCustomLambdas_InitializesCorrectly()
     {
         // Arrange
@@ -728,7 +728,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(cyclegan);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CycleGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -749,7 +749,7 @@ public class GenerativeAdversarialNetworkTests
 
     #region ConditionalGAN Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
@@ -769,7 +769,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(cgan.Discriminator);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalGAN_GenerateRandomNoiseTensor_ReturnsCorrectShape()
     {
         // Arrange
@@ -785,7 +785,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(4, noise.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -804,7 +804,7 @@ public class GenerativeAdversarialNetworkTests
 
     #region ACGAN Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ACGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
@@ -824,7 +824,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(acgan.Discriminator);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ACGAN_GenerateRandomNoiseTensor_ReturnsCorrectShape()
     {
         // Arrange
@@ -840,7 +840,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(4, noise.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ACGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -859,7 +859,7 @@ public class GenerativeAdversarialNetworkTests
 
     #region BigGAN Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BigGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
@@ -883,7 +883,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(biggan.Discriminator);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BigGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -902,7 +902,7 @@ public class GenerativeAdversarialNetworkTests
 
     #region ProgressiveGAN Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProgressiveGAN_Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
@@ -923,7 +923,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(proggan.Discriminator);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProgressiveGAN_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
@@ -963,7 +963,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.Equal(noiseSize, noise.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerativeAdversarialNetwork_NoiseValuesAreInExpectedRange()
     {
         // Arrange
@@ -992,7 +992,7 @@ public class GenerativeAdversarialNetworkTests
 
     #region Float Type Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DCGAN_WithFloatType_InitializesCorrectly()
     {
         // Arrange & Act
@@ -1004,7 +1004,7 @@ public class GenerativeAdversarialNetworkTests
         Assert.NotNull(dcgan.Discriminator);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GenerativeAdversarialNetwork_WithFloatType_InitializesCorrectly()
     {
         // Arrange

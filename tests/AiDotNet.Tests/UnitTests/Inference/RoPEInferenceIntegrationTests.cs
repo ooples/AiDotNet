@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.UnitTests.Inference;
 /// </summary>
 public class RoPEInferenceIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MHA_WithRoPE_ForwardProducesValidOutput()
     {
         int seqLen = 8;
@@ -26,7 +26,7 @@ public class RoPEInferenceIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MHA_WithRoPE_DifferentFromNoPositionalEncoding()
     {
         int seqLen = 4;
@@ -49,7 +49,7 @@ public class RoPEInferenceIntegrationTests
             "RoPE should produce different output than no positional encoding");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MHA_WithALiBi_ForwardProducesValidOutput()
     {
         int seqLen = 8;
@@ -65,7 +65,7 @@ public class RoPEInferenceIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GQA_WithRoPE_ForwardProducesValidOutput()
     {
         int seqLen = 8;
@@ -82,7 +82,7 @@ public class RoPEInferenceIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GQA_WithALiBi_ForwardProducesValidOutput()
     {
         int seqLen = 8;
@@ -99,7 +99,7 @@ public class RoPEInferenceIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RoPE_RelativePositionProperty()
     {
         // RoPE encodes relative positions: shifting both Q and K by the same amount
@@ -122,7 +122,7 @@ public class RoPEInferenceIntegrationTests
         Assert.InRange(MathF.Abs(dot0 - dot10), 0f, 0.01f);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MHA_PositionalEncoding_PreservedInMetadata()
     {
         var layer = new MultiHeadAttentionLayer<float>(8, 32, 4);

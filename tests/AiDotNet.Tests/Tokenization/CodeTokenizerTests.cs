@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.Tokenization
 {
     public class CodeTokenizerTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_SplitsCamelCaseIdentifiers()
         {
             // Arrange
@@ -28,7 +28,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("name", tokens);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_SplitsSnakeCaseIdentifiers()
         {
             // Arrange
@@ -47,7 +47,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("name", tokens);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_RecognizesCSharpKeywords()
         {
             // Arrange
@@ -68,7 +68,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("return", tokens);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Tokenize_RecognizesPythonKeywords()
         {
             // Arrange
@@ -89,7 +89,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains("import", tokens);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CodeBertTokenizer_EncodesCodeAndNL()
         {
             // Arrange
@@ -112,7 +112,7 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Contains(1, result.TokenTypeIds); // Code segment
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CodeBertTokenizer_EncodesCodeOnly()
         {
             // Arrange

@@ -42,7 +42,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 validActual, validPredicted);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullDetectors_ThrowsArgumentNullException()
         {
             // Act & Assert
@@ -50,7 +50,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 new EnsembleFitDetector<double, Matrix<double>, Vector<double>>(null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithEmptyDetectorList_ThrowsArgumentException()
         {
             // Arrange
@@ -61,7 +61,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 new EnsembleFitDetector<double, Matrix<double>, Vector<double>>(detectors));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithValidDetectors_CreatesInstance()
         {
             // Arrange
@@ -77,7 +77,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(ensemble);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithCustomOptions_CreatesInstance()
         {
             // Arrange
@@ -98,7 +98,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(ensemble);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithNullEvaluationData_ThrowsArgumentNullException()
         {
             // Arrange
@@ -112,7 +112,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Throws<ArgumentNullException>(() => ensemble.DetectFit(null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithSingleDetector_ReturnsSameFitType()
         {
             // Arrange
@@ -131,7 +131,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Equal(FitType.GoodFit, result.FitType);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithMultipleDetectorsReturningGoodFit_ReturnsGoodFit()
         {
             // Arrange
@@ -152,7 +152,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Equal(FitType.GoodFit, result.FitType);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithMixedFitTypes_CombinesResults()
         {
             // Arrange
@@ -172,7 +172,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_CalculatesWeightedConfidence()
         {
             // Arrange
@@ -197,7 +197,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithDifferentWeights_AffectsResult()
         {
             // Arrange
@@ -220,7 +220,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_CombinesRecommendationsFromAllDetectors()
         {
             // Arrange
@@ -242,7 +242,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.Recommendations.Count >= 3); // At least 3 unique recommendations
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_RemovesDuplicateRecommendations()
         {
             // Arrange
@@ -265,7 +265,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(sameRecCount <= 1, "Duplicate recommendations should be removed");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_RespectsMaxRecommendationsLimit()
         {
             // Arrange
@@ -295,7 +295,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.Recommendations.Count <= 5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_IncludesIndividualResultsInAdditionalInfo()
         {
             // Arrange
@@ -317,7 +317,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.AdditionalInfo.ContainsKey("DetectorWeights"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_IncludesGeneralRecommendationBasedOnFitType()
         {
             // Arrange
@@ -336,7 +336,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ResultContainsAllRequiredFields()
         {
             // Arrange

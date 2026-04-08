@@ -13,7 +13,7 @@ public class GradientEpisodicMemoryTests
 {
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_DefaultParameters_InitializesCorrectly()
     {
         // Arrange & Act
@@ -26,7 +26,7 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(0, gem.TaskCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_CustomMemorySize_InitializesCorrectly()
     {
         // Arrange & Act
@@ -37,7 +37,7 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(0, gem.TaskCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_CustomMargin_InitializesCorrectly()
     {
         // Arrange
@@ -50,7 +50,7 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(customMargin, gem.Margin);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_CustomLambda_InitializesCorrectly()
     {
         // Arrange
@@ -63,7 +63,7 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(customLambda, gem.Lambda);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_AllCustomParameters_InitializesCorrectly()
     {
         // Arrange
@@ -84,7 +84,7 @@ public class GradientEpisodicMemoryTests
 
     #region Property Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Lambda_SetValue_UpdatesCorrectly()
     {
         // Arrange
@@ -98,7 +98,7 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(newLambda, gem.Lambda);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Margin_SetValue_UpdatesCorrectly()
     {
         // Arrange
@@ -112,7 +112,7 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(newMargin, gem.Margin);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TaskCount_AfterAddingTasks_ReflectsCorrectCount()
     {
         // Arrange
@@ -132,7 +132,7 @@ public class GradientEpisodicMemoryTests
 
     #region BeforeTask Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BeforeTask_WithValidNetwork_ExecutesWithoutError()
     {
         // Arrange
@@ -143,7 +143,7 @@ public class GradientEpisodicMemoryTests
         gem.BeforeTask(network, taskId: 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BeforeTask_AfterPreviousTask_UpdatesReferenceGradients()
     {
         // Arrange
@@ -166,7 +166,7 @@ public class GradientEpisodicMemoryTests
 
     #region AfterTask Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AfterTask_FirstTask_StoresEpisodicMemory()
     {
         // Arrange
@@ -182,7 +182,7 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(1, gem.TaskCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AfterTask_NullNetwork_ThrowsArgumentNullException()
     {
         // Arrange
@@ -194,7 +194,7 @@ public class GradientEpisodicMemoryTests
         Assert.Throws<ArgumentNullException>(() => gem.AfterTask(null!, (inputs, targets), taskId: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AfterTask_NullInputs_ThrowsArgumentNullException()
     {
         // Arrange
@@ -206,7 +206,7 @@ public class GradientEpisodicMemoryTests
         Assert.Throws<ArgumentNullException>(() => gem.AfterTask(network, (null!, targets), taskId: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AfterTask_NullTargets_ThrowsArgumentNullException()
     {
         // Arrange
@@ -218,7 +218,7 @@ public class GradientEpisodicMemoryTests
         Assert.Throws<ArgumentNullException>(() => gem.AfterTask(network, (inputs, null!), taskId: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AfterTask_MultipleTasks_StoresMultipleEpisodicMemories()
     {
         // Arrange
@@ -237,7 +237,7 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(2, gem.TaskCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AfterTask_LargeDataset_SamplesDownToMemorySize()
     {
         // Arrange
@@ -258,7 +258,7 @@ public class GradientEpisodicMemoryTests
 
     #region ComputeLoss Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeLoss_AlwaysReturnsZero()
     {
         // Arrange
@@ -284,7 +284,7 @@ public class GradientEpisodicMemoryTests
 
     #region ModifyGradients Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ModifyGradients_BeforeAnyTask_ReturnsUnmodifiedGradients()
     {
         // Arrange
@@ -307,7 +307,7 @@ public class GradientEpisodicMemoryTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ModifyGradients_AfterTask_MayModifyGradientsBasedOnConstraints()
     {
         // Arrange
@@ -331,7 +331,7 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(gradients.Length, modifiedGradients.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ModifyGradients_NullNetwork_ThrowsArgumentNullException()
     {
         // Arrange
@@ -342,7 +342,7 @@ public class GradientEpisodicMemoryTests
         Assert.Throws<ArgumentNullException>(() => gem.ModifyGradients(null!, gradients));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ModifyGradients_NullGradients_ThrowsArgumentNullException()
     {
         // Arrange
@@ -353,7 +353,7 @@ public class GradientEpisodicMemoryTests
         Assert.Throws<ArgumentNullException>(() => gem.ModifyGradients(network, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ModifyGradients_ConflictingGradient_ProjectsToSatisfyConstraint()
     {
         // Arrange
@@ -382,7 +382,7 @@ public class GradientEpisodicMemoryTests
 
     #region Reset Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Reset_AfterTasks_ClearsAllStoredData()
     {
         // Arrange
@@ -402,7 +402,7 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(0, gem.TaskCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Reset_BeforeAnyTask_DoesNotThrow()
     {
         // Arrange
@@ -413,7 +413,7 @@ public class GradientEpisodicMemoryTests
         Assert.Equal(0, gem.TaskCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Reset_ThenModifyGradients_ReturnsUnmodified()
     {
         // Arrange
@@ -445,7 +445,7 @@ public class GradientEpisodicMemoryTests
 
     #region Integration Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GEM_CompleteWorkflow_ExecutesCorrectly()
     {
         // Arrange

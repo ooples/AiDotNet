@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.Factories
 {
     public class ActivationFunctionFactoryTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CreateActivationFunction_Returns_For_Scalar_Compatible()
         {
             // Scalar-compatible functions in current enum
@@ -37,14 +37,14 @@ namespace AiDotNet.Tests.Factories
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CreateActivationFunction_Throws_For_Softmax_Scalar()
         {
             Assert.Throws<NotSupportedException>(() =>
                 ActivationFunctionFactory<double>.CreateActivationFunction(ActivationFunction.Softmax));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CreateVectorActivationFunction_Returns_For_Vector_Compatible()
         {
             // Vector-compatible functions in current enum (includes Softmax)

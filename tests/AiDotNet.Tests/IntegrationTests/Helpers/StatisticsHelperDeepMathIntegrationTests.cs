@@ -17,7 +17,7 @@ public class StatisticsHelperDeepMathIntegrationTests
     // MEDIAN
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_OddCount_ReturnsMiddle()
     {
         // [1, 3, 5, 7, 9] => sorted, middle (index 2) = 5
@@ -26,7 +26,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(5.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_EvenCount_ReturnsAverageOfMiddleTwo()
     {
         // [1, 3, 5, 7] => sorted, (3+5)/2 = 4
@@ -35,7 +35,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(4.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_SingleElement_ReturnsThatElement()
     {
         var values = new double[] { 42.0 };
@@ -43,7 +43,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(42.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_AllSame_ReturnsThatValue()
     {
         var values = new double[] { 5, 5, 5, 5, 5 };
@@ -51,7 +51,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(5.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_TwoElements_ReturnsAverage()
     {
         var values = new double[] { 10, 20 };
@@ -63,7 +63,7 @@ public class StatisticsHelperDeepMathIntegrationTests
     // MEAN ABSOLUTE DEVIATION (MAD)
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAD_HandCalculated()
     {
         // values = [2, 4, 6, 8], median = 5
@@ -75,7 +75,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(2.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAD_AllSame_ReturnsZero()
     {
         var values = new Vector<double>(new double[] { 5, 5, 5, 5 });
@@ -83,7 +83,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAD_IsNonNegative()
     {
         var values = new Vector<double>(new double[] { -10, 0, 10, 20, 30 });
@@ -96,7 +96,7 @@ public class StatisticsHelperDeepMathIntegrationTests
     // VARIANCE (SAMPLE VARIANCE, n-1 denominator)
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Variance_HandCalculated_WithMean()
     {
         // values = [2, 4, 6, 8, 10], mean = 6
@@ -107,7 +107,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(10.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Variance_HandCalculated_NoMean()
     {
         // Same calculation but using the overload that computes mean internally
@@ -116,7 +116,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(10.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Variance_AllSame_ReturnsZero()
     {
         var values = new double[] { 5, 5, 5, 5, 5 };
@@ -124,7 +124,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Variance_SingleElement_ReturnsZero()
     {
         var values = new Vector<double>(new double[] { 42.0 });
@@ -132,7 +132,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Variance_IsNonNegative()
     {
         var values = new double[] { -5, 0, 5, 10, 100 };
@@ -140,7 +140,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.True(result >= 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Variance_ScaleProperty()
     {
         // Var(c*X) = c^2 * Var(X)
@@ -151,7 +151,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(9.0 * varOriginal, varScaled, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Variance_ShiftInvariant()
     {
         // Var(X + c) = Var(X) for any constant c
@@ -166,7 +166,7 @@ public class StatisticsHelperDeepMathIntegrationTests
     // STANDARD DEVIATION
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StdDev_EqualsSqrtVariance()
     {
         var values = new double[] { 2, 4, 6, 8, 10 };
@@ -175,7 +175,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(variance), stdDev, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StdDev_AllSame_ReturnsZero()
     {
         var values = new double[] { 7, 7, 7, 7 };
@@ -187,7 +187,7 @@ public class StatisticsHelperDeepMathIntegrationTests
     // MEAN SQUARED ERROR
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_HandCalculated()
     {
         // actual=[1,2,3,4,5], pred=[1.5,2.5,3.5,4.5,5.5]
@@ -199,7 +199,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(0.25, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_PerfectPredictions_ShouldBeZero()
     {
         var actual = new double[] { 1, 2, 3 };
@@ -208,7 +208,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_IsNonNegative()
     {
         var actual = new double[] { -5, 0, 5 };
@@ -221,7 +221,7 @@ public class StatisticsHelperDeepMathIntegrationTests
     // VARIANCE REDUCTION (for decision trees)
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VarianceReduction_PerfectSplit_MaximizesReduction()
     {
         // y = [1, 1, 1, 10, 10, 10]
@@ -237,7 +237,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(20.25, reduction, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VarianceReduction_NoSplitBenefit_ReturnsZero()
     {
         // When the split doesn't reduce variance at all, both subgroups must have
@@ -255,7 +255,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(0.0, reduction, 0.001);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VarianceReduction_IsNonNegative()
     {
         // Variance reduction should always be >= 0 for any valid split
@@ -270,7 +270,7 @@ public class StatisticsHelperDeepMathIntegrationTests
     // T-TEST
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TTest_IdenticalGroups_PValueOne()
     {
         // When both groups are identical, t-statistic = 0, p-value should be ≈ 1
@@ -286,7 +286,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.True(result.PValue > 0.9, $"P-value ({result.PValue}) should be > 0.9 for identical groups");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TTest_VeryDifferentGroups_SmallPValue()
     {
         // Groups with clearly different means
@@ -301,7 +301,7 @@ public class StatisticsHelperDeepMathIntegrationTests
             $"P-value ({result.PValue}) should be < 0.01 for very different groups");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TTest_HandCalculated_DegreesOfFreedom()
     {
         // df = n1 + n2 - 2
@@ -311,7 +311,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(5, result.DegreesOfFreedom); // 3 + 4 - 2 = 5
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TTest_TStatistic_HandCalculated()
     {
         // g1 = [2, 4, 6], mean = 4
@@ -331,7 +331,7 @@ public class StatisticsHelperDeepMathIntegrationTests
     // MANN-WHITNEY U TEST
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MannWhitneyU_IdenticalGroups_HighPValue()
     {
         var g1 = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
@@ -342,7 +342,7 @@ public class StatisticsHelperDeepMathIntegrationTests
             $"P-value ({result.PValue}) should be > 0.05 for identical groups");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MannWhitneyU_CompleteSeparation_SmallPValue()
     {
         // All values in g1 are below all values in g2
@@ -353,7 +353,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(0.0, result.UStatistic, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MannWhitneyU_Symmetry()
     {
         // U1 + U2 = n1 * n2
@@ -369,7 +369,7 @@ public class StatisticsHelperDeepMathIntegrationTests
     // CHI-SQUARE TEST
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChiSquare_IdenticalDistributions_HighPValue()
     {
         // Both groups have same distribution => not significant
@@ -380,7 +380,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.False(result.IsSignificant);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChiSquare_VeryDifferentDistributions_Significant()
     {
         // g1 all category 1, g2 all category 2 => very different
@@ -392,7 +392,7 @@ public class StatisticsHelperDeepMathIntegrationTests
             $"Chi-square test should be significant for completely different distributions (chi2={result.ChiSquareStatistic}, p={result.PValue})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChiSquare_DegreesOfFreedom_IsCategoriesMinusOne()
     {
         // 3 unique categories => df = 3 - 1 = 2
@@ -402,7 +402,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(2, result.DegreesOfFreedom);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChiSquare_ChiStatistic_IsNonNegative()
     {
         var g1 = new Vector<double>(new double[] { 1, 1, 2, 3 });
@@ -415,7 +415,7 @@ public class StatisticsHelperDeepMathIntegrationTests
     // F-TEST
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FTest_EqualVariances_FStatisticNearOne()
     {
         // Groups with same variance => F ≈ 1
@@ -425,7 +425,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(1.0, result.FStatistic, 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FTest_VeryDifferentVariances_LargeFStatistic()
     {
         // g1 low variance, g2 high variance
@@ -436,7 +436,7 @@ public class StatisticsHelperDeepMathIntegrationTests
             $"F-statistic ({result.FStatistic}) should be > 1 for different variances");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FTest_DegreesOfFreedom_AreCorrect()
     {
         var g1 = new Vector<double>(new double[] { 1, 2, 3 }); // n=3
@@ -446,7 +446,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(3, result.DenominatorDegreesOfFreedom); // 4-1
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FTest_FStatistic_IsGreaterThanOrEqualOne()
     {
         // Implementation takes max(var1,var2)/min(var1,var2) so F >= 1
@@ -456,7 +456,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.True(result.FStatistic >= 1.0 - Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FTest_BothZeroVariance_Throws()
     {
         var g1 = new Vector<double>(new double[] { 5, 5, 5 });
@@ -464,7 +464,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Throws<InvalidOperationException>(() => StatisticsHelper<double>.FTest(g1, g2));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FTest_TooFewElements_Throws()
     {
         var g1 = new Vector<double>(new double[] { 1 });
@@ -476,7 +476,7 @@ public class StatisticsHelperDeepMathIntegrationTests
     // CROSS-PROPERTY TESTS
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Variance_EqualsStdDev_Squared()
     {
         var values = new double[] { 3, 7, 1, 9, 5 };
@@ -485,7 +485,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(variance, stdDev * stdDev, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAD_LessThanOrEqual_StdDev()
     {
         // MAD <= StdDev for normal-like distributions
@@ -499,7 +499,7 @@ public class StatisticsHelperDeepMathIntegrationTests
             $"MAD ({mad}) should be <= StdDev ({stdDev})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TTest_PValue_BetweenZeroAndOne()
     {
         var g1 = new Vector<double>(new double[] { 1, 3, 5, 7, 9 });
@@ -509,7 +509,7 @@ public class StatisticsHelperDeepMathIntegrationTests
             $"P-value ({result.PValue}) should be in [0, 1]");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ChiSquare_PValue_BetweenZeroAndOne()
     {
         var g1 = new Vector<double>(new double[] { 1, 1, 2, 3 });
@@ -519,7 +519,7 @@ public class StatisticsHelperDeepMathIntegrationTests
             $"P-value ({result.PValue}) should be in [0, 1]");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FTest_PValue_BetweenZeroAndOne()
     {
         var g1 = new Vector<double>(new double[] { 1, 3, 5, 7, 9 });
@@ -533,7 +533,7 @@ public class StatisticsHelperDeepMathIntegrationTests
     // EDGE CASES
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_NegativeValues()
     {
         var values = new double[] { -5, -3, -1, 1, 3 };
@@ -541,7 +541,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(-1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Variance_LargeValues_StillAccurate()
     {
         // Values centered around 1,000,000 with small variance
@@ -550,7 +550,7 @@ public class StatisticsHelperDeepMathIntegrationTests
         Assert.Equal(2.5, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_Symmetric_PredActual()
     {
         // MSE(actual, pred) = MSE(pred, actual)

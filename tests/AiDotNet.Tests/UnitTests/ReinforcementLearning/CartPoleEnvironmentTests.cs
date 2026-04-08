@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.UnitTests.ReinforcementLearning;
 
 public class CartPoleEnvironmentTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_CreatesEnvironment()
     {
         // Arrange & Act
@@ -17,7 +17,7 @@ public class CartPoleEnvironmentTests
         Assert.Equal(2, env.ActionSpaceSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Reset_ReturnsValidState()
     {
         // Arrange
@@ -37,7 +37,7 @@ public class CartPoleEnvironmentTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Step_WithValidAction_ReturnsValidTransition()
     {
         // Arrange
@@ -56,7 +56,7 @@ public class CartPoleEnvironmentTests
         Assert.NotNull(info);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Step_WithInvalidAction_ThrowsException()
     {
         // Arrange
@@ -70,7 +70,7 @@ public class CartPoleEnvironmentTests
         Assert.Throws<ArgumentException>(() => env.Step(invalidAction2));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Episode_EventuallyTerminates()
     {
         // Arrange
@@ -96,7 +96,7 @@ public class CartPoleEnvironmentTests
         Assert.True(steps <= 100); // Should terminate before max steps
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Seed_MakesEnvironmentDeterministic()
     {
         // Arrange
@@ -128,7 +128,7 @@ public class CartPoleEnvironmentTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Close_DoesNotThrow()
     {
         // Arrange

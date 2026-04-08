@@ -26,7 +26,7 @@ public class GpuAccelerationConfigIntegrationTests
 
     #region Default Configuration Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_DefaultConstructor_HasExpectedDefaults()
     {
         // Act
@@ -52,7 +52,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(2, config.TransferStreams);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_AllPropertiesAreSettable()
     {
         // Arrange
@@ -115,7 +115,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(deviceType, config.DeviceType);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuDeviceType_EnumValuesAreDistinct()
     {
         // Verify all enum values are unique
@@ -125,7 +125,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(values.Length, uniqueValues.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuDeviceType_HasExpectedCount()
     {
         // 4 device types: Auto, CUDA, OpenCL, CPU
@@ -152,7 +152,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(usageLevel, config.UsageLevel);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuUsageLevel_EnumValuesAreDistinct()
     {
         var values = (GpuUsageLevel[])Enum.GetValues(typeof(GpuUsageLevel));
@@ -161,7 +161,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(values.Length, uniqueValues.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuUsageLevel_HasExpectedCount()
     {
         // 5 usage levels: Conservative, Default, Aggressive, AlwaysGpu, AlwaysCpu
@@ -187,7 +187,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(mode, config.ExecutionMode);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuExecutionModeConfig_EnumValuesAreDistinct()
     {
         var values = (GpuExecutionModeConfig[])Enum.GetValues(typeof(GpuExecutionModeConfig));
@@ -196,7 +196,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(values.Length, uniqueValues.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuExecutionModeConfig_HasExpectedCount()
     {
         // 4 modes: Auto, Eager, Deferred, ScopedDeferred
@@ -208,7 +208,7 @@ public class GpuAccelerationConfigIntegrationTests
 
     #region ToExecutionOptions Conversion Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToExecutionOptions_DefaultConfig_MapsCorrectly()
     {
         // Arrange
@@ -233,7 +233,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.False(options.ForceCpu);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToExecutionOptions_AlwaysGpuUsageLevel_SetsForceGpu()
     {
         // Arrange
@@ -247,7 +247,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.False(options.ForceCpu);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToExecutionOptions_AlwaysCpuUsageLevel_SetsForceCpu()
     {
         // Arrange
@@ -297,7 +297,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(expectedMode, options.ExecutionMode);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToExecutionOptions_CustomValues_MapsCorrectly()
     {
         // Arrange
@@ -339,7 +339,7 @@ public class GpuAccelerationConfigIntegrationTests
 
     #region ToString Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToString_DefaultConfig_ContainsAllKeyProperties()
     {
         // Arrange
@@ -364,7 +364,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Contains("Profiling=False", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToString_CustomConfig_ReflectsSettings()
     {
         // Arrange
@@ -394,7 +394,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Contains("Profiling=True", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToString_ReturnsNonEmptyString()
     {
         // Arrange
@@ -412,7 +412,7 @@ public class GpuAccelerationConfigIntegrationTests
 
     #region Edge Case Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_ZeroDeviceIndex_IsValid()
     {
         // Arrange & Act
@@ -422,7 +422,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(0, config.DeviceIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_HighDeviceIndex_IsAccepted()
     {
         // Arrange & Act
@@ -432,7 +432,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(15, config.DeviceIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_ZeroMinGpuElements_IsAccepted()
     {
         // Arrange & Act
@@ -442,7 +442,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(0, config.MinGpuElements);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_LargeMinGpuElements_IsAccepted()
     {
         // Arrange & Act
@@ -452,7 +452,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(1_000_000, config.MinGpuElements);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_ZeroMaxMemoryUsage_IsAccepted()
     {
         // Arrange & Act
@@ -462,7 +462,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(0.0, config.MaxGpuMemoryUsage, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_FullMaxMemoryUsage_IsAccepted()
     {
         // Arrange & Act
@@ -472,7 +472,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(1.0, config.MaxGpuMemoryUsage, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_SingleComputeStream_IsAccepted()
     {
         // Arrange & Act
@@ -482,7 +482,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(1, config.MaxComputeStreams);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_ManyComputeStreams_IsAccepted()
     {
         // Arrange & Act
@@ -492,7 +492,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(32, config.MaxComputeStreams);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_SingleTransferStream_IsAccepted()
     {
         // Arrange & Act
@@ -502,7 +502,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(1, config.TransferStreams);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_ManyTransferStreams_IsAccepted()
     {
         // Arrange & Act
@@ -516,7 +516,7 @@ public class GpuAccelerationConfigIntegrationTests
 
     #region Configuration Scenario Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_HighPerformanceScenario_ConfiguresCorrectly()
     {
         // Arrange - high-end GPU setup
@@ -550,7 +550,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(0.9, options.MaxMemoryUsage, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_DebuggingScenario_ConfiguresCorrectly()
     {
         // Arrange - debugging setup with verbose output and eager execution
@@ -578,7 +578,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(1, options.MaxComputeStreams);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_CpuOnlyScenario_ConfiguresCorrectly()
     {
         // Arrange - CPU-only execution
@@ -598,7 +598,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.False(options.EnableGpuResidency);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_InferenceOnlyGpuScenario_ConfiguresCorrectly()
     {
         // Arrange - GPU for inference only
@@ -617,7 +617,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(GpuExecutionModeConfig.ScopedDeferred, config.ExecutionMode);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_MemoryConstrainedScenario_ConfiguresCorrectly()
     {
         // Arrange - low memory environment
@@ -645,7 +645,7 @@ public class GpuAccelerationConfigIntegrationTests
 
     #region Multi-GPU Scenario Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_MultiGpuSetup_FirstDevice()
     {
         // Arrange - first GPU
@@ -660,7 +660,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(GpuDeviceType.CUDA, config.DeviceType);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_MultiGpuSetup_SecondDevice()
     {
         // Arrange - second GPU
@@ -674,7 +674,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.Equal(1, config.DeviceIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GpuAccelerationConfig_MultiGpuSetup_OpenCLDevice()
     {
         // Arrange - OpenCL device
@@ -693,7 +693,7 @@ public class GpuAccelerationConfigIntegrationTests
 
     #region Execution Options Clone Independence Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToExecutionOptions_ReturnsNewInstanceEachCall()
     {
         // Arrange
@@ -707,7 +707,7 @@ public class GpuAccelerationConfigIntegrationTests
         Assert.NotSame(options1, options2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToExecutionOptions_ChangingConfigDoesNotAffectPreviousOptions()
     {
         // Arrange

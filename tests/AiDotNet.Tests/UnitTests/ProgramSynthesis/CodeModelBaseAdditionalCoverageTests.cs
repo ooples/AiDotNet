@@ -15,7 +15,7 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public sealed class CodeModelBaseAdditionalCoverageTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EncodeDecode_HandlesCommonShapesAndValidatesArguments()
     {
         var model = new MinimalCodeModel(CreateArchitecture());
@@ -42,7 +42,7 @@ public sealed class CodeModelBaseAdditionalCoverageTests
         Assert.NotNull(decoded);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PerformCompletion_OffersMissingClosersAndCursorOffset()
     {
         var model = new MinimalCodeModel(CreateArchitecture());
@@ -60,7 +60,7 @@ public sealed class CodeModelBaseAdditionalCoverageTests
         Assert.Contains("}", completion.Candidates[0].CompletionText);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PerformGeneration_Heuristics_HandleSortAndReverse()
     {
         var model = new MinimalCodeModel(CreateArchitecture());
@@ -92,7 +92,7 @@ public sealed class CodeModelBaseAdditionalCoverageTests
         Assert.Contains("return", reverseResult.GeneratedCode, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PerformBugFixing_FixesTrivialClosersAndNormalizesPythonNewline()
     {
         var model = new MinimalCodeModel(CreateArchitecture());
@@ -108,7 +108,7 @@ public sealed class CodeModelBaseAdditionalCoverageTests
         Assert.EndsWith("\n", result.FixedCode);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PerformCodeReview_ProducesLocationsAndSecurityIssues()
     {
         var model = new MinimalCodeModel(CreateArchitecture());
@@ -132,7 +132,7 @@ public sealed class CodeModelBaseAdditionalCoverageTests
         Assert.Contains(result.Issues, issue => issue.Location?.FilePath == "a.cs");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PerformTask_ReturnsFailureResult_ForUnsupportedRequestType()
     {
         var model = new MinimalCodeModel(CreateArchitecture());

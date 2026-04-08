@@ -12,7 +12,7 @@ public class ContinuousBatchingTests
 {
     #region SequenceState Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SequenceState_InitializesCorrectly()
     {
         // Arrange
@@ -36,7 +36,7 @@ public class ContinuousBatchingTests
         Assert.False(state.PrefillComplete);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SequenceState_AppendToken_UpdatesState()
     {
         // Arrange
@@ -59,7 +59,7 @@ public class ContinuousBatchingTests
         Assert.Equal(-3.5, state.CumulativeLogProb, 5);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SequenceState_ShouldStop_MaxLength()
     {
         // Arrange
@@ -80,7 +80,7 @@ public class ContinuousBatchingTests
         Assert.Equal(StopReason.MaxLength, state.FinishReason);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SequenceState_ShouldStop_EndOfSequence()
     {
         // Arrange
@@ -100,7 +100,7 @@ public class ContinuousBatchingTests
         Assert.Equal(StopReason.EndOfSequence, state.FinishReason);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SequenceState_ShouldStop_StopToken()
     {
         // Arrange
@@ -121,7 +121,7 @@ public class ContinuousBatchingTests
         Assert.Equal(StopReason.StopToken, state.FinishReason);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SequenceState_Complete_SetsStatus()
     {
         // Arrange
@@ -140,7 +140,7 @@ public class ContinuousBatchingTests
         Assert.NotNull(state.CompletedAt);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SequenceState_Cancel_SetsStatus()
     {
         // Arrange
@@ -163,7 +163,7 @@ public class ContinuousBatchingTests
 
     #region BatchScheduler Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BatchScheduler_AddSequence_AddsToQueue()
     {
         // Arrange
@@ -182,7 +182,7 @@ public class ContinuousBatchingTests
         Assert.Equal(0, scheduler.RunningCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BatchScheduler_ScheduleNextBatch_ReturnsSequences()
     {
         // Arrange
@@ -205,7 +205,7 @@ public class ContinuousBatchingTests
         Assert.Equal(3, scheduler.RunningCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BatchScheduler_ScheduleNextBatch_RespectsMaxBatchSize()
     {
         // Arrange
@@ -228,7 +228,7 @@ public class ContinuousBatchingTests
         Assert.Equal(2, scheduler.RunningCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BatchScheduler_ScheduleNextBatch_AssignsBatchIndices()
     {
         // Arrange
@@ -252,7 +252,7 @@ public class ContinuousBatchingTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BatchScheduler_PriorityScheduling_HighPriorityFirst()
     {
         // Arrange
@@ -284,7 +284,7 @@ public class ContinuousBatchingTests
         Assert.Equal(10, batch[0].Priority);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BatchScheduler_CompleteSequence_RemovesFromRunning()
     {
         // Arrange
@@ -303,7 +303,7 @@ public class ContinuousBatchingTests
         Assert.Equal(0, scheduler.RunningCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BatchScheduler_PreemptSequence_MovesToPreempted()
     {
         // Arrange
@@ -328,7 +328,7 @@ public class ContinuousBatchingTests
         Assert.Equal(SequenceStatus.Paused, batch[0].Status);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BatchScheduler_ResumePreempted_PrioritizesPreempted()
     {
         // Arrange
@@ -366,7 +366,7 @@ public class ContinuousBatchingTests
         Assert.Equal(first.SequenceId, batch[0].SequenceId);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BatchScheduler_GetStatistics_ReturnsCorrectValues()
     {
         // Arrange
@@ -394,7 +394,7 @@ public class ContinuousBatchingTests
 
     #region ContinuousBatcher Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ContinuousBatcher_Creation_Succeeds()
     {
         // Arrange & Act
@@ -408,7 +408,7 @@ public class ContinuousBatchingTests
         Assert.Equal(0, batcher.PendingRequestCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ContinuousBatcher_Step_ProcessesSequences()
     {
         // Arrange
@@ -451,7 +451,7 @@ public class ContinuousBatchingTests
         Assert.True(tokensGenerated >= 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ContinuousBatcher_GetStatistics_ReturnsValidData()
     {
         // Arrange
@@ -469,7 +469,7 @@ public class ContinuousBatchingTests
         Assert.Equal(0, stats.TotalRequestsProcessed);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ContinuousBatcher_StartStop_Works()
     {
         // Arrange
@@ -489,7 +489,7 @@ public class ContinuousBatchingTests
         Assert.False(isNowRunning);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ContinuousBatcher_GenerateAsync_ReturnsCancellableTask()
     {
         // Arrange
@@ -518,7 +518,7 @@ public class ContinuousBatchingTests
 
     #region Configuration Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void BatchSchedulerConfig_ForModel_ReturnsCorrectConfig()
     {
         // Act
@@ -534,7 +534,7 @@ public class ContinuousBatchingTests
         Assert.True(llama70b.MaxBatchSize <= 4); // Reduced for large model
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ContinuousBatcherConfig_ForModel_ReturnsCorrectConfig()
     {
         // Act
@@ -545,7 +545,7 @@ public class ContinuousBatchingTests
         Assert.Equal(32, config.SchedulerConfig.NumHeads);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GenerationRequest_DefaultValues_AreReasonable()
     {
         // Arrange & Act
@@ -564,7 +564,7 @@ public class ContinuousBatchingTests
 
     #region Event Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ContinuousBatcher_SequenceCompleted_EventFires()
     {
         // Arrange

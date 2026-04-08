@@ -29,7 +29,7 @@ public class WordPieceTokenizerTests
         _tokenizer = WordPieceTokenizer.Train(_trainingCorpus, 500);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Train_CreatesVocabulary_WithCorrectSize()
     {
         // Arrange & Act
@@ -39,7 +39,7 @@ public class WordPieceTokenizerTests
         Assert.True(tokenizer.VocabularySize > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Tokenize_SimpleText_ReturnsTokens()
     {
         // Arrange
@@ -53,7 +53,7 @@ public class WordPieceTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Tokenize_UnknownWord_ReturnsUnkOrSubwords()
     {
         // Arrange
@@ -67,7 +67,7 @@ public class WordPieceTokenizerTests
         Assert.NotEmpty(tokens);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Tokenize_ContinuationPrefix_UsesHashHash()
     {
         // Arrange
@@ -83,7 +83,7 @@ public class WordPieceTokenizerTests
         Assert.True(tokens.Count > 0, "Should produce at least one token");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Encode_WithSpecialTokens_AddsBertStyleTokens()
     {
         // Arrange
@@ -99,7 +99,7 @@ public class WordPieceTokenizerTests
         Assert.Contains("[SEP]", result.Tokens);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Encode_WithAttentionMask_ReturnsAllOnes()
     {
         // Arrange
@@ -113,7 +113,7 @@ public class WordPieceTokenizerTests
         Assert.All(result.AttentionMask, m => Assert.Equal(1, m));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Encode_WithPadding_HasZerosInAttentionMask()
     {
         // Arrange
@@ -133,7 +133,7 @@ public class WordPieceTokenizerTests
         Assert.Contains(0, result.AttentionMask); // Padding has 0 attention
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Decode_RemovesContinuationMarkers()
     {
         // Arrange
@@ -147,7 +147,7 @@ public class WordPieceTokenizerTests
         Assert.DoesNotContain("##", decoded);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Roundtrip_PreservesWordContent()
     {
         // Arrange
@@ -163,7 +163,7 @@ public class WordPieceTokenizerTests
         Assert.Contains("machine", normalizedDecoded);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SpecialTokens_AreBertStyle()
     {
         // Assert
@@ -174,7 +174,7 @@ public class WordPieceTokenizerTests
         Assert.Equal("[MASK]", _tokenizer.SpecialTokens.MaskToken);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Encode_TokenTypeIds_DefaultsToZero()
     {
         // Arrange
@@ -188,7 +188,7 @@ public class WordPieceTokenizerTests
         Assert.All(result.TokenTypeIds, id => Assert.Equal(0, id));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EncodeBatch_ConsistentResults()
     {
         // Arrange
@@ -204,14 +204,14 @@ public class WordPieceTokenizerTests
 
     #region PR #757 Bug Fix Tests - Parameter Validation
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Train_NullCorpus_ThrowsArgumentNullException()
     {
         Assert.Throws<System.ArgumentNullException>(() =>
             WordPieceTokenizer.Train(null!, 100));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Train_InvalidVocabSize_ThrowsArgumentOutOfRangeException()
     {
         var corpus = new List<string> { "Hello world" };
@@ -222,7 +222,7 @@ public class WordPieceTokenizerTests
             WordPieceTokenizer.Train(corpus, -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_InvalidMaxInputCharsPerWord_ThrowsArgumentOutOfRangeException()
     {
         var vocabulary = new AiDotNet.Tokenization.Vocabulary.Vocabulary();

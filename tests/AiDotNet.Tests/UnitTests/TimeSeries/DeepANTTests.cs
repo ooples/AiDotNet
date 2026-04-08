@@ -10,7 +10,7 @@ public class DeepANTTests
 {
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithDefaultOptions_CreatesValidModel()
     {
         var model = new DeepANT<double>();
@@ -18,7 +18,7 @@ public class DeepANTTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithCustomOptions_CreatesValidModel()
     {
         var options = new DeepANTOptions<double>
@@ -38,7 +38,7 @@ public class DeepANTTests
 
     #region Training Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Train_WithValidData_CompletesWithoutError()
     {
         var options = new DeepANTOptions<double>
@@ -57,7 +57,7 @@ public class DeepANTTests
         Assert.Null(exception);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Train_WithMinimalData_CompletesWithoutError()
     {
         var options = new DeepANTOptions<double>
@@ -80,7 +80,7 @@ public class DeepANTTests
 
     #region Prediction Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PredictSingle_AfterTraining_ReturnsFiniteValue()
     {
         var options = new DeepANTOptions<double>
@@ -107,7 +107,7 @@ public class DeepANTTests
         Assert.False(double.IsInfinity(prediction), "Prediction is Infinity");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Predict_WithMatrix_ReturnsValidPredictions()
     {
         var options = new DeepANTOptions<double>
@@ -138,7 +138,7 @@ public class DeepANTTests
 
     #region Anomaly Detection Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DetectAnomalies_AfterTraining_ReturnsValidResults()
     {
         var options = new DeepANTOptions<double>
@@ -166,7 +166,7 @@ public class DeepANTTests
         Assert.Equal(testData.Length - options.WindowSize, anomalies.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DetectAnomalies_WithDataShorterThanWindowSize_ThrowsArgumentException()
     {
         var options = new DeepANTOptions<double>
@@ -188,7 +188,7 @@ public class DeepANTTests
         Assert.Throws<ArgumentException>(() => model.DetectAnomalies(shortData));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeAnomalyScores_AfterTraining_ReturnsValidScores()
     {
         var options = new DeepANTOptions<double>
@@ -222,7 +222,7 @@ public class DeepANTTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeAnomalyScores_WithDataShorterThanWindowSize_ThrowsArgumentException()
     {
         var options = new DeepANTOptions<double>
@@ -243,7 +243,7 @@ public class DeepANTTests
 
     #region Serialization Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Serialize_AndDeserialize_PreservesModel()
     {
         var options = new DeepANTOptions<double>
@@ -281,7 +281,7 @@ public class DeepANTTests
 
     #region Float Type Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithFloatType_CreatesValidModel()
     {
         var options = new DeepANTOptions<float>

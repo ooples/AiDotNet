@@ -38,7 +38,7 @@ public class ClopperPearsonTests
             $"BetaCDF({x}, {alpha}, {beta}) = {result}, expected {expected}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateBetaCDF_InvalidAlpha_ThrowsArgumentException()
     {
         // Act & Assert
@@ -48,7 +48,7 @@ public class ClopperPearsonTests
             StatisticsHelper<double>.CalculateBetaCDF(0.5, -1.0, 1.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateBetaCDF_InvalidBeta_ThrowsArgumentException()
     {
         // Act & Assert
@@ -69,7 +69,7 @@ public class ClopperPearsonTests
             StatisticsHelper<double>.CalculateBetaCDF(x, alpha, beta));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateBetaCDF_ResultAlwaysBetween0And1()
     {
         // Arrange - test various valid inputs
@@ -132,7 +132,7 @@ public class ClopperPearsonTests
             $"Round-trip failed: p={p} -> x={x} -> p'={pBack}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateInverseBetaCDF_InvalidProbability_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
@@ -240,7 +240,7 @@ public class ClopperPearsonTests
             $"Lower bound for ({successes}/{trials}) = {lower}, expected {expectedLower}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateClopperPearsonInterval_BoundsContainPointEstimate()
     {
         // Arrange
@@ -290,7 +290,7 @@ public class ClopperPearsonTests
             $"Higher confidence ({confidence}) upper bound {upperWide} should be >= {upperNarrow}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateClopperPearsonInterval_NegativeSuccesses_ThrowsArgumentException()
     {
         // Act & Assert
@@ -298,7 +298,7 @@ public class ClopperPearsonTests
             StatisticsHelper<double>.CalculateClopperPearsonInterval(-1, 100, 0.95));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateClopperPearsonInterval_SuccessesGreaterThanTrials_ThrowsArgumentException()
     {
         // Act & Assert
@@ -306,7 +306,7 @@ public class ClopperPearsonTests
             StatisticsHelper<double>.CalculateClopperPearsonInterval(101, 100, 0.95));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateClopperPearsonInterval_ZeroTrials_ThrowsArgumentOutOfRangeException()
     {
         // Act & Assert
@@ -350,7 +350,7 @@ public class ClopperPearsonTests
             $"Lower bound for ({successes}/{trials}) = {result}, expected {expected}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateClopperPearsonLowerBound_MatchesIntervalLowerBound()
     {
         // Two-sided 95% interval uses alpha/2 = 0.025 for lower bound
@@ -386,7 +386,7 @@ public class ClopperPearsonTests
 
     #region Float Type Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateBetaCDF_FloatType_ReturnsCorrectResult()
     {
         // Act
@@ -396,7 +396,7 @@ public class ClopperPearsonTests
         Assert.True(Math.Abs(result - 0.5f) < 0.001f);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CalculateClopperPearsonInterval_FloatType_ReturnsCorrectResult()
     {
         // Act

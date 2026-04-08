@@ -14,7 +14,7 @@ public class ClusteringPerformanceIntegrationTests
     private const int MaxDbscanSeconds = 2;
     private const long MaxRetainedBytes = 128L * 1024 * 1024;
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KMeans_CompletesWithinBudget()
     {
         var dataset = ClusteringTestData.CreateThreeClusterBlobs(pointsPerCluster: 50, spacing: 8.0);
@@ -34,7 +34,7 @@ public class ClusteringPerformanceIntegrationTests
         Assert.Equal(3, kmeans.NumClusters);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DBSCAN_CompletesWithinBudget()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 60, spacing: 8.0);

@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed.NeuralOperators;
 
 public class FourierLayerTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FourierLayer_IdentityWeightsPreserveConstantInput()
     {
         var layer = new FourierLayer<double>(
@@ -45,7 +45,7 @@ public class FourierLayerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FourierLayer_ChannelMixingSwapsConstantChannels()
     {
         var layer = new FourierLayer<double>(

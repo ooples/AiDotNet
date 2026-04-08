@@ -8,7 +8,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
 {
     public class MaxAbsScalerTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void NormalizeOutput_WithPositiveValues_ScalesToOneOrLess()
         {
             // Arrange
@@ -27,7 +27,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(1.0, normalized[3], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void NormalizeOutput_WithNegativeAndPositiveValues_PreservesSign()
         {
             // Arrange
@@ -45,7 +45,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(1.0, normalized[3], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void NormalizeOutput_WithZeros_PreservesZeros()
         {
             // Arrange
@@ -63,7 +63,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(1.0, normalized[3], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void NormalizeOutput_WithAllZeros_HandlesGracefully()
         {
             // Arrange
@@ -80,7 +80,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(0.0, normalized[2], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void NormalizeOutput_WithSingleValue_NormalizesToOne()
         {
             // Arrange
@@ -95,7 +95,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(1.0, normalized[0], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void NormalizeInput_WithMatrix_NormalizesEachColumnIndependently()
         {
             // Arrange
@@ -124,7 +124,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(0.25, normalized[2, 1], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Denormalize_WithVector_RestoresOriginalValues()
         {
             // Arrange
@@ -142,7 +142,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(original[3], denormalized[3], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Denormalize_Coefficients_ReturnsCorrectValues()
         {
             // Arrange
@@ -168,7 +168,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(0.25, denormalized[1], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Denormalize_Intercept_ReturnsZero()
         {
             // Arrange
@@ -191,7 +191,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(0.0, intercept, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void NormalizeOutput_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -209,7 +209,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(1.0f, normalized[3], 5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void NormalizeInput_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -228,7 +228,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(400.0f, parametersList[1].MaxAbs);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void NormalizeOutput_WithTensor_WorksCorrectly()
         {
             // Arrange
@@ -247,7 +247,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(1.0, normalized[3], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void NormalizeInput_WithTensor_WorksCorrectly()
         {
             // Arrange
@@ -266,7 +266,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(400.0, parametersList[1].MaxAbs);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void NormalizeOutput_WithLargeNegativeValue_NormalizesCorrectly()
         {
             // Arrange
@@ -284,7 +284,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             Assert.Equal(0.5, normalized[3], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RoundTrip_NormalizeAndDenormalize_ReturnsOriginal()
         {
             // Arrange

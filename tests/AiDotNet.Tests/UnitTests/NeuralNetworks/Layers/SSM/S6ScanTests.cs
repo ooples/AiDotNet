@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class S6ScanTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequentialScanForward_ProducesCorrectOutputShape()
     {
         int batchSize = 2;
@@ -31,7 +31,7 @@ public class S6ScanTests
         Assert.Equal(new[] { batchSize, seqLen + 1, innerDim, stateDim }, hiddenStates.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequentialScanForward_ProducesNoNaN()
     {
         int batchSize = 1;
@@ -52,7 +52,7 @@ public class S6ScanTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequentialScanForward_HiddenStateZeroAtT0()
     {
         int batchSize = 1;
@@ -78,7 +78,7 @@ public class S6ScanTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequentialScanBackward_ProducesCorrectGradientShapes()
     {
         int batchSize = 1;
@@ -109,7 +109,7 @@ public class S6ScanTests
         Assert.Equal(new[] { innerDim }, dD.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequentialScanBackward_ProducesNoNaN()
     {
         int batchSize = 1;
@@ -140,7 +140,7 @@ public class S6ScanTests
         Assert.False(ContainsNaN(dD));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParallelScan_ProducesCorrectOutputShape()
     {
         int batchSize = 2;
@@ -161,7 +161,7 @@ public class S6ScanTests
         Assert.Equal(new[] { batchSize, seqLen, innerDim }, output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParallelScan_ProducesNoNaN()
     {
         int batchSize = 1;
@@ -182,7 +182,7 @@ public class S6ScanTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParallelScan_MatchesSequentialScan()
     {
         int batchSize = 1;
@@ -214,7 +214,7 @@ public class S6ScanTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequentialScan_Double_ProducesValidOutput()
     {
         int batchSize = 1;

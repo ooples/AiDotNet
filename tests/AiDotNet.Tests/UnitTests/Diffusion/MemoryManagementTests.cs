@@ -14,7 +14,7 @@ public class MemoryManagementTests
 {
     #region ActivationPool Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActivationPool_Rent_ReturnsCorrectShape()
     {
         // Arrange
@@ -32,7 +32,7 @@ public class MemoryManagementTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActivationPool_RentAndReturn_ReusesBuffer()
     {
         // Arrange
@@ -48,7 +48,7 @@ public class MemoryManagementTests
         Assert.True(pool.Stats.CacheHits >= 1, "Should have cache hit after return");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActivationPool_Stats_TracksMissesCorrectly()
     {
         // Arrange
@@ -62,7 +62,7 @@ public class MemoryManagementTests
         Assert.Equal(2, pool.Stats.CacheMisses);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActivationPool_Return_IncreasesReturnCount()
     {
         // Arrange
@@ -76,7 +76,7 @@ public class MemoryManagementTests
         Assert.Equal(1, pool.Stats.Returns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActivationPool_Clear_ResetsPool()
     {
         // Arrange
@@ -91,7 +91,7 @@ public class MemoryManagementTests
         Assert.Equal(0, pool.GetMemoryUsage());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActivationPool_GetMemoryUsage_ReflectsAllocations()
     {
         // Arrange
@@ -106,7 +106,7 @@ public class MemoryManagementTests
         Assert.True(afterRent > initialMemory, "Memory should increase after rent");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActivationPool_HitRatio_ComputesCorrectly()
     {
         // Arrange
@@ -127,7 +127,7 @@ public class MemoryManagementTests
             "Hit ratio should be between 0 and 1");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActivationPool_RentNull_ThrowsException()
     {
         // Arrange
@@ -137,7 +137,7 @@ public class MemoryManagementTests
         Assert.Throws<ArgumentException>(() => pool.Rent(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActivationPool_RentEmpty_ThrowsException()
     {
         // Arrange
@@ -147,7 +147,7 @@ public class MemoryManagementTests
         Assert.Throws<ArgumentException>(() => pool.Rent(Array.Empty<int>()));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActivationPool_ReturnNull_DoesNotThrow()
     {
         // Arrange
@@ -157,7 +157,7 @@ public class MemoryManagementTests
         pool.Return(null!);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActivationPool_Dispose_IsIdempotent()
     {
         // Arrange
@@ -173,7 +173,7 @@ public class MemoryManagementTests
 
     #region ModelShard Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelShard_Constructor_DistributesLayersEvenly()
     {
         // Arrange
@@ -189,7 +189,7 @@ public class MemoryManagementTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelShard_Constructor_HandlesUnevenDistribution()
     {
         // Arrange
@@ -207,7 +207,7 @@ public class MemoryManagementTests
         Assert.Equal(10, total);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelShard_GetLayerDevice_ReturnsCorrectDevice()
     {
         // Arrange
@@ -225,7 +225,7 @@ public class MemoryManagementTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelShard_GetDeviceMemoryUsage_ReturnsAllDevices()
     {
         // Arrange
@@ -242,7 +242,7 @@ public class MemoryManagementTests
         Assert.True(memoryUsage.ContainsKey(2));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelShard_Constructor_InvalidDeviceCount_Throws()
     {
         // Arrange
@@ -253,7 +253,7 @@ public class MemoryManagementTests
             new ModelShard<float>(layers, numDevices: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelShard_GetDeviceLayers_InvalidDevice_Throws()
     {
         // Arrange
@@ -265,7 +265,7 @@ public class MemoryManagementTests
             shard.GetDeviceLayers(5));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelShard_GetLayerDevice_UnknownLayer_Throws()
     {
         // Arrange
@@ -278,7 +278,7 @@ public class MemoryManagementTests
             shard.GetLayerDevice(unknownLayer));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelShard_ToString_ContainsDeviceInfo()
     {
         // Arrange
@@ -294,7 +294,7 @@ public class MemoryManagementTests
         Assert.Contains("layers", str.ToLower());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelShard_EmptyLayers_DoesNotThrow()
     {
         // Arrange & Act
@@ -305,7 +305,7 @@ public class MemoryManagementTests
         Assert.Empty(shard.GetDeviceLayers(1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelShard_SingleDevice_GetsAllLayers()
     {
         // Arrange
@@ -318,7 +318,7 @@ public class MemoryManagementTests
         Assert.Equal(10, shard.GetDeviceLayers(0).Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelShard_Forward_ProcessesAllLayers()
     {
         // Arrange
@@ -343,7 +343,7 @@ public class MemoryManagementTests
 
     #region ShardingConfig Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShardingConfig_DefaultStrategy_IsEvenSplit()
     {
         // Arrange & Act
@@ -353,7 +353,7 @@ public class MemoryManagementTests
         Assert.Equal(ShardingStrategy.EvenSplit, config.Strategy);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShardingConfig_CustomAssignments_CanBeSet()
     {
         // Arrange & Act
@@ -369,7 +369,7 @@ public class MemoryManagementTests
         Assert.Equal(6, config.CustomDeviceAssignments.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelShard_CustomStrategy_UsesAssignments()
     {
         // Arrange

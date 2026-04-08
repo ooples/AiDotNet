@@ -118,7 +118,7 @@ public class HessenbergDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HessenbergDecomposition_IdentityMatrix_PreservesIdentity()
     {
         // Arrange
@@ -139,7 +139,7 @@ public class HessenbergDecompositionIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HessenbergDecomposition_DiagonalMatrix_PreservesDiagonal()
     {
         // Arrange - Diagonal matrices are already upper Hessenberg
@@ -154,7 +154,7 @@ public class HessenbergDecompositionIntegrationTests
             "Diagonal matrix Hessenberg form should be upper Hessenberg");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HessenbergDecomposition_UpperTriangularMatrix_PreservesStructure()
     {
         // Arrange - Upper triangular is already upper Hessenberg
@@ -172,7 +172,7 @@ public class HessenbergDecompositionIntegrationTests
             "Upper triangular matrix Hessenberg form should be upper Hessenberg");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HessenbergDecomposition_SymmetricMatrix_ProducesTridiagonal()
     {
         // Arrange - For symmetric matrices, Hessenberg form should be tridiagonal
@@ -246,7 +246,7 @@ public class HessenbergDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HessenbergDecomposition_LargeMatrix_ProducesValidDecomposition()
     {
         // Arrange
@@ -260,7 +260,7 @@ public class HessenbergDecompositionIntegrationTests
             "Large matrix Hessenberg form should be upper Hessenberg");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HessenbergDecomposition_ZeroMatrix_HandlesGracefully()
     {
         // Arrange
@@ -278,7 +278,7 @@ public class HessenbergDecompositionIntegrationTests
 
     #region Validation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HessenbergDecomposition_NonSquareMatrix_ThrowsException()
     {
         // Arrange

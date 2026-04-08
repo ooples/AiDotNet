@@ -78,7 +78,7 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         return Task.CompletedTask;
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task CreateRun_WhenModelDoesNotExist_Returns404()
     {
         var response = await PostAsJsonAsync("/api/federated/runs", new CreateFederatedRunRequest
@@ -91,7 +91,7 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task JoinRun_EnterpriseTier_WithNullAttestation_Returns403()
     {
         var modelName = "fed-join-enterprise";
@@ -122,7 +122,7 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task FederatedRun_Lifecycle_FedAvg_AggregatesAndAdvancesRound()
     {
         var modelName = "fed-lifecycle";
@@ -255,7 +255,7 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         Assert.False(string.IsNullOrWhiteSpace(key!.KeyBase64));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GetParameters_WhenClientNotJoined_Returns403()
     {
         var modelName = "fed-parameters-403";

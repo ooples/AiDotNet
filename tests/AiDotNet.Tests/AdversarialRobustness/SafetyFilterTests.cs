@@ -14,7 +14,7 @@ public class SafetyFilterTests
 
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithValidOptions_CreatesInstance()
     {
         // Arrange
@@ -32,7 +32,7 @@ public class SafetyFilterTests
         Assert.NotNull(filter.GetOptions());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
         // Act & Assert
@@ -43,7 +43,7 @@ public class SafetyFilterTests
 
     #region ValidateInput Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ValidateInput_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange
@@ -58,7 +58,7 @@ public class SafetyFilterTests
         Assert.Throws<ArgumentNullException>(() => filter.ValidateInput(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ValidateInput_WithNaN_MarksInvalid()
     {
         // Arrange
@@ -79,7 +79,7 @@ public class SafetyFilterTests
         Assert.True(result.SafetyScore < 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ValidateInput_WithInfinity_MarksInvalid()
     {
         // Arrange
@@ -99,7 +99,7 @@ public class SafetyFilterTests
         Assert.Contains(result.Issues, i => i.Type == "InvalidValue");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ValidateInput_WithNegativeInfinity_MarksInvalid()
     {
         // Arrange
@@ -118,7 +118,7 @@ public class SafetyFilterTests
         Assert.False(result.IsValid);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ValidateInput_WithExcessLength_MarksInvalid()
     {
         // Arrange
@@ -138,7 +138,7 @@ public class SafetyFilterTests
         Assert.Contains(result.Issues, i => i.Type == "LengthExceeded");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ValidateInput_WithValidInput_ReturnsValidResult()
     {
         // Arrange
@@ -159,7 +159,7 @@ public class SafetyFilterTests
         Assert.Empty(result.Issues);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ValidateInput_WithDisabledValidation_AlwaysReturnsValid()
     {
         // Arrange
@@ -182,7 +182,7 @@ public class SafetyFilterTests
 
     #region FilterOutput Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FilterOutput_WithNullOutput_ThrowsArgumentNullException()
     {
         // Arrange
@@ -196,7 +196,7 @@ public class SafetyFilterTests
         Assert.Throws<ArgumentNullException>(() => filter.FilterOutput(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FilterOutput_WithSafeOutput_ReturnsUnmodified()
     {
         // Arrange
@@ -217,7 +217,7 @@ public class SafetyFilterTests
         Assert.Equal(output.Length, result.FilteredOutput.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FilterOutput_WithDisabledFiltering_ReturnsUnmodified()
     {
         // Arrange
@@ -240,7 +240,7 @@ public class SafetyFilterTests
 
     #region DetectJailbreak Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DetectJailbreak_WithCleanInput_DetectsNoJailbreak()
     {
         // Arrange
@@ -261,7 +261,7 @@ public class SafetyFilterTests
         Assert.Equal(0.0, result.ConfidenceScore);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DetectJailbreak_WithEmptyInput_DetectsNoJailbreak()
     {
         // Arrange
@@ -283,7 +283,7 @@ public class SafetyFilterTests
 
     #region IdentifyHarmfulContent Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IdentifyHarmfulContent_WithCleanInput_DetectsNoHarm()
     {
         // Arrange
@@ -303,7 +303,7 @@ public class SafetyFilterTests
         Assert.Equal(0.0, result.HarmScore);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IdentifyHarmfulContent_WithEmptyInput_DetectsNoHarm()
     {
         // Arrange
@@ -322,7 +322,7 @@ public class SafetyFilterTests
         Assert.False(result.HarmfulContentDetected);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IdentifyHarmfulContent_WithNoCategories_DetectsNoHarm()
     {
         // Arrange
@@ -345,7 +345,7 @@ public class SafetyFilterTests
 
     #region ComputeSafetyScore Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeSafetyScore_ReturnsBoundedScore()
     {
         // Arrange
@@ -366,7 +366,7 @@ public class SafetyFilterTests
         Assert.True(score <= 1.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeSafetyScore_WithCleanInput_ReturnsHighScore()
     {
         // Arrange
@@ -386,7 +386,7 @@ public class SafetyFilterTests
         Assert.True(score >= 0.8, $"Expected high safety score for clean input, got {score}");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeSafetyScore_WithInvalidInput_ReturnsLowerScore()
     {
         // Arrange
@@ -409,7 +409,7 @@ public class SafetyFilterTests
 
     #region GetOptions and Reset Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetOptions_ReturnsConfiguredOptions()
     {
         // Arrange
@@ -432,7 +432,7 @@ public class SafetyFilterTests
         Assert.Equal(0.7, returnedOptions.SafetyThreshold, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Reset_DoesNotThrow()
     {
         // Arrange
@@ -451,7 +451,7 @@ public class SafetyFilterTests
 
     #region Serialization Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Serialize_ReturnsNonEmptyByteArray()
     {
         // Arrange
@@ -470,7 +470,7 @@ public class SafetyFilterTests
         Assert.True(bytes.Length > 0, "Serialized data should not be empty");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Deserialize_WithNullData_ThrowsArgumentNullException()
     {
         // Arrange
@@ -481,7 +481,7 @@ public class SafetyFilterTests
         Assert.Throws<ArgumentNullException>(() => filter.Deserialize(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SerializeDeserialize_PreservesOptions()
     {
         // Arrange
@@ -510,7 +510,7 @@ public class SafetyFilterTests
 
     #region SaveModel/LoadModel Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SaveModel_WithNullFilePath_ThrowsArgumentException()
     {
         // Arrange
@@ -521,7 +521,7 @@ public class SafetyFilterTests
         Assert.Throws<ArgumentException>(() => filter.SaveModel(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SaveModel_WithEmptyFilePath_ThrowsArgumentException()
     {
         // Arrange
@@ -532,7 +532,7 @@ public class SafetyFilterTests
         Assert.Throws<ArgumentException>(() => filter.SaveModel(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SaveModel_WithWhitespaceFilePath_ThrowsArgumentException()
     {
         // Arrange
@@ -543,7 +543,7 @@ public class SafetyFilterTests
         Assert.Throws<ArgumentException>(() => filter.SaveModel("   "));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadModel_WithNullFilePath_ThrowsArgumentException()
     {
         // Arrange
@@ -554,7 +554,7 @@ public class SafetyFilterTests
         Assert.Throws<ArgumentException>(() => filter.LoadModel(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadModel_WithEmptyFilePath_ThrowsArgumentException()
     {
         // Arrange
@@ -565,7 +565,7 @@ public class SafetyFilterTests
         Assert.Throws<ArgumentException>(() => filter.LoadModel(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LoadModel_WithNonexistentFile_ThrowsFileNotFoundException()
     {
         // Arrange
@@ -576,7 +576,7 @@ public class SafetyFilterTests
         Assert.Throws<FileNotFoundException>(() => filter.LoadModel("nonexistent_file_12345.model"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SaveAndLoadModel_RoundTrip_PreservesOptions()
     {
         // Arrange
@@ -619,7 +619,7 @@ public class SafetyFilterTests
 
     #region Edge Case Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ValidateInput_WithMultipleIssues_ReportsAllIssues()
     {
         // Arrange
@@ -640,7 +640,7 @@ public class SafetyFilterTests
         Assert.True(result.Issues.Count >= 2, "Should report multiple issues");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeSafetyScore_WithEmptyInput_ReturnsValidScore()
     {
         // Arrange
@@ -663,7 +663,7 @@ public class SafetyFilterTests
 
     #region Float Type Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ValidateInput_FloatType_WorksCorrectly()
     {
         // Arrange
@@ -682,7 +682,7 @@ public class SafetyFilterTests
         Assert.True(result.IsValid);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComputeSafetyScore_FloatType_ReturnsBoundedScore()
     {
         // Arrange

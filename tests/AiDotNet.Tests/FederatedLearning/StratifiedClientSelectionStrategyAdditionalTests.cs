@@ -7,7 +7,7 @@ using Xunit;
 
 public class StratifiedClientSelectionStrategyAdditionalTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SelectClients_Throws_WhenRequestNull()
     {
         var strategy = new StratifiedClientSelectionStrategy();
@@ -15,7 +15,7 @@ public class StratifiedClientSelectionStrategyAdditionalTests
         Assert.Throws<ArgumentNullException>(() => strategy.SelectClients(request: null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SelectClients_FallsBackToShuffle_WhenGroupKeysNull()
     {
         var strategy = new StratifiedClientSelectionStrategy();
@@ -35,7 +35,7 @@ public class StratifiedClientSelectionStrategyAdditionalTests
         Assert.True(selected.SequenceEqual(selected.OrderBy(i => i)));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SelectClients_FallsBackToShuffle_WhenGroupKeysEmpty()
     {
         var strategy = new StratifiedClientSelectionStrategy();
@@ -55,7 +55,7 @@ public class StratifiedClientSelectionStrategyAdditionalTests
         Assert.True(selected.SequenceEqual(selected.OrderBy(i => i)));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SelectClients_FallsBackToShuffle_WhenOnlyOneGroup()
     {
         var strategy = new StratifiedClientSelectionStrategy();
@@ -81,7 +81,7 @@ public class StratifiedClientSelectionStrategyAdditionalTests
         Assert.True(selected.SequenceEqual(selected.OrderBy(i => i)));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SelectClients_AssignsDefaultGroup_WhenGroupKeyMissingOrBlank()
     {
         var strategy = new StratifiedClientSelectionStrategy();
@@ -106,7 +106,7 @@ public class StratifiedClientSelectionStrategyAdditionalTests
         Assert.True(selected.SequenceEqual(selected.OrderBy(i => i)));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SelectClients_IncreasesGroupAllocations_WhenAllocatedLessThanDesired()
     {
         var strategy = new StratifiedClientSelectionStrategy();

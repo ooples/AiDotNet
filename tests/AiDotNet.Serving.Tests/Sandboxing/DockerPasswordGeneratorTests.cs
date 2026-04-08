@@ -5,7 +5,7 @@ namespace AiDotNet.Serving.Tests.Sandboxing;
 
 public sealed class DockerPasswordGeneratorTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Generate_Default_ReturnsBase64UrlString()
     {
         var password = DockerPasswordGenerator.Generate();

@@ -64,14 +64,14 @@ public class NeuralNetworkAnomalyDetectionTests
 
     #region AutoencoderDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Autoencoder_Construction_NotFittedByDefault()
     {
         var detector = new AutoencoderDetector<double>();
         Assert.False(detector.IsFitted);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Autoencoder_OutlierGetsHighestScore()
     {
         var detector = new AutoencoderDetector<double>(epochs: 10);
@@ -83,7 +83,7 @@ public class NeuralNetworkAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Autoencoder_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new AutoencoderDetector<double>(epochs: 10);
@@ -97,7 +97,7 @@ public class NeuralNetworkAnomalyDetectionTests
 
     #region VAEDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VAE_OutlierGetsHighestScore()
     {
         var detector = new VAEDetector<double>(epochs: 10);
@@ -108,7 +108,7 @@ public class NeuralNetworkAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VAE_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new VAEDetector<double>(epochs: 10);
@@ -122,7 +122,7 @@ public class NeuralNetworkAnomalyDetectionTests
 
     #region DAGMMDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DAGMM_OutlierGetsHighestScore()
     {
         var detector = new DAGMMDetector<double>(epochs: 10);
@@ -133,7 +133,7 @@ public class NeuralNetworkAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DAGMM_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new DAGMMDetector<double>(epochs: 10);
@@ -147,7 +147,7 @@ public class NeuralNetworkAnomalyDetectionTests
 
     #region DeepSVDDDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeepSVDD_OutlierGetsHighestScore()
     {
         var detector = new DeepSVDDDetector<double>(epochs: 10);
@@ -158,7 +158,7 @@ public class NeuralNetworkAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeepSVDD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new DeepSVDDDetector<double>(epochs: 10);
@@ -172,7 +172,7 @@ public class NeuralNetworkAnomalyDetectionTests
 
     #region DevNetDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DevNet_OutlierGetsHighestScore()
     {
         var detector = new DevNetDetector<double>(epochs: 10);
@@ -183,7 +183,7 @@ public class NeuralNetworkAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DevNet_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new DevNetDetector<double>(epochs: 10);
@@ -197,7 +197,7 @@ public class NeuralNetworkAnomalyDetectionTests
 
     #region GANomalyDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GAnomaly_OutlierGetsHighestScore()
     {
         var detector = new GANomalyDetector<double>(epochs: 10);
@@ -208,7 +208,7 @@ public class NeuralNetworkAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GAnomaly_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new GANomalyDetector<double>(epochs: 10);
@@ -222,7 +222,7 @@ public class NeuralNetworkAnomalyDetectionTests
 
     #region AnoGANDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AnoGAN_OutlierGetsHighestScore()
     {
         var detector = new AnoGANDetector<double>(epochs: 10);
@@ -233,7 +233,7 @@ public class NeuralNetworkAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AnoGAN_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new AnoGANDetector<double>(epochs: 10);
@@ -247,7 +247,7 @@ public class NeuralNetworkAnomalyDetectionTests
 
     #region Cross-Detector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllNeuralNetworkDetectors_PredictBeforeFit_Throws()
     {
         var detectors = new AnomalyDetectorBase<double>[]

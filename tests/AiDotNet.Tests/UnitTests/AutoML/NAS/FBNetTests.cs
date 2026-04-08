@@ -12,7 +12,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
     /// </summary>
     public class FBNetTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
@@ -23,7 +23,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(fbnet);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_GetArchitectureParameters_ReturnsCorrectCount()
         {
             // Arrange
@@ -38,7 +38,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(15, params_.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_GetTemperature_ReturnsInitialValue()
         {
             // Arrange
@@ -52,7 +52,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(5.0, temp);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_AnnealTemperature_DecreasesTemperature()
         {
             // Arrange
@@ -68,7 +68,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(midTemp < initialTemp);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_GumbelSoftmax_ReturnsProbabilities()
         {
             // Arrange
@@ -87,7 +87,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(theta.Length, probs.Length);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_GumbelSoftmax_HardMode_ReturnsOneHot()
         {
             // Arrange
@@ -108,7 +108,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(Math.Abs(sum - 1.0) < 0.01);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_ComputeExpectedLatency_ReturnsNonNegativeValue()
         {
             // Arrange
@@ -122,7 +122,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(latency >= 0.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_ComputeTotalLoss_IncludesLatencyPenalty()
         {
             // Arrange
@@ -137,7 +137,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(totalLoss > taskLoss - 0.01); // Should include some latency term
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_DeriveArchitecture_ReturnsValidArchitecture()
         {
             // Arrange
@@ -152,7 +152,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Equal(5, architecture.Operations.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_MeetsConstraints_ReturnsBoolean()
         {
             // Arrange
@@ -166,7 +166,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(meetsConstraints || !meetsConstraints);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_GetArchitectureCost_ReturnsValidCost()
         {
             // Arrange
@@ -182,7 +182,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(cost.Memory >= 0.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_SetConstraints_UpdatesConstraints()
         {
             // Arrange
@@ -203,7 +203,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(meetsConstraints || !meetsConstraints);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_WithDifferentPlatforms_InitializesCorrectly()
         {
             // Arrange & Act
@@ -218,7 +218,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.NotNull(fbnetEdge);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_GetArchitectureGradients_MatchesParameters()
         {
             // Arrange
@@ -239,7 +239,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
 
         #region Edge Case Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_SingleLayer_InitializesCorrectly()
         {
             // Arrange & Act - minimal numLayers
@@ -252,7 +252,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Single(params_);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_AnnealTemperature_AtStepZero_ReturnsInitialTemperature()
         {
             // Arrange
@@ -267,7 +267,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(temp >= 4.9); // Should be very close to 5.0
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_AnnealTemperature_AtFinalStep_ReturnsMinTemperature()
         {
             // Arrange
@@ -282,7 +282,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(temp < 5.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_AnnealTemperature_BeyondTotalSteps_HandlesGracefully()
         {
             // Arrange
@@ -297,7 +297,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(temp >= 0.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_GumbelSoftmax_SingleElementVector_ReturnsOne()
         {
             // Arrange
@@ -314,7 +314,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(Math.Abs(probs[0] - 1.0) < 0.01);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_GumbelSoftmax_AllZeroLogits_HandlesCorrectly()
         {
             // Arrange
@@ -334,7 +334,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(Math.Abs(sum - 1.0) < 0.01);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_ZeroLatencyWeight_TaskLossOnly()
         {
             // Arrange
@@ -349,7 +349,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(Math.Abs(totalLoss - taskLoss) < 0.01);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_HighLatencyWeight_DominatedByLatency()
         {
             // Arrange
@@ -364,7 +364,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.True(totalLoss > taskLoss);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_DeriveArchitecture_SingleLayer_ReturnsOneOperation()
         {
             // Arrange
@@ -379,7 +379,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.Single(architecture.Operations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_SetConstraints_VeryTightConstraints_StillWorks()
         {
             // Arrange
@@ -400,7 +400,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
             Assert.False(meetsConstraints); // Likely won't meet very tight constraints
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FBNet_SetConstraints_VeryLooseConstraints_Satisfied()
         {
             // Arrange

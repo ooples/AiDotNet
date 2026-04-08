@@ -12,14 +12,14 @@ namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
 public sealed class ProgramSynthesisServingClientTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Ctor_BaseAddressMissing_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new ProgramSynthesisServingClient(new ProgramSynthesisServingClientOptions()));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ExecuteProgramAsync_SendsAuthHeadersAndDeserializesResponse()
     {
         var handler = new RecordingHandler(_ =>
@@ -64,7 +64,7 @@ public sealed class ProgramSynthesisServingClientTests
         Assert.Equal("token", handler.LastRequest.Headers.Authorization!.Parameter);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ExecuteProgramAsync_UnparseableBody_Throws()
     {
         var handler = new RecordingHandler(_ =>
@@ -83,7 +83,7 @@ public sealed class ProgramSynthesisServingClientTests
             client.ExecuteProgramAsync(new ProgramExecuteRequest { Language = ProgramLanguage.Python, SourceCode = "print(1)" }, CancellationToken.None));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ExecuteProgramAsync_NonSuccessAndUnparseableBody_ThrowsHttpRequestException()
     {
         var handler = new RecordingHandler(_ =>
@@ -102,7 +102,7 @@ public sealed class ProgramSynthesisServingClientTests
             client.ExecuteProgramAsync(new ProgramExecuteRequest { Language = ProgramLanguage.Python, SourceCode = "print(1)" }, CancellationToken.None));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ExecuteCodeTaskAsync_Summarization_UsesTaskRoute()
     {
         var handler = new RecordingHandler(request =>
@@ -137,7 +137,7 @@ public sealed class ProgramSynthesisServingClientTests
         Assert.Equal("ok", typed.Summary);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task ExecuteCodeTaskAsync_UnsupportedRequestType_Throws()
     {
         var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));

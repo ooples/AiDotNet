@@ -26,7 +26,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
     // HINGE LOSS
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HingeLoss_PerfectPredictions_InProbabilitySpace_ShouldBeZero()
     {
         // Predictions: 1.0 for positive, 0.0 for negative (probabilities in [0,1])
@@ -40,7 +40,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HingeLoss_AllWrongPredictions_ShouldBeTwo()
     {
         // pred=0.0 for actual=1.0: yHat=2*0-1=-1, y=+1, hinge=max(0,1-1*(-1))=max(0,2)=2
@@ -53,7 +53,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(2.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HingeLoss_HandCalculated_MixedConfidence()
     {
         // pred=0.9 for actual=1: yHat=2*0.9-1=0.8, y=+1, hinge=max(0,1-0.8)=0.2
@@ -68,7 +68,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.4, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HingeLoss_RawMarginScores_NotInProbabilityRange()
     {
         // pred=3.0 (>1, so NOT converted), actual=1 => y=+1
@@ -85,7 +85,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0 / 3.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HingeLoss_IsNonNegative()
     {
         var pred = new double[] { 0.2, 0.8, 0.5, 0.3 };
@@ -99,7 +99,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
     // HAMMING LOSS
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HammingLoss_PerfectPredictions_ShouldBeZero()
     {
         var pred = new double[] { 1.0, 0.0, 1.0, 0.0 };
@@ -109,7 +109,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HammingLoss_AllWrong_ShouldBeOne()
     {
         var pred = new double[] { 1.0, 0.0, 1.0, 0.0 };
@@ -119,7 +119,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HammingLoss_HandCalculated_OneWrong()
     {
         // 3 correct, 1 wrong out of 4 => 1/4 = 0.25
@@ -130,7 +130,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.25, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HammingLoss_UsesRounding_PointFiveRoundsToEven()
     {
         // Math.Round(0.5) = 0 (banker's rounding), Math.Round(1.5) = 2
@@ -145,7 +145,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.5, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HammingLoss_MultiClass_HandCalculated()
     {
         // Multi-class: 5 samples, 2 wrong
@@ -156,7 +156,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(2.0 / 5.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HammingLoss_PlusAccuracy_EqualsOne()
     {
         // HammingLoss = 1 - Accuracy for single-label classification
@@ -173,7 +173,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
     // OPTIMIZED PRECISION
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizedPrecision_PerfectPredictions_ShouldBeOne()
     {
         // Perfect: TP=2, TN=2, FP=0, FN=0
@@ -187,7 +187,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizedPrecision_HandCalculated_BalancedClassifier()
     {
         // TP=3, TN=2, FP=1, FN=1 (7 samples)
@@ -210,7 +210,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizedPrecision_HighlyImbalanced_PenalizesAsymmetry()
     {
         // All predicted positive: TP=3, FP=7, TN=0, FN=0
@@ -226,7 +226,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(-0.7, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizedPrecision_BalancedSensSpec_NoPenalty()
     {
         // Construct scenario where Sens == Spec
@@ -246,7 +246,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
     // BALANCED ERROR RATE
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BalancedErrorRate_PerfectClassifier_ShouldBeZero()
     {
         var pred = new double[] { 1, 1, 0, 0 };
@@ -256,7 +256,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BalancedErrorRate_PlusBalancedAccuracy_EqualsOne()
     {
         // BER = 1 - BalancedAccuracy
@@ -269,7 +269,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, ber + ba, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BalancedErrorRate_HandCalculated_Asymmetric()
     {
         // TP=2, TN=1, FP=2, FN=1
@@ -283,7 +283,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.5, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BalancedErrorRate_RandomClassifier_ShouldBeHalf()
     {
         // When FNR = FPR = 0.5, BER = 0.5
@@ -299,7 +299,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
     // HUBER LOSS (REGRESSION)
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuberLoss_SmallErrors_EqualsHalfMSE()
     {
         // When all errors <= delta, Huber = 0.5 * error^2 (quadratic)
@@ -314,7 +314,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuberLoss_LargeErrors_IsLinear()
     {
         // When |error| > delta, Huber = delta * (|error| - 0.5 * delta)
@@ -328,7 +328,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(3.5, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuberLoss_MixedQuadraticLinear_HandCalculated()
     {
         // delta=1.0
@@ -344,7 +344,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuberLoss_PerfectPredictions_ShouldBeZero()
     {
         var pred = new double[] { 1.0, 2.0, 3.0 };
@@ -354,7 +354,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuberLoss_ContinuousAtBoundary()
     {
         // At |error|=delta, both branches give the same value
@@ -373,7 +373,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.True(Math.Abs(below - above) < 0.01, "Huber loss should be continuous at the boundary");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuberLoss_LessThanOrEqualMSE()
     {
         // Huber loss <= 0.5 * MSE (for delta=1) since linear part grows slower
@@ -391,7 +391,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
     // LOG-COSH LOSS
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogCoshLoss_SmallErrors_ApproximatesHalfSquared()
     {
         // For small x: log(cosh(x)) ≈ x^2/2
@@ -405,7 +405,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
             $"For small errors, log(cosh(x)) should approximate x^2/2. Got {result}, expected ~{approx}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogCoshLoss_LargeErrors_ApproximatesAbsMinusLog2()
     {
         // For large |x|: log(cosh(x)) ≈ |x| - log(2)
@@ -418,7 +418,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, 0.001);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogCoshLoss_PerfectPredictions_ShouldBeZero()
     {
         var pred = new double[] { 1.0, 2.0, 3.0 };
@@ -428,7 +428,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogCoshLoss_HandCalculated_ModerateErrors()
     {
         // errors: 1.0 and -1.0
@@ -443,7 +443,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogCoshLoss_IsSymmetric()
     {
         var pred1 = new double[] { 2.0 };
@@ -454,7 +454,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(metric.Compute(pred1, actual1), metric.Compute(pred2, actual2), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogCoshLoss_IsAlwaysNonNegative()
     {
         var pred = new double[] { -5, 0, 3, -1.5, 7 };
@@ -468,7 +468,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
     // QUANTILE LOSS (PINBALL LOSS)
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantileLoss_Median_EqualsHalfMAE()
     {
         // At quantile=0.5: loss = 0.5*|error| for all cases
@@ -482,7 +482,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(mae / 2.0, quantile, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantileLoss_HighQuantile_PenalizesUnderPrediction()
     {
         // tau=0.9
@@ -498,7 +498,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(2.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantileLoss_LowQuantile_PenalizesOverPrediction()
     {
         // tau=0.1
@@ -512,7 +512,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(2.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantileLoss_AsymmetryVerification()
     {
         // For same |error|, loss should differ by tau/(1-tau) ratio
@@ -527,7 +527,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(9.0, underLoss / overLoss, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantileLoss_PerfectPredictions_ShouldBeZero()
     {
         var pred = new double[] { 1, 2, 3 };
@@ -536,7 +536,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, metric.Compute(pred, actual), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantileLoss_InvalidQuantile_ShouldThrow()
     {
         Assert.Throws<ArgumentException>(() => new QuantileLossMetric<double>(0.0));
@@ -548,7 +548,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
     // TWEEDIE LOSS
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TweedieLoss_PowerZero_EquatesMSE()
     {
         // p=0: Tweedie = (y-mu)^2, which is MSE (without /N, but implementation averages)
@@ -561,7 +561,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(mse, tweedie, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TweedieLoss_PowerOne_PoissonDeviance()
     {
         // p=1: Tweedie = 2*(y*log(y/mu) - (y-mu)) for y>0
@@ -575,7 +575,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(poisson, tweedie, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TweedieLoss_PowerTwo_GammaDeviance()
     {
         // p=2: Tweedie = 2*(-log(y/mu) + (y-mu)/mu) for y>0
@@ -592,7 +592,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TweedieLoss_PerfectPredictions_ShouldBeZero()
     {
         var pred = new double[] { 1.0, 2.0, 3.0 };
@@ -602,7 +602,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, 0.001);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TweedieLoss_InvalidPower_ShouldThrow()
     {
         // power in (0,1) is invalid
@@ -613,7 +613,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
     // POISSON DEVIANCE
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonDeviance_HandCalculated()
     {
         // y=5, mu=3: 2*(5*log(5/3) - (5-3)) = 2*(5*0.5108 - 2) = 2*(2.554 - 2) = 2*0.554 = 1.108
@@ -629,7 +629,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonDeviance_ZeroActual_UsesTwoMu()
     {
         // y=0, mu=3: deviance = 2 * mu = 6
@@ -640,7 +640,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(6.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonDeviance_PerfectPredictions_ShouldBeZero()
     {
         // y=mu => 2*(y*log(1) - 0) = 0
@@ -651,7 +651,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonDeviance_IsNonNegative()
     {
         // Poisson deviance is always >= 0 (it's a deviance)
@@ -666,7 +666,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
     // SPEARMAN CORRELATION
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpearmanCorrelation_PerfectMonotonic_ShouldBeOne()
     {
         // Perfect monotonic increasing: ranks identical
@@ -677,7 +677,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpearmanCorrelation_PerfectReverseMonotonic_ShouldBeNegOne()
     {
         // Perfect monotonic decreasing: opposite ranks
@@ -688,7 +688,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(-1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpearmanCorrelation_HandCalculated_NoTies()
     {
         // pred = [3, 1, 4, 2]  => ranks = [3, 1, 4, 2]
@@ -708,7 +708,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(-0.6, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpearmanCorrelation_WithTies_UsesAverageRanks()
     {
         // pred = [1, 2, 2, 4] => ranks = [1, 2.5, 2.5, 4] (tied 2nd and 3rd)
@@ -728,7 +728,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpearmanCorrelation_NonlinearMonotonic_StillOne()
     {
         // Spearman only cares about monotonic relationship, not linearity
@@ -741,7 +741,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpearmanCorrelation_ConstantInput_ShouldBeZero()
     {
         var pred = new double[] { 5, 5, 5, 5 };
@@ -755,7 +755,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
     // SYMMETRIC MAPE
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymmetricMAPE_HandCalculated()
     {
         // sMAPE = 100/N * sum(|y-yhat| / ((|y|+|yhat|)/2))
@@ -772,7 +772,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymmetricMAPE_PerfectPredictions_ShouldBeZero()
     {
         var pred = new double[] { 1, 2, 3 };
@@ -781,7 +781,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, metric.Compute(pred, actual), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymmetricMAPE_IsSymmetric_UnlikeRegularMAPE()
     {
         // sMAPE treats over and under predictions equally
@@ -794,7 +794,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(forward, backward, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymmetricMAPE_BoundedByTwoHundred()
     {
         // Max sMAPE occurs when one of y,yhat is 0 and the other is nonzero
@@ -811,7 +811,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
     // MEAN DIRECTIONAL ACCURACY
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MDA_PerfectDirectionPrediction_ShouldBeOne()
     {
         // Actuals: 1,3,2,5 => changes: +2, -1, +3
@@ -824,7 +824,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MDA_AllWrongDirections_ShouldBeZero()
     {
         // Actuals: 1,3,2,5 => changes: +2, -1, +3
@@ -837,7 +837,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MDA_HandCalculated_MixedDirections()
     {
         // Actuals: 10,15,12,18,16 => changes: +5, -3, +6, -2
@@ -851,7 +851,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.75, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MDA_SingleElement_ReturnsHalf()
     {
         var pred = new double[] { 1.0 };
@@ -865,7 +865,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
     // ADJUSTED R2
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdjustedR2_PerfectPredictions_ShouldBeOne()
     {
         var pred = new double[] { 1, 2, 3, 4, 5 };
@@ -875,7 +875,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdjustedR2_HandCalculated()
     {
         // actual = [1,2,3,4,5], mean=3
@@ -894,7 +894,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdjustedR2_LessThanOrEqualR2()
     {
         // Adjusted R2 <= R2 when n > p+1
@@ -908,7 +908,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
             $"AdjustedR2 ({adjR2}) should be <= R2 ({r2})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdjustedR2_MorePredictors_LowerScore()
     {
         // More predictors => greater penalty => lower adjusted R2
@@ -922,7 +922,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
             $"AdjR2 with 1 predictor ({adj1}) should be > AdjR2 with 5 ({adj5})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdjustedR2_TooFewSamples_ReturnsZero()
     {
         // n <= p+1 => not enough samples
@@ -937,7 +937,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
     // MEAN SQUARED LOG ERROR
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSLE_HandCalculated()
     {
         // MSLE = (1/N) * sum((log(1+y) - log(1+yhat))^2)
@@ -954,7 +954,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSLE_PerfectPredictions_ShouldBeZero()
     {
         var pred = new double[] { 1, 2, 3 };
@@ -963,7 +963,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, metric.Compute(pred, actual), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSLE_PenalizesUnderPredictionMore()
     {
         // MSLE penalizes underprediction more than overprediction for positive values
@@ -981,7 +981,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(under, over, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSLE_NegativeValues_ClampedToZero()
     {
         // Implementation clamps negatives to 0
@@ -998,7 +998,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
     // EXPLAINED VARIANCE
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExplainedVariance_PerfectPredictions_ShouldBeOne()
     {
         var pred = new double[] { 1, 2, 3, 4, 5 };
@@ -1008,7 +1008,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExplainedVariance_EqualsR2_WhenUnbiased()
     {
         // EV = 1 - Var(residuals)/Var(y)
@@ -1033,7 +1033,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExplainedVariance_GreaterThanOrEqualR2_WhenBiased()
     {
         // When predictions have a constant bias, EV >= R2
@@ -1049,7 +1049,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
             $"EV ({ev}) should be >= R2 ({r2}) with constant bias");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExplainedVariance_ConstantBias_StillOne()
     {
         // pred = actual + constant => residuals all equal constant
@@ -1061,7 +1061,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExplainedVariance_MeanPredictor_ShouldBeZero()
     {
         // Predicting mean for all => residuals = actual - mean
@@ -1079,7 +1079,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
     // CROSS-METRIC MATHEMATICAL IDENTITIES
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossMetric_HammingLoss_IsOneMinus_Accuracy()
     {
         var pred = new double[] { 1, 0, 1, 0, 1, 1, 0 };
@@ -1089,7 +1089,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, hamming + accuracy, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossMetric_BER_IsOneMinus_BalancedAccuracy()
     {
         var pred = new double[] { 1, 0, 1, 0, 1, 1, 0 };
@@ -1099,7 +1099,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, ber + ba, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossMetric_QuantileLoss05_IsHalf_MAE()
     {
         var pred = new double[] { 1, 3, 5, 7, 9 };
@@ -1109,7 +1109,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(mae / 2.0, quantile, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossMetric_PoissonDeviance_EqualsTweedie_PowerOne()
     {
         var pred = new double[] { 2, 4, 6, 8 };
@@ -1119,7 +1119,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(poisson, tweedie, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossMetric_Tweedie_PowerZero_EqualsMSE()
     {
         var pred = new double[] { 1.5, 2.5, 3.5 };
@@ -1129,7 +1129,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(mse, tweedie, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossMetric_LogCoshLoss_BetweenMAEandMSE()
     {
         // For same data, log(cosh(x)) is between x^2/2 and |x|-log(2)
@@ -1147,7 +1147,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
             "LogCosh should be non-negative");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossMetric_HuberLoss_SmallDelta_ApproximatesDeltaMAE()
     {
         // For very small delta, almost all errors are in the linear region
@@ -1162,7 +1162,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
             $"Huber ({huber}) should approximate delta*(MAE-delta/2) = {approx} for small delta");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossMetric_ExplainedVariance_GeR2_ForBiasedPredictions()
     {
         // Biased predictions: pred = actual + 3
@@ -1182,7 +1182,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
     // EDGE CASES AND VALIDATION
     // ═══════════════════════════════════════════════════════════════
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllMetrics_EmptyInput_ShouldHandleGracefully()
     {
         var empty = Array.Empty<double>();
@@ -1200,7 +1200,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, new AdjustedR2Metric<double>().Compute(empty, empty), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllMetrics_MismatchedLengths_ShouldThrow()
     {
         var a = new double[] { 1, 2 };
@@ -1221,7 +1221,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => new AdjustedR2Metric<double>().Compute(a, b));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HingeLoss_ComputeWithCI_InvalidBootstrap_ShouldThrow()
     {
         var pred = new double[] { 0.9, 0.1 };
@@ -1235,7 +1235,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
             metric.ComputeWithCI(pred, actual, confidenceLevel: 1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpearmanCorrelation_ComputeWithCI_ProducesValidInterval()
     {
         var pred = new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
@@ -1251,7 +1251,7 @@ public class LossAndRobustRegressionMetricsDeepMathIntegrationTests
         Assert.True(upper <= 1.0 + Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetricDirections_AreCorrect()
     {
         // Loss metrics should be LowerIsBetter

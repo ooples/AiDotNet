@@ -32,7 +32,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
     // MA Model Tests
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAModel_PredictSingle_ReturnsFiniteValue()
     {
         // MA(1) prediction: y_hat = mean + theta1 * e(t-1)
@@ -50,7 +50,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         Assert.True((!double.IsNaN(prediction) && !double.IsInfinity(prediction)), $"MA prediction should be finite, got {prediction}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAModel_PredictionConvergesToMean_AsHorizonIncreases()
     {
         // For MA(q), predictions should converge to the series mean as we forecast further
@@ -79,7 +79,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAModel_Predict_ShiftsErrorsToZero()
     {
         // MA prediction shifts the working errors vector: at each step, the oldest error
@@ -107,7 +107,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAModel_InsufficientData_ThrowsArgumentException()
     {
         // Training requires length > MAOrder
@@ -122,7 +122,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => model.Train(x, y));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAModel_EmptyData_ThrowsArgumentException()
     {
         // Empty data should throw ArgumentException (either from Matrix constructor or Train)
@@ -138,7 +138,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         });
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAModel_PredictBeforeTrain_ThrowsInvalidOperationException()
     {
         var options = new MAModelOptions<double> { MAOrder = 1 };
@@ -148,7 +148,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
             model.PredictSingle(MakeVector(new double[] { 1.0 })));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAModel_Evaluation_ReturnsAllMetrics()
     {
         // MA EvaluateModel should return MSE, RMSE, MAE, MAPE
@@ -173,7 +173,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
             "RMSE should be sqrt(MSE)");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAModel_ConstantSeries_MeanIsConstant()
     {
         // If all values are the same, the mean should be that value
@@ -192,7 +192,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
             $"Constant series prediction should be near {constant}, got {prediction}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAModel_HigherOrder_CapturesMoreLags()
     {
         // MA(1) uses 1 lag, MA(3) uses 3 lags
@@ -237,7 +237,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
             $"MA(3) should converge by step 4, diff = {Math.Abs(pred3[4] - mean)}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAModel_MACoefficients_StayWithinBounds()
     {
         // MA coefficients should be bounded within (-1, 1) for invertibility
@@ -257,7 +257,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
             "Model with high-variance data should still produce finite predictions");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAModel_Forecast_MatchesPredictOutput()
     {
         // Forecast and Predict should produce consistent results
@@ -285,7 +285,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAModel_NegativeHorizon_ThrowsException()
     {
         var data = new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0 };
@@ -299,7 +299,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         Assert.ThrowsAny<Exception>(() => model.Forecast(MakeVector(data), -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAModel_Serialize_DeserializeProducesSamePredictions()
     {
         var data = new double[] { 1.0, 0.8, 1.2, 0.9, 1.1, 0.7, 1.3, 0.85, 1.15, 0.95,
@@ -327,7 +327,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
     // GARCH Model Tests
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GARCHModel_Train_ProducesNonNegativeVariances()
     {
         // GARCH conditional variances must always be non-negative
@@ -354,7 +354,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
             $"GARCH prediction should be finite, got {prediction}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GARCHModel_StationarityConstraint_SumAlphaBetaLessThanOne()
     {
         // For a stationary GARCH(1,1), we need alpha + beta < 1
@@ -388,7 +388,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GARCHModel_VolatilityClustering_HighVolAfterHighVol()
     {
         // GARCH models capture volatility clustering: high volatility periods
@@ -422,7 +422,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         Assert.True((!double.IsNaN(prediction) && !double.IsInfinity(prediction)), "GARCH should handle volatility regime changes");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GARCHModel_PredictBeforeTrain_Throws()
     {
         var options = new GARCHModelOptions<double>
@@ -436,7 +436,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
             model.PredictSingle(MakeVector(new double[] { 1.0 })));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GARCHModel_VarianceEquation_OmegaIsFloor()
     {
         // In the GARCH variance equation: sigma^2_t = omega + alpha*e^2_{t-1} + beta*sigma^2_{t-1}
@@ -464,7 +464,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
             "GARCH with near-zero volatility data should produce finite prediction");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GARCHModel_Forecast_ReturnsRequestedHorizon()
     {
         var data = new double[40];
@@ -494,7 +494,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GARCHModel_SerializeDeserialize_ProducesConsistentForecasts()
     {
         var data = new double[40];
@@ -533,7 +533,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         Assert.True((!double.IsNaN(p2) && !double.IsInfinity(p2)), "Deserialized GARCH prediction should be finite");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GARCHModel_HigherARCHOrder_CapturesMoreShocks()
     {
         // GARCH(2,1) uses 2 past squared residuals vs GARCH(1,1) using 1
@@ -574,7 +574,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GARCHModel_Metadata_ContainsModelInfo()
     {
         var options = new GARCHModelOptions<double>
@@ -595,7 +595,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         Assert.NotNull(metadata);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GARCHModel_NegativeHorizon_ThrowsException()
     {
         var data = new double[30];
@@ -614,7 +614,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         Assert.ThrowsAny<Exception>(() => model.Forecast(MakeVector(data), -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GARCHModel_EvaluateModel_ReturnsMetrics()
     {
         var data = new double[40];
@@ -644,7 +644,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
     // Cross-model comparison tests
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAModel_Evaluation_MSEConsistencyWithPredictions()
     {
         // Verify that EvaluateModel's MSE matches manually computed MSE from predictions
@@ -676,7 +676,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         Assert.Equal(manualMSE, metrics["MSE"], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAModel_MAOrder0_PredictsMean()
     {
         // MA(0) is just a white noise model: prediction = mean

@@ -17,7 +17,7 @@ public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
     // the input (every pixel gets a classification).
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OutputSpatialDims_MatchInput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -47,7 +47,7 @@ public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
     // Negative mask values indicate a broken classification head.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaskValues_AreNonNegative()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -71,7 +71,7 @@ public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
     // from uniform input indicate hallucinated boundaries.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniformInput_UniformMask()
     {
         var network = CreateNetwork();
@@ -96,7 +96,7 @@ public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
     // Total mask area/probability mass must be finite.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OutputSum_IsFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

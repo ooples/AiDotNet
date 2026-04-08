@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.MatrixDecomposition;
 /// </summary>
 public class IcaDecompositionTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithValidMatrix_InitializesCorrectly()
     {
         // Arrange
@@ -32,7 +32,7 @@ public class IcaDecompositionTests
         Assert.NotNull(ica.WhiteningMatrix);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroComponents_ThrowsArgumentException()
     {
         // Arrange
@@ -46,7 +46,7 @@ public class IcaDecompositionTests
         Assert.Throws<ArgumentException>(() => new IcaDecomposition<double>(matrix, components: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithTooManyComponents_ThrowsArgumentException()
     {
         // Arrange
@@ -60,7 +60,7 @@ public class IcaDecompositionTests
         Assert.Throws<ArgumentException>(() => new IcaDecomposition<double>(matrix, components: 10));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void UnmixingMatrix_HasCorrectDimensions()
     {
         // Arrange
@@ -81,7 +81,7 @@ public class IcaDecompositionTests
         Assert.Equal(matrix.Columns, ica.UnmixingMatrix.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IndependentComponents_HasCorrectDimensions()
     {
         // Arrange
@@ -102,7 +102,7 @@ public class IcaDecompositionTests
         Assert.Equal(matrix.Rows, ica.IndependentComponents.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Mean_HasCorrectLength()
     {
         // Arrange
@@ -120,7 +120,7 @@ public class IcaDecompositionTests
         Assert.Equal(matrix.Columns, ica.Mean.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Solve_ReturnsVectorOfCorrectSize()
     {
         // Arrange
@@ -141,7 +141,7 @@ public class IcaDecompositionTests
         Assert.True(x.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Invert_ReturnsMatrixOfCorrectDimensions()
     {
         // Arrange
@@ -162,7 +162,7 @@ public class IcaDecompositionTests
         Assert.True(inverse.Columns > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Transform_WithNewData_ReturnsCorrectDimensions()
     {
         // Arrange
@@ -189,7 +189,7 @@ public class IcaDecompositionTests
         Assert.Equal(newMatrix.Rows, transformed.Rows);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void A_Property_ReturnsOriginalMatrix()
     {
         // Arrange
@@ -206,7 +206,7 @@ public class IcaDecompositionTests
         Assert.Equal(matrix, ica.A);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Factorization_WithMixedSignals_SeparatesComponents()
     {
         // Arrange - Create two independent source signals
@@ -241,7 +241,7 @@ public class IcaDecompositionTests
         Assert.Equal(100, ica.IndependentComponents.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Factorization_WithDifferentNumericTypes_WorksCorrectly()
     {
         // Arrange
@@ -260,7 +260,7 @@ public class IcaDecompositionTests
         Assert.NotNull(icaFloat.IndependentComponents);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void WhiteningMatrix_HasCorrectDimensions()
     {
         // Arrange
@@ -281,7 +281,7 @@ public class IcaDecompositionTests
         Assert.Equal(matrix.Columns, ica.WhiteningMatrix.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MixingMatrix_HasCorrectDimensions()
     {
         // Arrange
@@ -303,7 +303,7 @@ public class IcaDecompositionTests
         Assert.True(ica.MixingMatrix.Columns > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithDefaultComponents_UsesMinDimension()
     {
         // Arrange

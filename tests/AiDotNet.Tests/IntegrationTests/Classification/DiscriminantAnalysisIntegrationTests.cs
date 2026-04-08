@@ -14,7 +14,7 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region LDA Core Functionality Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDA_Train_ComputesCorrectClassMeans()
     {
         // Arrange: Two classes with known means
@@ -57,7 +57,7 @@ public class DiscriminantAnalysisIntegrationTests
             $"Point at class 1 mean should favor class 1. Got P(class0)={probsClass1[0, 0]}, P(class1)={probsClass1[0, 1]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDA_Train_ComputesCorrectClassPriors()
     {
         // Arrange: Imbalanced classes - 3 samples class 0, 1 sample class 1
@@ -88,7 +88,7 @@ public class DiscriminantAnalysisIntegrationTests
             $"Probabilities should sum to 1, got {sum}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDA_PredictProbabilities_SumToOne()
     {
         // Arrange
@@ -131,7 +131,7 @@ public class DiscriminantAnalysisIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDA_MahalanobisDistance_PooledCovariance()
     {
         // Arrange: Well-separated Gaussian clusters
@@ -166,7 +166,7 @@ public class DiscriminantAnalysisIntegrationTests
             $"At midpoint, probabilities should be relatively balanced. Got P(0)={probs[0, 0]}, P(1)={probs[0, 1]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDA_Regularization_ImprovesSingularCovariance()
     {
         // Arrange: Degenerate case with collinear points
@@ -200,7 +200,7 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.True(Math.Abs(sum - 1.0) < Tolerance, $"Probabilities should sum to 1, got {sum}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDA_LinearDecisionBoundary_CorrectlyClassifies()
     {
         // Arrange: Two classes that are linearly separable
@@ -246,7 +246,7 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region QDA Core Functionality Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QDA_Train_ComputesSeparateCovarianceMatrices()
     {
         // Arrange: Two classes with different covariance structures
@@ -286,7 +286,7 @@ public class DiscriminantAnalysisIntegrationTests
             $"Point (10,2) should favor class 1. Got P(0)={probs[1, 0]}, P(1)={probs[1, 1]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QDA_PredictProbabilities_SumToOne()
     {
         // Arrange
@@ -323,7 +323,7 @@ public class DiscriminantAnalysisIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QDA_QuadraticDecisionBoundary_ClassifiesNonLinearData()
     {
         // Arrange: Data that requires curved decision boundary
@@ -372,7 +372,7 @@ public class DiscriminantAnalysisIntegrationTests
             $"Point (3,0) should favor class 0. Got P(0)={probs[2, 0]}, P(1)={probs[2, 1]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QDA_Regularization_PreventsOverfitting()
     {
         // Arrange: Small dataset prone to singular covariance
@@ -408,7 +408,7 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region LDA vs QDA Comparison Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDA_vs_QDA_SameCovariance_SimilarResults()
     {
         // Arrange: Data where both classes have same covariance
@@ -450,7 +450,7 @@ public class DiscriminantAnalysisIntegrationTests
             $"LDA and QDA should give similar probs when covariances are equal. LDA P(0)={ldaProbs[0, 0]}, QDA P(0)={qdaProbs[0, 0]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDA_vs_QDA_DifferentCovariance_QDABetter()
     {
         // Arrange: Data where classes have VERY different covariances
@@ -501,7 +501,7 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region Edge Cases and Error Handling
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDA_ThrowsOnMismatchedDimensions()
     {
         // Arrange
@@ -514,7 +514,7 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.Throws<ArgumentException>(() => lda.Train(x, y));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QDA_ThrowsOnMismatchedDimensions()
     {
         // Arrange
@@ -527,7 +527,7 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.Throws<ArgumentException>(() => qda.Train(x, y));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDA_PredictBeforeTrain_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -539,7 +539,7 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.Throws<InvalidOperationException>(() => lda.PredictProbabilities(testPoint));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QDA_PredictBeforeTrain_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -551,7 +551,7 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.Throws<InvalidOperationException>(() => qda.PredictProbabilities(testPoint));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDA_SingleSamplePerClass_HandlesGracefully()
     {
         // Arrange: Edge case with just 1 sample per class
@@ -583,7 +583,7 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region PredictLogProbabilities Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDA_PredictLogProbabilities_ConsistentWithProbabilities()
     {
         // Arrange
@@ -616,7 +616,7 @@ public class DiscriminantAnalysisIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QDA_PredictLogProbabilities_ConsistentWithProbabilities()
     {
         // Arrange
@@ -653,7 +653,7 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region Clone and Serialization Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDA_Clone_ProducesSamePredictions()
     {
         // Arrange
@@ -684,7 +684,7 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.True(Math.Abs(originalProbs[0, 1] - cloneProbs[0, 1]) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QDA_Clone_ProducesSamePredictions()
     {
         // Arrange
@@ -715,7 +715,7 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.True(Math.Abs(originalProbs[0, 1] - cloneProbs[0, 1]) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDA_Clone_IsIndependent()
     {
         // Arrange
@@ -758,7 +758,7 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region Multiclass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDA_MulticlassClassification_ThreeClasses()
     {
         // Arrange: 3-class problem
@@ -806,7 +806,7 @@ public class DiscriminantAnalysisIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QDA_MulticlassClassification_FourClasses()
     {
         // Arrange: 4-class problem at corners of a square
@@ -855,7 +855,7 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDA_NumericalStability_LargeFeatureValues()
     {
         // Arrange: Data with large feature values
@@ -885,7 +885,7 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.False(double.IsInfinity(probs[0, 0]), "Probability should not be infinite");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QDA_NumericalStability_SmallVariances()
     {
         // Arrange: Data with very small variances
@@ -922,7 +922,7 @@ public class DiscriminantAnalysisIntegrationTests
 
     #region GetModelMetadata Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LDA_GetModelMetadata_ContainsRegularizationParam()
     {
         // Arrange
@@ -951,7 +951,7 @@ public class DiscriminantAnalysisIntegrationTests
         Assert.Equal(0.05, metadata.AdditionalInfo["RegularizationParam"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QDA_GetModelMetadata_ContainsRegularizationParam()
     {
         // Arrange

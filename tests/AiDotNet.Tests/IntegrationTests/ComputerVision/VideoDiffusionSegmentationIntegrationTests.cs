@@ -29,7 +29,7 @@ public class VideoDiffusionSegmentationIntegrationTests
 
     #region DEVA
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DEVA_Construction_Succeeds()
     {
         var model = new DEVA<double>(Arch(), modelSize: DEVAModelSize.Base);
@@ -37,7 +37,7 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DEVA_Predict_ReturnsOutput()
     {
         var model = new DEVA<double>(Arch(), modelSize: DEVAModelSize.Base);
@@ -46,7 +46,7 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DEVA_Train_DoesNotThrow()
     {
         var model = new DEVA<double>(Arch(), modelSize: DEVAModelSize.Base);
@@ -56,7 +56,7 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DEVA_Dispose_DoesNotThrow()
     {
         var model = new DEVA<double>(Arch());
@@ -67,7 +67,7 @@ public class VideoDiffusionSegmentationIntegrationTests
 
     #region EfficientTAM
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EfficientTAM_Construction_Succeeds()
     {
         var model = new EfficientTAM<double>(Arch(), modelSize: EfficientTAMModelSize.Tiny);
@@ -75,7 +75,7 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EfficientTAM_Predict_ReturnsOutput()
     {
         var model = new EfficientTAM<double>(Arch(), modelSize: EfficientTAMModelSize.Tiny);
@@ -84,7 +84,7 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EfficientTAM_Dispose_DoesNotThrow()
     {
         var model = new EfficientTAM<double>(Arch());
@@ -95,7 +95,7 @@ public class VideoDiffusionSegmentationIntegrationTests
 
     #region UniVS
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniVS_Construction_Succeeds()
     {
         var model = new UniVS<double>(Arch(), modelSize: UniVSModelSize.R50);
@@ -103,7 +103,7 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniVS_Predict_ReturnsOutput()
     {
         var model = new UniVS<double>(Arch(), modelSize: UniVSModelSize.R50);
@@ -112,7 +112,7 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniVS_Dispose_DoesNotThrow()
     {
         var model = new UniVS<double>(Arch());
@@ -123,7 +123,7 @@ public class VideoDiffusionSegmentationIntegrationTests
 
     #region DiffCutSegmentation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiffCutSegmentation_Construction_Succeeds()
     {
         var model = new DiffCutSegmentation<double>(Arch());
@@ -131,7 +131,7 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiffCutSegmentation_Predict_ReturnsOutput()
     {
         var model = new DiffCutSegmentation<double>(Arch());
@@ -140,7 +140,7 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiffCutSegmentation_Dispose_DoesNotThrow()
     {
         var model = new DiffCutSegmentation<double>(Arch());
@@ -151,7 +151,7 @@ public class VideoDiffusionSegmentationIntegrationTests
 
     #region ODISESegmentation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ODISESegmentation_Construction_Succeeds()
     {
         var model = new ODISESegmentation<double>(Arch());
@@ -159,7 +159,7 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ODISESegmentation_Predict_ReturnsOutput()
     {
         var model = new ODISESegmentation<double>(Arch());
@@ -168,7 +168,7 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ODISESegmentation_Dispose_DoesNotThrow()
     {
         var model = new ODISESegmentation<double>(Arch());
@@ -179,7 +179,7 @@ public class VideoDiffusionSegmentationIntegrationTests
 
     #region MedSegDiffV2Segmentation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MedSegDiffV2Segmentation_Construction_Succeeds()
     {
         var model = new MedSegDiffV2Segmentation<double>(Arch());
@@ -187,7 +187,7 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MedSegDiffV2Segmentation_Predict_ReturnsOutput()
     {
         var model = new MedSegDiffV2Segmentation<double>(Arch());
@@ -196,7 +196,7 @@ public class VideoDiffusionSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MedSegDiffV2Segmentation_Dispose_DoesNotThrow()
     {
         var model = new MedSegDiffV2Segmentation<double>(Arch());

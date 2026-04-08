@@ -56,7 +56,7 @@ public class TimeSeriesCrossValidatorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithValidParameters_CreatesValidator()
     {
         // Act
@@ -69,7 +69,7 @@ public class TimeSeriesCrossValidatorIntegrationTests
         Assert.NotNull(validator);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithCustomOptions_CreatesValidator()
     {
         // Arrange
@@ -90,7 +90,7 @@ public class TimeSeriesCrossValidatorIntegrationTests
 
     #region Temporal Ordering Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_TrainingIndicesAlwaysPrecedeValidationIndices()
     {
         // Arrange
@@ -120,7 +120,7 @@ public class TimeSeriesCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_NoFutureDataLeakage()
     {
         // Arrange
@@ -155,7 +155,7 @@ public class TimeSeriesCrossValidatorIntegrationTests
 
     #region Expanding Window Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_TrainingSetExpandsOverFolds()
     {
         // Arrange
@@ -185,7 +185,7 @@ public class TimeSeriesCrossValidatorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_ValidationSetSizeIsConstant()
     {
         // Arrange
@@ -214,7 +214,7 @@ public class TimeSeriesCrossValidatorIntegrationTests
 
     #region Fold Generation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_GeneratesCorrectNumberOfFolds()
     {
         // Arrange - With 50 samples, initial=10, validation=5, step=5
@@ -238,7 +238,7 @@ public class TimeSeriesCrossValidatorIntegrationTests
         Assert.True(result.FoldResults.Count >= 5, $"Expected at least 5 folds, got {result.FoldResults.Count}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_ValidationIndicesAreContiguous()
     {
         // Arrange
@@ -271,7 +271,7 @@ public class TimeSeriesCrossValidatorIntegrationTests
 
     #region Step Size Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_StepSizeAffectsFoldOverlap()
     {
         // Arrange - Step size equals validation size means no overlap
@@ -304,7 +304,7 @@ public class TimeSeriesCrossValidatorIntegrationTests
 
     #region Result Structure Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_ReturnsValidFoldResults()
     {
         // Arrange
@@ -339,7 +339,7 @@ public class TimeSeriesCrossValidatorIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validate_WithLargeInitialTrainSize_GeneratesFewFolds()
     {
         // Arrange

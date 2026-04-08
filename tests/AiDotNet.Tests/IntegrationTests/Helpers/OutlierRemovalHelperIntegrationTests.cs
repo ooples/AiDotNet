@@ -10,7 +10,7 @@ public class OutlierRemovalHelperIntegrationTests
 {
     #region ConvertToMatrixVector Tests - Matrix/Vector Input
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_MatrixVectorInput_ReturnsSameObjects()
     {
         var inputMatrix = new Matrix<double>(new double[,]
@@ -28,7 +28,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Same(outputVector, resultVector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_MatrixVectorInput_PreservesValues()
     {
         var inputMatrix = new Matrix<double>(new double[,]
@@ -49,7 +49,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Equal(200.0, resultVector[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_MatrixVectorInput_PreservesShape()
     {
         var inputMatrix = new Matrix<double>(5, 3);
@@ -63,7 +63,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Equal(5, resultVector.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_MatrixVectorInput_Float_WorksCorrectly()
     {
         var inputMatrix = new Matrix<float>(new float[,]
@@ -84,7 +84,7 @@ public class OutlierRemovalHelperIntegrationTests
 
     #region ConvertToMatrixVector Tests - Tensor Input
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_TensorInput_ConvertsTensorToMatrix()
     {
         var inputTensor = new Tensor<double>(new[] { 3, 2 });
@@ -106,7 +106,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Equal(4.0, resultMatrix[1, 1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_TensorInput_ConvertsOutputTensorToVector()
     {
         var inputTensor = new Tensor<double>(new[] { 2, 3 });
@@ -125,7 +125,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Equal(200.0, resultVector[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_TensorInput_PreservesAllValues()
     {
         var inputTensor = new Tensor<double>(new[] { 4, 5 });
@@ -150,7 +150,7 @@ public class OutlierRemovalHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_TensorInput_Float_WorksCorrectly()
     {
         var inputTensor = new Tensor<float>(new[] { 2, 2 });
@@ -171,7 +171,7 @@ public class OutlierRemovalHelperIntegrationTests
 
     #region ConvertToMatrixVector Tests - Error Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_TensorNot2D_ThrowsInvalidOperationException()
     {
         var inputTensor = new Tensor<double>(new[] { 3 }); // 1D tensor
@@ -182,7 +182,7 @@ public class OutlierRemovalHelperIntegrationTests
                 .ConvertToMatrixVector(inputTensor, outputTensor));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_Tensor3D_ThrowsInvalidOperationException()
     {
         var inputTensor = new Tensor<double>(new[] { 2, 3, 4 }); // 3D tensor
@@ -193,7 +193,7 @@ public class OutlierRemovalHelperIntegrationTests
                 .ConvertToMatrixVector(inputTensor, outputTensor));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_OutputTensorNot1D_ThrowsInvalidOperationException()
     {
         var inputTensor = new Tensor<double>(new[] { 2, 3 });
@@ -204,7 +204,7 @@ public class OutlierRemovalHelperIntegrationTests
                 .ConvertToMatrixVector(inputTensor, outputTensor));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_UnsupportedTypes_ThrowsInvalidOperationException()
     {
         var inputs = new List<double> { 1, 2, 3 };
@@ -219,7 +219,7 @@ public class OutlierRemovalHelperIntegrationTests
 
     #region ConvertToOriginalTypes Tests - Matrix/Vector Types
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToOriginalTypes_MatrixVectorTypes_ReturnsSameObjects()
     {
         var cleanedMatrix = new Matrix<double>(new double[,]
@@ -240,7 +240,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Same(cleanedVector, resultOutputs);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToOriginalTypes_MatrixVectorTypes_PreservesValues()
     {
         var cleanedMatrix = new Matrix<double>(new double[,]
@@ -262,7 +262,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Equal(100.5, resultOutputs[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToOriginalTypes_MatrixVectorTypes_Float_WorksCorrectly()
     {
         var cleanedMatrix = new Matrix<float>(new float[,]
@@ -287,7 +287,7 @@ public class OutlierRemovalHelperIntegrationTests
 
     #region ConvertToOriginalTypes Tests - Tensor Types
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToOriginalTypes_TensorTypes_ConvertsMatrixToTensor()
     {
         var cleanedMatrix = new Matrix<double>(new double[,]
@@ -309,7 +309,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Equal(3, resultInputs.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToOriginalTypes_TensorTypes_ConvertsVectorToTensor()
     {
         var cleanedMatrix = new Matrix<double>(new double[,]
@@ -331,7 +331,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Equal(3, resultOutputs.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToOriginalTypes_TensorTypes_PreservesAllInputValues()
     {
         var cleanedMatrix = new Matrix<double>(new double[,]
@@ -355,7 +355,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Equal(9.0, resultInputs[2, 2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToOriginalTypes_TensorTypes_PreservesAllOutputValues()
     {
         var cleanedMatrix = new Matrix<double>(2, 3);
@@ -372,7 +372,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Equal(222.0, resultOutputs[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToOriginalTypes_TensorTypes_Float_WorksCorrectly()
     {
         var cleanedMatrix = new Matrix<float>(new float[,]
@@ -397,7 +397,7 @@ public class OutlierRemovalHelperIntegrationTests
 
     #region ConvertToOriginalTypes Tests - Error Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToOriginalTypes_UnsupportedTypes_ThrowsInvalidOperationException()
     {
         var cleanedMatrix = new Matrix<double>(2, 2);
@@ -412,7 +412,7 @@ public class OutlierRemovalHelperIntegrationTests
                     typeof(List<double>)));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToOriginalTypes_MismatchedTypes_ThrowsInvalidOperationException()
     {
         var cleanedMatrix = new Matrix<double>(2, 2);
@@ -432,7 +432,7 @@ public class OutlierRemovalHelperIntegrationTests
 
     #region Round-Trip Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RoundTrip_MatrixVector_PreservesData()
     {
         var originalMatrix = new Matrix<double>(new double[,]
@@ -460,7 +460,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Same(originalVector, resultVector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RoundTrip_Tensor_PreservesData()
     {
         var originalInputTensor = new Tensor<double>(new[] { 3, 4 });
@@ -500,7 +500,7 @@ public class OutlierRemovalHelperIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RoundTrip_Tensor_PreservesShape()
     {
         var originalInputTensor = new Tensor<double>(new[] { 5, 7 });
@@ -527,7 +527,7 @@ public class OutlierRemovalHelperIntegrationTests
 
     #region Large Dataset Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_LargeMatrix_HandlesCorrectly()
     {
         int rows = 1000;
@@ -553,7 +553,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Equal(rows, resultVector.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_LargeTensor_HandlesCorrectly()
     {
         int rows = 500;
@@ -583,7 +583,7 @@ public class OutlierRemovalHelperIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_SingleRowMatrix_WorksCorrectly()
     {
         var inputMatrix = new Matrix<double>(new double[,]
@@ -600,7 +600,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Equal(1, resultVector.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_SingleColumnMatrix_WorksCorrectly()
     {
         var inputMatrix = new Matrix<double>(new double[,]
@@ -619,7 +619,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Equal(3, resultVector.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_SingleElementTensor_WorksCorrectly()
     {
         var inputTensor = new Tensor<double>(new[] { 1, 1 });
@@ -638,7 +638,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Equal(100.0, resultVector[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToOriginalTypes_SingleRowMatrix_WorksCorrectly()
     {
         var cleanedMatrix = new Matrix<double>(new double[,]
@@ -659,7 +659,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Equal(3, resultInputs.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_NegativeValues_PreservesSign()
     {
         var inputMatrix = new Matrix<double>(new double[,]
@@ -680,7 +680,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Equal(200.0, resultVector[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvertToMatrixVector_SpecialDoubleValues_HandlesCorrectly()
     {
         var inputMatrix = new Matrix<double>(new double[,]

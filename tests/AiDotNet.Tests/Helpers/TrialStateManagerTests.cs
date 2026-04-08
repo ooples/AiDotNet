@@ -34,7 +34,7 @@ public class TrialStateManagerTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FirstUse_CreatesTrialFile()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -48,7 +48,7 @@ public class TrialStateManagerTests : IDisposable
         Assert.True(File.Exists(_trialFilePath));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FirstUse_StatusShowsFreshTrial()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -63,7 +63,7 @@ public class TrialStateManagerTests : IDisposable
         Assert.Equal(TrialStateManager.TrialOperationLimit - 1, status.OperationsRemaining);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RecordOperation_IncrementsCounter()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -79,7 +79,7 @@ public class TrialStateManagerTests : IDisposable
         Assert.False(status.IsExpired);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OperationLimit_ThrowsLicenseRequiredException()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -97,7 +97,7 @@ public class TrialStateManagerTests : IDisposable
         Assert.Equal(TrialStateManager.TrialOperationLimit, ex.OperationsPerformed);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OperationLimit_StatusShowsExpired()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -113,7 +113,7 @@ public class TrialStateManagerTests : IDisposable
         Assert.Equal(TrialStateManager.TrialOperationLimit, status.OperationsUsed);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TamperedFile_TreatedAsExpired()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -126,7 +126,7 @@ public class TrialStateManagerTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => manager.RecordOperationOrThrow());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CorruptedFile_TreatedAsExpired()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -139,7 +139,7 @@ public class TrialStateManagerTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => manager.RecordOperationOrThrow());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EmptyFile_TreatedAsExpired()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -151,7 +151,7 @@ public class TrialStateManagerTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => manager.RecordOperationOrThrow());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void NullSignature_TreatedAsExpired()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -163,7 +163,7 @@ public class TrialStateManagerTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => manager.RecordOperationOrThrow());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DeletedFile_RestartsTrialFromScratch()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -185,7 +185,7 @@ public class TrialStateManagerTests : IDisposable
         Assert.Throws<LicenseRequiredException>(() => manager.RecordOperationOrThrow());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Reset_DeletesTrialFile()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -196,7 +196,7 @@ public class TrialStateManagerTests : IDisposable
         Assert.False(File.Exists(_trialFilePath));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Reset_AllowsFreshTrialToStart()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -218,7 +218,7 @@ public class TrialStateManagerTests : IDisposable
         Assert.False(status.IsExpired);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetStatus_BeforeAnyOperation_ReturnsZeroOperations()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -230,7 +230,7 @@ public class TrialStateManagerTests : IDisposable
         Assert.False(status.IsExpired);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetStatus_DoesNotIncrementCounter()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -244,7 +244,7 @@ public class TrialStateManagerTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StatePersistsAcrossInstances()
     {
         // First instance records 3 operations
@@ -264,7 +264,7 @@ public class TrialStateManagerTests : IDisposable
         Assert.Equal(4, manager2.GetStatus().OperationsUsed);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ExpirationReason_OperationLimitReached_SetCorrectly()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -287,7 +287,7 @@ public class TrialStateManagerTests : IDisposable
         Assert.True(ex.TrialDaysElapsed >= 0, "TrialDaysElapsed should be non-negative");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LicenseRequiredException_HasDescriptiveMessage()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -304,13 +304,13 @@ public class TrialStateManagerTests : IDisposable
         Assert.Contains("aidotnet.dev", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_NullPath_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new TrialStateManager(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ThreadSafety_ConcurrentOperations_DoNotCorruptState()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -347,7 +347,7 @@ public class TrialStateManagerTests : IDisposable
         Assert.True(status.IsExpired);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ConsoleMessage_MatchesExpectedFormat()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -377,7 +377,7 @@ public class TrialStateManagerTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ConsoleMessage_CountdownDecrementsCorrectly()
     {
         var manager = new TrialStateManager(_trialFilePath);
@@ -408,7 +408,7 @@ public class TrialStateManagerTests : IDisposable
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ConsoleMessage_IncludesAiDotNetDevUrl()
     {
         var manager = new TrialStateManager(_trialFilePath);

@@ -12,7 +12,7 @@ public class HyperbandOptimizerTests
 {
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithDefaultParameters_CreatesOptimizer()
     {
         // Act
@@ -23,7 +23,7 @@ public class HyperbandOptimizerTests
         Assert.True(optimizer.NumBrackets > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithMaximize_SetsMaximize()
     {
         // Act
@@ -33,7 +33,7 @@ public class HyperbandOptimizerTests
         Assert.NotNull(optimizer);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithMinimize_SetsMinimize()
     {
         // Act
@@ -43,7 +43,7 @@ public class HyperbandOptimizerTests
         Assert.NotNull(optimizer);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithSeed_ProducesReproducibleResults()
     {
         // Arrange
@@ -61,7 +61,7 @@ public class HyperbandOptimizerTests
         Assert.Equal(result1.BestObjectiveValue, result2.BestObjectiveValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroMaxResource_ThrowsArgumentException()
     {
         // Act & Assert
@@ -69,7 +69,7 @@ public class HyperbandOptimizerTests
             new HyperbandOptimizer<double, double[], double[]>(maxResource: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithNegativeMaxResource_ThrowsArgumentException()
     {
         // Act & Assert
@@ -77,7 +77,7 @@ public class HyperbandOptimizerTests
             new HyperbandOptimizer<double, double[], double[]>(maxResource: -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithReductionFactorLessThanTwo_ThrowsArgumentException()
     {
         // Act & Assert
@@ -85,7 +85,7 @@ public class HyperbandOptimizerTests
             new HyperbandOptimizer<double, double[], double[]>(reductionFactor: 1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithZeroMinResource_ThrowsArgumentException()
     {
         // Act & Assert
@@ -93,7 +93,7 @@ public class HyperbandOptimizerTests
             new HyperbandOptimizer<double, double[], double[]>(minResource: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithMinResourceExceedingMax_ThrowsArgumentException()
     {
         // Act & Assert
@@ -101,7 +101,7 @@ public class HyperbandOptimizerTests
             new HyperbandOptimizer<double, double[], double[]>(maxResource: 10, minResource: 20));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithValidResourceParameters_CalculatesNumBrackets()
     {
         // Arrange & Act
@@ -117,7 +117,7 @@ public class HyperbandOptimizerTests
 
     #region Optimize Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Optimize_WithValidInputs_ReturnsResult()
     {
         // Arrange
@@ -134,7 +134,7 @@ public class HyperbandOptimizerTests
         Assert.True(result.CompletedTrials > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Optimize_WithNullObjectiveFunction_ThrowsArgumentNullException()
     {
         // Arrange
@@ -145,7 +145,7 @@ public class HyperbandOptimizerTests
         Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(null!, searchSpace, 10));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Optimize_WithNullSearchSpace_ThrowsArgumentNullException()
     {
         // Arrange
@@ -155,7 +155,7 @@ public class HyperbandOptimizerTests
         Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(SimpleObjective, null!, 10));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Optimize_WithZeroTrials_ThrowsArgumentException()
     {
         // Arrange
@@ -166,7 +166,7 @@ public class HyperbandOptimizerTests
         Assert.Throws<ArgumentException>(() => optimizer.Optimize(SimpleObjective, searchSpace, 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Optimize_WithNegativeTrials_ThrowsArgumentException()
     {
         // Arrange
@@ -177,7 +177,7 @@ public class HyperbandOptimizerTests
         Assert.Throws<ArgumentException>(() => optimizer.Optimize(SimpleObjective, searchSpace, -5));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Optimize_ForMaximization_FindsHighValue()
     {
         // Arrange
@@ -192,7 +192,7 @@ public class HyperbandOptimizerTests
         Assert.True(result.BestObjectiveValue > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Optimize_ForMinimization_FindsLowValue()
     {
         // Arrange
@@ -207,7 +207,7 @@ public class HyperbandOptimizerTests
         Assert.True(result.BestObjectiveValue >= 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Optimize_WithContinuousParameter_SamplesInRange()
     {
         // Arrange
@@ -227,7 +227,7 @@ public class HyperbandOptimizerTests
         Assert.InRange(result.BestObjectiveValue, 0.001, 0.1);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Optimize_WithIntegerParameter_SamplesIntegers()
     {
         // Arrange
@@ -249,7 +249,7 @@ public class HyperbandOptimizerTests
         Assert.Contains(bestBatchSize, new[] { 16, 32, 48, 64 });
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Optimize_WithCategoricalParameter_SelectsFromChoices()
     {
         // Arrange
@@ -278,7 +278,7 @@ public class HyperbandOptimizerTests
         Assert.Contains(bestOptimizer, new[] { "adam", "sgd", "rmsprop" });
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Optimize_WithLogScaleParameter_SamplesLogarithmically()
     {
         // Arrange
@@ -300,7 +300,7 @@ public class HyperbandOptimizerTests
         Assert.InRange(bestLr, 0.0001, 0.1);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Optimize_TracksResourceBudget()
     {
         // Arrange
@@ -328,7 +328,7 @@ public class HyperbandOptimizerTests
 
     #region GetBestTrial Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetBestTrial_AfterOptimization_ReturnsBestTrial()
     {
         // Arrange
@@ -346,7 +346,7 @@ public class HyperbandOptimizerTests
         Assert.Equal(TrialStatus.Complete, bestTrial.Status);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetBestTrial_BeforeOptimization_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -360,7 +360,7 @@ public class HyperbandOptimizerTests
 
     #region GetAllTrials Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetAllTrials_AfterOptimization_ReturnsAllTrials()
     {
         // Arrange
@@ -378,7 +378,7 @@ public class HyperbandOptimizerTests
         Assert.True(allTrials.Count > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetAllTrials_BeforeOptimization_ReturnsEmptyList()
     {
         // Arrange
@@ -395,7 +395,7 @@ public class HyperbandOptimizerTests
 
     #region GetTrials Filter Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetTrials_WithCompletedFilter_ReturnsOnlyCompleted()
     {
         // Arrange
@@ -412,7 +412,7 @@ public class HyperbandOptimizerTests
         Assert.All(completedTrials, t => Assert.Equal(TrialStatus.Complete, t.Status));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetTrials_WithNullFilter_ThrowsArgumentNullException()
     {
         // Arrange
@@ -426,7 +426,7 @@ public class HyperbandOptimizerTests
 
     #region SuggestNext Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SuggestNext_BeforeOptimization_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -437,7 +437,7 @@ public class HyperbandOptimizerTests
         Assert.Throws<InvalidOperationException>(() => optimizer.SuggestNext(trial));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SuggestNext_AfterOptimization_ReturnsSuggestedParameters()
     {
         // Arrange
@@ -460,7 +460,7 @@ public class HyperbandOptimizerTests
 
     #region Bracket Info Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetBracketInfo_ReturnsCorrectNumberOfBrackets()
     {
         // Arrange
@@ -474,7 +474,7 @@ public class HyperbandOptimizerTests
         Assert.Equal(optimizer.NumBrackets, brackets.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetBracketInfo_BracketsHaveValidResources()
     {
         // Arrange
@@ -490,7 +490,7 @@ public class HyperbandOptimizerTests
         Assert.All(brackets, b => Assert.True(b.InitialConfigurations > 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetBracketInfo_EachBracketHasRounds()
     {
         // Arrange
@@ -504,7 +504,7 @@ public class HyperbandOptimizerTests
         Assert.All(brackets, b => Assert.True(b.Rounds.Count > 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetTotalConfigurationCount_ReturnsPositiveNumber()
     {
         // Arrange
@@ -522,7 +522,7 @@ public class HyperbandOptimizerTests
 
     #region Thread Safety Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Optimize_FromMultipleThreads_IsThreadSafe()
     {
         // Arrange
@@ -570,7 +570,7 @@ public class HyperbandOptimizerTests
 
     #region Error Handling Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Optimize_WithFailingObjective_HandlesGracefully()
     {
         // Arrange
@@ -598,7 +598,7 @@ public class HyperbandOptimizerTests
 
     #region Result Properties Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OptimizationResult_HasCorrectStatistics()
     {
         // Arrange
@@ -617,7 +617,7 @@ public class HyperbandOptimizerTests
         Assert.NotEqual(default, result.EndTime);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OptimizationResult_HasBestParameters()
     {
         // Arrange
@@ -633,7 +633,7 @@ public class HyperbandOptimizerTests
         Assert.Contains("x", result.BestParameters.Keys);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OptimizationResult_HasSearchSpace()
     {
         // Arrange

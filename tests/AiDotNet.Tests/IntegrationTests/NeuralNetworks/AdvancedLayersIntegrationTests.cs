@@ -17,7 +17,7 @@ public class AdvancedLayersIntegrationTests
 {
     #region TransformerEncoderLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransformerEncoderLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange
@@ -39,7 +39,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(embeddingSize, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransformerEncoderLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange
@@ -64,7 +64,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransformerEncoderLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -82,7 +82,7 @@ public class AdvancedLayersIntegrationTests
         Assert.IsType<TransformerEncoderLayer<float>>(clone);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransformerEncoderLayer_ParameterCount_ReturnsPositiveValue()
     {
         // Arrange
@@ -102,7 +102,7 @@ public class AdvancedLayersIntegrationTests
 
     #region TransformerDecoderLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransformerDecoderLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange
@@ -124,7 +124,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(embeddingSize, output.Shape[^1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransformerDecoderLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange
@@ -148,7 +148,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(embeddingSize, output.Shape[^1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransformerDecoderLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -171,7 +171,7 @@ public class AdvancedLayersIntegrationTests
 
     #region FeedForwardLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FeedForwardLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -193,7 +193,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FeedForwardLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -210,7 +210,7 @@ public class AdvancedLayersIntegrationTests
         Assert.IsType<FeedForwardLayer<float>>(clone);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FeedForwardLayer_ParameterCount_ReturnsCorrectValue()
     {
         // Arrange
@@ -227,7 +227,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(expectedParams, paramCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FeedForwardLayer_WithReLU_ProducesNonNegativeOutput()
     {
         // Arrange
@@ -253,7 +253,7 @@ public class AdvancedLayersIntegrationTests
 
     #region ResidualLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResidualLayer_ForwardPass_WithoutInnerLayer_PreservesInput()
     {
         // Arrange
@@ -270,7 +270,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResidualLayer_ForwardPass_WithInnerLayer_ProducesValidOutput()
     {
         // Arrange
@@ -290,7 +290,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResidualLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -312,7 +312,7 @@ public class AdvancedLayersIntegrationTests
 
     #region DeconvolutionalLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeconvolutionalLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -338,7 +338,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeconvolutionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -358,7 +358,7 @@ public class AdvancedLayersIntegrationTests
 
     #region UpsamplingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UpsamplingLayer_ForwardPass_IncreasesSize()
     {
         // Arrange
@@ -381,7 +381,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UpsamplingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -397,7 +397,7 @@ public class AdvancedLayersIntegrationTests
         Assert.IsType<UpsamplingLayer<float>>(clone);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UpsamplingLayer_ScaleFactor4_ProducesCorrectSize()
     {
         // Arrange
@@ -419,7 +419,7 @@ public class AdvancedLayersIntegrationTests
 
     #region AddLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AddLayer_ForwardPass_AddsTwoInputs()
     {
         // Arrange
@@ -441,7 +441,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(3.0f, output[0, 0, 0], 1e-5f);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AddLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -462,7 +462,7 @@ public class AdvancedLayersIntegrationTests
 
     #region ConcatenateLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConcatenateLayer_ForwardPass_ConcatenatesAlongAxis()
     {
         // Arrange
@@ -486,7 +486,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(8, output.Shape[2]); // features preserved
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConcatenateLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -507,7 +507,7 @@ public class AdvancedLayersIntegrationTests
 
     #region SqueezeAndExcitationLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SqueezeAndExcitationLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -530,7 +530,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(channels, output.Shape[3]); // channels preserved
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SqueezeAndExcitationLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -547,7 +547,7 @@ public class AdvancedLayersIntegrationTests
         Assert.IsType<SqueezeAndExcitationLayer<float>>(clone);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SqueezeAndExcitationLayer_ParameterCount_ReturnsPositiveValue()
     {
         // Arrange
@@ -566,7 +566,7 @@ public class AdvancedLayersIntegrationTests
 
     #region Cross-Layer Integration Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransformerEncoderDecoderStack_ForwardPass_Works()
     {
         // Arrange
@@ -590,7 +590,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(embeddingSize, decoderOutput.Shape[^1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResidualWithFeedForward_ForwardPass_Works()
     {
         // Arrange
@@ -609,7 +609,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvDeconvPipeline_ForwardPass_Works()
     {
         // Arrange
@@ -632,7 +632,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(upsampled.Shape[2] > downsampled.Shape[2], "Deconv should increase spatial size");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResidualChain_MultipleBlocks_Works()
     {
         // Arrange
@@ -659,7 +659,7 @@ public class AdvancedLayersIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransformerEncoderLayer_SmallEmbedding_Works()
     {
         // Arrange - minimum valid configuration
@@ -678,7 +678,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(embeddingSize, output.Shape[^1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FeedForwardLayer_LargeInputOutput_Works()
     {
         // Arrange
@@ -696,7 +696,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(outputSize, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UpsamplingLayer_SmallInput_Works()
     {
         // Arrange
@@ -718,7 +718,7 @@ public class AdvancedLayersIntegrationTests
 
     #region ConvLSTMLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvLSTMLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - ConvLSTM for spatiotemporal data
@@ -738,7 +738,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvLSTMLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -761,7 +761,7 @@ public class AdvancedLayersIntegrationTests
 
     #region GatedLinearUnitLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GatedLinearUnitLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -781,7 +781,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(outputDim, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GatedLinearUnitLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -799,7 +799,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GatedLinearUnitLayer_ParameterCount_IsPositive()
     {
         // Arrange
@@ -818,7 +818,7 @@ public class AdvancedLayersIntegrationTests
 
     #region HighwayLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HighwayLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - Highway layers preserve dimensions
@@ -835,7 +835,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HighwayLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -853,7 +853,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HighwayLayer_ParameterCount_IsPositive()
     {
         // Arrange
@@ -872,7 +872,7 @@ public class AdvancedLayersIntegrationTests
 
     #region MaxPool3DLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaxPool3DLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - 3D pooling for volumetric data [channels, depth, height, width]
@@ -895,7 +895,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(4, output.Shape[4]); // W halved
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaxPool3DLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange - input shape must be [channels, depth, height, width]
@@ -918,7 +918,7 @@ public class AdvancedLayersIntegrationTests
 
     #region MultiplyLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiplyLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - Element-wise multiplication of multiple inputs
@@ -937,7 +937,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input1.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiplyLayer_ElementWiseMultiplication_IsCorrect()
     {
         // Arrange
@@ -960,7 +960,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(20f, output[3]); // 5 * 4
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiplyLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -985,7 +985,7 @@ public class AdvancedLayersIntegrationTests
 
     #region MaskingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaskingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -1002,7 +1002,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaskingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -1025,7 +1025,7 @@ public class AdvancedLayersIntegrationTests
 
     #region SplitLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SplitLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - Split tensor along last dimension
@@ -1049,7 +1049,7 @@ public class AdvancedLayersIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SplitLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -1072,7 +1072,7 @@ public class AdvancedLayersIntegrationTests
 
     #region ReshapeLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReshapeLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - Reshape from [8, 4] to [32]
@@ -1091,7 +1091,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(32, output.Shape[1]); // reshaped
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReshapeLayer_FlattenToExpand_Works()
     {
         // Arrange - Reshape from [16] to [4, 4]
@@ -1111,7 +1111,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(4, output.Shape[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReshapeLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -1135,7 +1135,7 @@ public class AdvancedLayersIntegrationTests
 
     #region Conv3DLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Conv3DLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - 3D convolution for volumetric data
@@ -1158,7 +1158,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(outputChannels, output.Shape[1]); // channels
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Conv3DLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -1184,7 +1184,7 @@ public class AdvancedLayersIntegrationTests
 
     #region GRULayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GRULayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - GRU for sequence data
@@ -1204,7 +1204,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GRULayer_ReturnSequences_ProducesSequenceOutput()
     {
         // Arrange - GRU returning full sequence
@@ -1224,7 +1224,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GRULayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -1248,7 +1248,7 @@ public class AdvancedLayersIntegrationTests
 
     #region SelfAttentionLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelfAttentionLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -1267,7 +1267,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelfAttentionLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange
@@ -1287,7 +1287,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelfAttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -1308,7 +1308,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelfAttentionLayer_ParameterCount_IsPositive()
     {
         // Arrange
@@ -1328,7 +1328,7 @@ public class AdvancedLayersIntegrationTests
 
     #region MultiHeadAttentionLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiHeadAttentionLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -1347,7 +1347,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiHeadAttentionLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange
@@ -1366,7 +1366,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiHeadAttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -1387,7 +1387,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiHeadAttentionLayer_ParameterCount_IsPositive()
     {
         // Arrange
@@ -1407,7 +1407,7 @@ public class AdvancedLayersIntegrationTests
 
     #region DenseLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DenseLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -1428,7 +1428,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DenseLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -1448,7 +1448,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DenseLayer_ParameterCount_IsCorrect()
     {
         // Arrange
@@ -1464,7 +1464,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(expected, paramCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DenseLayer_WithReLU_ProducesNonNegativeOutput()
     {
         // Arrange
@@ -1488,7 +1488,7 @@ public class AdvancedLayersIntegrationTests
 
     #region LSTMLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LSTMLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -1508,7 +1508,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LSTMLayer_ForwardPass_DifferentSequenceLengths_ProducesValidOutput()
     {
         // Arrange
@@ -1529,7 +1529,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LSTMLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -1551,7 +1551,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LSTMLayer_ParameterCount_IsPositive()
     {
         // Arrange
@@ -1572,7 +1572,7 @@ public class AdvancedLayersIntegrationTests
 
     #region DropoutLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DropoutLayer_ForwardPass_Training_AppliesDropout()
     {
         // Arrange
@@ -1595,7 +1595,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(zeroCount > 0, "Dropout should zero some values during training");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DropoutLayer_ForwardPass_Inference_PreservesInput()
     {
         // Arrange
@@ -1619,7 +1619,7 @@ public class AdvancedLayersIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DropoutLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -1642,7 +1642,7 @@ public class AdvancedLayersIntegrationTests
 
     #region FlattenLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlattenLayer_ForwardPass_3DInput_FlattensCorrectly()
     {
         // Arrange
@@ -1661,7 +1661,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(8 * 8 * 3, output.Shape[1]); // flattened
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlattenLayer_ForwardPass_4DInput_FlattensCorrectly()
     {
         // Arrange
@@ -1681,7 +1681,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlattenLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -1704,7 +1704,7 @@ public class AdvancedLayersIntegrationTests
 
     #region ActivationLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActivationLayer_ReLU_ProducesNonNegativeOutput()
     {
         // Arrange
@@ -1728,7 +1728,7 @@ public class AdvancedLayersIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActivationLayer_Sigmoid_ProducesOutputInRange()
     {
         // Arrange
@@ -1748,7 +1748,7 @@ public class AdvancedLayersIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActivationLayer_Tanh_ProducesOutputInRange()
     {
         // Arrange
@@ -1769,7 +1769,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ActivationLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -1792,7 +1792,7 @@ public class AdvancedLayersIntegrationTests
 
     #region InputLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InputLayer_ForwardPass_PreservesInput()
     {
         // Arrange
@@ -1815,7 +1815,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InputLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -1838,7 +1838,7 @@ public class AdvancedLayersIntegrationTests
 
     #region PaddingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PaddingLayer_ForwardPass_AddsPadding()
     {
         // Arrange
@@ -1858,7 +1858,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PaddingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -1882,7 +1882,7 @@ public class AdvancedLayersIntegrationTests
 
     #region GaussianNoiseLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianNoiseLayer_ForwardPass_Training_AddsNoise()
     {
         // Arrange
@@ -1913,7 +1913,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(hasDifference, "Gaussian noise should modify values during training");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianNoiseLayer_ForwardPass_Inference_PreservesInput()
     {
         // Arrange
@@ -1938,7 +1938,7 @@ public class AdvancedLayersIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianNoiseLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -1962,7 +1962,7 @@ public class AdvancedLayersIntegrationTests
 
     #region CrossAttentionLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossAttentionLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -1984,7 +1984,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossAttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2007,7 +2007,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CrossAttentionLayer_ParameterCount_IsPositive()
     {
         // Arrange
@@ -2027,7 +2027,7 @@ public class AdvancedLayersIntegrationTests
 
     #region ConvolutionalLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvolutionalLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2050,7 +2050,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvolutionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2073,7 +2073,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvolutionalLayer_ParameterCount_IsPositive()
     {
         // Arrange
@@ -2095,7 +2095,7 @@ public class AdvancedLayersIntegrationTests
 
     #region BatchNormalizationLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNormalizationLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2113,7 +2113,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNormalizationLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2132,7 +2132,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchNormalizationLayer_ParameterCount_IsPositive()
     {
         // Arrange
@@ -2150,7 +2150,7 @@ public class AdvancedLayersIntegrationTests
 
     #region MaxPoolingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaxPoolingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2175,7 +2175,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaxPoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2202,7 +2202,7 @@ public class AdvancedLayersIntegrationTests
 
     #region AveragePoolingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AveragePoolingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2227,7 +2227,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AveragePoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2254,7 +2254,7 @@ public class AdvancedLayersIntegrationTests
 
     #region EmbeddingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EmbeddingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2280,7 +2280,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(embeddingDim, output.Shape[2]); // embedding dimension
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EmbeddingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2305,7 +2305,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EmbeddingLayer_ParameterCount_IsPositive()
     {
         // Arrange
@@ -2325,7 +2325,7 @@ public class AdvancedLayersIntegrationTests
 
     #region LayerNormalizationLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayerNormalizationLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2343,7 +2343,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayerNormalizationLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2362,7 +2362,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayerNormalizationLayer_ParameterCount_IsPositive()
     {
         // Arrange
@@ -2380,7 +2380,7 @@ public class AdvancedLayersIntegrationTests
 
     #region GlobalPoolingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GlobalPoolingLayer_MaxPooling_ProducesValidOutput()
     {
         // Arrange
@@ -2400,7 +2400,7 @@ public class AdvancedLayersIntegrationTests
         // Output is [batch, 1, 1, channels] -> spatial dimensions are pooled
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GlobalPoolingLayer_AveragePooling_ProducesValidOutput()
     {
         // Arrange
@@ -2417,7 +2417,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GlobalPoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2441,7 +2441,7 @@ public class AdvancedLayersIntegrationTests
 
     #region GroupNormalizationLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GroupNormalizationLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2461,7 +2461,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GroupNormalizationLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2485,7 +2485,7 @@ public class AdvancedLayersIntegrationTests
 
     #region InstanceNormalizationLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InstanceNormalizationLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2504,7 +2504,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InstanceNormalizationLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2527,7 +2527,7 @@ public class AdvancedLayersIntegrationTests
 
     #region PositionalEncodingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PositionalEncodingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2547,7 +2547,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PositionalEncodingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2571,7 +2571,7 @@ public class AdvancedLayersIntegrationTests
 
     #region DepthwiseSeparableConvolutionalLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DepthwiseSeparableConvLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2596,7 +2596,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(outputChannels, output.Shape[1]); // output channels
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DepthwiseSeparableConvLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2625,7 +2625,7 @@ public class AdvancedLayersIntegrationTests
 
     #region DilatedConvolutionalLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DilatedConvolutionalLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2651,7 +2651,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(outputChannels, output.Shape[1]); // output channels
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DilatedConvolutionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2681,7 +2681,7 @@ public class AdvancedLayersIntegrationTests
 
     #region SeparableConvolutionalLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SeparableConvolutionalLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2707,7 +2707,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(batchSize, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SeparableConvolutionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2738,7 +2738,7 @@ public class AdvancedLayersIntegrationTests
 
     #region AdaptiveAveragePoolingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdaptiveAveragePoolingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2762,7 +2762,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(inputChannels, output.Shape[1]); // channels preserved
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdaptiveAveragePoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2788,7 +2788,7 @@ public class AdvancedLayersIntegrationTests
 
     #region TimeEmbeddingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeEmbeddingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2807,7 +2807,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(4, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeEmbeddingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2831,7 +2831,7 @@ public class AdvancedLayersIntegrationTests
 
     #region MeanLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeanLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2848,7 +2848,7 @@ public class AdvancedLayersIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeanLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2872,7 +2872,7 @@ public class AdvancedLayersIntegrationTests
 
     #region LambdaLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LambdaLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2893,7 +2893,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LambdaLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2919,7 +2919,7 @@ public class AdvancedLayersIntegrationTests
 
     #region LocallyConnectedLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LocallyConnectedLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2944,7 +2944,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LocallyConnectedLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -2975,7 +2975,7 @@ public class AdvancedLayersIntegrationTests
 
     #region SpectralNormalizationLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpectralNormalizationLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -2993,7 +2993,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(32, output.Shape[1]); // output features
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpectralNormalizationLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3016,7 +3016,7 @@ public class AdvancedLayersIntegrationTests
 
     #region CroppingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CroppingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3041,7 +3041,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CroppingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3070,7 +3070,7 @@ public class AdvancedLayersIntegrationTests
 
     #region SubpixelConvolutionalLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SubpixelConvolutionalLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3096,7 +3096,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SubpixelConvolutionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3124,7 +3124,7 @@ public class AdvancedLayersIntegrationTests
 
     #region PoolingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoolingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3149,7 +3149,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(8, output.Shape[3]); // width halved
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3176,7 +3176,7 @@ public class AdvancedLayersIntegrationTests
 
     #region RecurrentLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RecurrentLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3196,7 +3196,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RecurrentLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3221,7 +3221,7 @@ public class AdvancedLayersIntegrationTests
 
     #region FullyConnectedLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullyConnectedLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3241,7 +3241,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(4, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FullyConnectedLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3266,7 +3266,7 @@ public class AdvancedLayersIntegrationTests
 
     #region BidirectionalLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BidirectionalLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3290,7 +3290,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BidirectionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3318,7 +3318,7 @@ public class AdvancedLayersIntegrationTests
 
     #region TimeDistributedLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeDistributedLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3339,7 +3339,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeDistributedLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3365,7 +3365,7 @@ public class AdvancedLayersIntegrationTests
 
     #region SequenceLastLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequenceLastLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3383,7 +3383,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SequenceLastLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3406,7 +3406,7 @@ public class AdvancedLayersIntegrationTests
 
     #region Upsample3DLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Upsample3DLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3426,7 +3426,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Upsample3DLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3450,7 +3450,7 @@ public class AdvancedLayersIntegrationTests
 
     #region GraphConvolutionalLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphConvolutionalLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3475,7 +3475,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphConvolutionalLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3511,7 +3511,7 @@ public class AdvancedLayersIntegrationTests
 
     #region GraphAttentionLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphAttentionLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3537,7 +3537,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphAttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3573,7 +3573,7 @@ public class AdvancedLayersIntegrationTests
 
     #region AttentionLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AttentionLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3593,7 +3593,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AttentionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3618,7 +3618,7 @@ public class AdvancedLayersIntegrationTests
 
     #region DecoderLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecoderLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3639,7 +3639,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecoderLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3665,7 +3665,7 @@ public class AdvancedLayersIntegrationTests
 
     #region RBMLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RBMLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3685,7 +3685,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RBMLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3710,7 +3710,7 @@ public class AdvancedLayersIntegrationTests
 
     #region ReservoirLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReservoirLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3729,7 +3729,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReservoirLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3753,7 +3753,7 @@ public class AdvancedLayersIntegrationTests
 
     #region SparseLinearLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SparseLinearLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3772,7 +3772,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SparseLinearLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3796,7 +3796,7 @@ public class AdvancedLayersIntegrationTests
 
     #region SpatialTransformerLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpatialTransformerLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3818,7 +3818,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpatialTransformerLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3845,7 +3845,7 @@ public class AdvancedLayersIntegrationTests
 
     #region PatchEmbeddingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PatchEmbeddingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3867,7 +3867,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PatchEmbeddingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3894,7 +3894,7 @@ public class AdvancedLayersIntegrationTests
 
     #region TransitionLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransitionLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3915,7 +3915,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransitionLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3941,7 +3941,7 @@ public class AdvancedLayersIntegrationTests
 
     #region BasicBlock Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicBlock_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -3962,7 +3962,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicBlock_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -3988,7 +3988,7 @@ public class AdvancedLayersIntegrationTests
 
     #region BottleneckBlock Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BottleneckBlock_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4009,7 +4009,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BottleneckBlock_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4035,7 +4035,7 @@ public class AdvancedLayersIntegrationTests
 
     #region CapsuleLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CapsuleLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4057,7 +4057,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CapsuleLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4084,7 +4084,7 @@ public class AdvancedLayersIntegrationTests
 
     #region DenseBlock Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DenseBlock_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4106,7 +4106,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DenseBlock_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4133,7 +4133,7 @@ public class AdvancedLayersIntegrationTests
 
     #region GraphIsomorphismLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphIsomorphismLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4158,7 +4158,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphIsomorphismLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4187,7 +4187,7 @@ public class AdvancedLayersIntegrationTests
 
     #region GraphSAGELayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphSAGELayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4213,7 +4213,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphSAGELayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4243,7 +4243,7 @@ public class AdvancedLayersIntegrationTests
 
     #region InvertedResidualBlock Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvertedResidualBlock_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4265,7 +4265,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvertedResidualBlock_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4292,7 +4292,7 @@ public class AdvancedLayersIntegrationTests
 
     #region MessagePassingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MessagePassingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4317,7 +4317,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MessagePassingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4346,7 +4346,7 @@ public class AdvancedLayersIntegrationTests
 
     #region SpikingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpikingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4366,7 +4366,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpikingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4391,7 +4391,7 @@ public class AdvancedLayersIntegrationTests
 
     #region QuantumLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantumLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4411,7 +4411,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantumLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4436,7 +4436,7 @@ public class AdvancedLayersIntegrationTests
 
     #region AnomalyDetectorLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AnomalyDetectorLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4455,7 +4455,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AnomalyDetectorLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4479,7 +4479,7 @@ public class AdvancedLayersIntegrationTests
 
     #region RBFLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RBFLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4499,7 +4499,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RBFLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4524,7 +4524,7 @@ public class AdvancedLayersIntegrationTests
 
     #region ExpertLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpertLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -4549,7 +4549,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExpertLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -4577,7 +4577,7 @@ public class AdvancedLayersIntegrationTests
 
     #region HyperbolicLinearLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HyperbolicLinearLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange
@@ -4594,7 +4594,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal([3, outputFeatures], output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HyperbolicLinearLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange
@@ -4615,7 +4615,7 @@ public class AdvancedLayersIntegrationTests
 
     #region OctonionLinearLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OctonionLinearLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange
@@ -4631,7 +4631,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal([4, outputFeatures * 8], output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OctonionLinearLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange
@@ -4652,7 +4652,7 @@ public class AdvancedLayersIntegrationTests
 
     #region ReadoutLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReadoutLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange
@@ -4668,7 +4668,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal([3, outputSize], output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ReadoutLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange
@@ -4689,7 +4689,7 @@ public class AdvancedLayersIntegrationTests
 
     #region MeasurementLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeasurementLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange
@@ -4704,7 +4704,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeasurementLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange
@@ -4724,7 +4724,7 @@ public class AdvancedLayersIntegrationTests
 
     #region MixtureOfExpertsLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MixtureOfExpertsLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange
@@ -4748,7 +4748,7 @@ public class AdvancedLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MixtureOfExpertsLayer_TopKRouting_ProducesValidOutput()
     {
         // Arrange

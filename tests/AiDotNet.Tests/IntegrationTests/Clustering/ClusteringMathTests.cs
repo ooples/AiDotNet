@@ -18,7 +18,7 @@ namespace AiDotNet.Tests.IntegrationTests.Clustering;
 /// </summary>
 public class ClusteringMathTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KMeans_FindsClusters_WellSeparatedData()
     {
         // Create 3 well-separated clusters
@@ -55,7 +55,7 @@ public class ClusteringMathTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KMeans_DeterministicTraining_SameDataSameResult()
     {
         var data1 = CreateClusteredData(
@@ -86,7 +86,7 @@ public class ClusteringMathTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KMeans_SerializeRoundTrip_PredictionsMatch()
     {
         var data = CreateClusteredData(
@@ -114,7 +114,7 @@ public class ClusteringMathTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DBSCAN_FindsDenseClusters_IdentifiesNoise()
     {
         // Two dense clusters with some noise points

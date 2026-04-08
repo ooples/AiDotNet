@@ -58,7 +58,7 @@ public class MAMLTrainerTests
 
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_ValidInputs_InitializesSuccessfully()
     {
         // Arrange
@@ -72,7 +72,7 @@ public class MAMLTrainerTests
         Assert.Equal(MetaLearningAlgorithmType.MAML, algorithm.AlgorithmType);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_NullOptions_ThrowsArgumentNullException()
     {
         // Act & Assert
@@ -84,7 +84,7 @@ public class MAMLTrainerTests
 
     #region MetaTrain Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MetaTrain_WithValidTaskBatch_ReturnsNonNegativeLoss()
     {
         // Arrange
@@ -100,7 +100,7 @@ public class MAMLTrainerTests
         Assert.True(loss >= 0, "Loss should be non-negative");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MetaTrain_WithMultipleTasks_ReturnsValidLoss()
     {
         // Arrange
@@ -117,7 +117,7 @@ public class MAMLTrainerTests
         Assert.False(double.IsNaN(loss), "Loss should not be NaN");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MetaTrain_NullTaskBatch_ThrowsArgumentException()
     {
         // Arrange
@@ -128,7 +128,7 @@ public class MAMLTrainerTests
         Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MetaTrain_EmptyTaskBatch_ThrowsArgumentException()
     {
         // Arrange
@@ -144,7 +144,7 @@ public class MAMLTrainerTests
 
     #region Adapt Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Adapt_ValidTask_ReturnsAdaptedModel()
     {
         // Arrange
@@ -159,7 +159,7 @@ public class MAMLTrainerTests
         Assert.NotNull(adaptedModel);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Adapt_NullTask_ThrowsArgumentNullException()
     {
         // Arrange
@@ -174,7 +174,7 @@ public class MAMLTrainerTests
 
     #region FirstOrder Approximation Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MetaTrain_WithFirstOrderApproximation_ReturnsValidLoss()
     {
         // Arrange
@@ -203,7 +203,7 @@ public class MAMLTrainerTests
 
     #region Options Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Options_IsValid_ReturnsTrueForValidOptions()
     {
         // Arrange
@@ -216,7 +216,7 @@ public class MAMLTrainerTests
         Assert.True(isValid);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Options_Clone_CreatesIndependentCopy()
     {
         // Arrange

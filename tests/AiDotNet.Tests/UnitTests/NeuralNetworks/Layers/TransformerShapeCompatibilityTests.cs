@@ -12,7 +12,7 @@ public class TransformerShapeCompatibilityTests
 {
     #region PositionalEncodingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PositionalEncodingLayer_Forward_With2DInput_ReturnsCorrectShape()
     {
         // Arrange
@@ -33,7 +33,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Equal(embeddingSize, output.Shape[1]); // embedding_size preserved
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PositionalEncodingLayer_Forward_With3DInput_ReturnsCorrectShape()
     {
         // Arrange
@@ -57,7 +57,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Equal(embeddingSize, output.Shape[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PositionalEncodingLayer_Forward_With3DInput_AddsSameEncodingsPerBatch()
     {
         // Arrange
@@ -90,7 +90,7 @@ public class TransformerShapeCompatibilityTests
 
     #region AttentionLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AttentionLayer_Forward_With2DInput_ReturnsCorrectShape()
     {
         // Arrange
@@ -113,7 +113,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Equal(inputSize, output.Shape[1]); // Output projects back to inputSize via Wo
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AttentionLayer_Forward_With3DInput_ReturnsCorrectShape()
     {
         // Arrange
@@ -142,7 +142,7 @@ public class TransformerShapeCompatibilityTests
 
     #region TransformerEncoderLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransformerEncoderLayer_Forward_With2DInput_ReturnsCorrectShape()
     {
         // Arrange
@@ -165,7 +165,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Equal(embeddingSize, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransformerEncoderLayer_Forward_With3DInput_ReturnsCorrectShape()
     {
         // Arrange
@@ -194,7 +194,7 @@ public class TransformerShapeCompatibilityTests
 
     #region Transformer Pipeline Integration Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TransformerPipeline_With3DInput_AllLayersProduceCorrectShapes()
     {
         // Arrange - Create a simple transformer pipeline
@@ -227,7 +227,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Equal(embeddingSize, encoded.Shape[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DecoderLayer_Forward_With3DInput_ReturnsCorrectShape()
     {
         // Arrange
@@ -261,7 +261,7 @@ public class TransformerShapeCompatibilityTests
 
     #region Higher-Rank Tensor Tests (4D, 5D)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorMatMul_4Dx2D_ReturnsCorrectShape()
     {
         // Arrange - 4D tensor: [batch, heads, seq, dim] @ [dim, out_dim] = [batch, heads, seq, out_dim]
@@ -289,7 +289,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Equal(outDim, result.Shape[3]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorMatMul_4Dx4D_ReturnsCorrectShape()
     {
         // Arrange - 4D x 4D for batched attention scores: Q @ K^T
@@ -316,7 +316,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Equal(seqLen, result.Shape[3]); // Attention scores: seq x seq
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorMatMul_5Dx2D_ReturnsCorrectShape()
     {
         // Arrange - 5D tensor: [outer_batch, inner_batch, heads, seq, dim] @ [dim, out]
@@ -346,7 +346,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Equal(outDim, result.Shape[4]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorMatMul_5Dx5D_ReturnsCorrectShape()
     {
         // Arrange - Full 5D batched matmul: attention pattern with extra batch dimension
@@ -374,7 +374,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Equal(seqLen, result.Shape[4]); // seqLen x seqLen attention pattern
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayerNorm_4DTensor_ReturnsCorrectShape()
     {
         // Arrange - 4D tensor: [batch, heads, seq, dim]
@@ -407,7 +407,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Equal(batchSize * numHeads * seqLen, variance.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayerNorm_4DTensor_MultiDimNormalization_ReturnsCorrectShape()
     {
         // Arrange - Normalize over last 2 dimensions (seq, dim)
@@ -438,7 +438,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Equal(batchSize * numHeads, mean.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayerNorm_5DTensor_ReturnsCorrectShape()
     {
         // Arrange - 5D tensor: [outer, inner, heads, seq, dim]
@@ -471,7 +471,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Equal(outerBatch * innerBatch * numHeads * seqLen, mean.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayerNorm_4DTensor_OutputIsNormalized()
     {
         // Arrange - Verify that output is actually normalized (mean ≈ 0, var ≈ 1)
@@ -518,7 +518,7 @@ public class TransformerShapeCompatibilityTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchMatMul_4DTensors_AttentionPattern_ReturnsCorrectShape()
     {
         // Arrange - BatchMatMul for attention: attention_weights @ V
@@ -546,7 +546,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Equal(dim, result.Shape[3]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchMatMul_5DTensors_ReturnsCorrectShape()
     {
         // Arrange - 5D BatchMatMul for video or other high-dimensional data
@@ -576,7 +576,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Equal(outDim, result.Shape[4]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchMatMul_2DTensors_ReturnsCorrectShape()
     {
         // Arrange - 2D BatchMatMul (standard matrix multiplication)
@@ -600,7 +600,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Equal(n, result.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchMatMul_RankMismatch_ThrowsArgumentException()
     {
         // Arrange - BatchMatMul requires tensors with matching ranks
@@ -613,7 +613,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Throws<ArgumentException>(act);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchMatMul_BatchDimMismatch_ThrowsArgumentException()
     {
         // Arrange - BatchMatMul requires matching batch dimensions
@@ -626,7 +626,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Throws<ArgumentException>(act);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorMatMul_DimensionMismatch_ThrowsArgumentException()
     {
         // Arrange - Incompatible dimensions
@@ -639,7 +639,7 @@ public class TransformerShapeCompatibilityTests
         Assert.Throws<ArgumentException>(act);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorMatMul_RankMismatch_NDxND_ThrowsArgumentException()
     {
         // Arrange - ND x ND with different ranks (not supported)

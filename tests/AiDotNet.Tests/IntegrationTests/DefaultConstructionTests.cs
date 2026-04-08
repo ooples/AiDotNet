@@ -70,7 +70,7 @@ public class DefaultConstructionTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllDefaultConstructableModels_ShouldListDiscoveredTypes()
     {
         var types = GetDefaultConstructableModelTypes().ToList();
@@ -85,7 +85,7 @@ public class DefaultConstructionTests
             "This may indicate a regression in default constructor availability.");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllDefaultConstructableModels_ShouldConstructWithoutException()
     {
         var types = GetDefaultConstructableModelTypes().ToList();

@@ -17,7 +17,7 @@ public class ExtensionsDeepMathIntegrationTests
     // Vector Norm / Magnitude Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Norm_UnitVector_IsOne()
     {
         // ||e_i|| = 1 for any standard basis vector
@@ -25,7 +25,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(1.0, v.Norm(), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Norm_345Triangle_Is5()
     {
         // ||[3, 4]|| = sqrt(9 + 16) = 5
@@ -33,21 +33,21 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(5.0, v.Norm(), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Magnitude_EqualsNorm()
     {
         var v = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
         Assert.Equal(v.Norm(), v.Magnitude(), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Norm_ZeroVector_IsZero()
     {
         var v = new Vector<double>(new[] { 0.0, 0.0, 0.0 });
         Assert.Equal(0.0, v.Norm(), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Norm_ScaledVector_ScalesLinearly()
     {
         // ||alpha * v|| = |alpha| * ||v||
@@ -57,7 +57,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(alpha * v.Norm(), scaled.Norm(), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Norm_HandComputed()
     {
         // ||[1, 2, 2]|| = sqrt(1 + 4 + 4) = 3
@@ -69,7 +69,7 @@ public class ExtensionsDeepMathIntegrationTests
     // Dot Product Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DotProduct_OrthogonalVectors_IsZero()
     {
         // e1 . e2 = 0
@@ -78,7 +78,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(0.0, v1.DotProduct(v2), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DotProduct_HandComputed()
     {
         // [1,2,3] . [4,5,6] = 4 + 10 + 18 = 32
@@ -87,7 +87,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(32.0, v1.DotProduct(v2), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DotProduct_SelfDot_EqualsNormSquared()
     {
         // v . v = ||v||^2
@@ -96,7 +96,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(norm * norm, v.DotProduct(v), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DotProduct_IsCommutative()
     {
         var v1 = new Vector<double>(new[] { 1.0, -2.0, 3.0 });
@@ -104,7 +104,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(v1.DotProduct(v2), v2.DotProduct(v1), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DotProduct_IsLinear()
     {
         // (a*v1 + v2) . v3 = a*(v1.v3) + (v2.v3)
@@ -122,7 +122,7 @@ public class ExtensionsDeepMathIntegrationTests
     // Vector Arithmetic Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Add_HandComputed()
     {
         var v1 = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -133,7 +133,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(9.0, sum[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Subtract_HandComputed()
     {
         var v1 = new Vector<double>(new[] { 5.0, 8.0, 3.0 });
@@ -144,7 +144,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(2.0, diff[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Add_SubtractInverse()
     {
         // v + w - w = v
@@ -155,7 +155,7 @@ public class ExtensionsDeepMathIntegrationTests
             Assert.Equal(v[i], result[i], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScalarMultiply_HandComputed()
     {
         var v = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -165,7 +165,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(30.0, scaled[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScalarDivide_HandComputed()
     {
         var v = new Vector<double>(new[] { 10.0, 20.0, 30.0 });
@@ -175,7 +175,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(3.0, divided[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScalarAdd_HandComputed()
     {
         var v = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -185,7 +185,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(8.0, result[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ScalarSubtract_HandComputed()
     {
         var v = new Vector<double>(new[] { 10.0, 20.0, 30.0 });
@@ -199,7 +199,7 @@ public class ExtensionsDeepMathIntegrationTests
     // Pointwise Operation Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PointwiseMultiply_HandComputed()
     {
         var v1 = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -210,7 +210,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(18.0, product[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PointwiseDivide_HandComputed()
     {
         var v1 = new Vector<double>(new[] { 10.0, 20.0, 30.0 });
@@ -221,7 +221,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(3.0, quotient[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PointwiseExp_Log_AreInverse()
     {
         // log(exp(x)) = x for positive x
@@ -234,7 +234,7 @@ public class ExtensionsDeepMathIntegrationTests
             Assert.Equal(v[i], logExpV[i], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PointwiseExp_HandComputed()
     {
         // exp(0) = 1, exp(1) = e
@@ -244,7 +244,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(Math.E, result[1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PointwiseLog_HandComputed()
     {
         // log(1) = 0, log(e) = 1
@@ -254,7 +254,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(1.0, result[1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PointwiseAbs_HandComputed()
     {
         var v = new Vector<double>(new[] { -3.0, 0.0, 5.0, -7.0 });
@@ -265,7 +265,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(7.0, abs[3], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PointwiseSqrt_HandComputed()
     {
         var v = new Vector<double>(new[] { 4.0, 9.0, 16.0, 25.0 });
@@ -276,7 +276,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(5.0, sqrt[3], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PointwiseSign_HandComputed()
     {
         var v = new Vector<double>(new[] { -3.0, 0.0, 5.0 });
@@ -290,7 +290,7 @@ public class ExtensionsDeepMathIntegrationTests
     // Outer Product Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OuterProduct_HandComputed()
     {
         // [1,2] outer [3,4,5] = [[3,4,5],[6,8,10]]
@@ -308,7 +308,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(10.0, outer[1, 2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OuterProduct_Rank1Matrix()
     {
         // Outer product always produces a rank-1 matrix
@@ -329,7 +329,7 @@ public class ExtensionsDeepMathIntegrationTests
     // Diagonal Matrix Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateDiagonal_HandComputed()
     {
         var v = new Vector<double>(new[] { 2.0, 5.0, 7.0 });
@@ -346,7 +346,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(0.0, diag[0, 2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToDiagonalMatrix_EqualsCreateDiagonal()
     {
         var v = new Vector<double>(new[] { 1.0, 3.0, 5.0 });
@@ -362,21 +362,21 @@ public class ExtensionsDeepMathIntegrationTests
     // Statistics Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sum_HandComputed()
     {
         var v = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
         Assert.Equal(15.0, v.Sum(), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Average_HandComputed()
     {
         var v = new Vector<double>(new[] { 2.0, 4.0, 6.0, 8.0, 10.0 });
         Assert.Equal(6.0, v.Average(), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Max_Min_HandComputed()
     {
         var v = new Vector<double>(new[] { 3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0 });
@@ -384,7 +384,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(1.0, v.Min(), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaxIndex_MinIndex_HandComputed()
     {
         var v = new Vector<double>(new[] { 3.0, 1.0, 5.0, 2.0 });
@@ -392,14 +392,14 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(1, v.MinIndex()); // 1.0 at index 1
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AbsoluteMaximum_HandComputed()
     {
         var v = new Vector<double>(new[] { -7.0, 3.0, -2.0, 5.0 });
         Assert.Equal(7.0, v.AbsoluteMaximum(), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardDeviation_HandComputed()
     {
         // Values: 2, 4, 4, 4, 5, 5, 7, 9
@@ -413,14 +413,14 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(expected, std, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_OddLength()
     {
         var v = new Vector<double>(new[] { 5.0, 1.0, 3.0 });
         Assert.Equal(3.0, v.Median(), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Median_EvenLength()
     {
         // Sorted: 1, 2, 3, 4 -> median = (2+3)/2 = 2.5
@@ -432,14 +432,14 @@ public class ExtensionsDeepMathIntegrationTests
     // Euclidean Distance Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EuclideanDistance_SameVector_IsZero()
     {
         var v = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
         Assert.Equal(0.0, v.EuclideanDistance(v), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EuclideanDistance_HandComputed()
     {
         // d([1,0], [0,1]) = sqrt((1-0)^2 + (0-1)^2) = sqrt(2)
@@ -448,7 +448,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(2.0), v1.EuclideanDistance(v2), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EuclideanDistance_345Triangle()
     {
         // d([0,0], [3,4]) = 5
@@ -457,7 +457,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(5.0, v1.EuclideanDistance(v2), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EuclideanDistance_IsSymmetric()
     {
         var v1 = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -465,7 +465,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(v1.EuclideanDistance(v2), v2.EuclideanDistance(v1), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EuclideanDistance_EqualsSubtractNorm()
     {
         // d(v1, v2) = ||v1 - v2||
@@ -478,7 +478,7 @@ public class ExtensionsDeepMathIntegrationTests
     // Slice / SubVector Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Slice_HandComputed()
     {
         var v = new Vector<double>(new[] { 10.0, 20.0, 30.0, 40.0, 50.0 });
@@ -489,7 +489,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(40.0, sliced[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SubVector_ByIndices()
     {
         var v = new Vector<double>(new[] { 10.0, 20.0, 30.0, 40.0, 50.0 });
@@ -500,7 +500,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(50.0, sub[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Extract_GetsFirstNElements()
     {
         var v = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -515,7 +515,7 @@ public class ExtensionsDeepMathIntegrationTests
     // Argsort Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Argsort_HandComputed()
     {
         var v = new Vector<double>(new[] { 3.0, 1.0, 4.0, 1.0, 5.0 });
@@ -528,7 +528,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(4, indices[4]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Argsort_AlreadySorted()
     {
         var v = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 });
@@ -541,7 +541,7 @@ public class ExtensionsDeepMathIntegrationTests
     // Repeat Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Repeat_HandComputed()
     {
         var v = new Vector<double>(new[] { 1.0, 2.0 });
@@ -559,7 +559,7 @@ public class ExtensionsDeepMathIntegrationTests
     // Matrix Shape Conversions
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToRowMatrix_HandComputed()
     {
         var v = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -571,7 +571,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(3.0, rowMat[0, 2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToColumnMatrix_HandComputed()
     {
         var v = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -583,7 +583,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(3.0, colMat[2, 0], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Reshape_HandComputed()
     {
         var v = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 });
@@ -603,7 +603,7 @@ public class ExtensionsDeepMathIntegrationTests
     // Vector-Matrix Multiplication
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorMatrixMultiply_HandComputed()
     {
         // [1,2,3] * [[1,4],[2,5],[3,6]] = [1*1+2*2+3*3, 1*4+2*5+3*6] = [14, 32]
@@ -619,7 +619,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(32.0, result[1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorMatrixMultiply_IdentityMatrix()
     {
         // v * I = v (for square identity)
@@ -636,7 +636,7 @@ public class ExtensionsDeepMathIntegrationTests
     // Transform Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Transform_SquareEachElement()
     {
         var v = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 });
@@ -651,7 +651,7 @@ public class ExtensionsDeepMathIntegrationTests
     // Maximum (clamp) Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Maximum_ClampsToScalar()
     {
         var v = new Vector<double>(new[] { -3.0, -1.0, 0.0, 2.0, 5.0 });
@@ -667,7 +667,7 @@ public class ExtensionsDeepMathIntegrationTests
     // Conversion Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ToVectorList_ToIntList_Roundtrip()
     {
         var indices = new[] { 0, 5, 10, 15 };
@@ -684,7 +684,7 @@ public class ExtensionsDeepMathIntegrationTests
     // PointwiseMultiplyInPlace Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PointwiseMultiplyInPlace_ModifiesVector()
     {
         var v1 = new Vector<double>(new[] { 2.0, 3.0, 4.0 });
@@ -699,7 +699,7 @@ public class ExtensionsDeepMathIntegrationTests
     // Mathematical Identities / Properties
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CauchySchwarzInequality()
     {
         // |v . w| <= ||v|| * ||w||
@@ -710,7 +710,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.True(dot <= product + Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TriangleInequality()
     {
         // ||v + w|| <= ||v|| + ||w||
@@ -721,7 +721,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.True(sumNorm <= normSum + Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PythagoreanTheorem_OrthogonalVectors()
     {
         // If v . w = 0, then ||v + w||^2 = ||v||^2 + ||w||^2
@@ -736,7 +736,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(vNormSq + wNormSq, sumNormSq, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OuterProduct_DotProduct_Relationship()
     {
         // For vectors u, v: u^T v = trace(v * u^T) where v*u^T is outer product
@@ -752,7 +752,7 @@ public class ExtensionsDeepMathIntegrationTests
         Assert.Equal(dot, trace, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiagonalMatrix_VectorMultiply_IsPointwiseMultiply()
     {
         // D * v = diag(d) . v (pointwise)

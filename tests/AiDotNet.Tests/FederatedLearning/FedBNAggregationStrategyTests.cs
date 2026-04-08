@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.FederatedLearning;
 
 public class FedBNAggregationStrategyTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Aggregate_KeepsBatchNormLayersLocal()
     {
         var aggregator = new FedBNAggregationStrategy<double>();

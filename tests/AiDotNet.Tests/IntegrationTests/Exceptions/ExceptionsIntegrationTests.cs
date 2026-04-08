@@ -12,7 +12,7 @@ public class ExceptionsIntegrationTests
 {
     #region AiDotNetException
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AiDotNetException_DefaultConstructor()
     {
         var ex = new AiDotNetException();
@@ -20,14 +20,14 @@ public class ExceptionsIntegrationTests
         Assert.IsAssignableFrom<Exception>(ex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AiDotNetException_MessageConstructor()
     {
         var ex = new AiDotNetException("test error");
         Assert.Equal("test error", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AiDotNetException_MessageAndInnerException()
     {
         var inner = new InvalidOperationException("inner");
@@ -40,7 +40,7 @@ public class ExceptionsIntegrationTests
 
     #region TensorShapeMismatchException
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorShapeMismatch_DefaultConstructor_SetsDefaults()
     {
         var ex = new TensorShapeMismatchException();
@@ -50,7 +50,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Unknown", ex.Operation);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorShapeMismatch_MessageConstructor_SetsDefaults()
     {
         var ex = new TensorShapeMismatchException("shape error");
@@ -59,7 +59,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Unknown", ex.Operation);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorShapeMismatch_WithInnerException()
     {
         var inner = new Exception("root cause");
@@ -68,7 +68,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Unknown", ex.Component);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorShapeMismatch_FullConstructor_StoresProperties()
     {
         var expected = new[] { 1, 3, 224, 224 };
@@ -81,7 +81,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Forward", ex.Operation);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorShapeMismatch_FullConstructor_FormatsMessage()
     {
         var ex = new TensorShapeMismatchException(new[] { 2, 3 }, new[] { 4, 5 }, "DenseLayer", "MatMul");
@@ -91,7 +91,7 @@ public class ExceptionsIntegrationTests
         Assert.Contains("4, 5", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorShapeMismatch_ThreeArgConstructor_SetsOperationToUnknown()
     {
         var ex = new TensorShapeMismatchException(new[] { 1 }, new[] { 2 }, "MyLayer");
@@ -99,7 +99,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Unknown", ex.Operation);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorShapeMismatch_WithInnerAndShapes()
     {
         var inner = new Exception("root");
@@ -109,7 +109,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Op", ex.Operation);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorShapeMismatch_InheritsFromAiDotNetException()
     {
         var ex = new TensorShapeMismatchException();
@@ -120,7 +120,7 @@ public class ExceptionsIntegrationTests
 
     #region TensorRankException
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorRankException_StoresProperties()
     {
         var ex = new TensorRankException(2, 3, "DenseLayer", "Forward");
@@ -130,7 +130,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Forward", ex.Operation);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorRankException_FormatsMessage()
     {
         var ex = new TensorRankException(2, 4, "Conv2D", "Forward");
@@ -140,7 +140,7 @@ public class ExceptionsIntegrationTests
         Assert.Contains("4", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorRankException_InheritsFromAiDotNetException()
     {
         var ex = new TensorRankException(1, 2, "Test", "Test");
@@ -151,7 +151,7 @@ public class ExceptionsIntegrationTests
 
     #region TensorDimensionException
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorDimensionException_StoresProperties()
     {
         var ex = new TensorDimensionException(1, 224, 112, "ConvLayer", "Forward");
@@ -162,7 +162,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Forward", ex.Operation);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorDimensionException_FormatsMessage()
     {
         var ex = new TensorDimensionException(0, 10, 20, "Pool", "Compute");
@@ -173,7 +173,7 @@ public class ExceptionsIntegrationTests
         Assert.Contains("20", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorDimensionException_InheritsFromAiDotNetException()
     {
         var ex = new TensorDimensionException(0, 1, 2, "T", "O");
@@ -184,7 +184,7 @@ public class ExceptionsIntegrationTests
 
     #region VectorLengthMismatchException
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorLengthMismatch_StoresProperties()
     {
         var ex = new VectorLengthMismatchException(10, 20, "DotProduct", "Compute");
@@ -194,7 +194,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Compute", ex.Operation);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorLengthMismatch_FormatsMessage()
     {
         var ex = new VectorLengthMismatchException(5, 10, "Add", "ElementWise");
@@ -204,7 +204,7 @@ public class ExceptionsIntegrationTests
         Assert.Contains("10", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VectorLengthMismatch_InheritsFromAiDotNetException()
     {
         var ex = new VectorLengthMismatchException(1, 2, "T", "O");
@@ -215,7 +215,7 @@ public class ExceptionsIntegrationTests
 
     #region ForwardPassRequiredException
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForwardPassRequired_TwoArgConstructor()
     {
         var ex = new ForwardPassRequiredException("layer1", "DenseLayer");
@@ -226,7 +226,7 @@ public class ExceptionsIntegrationTests
         Assert.Contains("DenseLayer", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForwardPassRequired_ThreeArgConstructor()
     {
         var ex = new ForwardPassRequiredException("bn1", "BatchNorm", "gradient computation");
@@ -236,7 +236,7 @@ public class ExceptionsIntegrationTests
         Assert.Contains("gradient computation", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ForwardPassRequired_InheritsFromAiDotNetException()
     {
         var ex = new ForwardPassRequiredException("x", "y");
@@ -247,7 +247,7 @@ public class ExceptionsIntegrationTests
 
     #region InvalidDataValueException
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvalidDataValue_DefaultConstructor()
     {
         var ex = new InvalidDataValueException();
@@ -255,7 +255,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Unknown", ex.Operation);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvalidDataValue_MessageConstructor()
     {
         var ex = new InvalidDataValueException("NaN detected");
@@ -263,7 +263,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Unknown", ex.Component);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvalidDataValue_WithInnerException()
     {
         var inner = new ArithmeticException("overflow");
@@ -271,7 +271,7 @@ public class ExceptionsIntegrationTests
         Assert.Same(inner, ex.InnerException);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvalidDataValue_WithContext()
     {
         var ex = new InvalidDataValueException("NaN found", "Normalizer", "Scale");
@@ -282,7 +282,7 @@ public class ExceptionsIntegrationTests
         Assert.Contains("NaN found", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvalidDataValue_WithContextAndInner()
     {
         var inner = new Exception("root");
@@ -291,7 +291,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Layer", ex.Component);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvalidDataValue_InheritsFromAiDotNetException()
     {
         var ex = new InvalidDataValueException();
@@ -302,7 +302,7 @@ public class ExceptionsIntegrationTests
 
     #region InvalidInputDimensionException
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvalidInputDimension_DefaultConstructor()
     {
         var ex = new InvalidInputDimensionException();
@@ -310,7 +310,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Unknown", ex.Operation);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvalidInputDimension_MessageConstructor()
     {
         var ex = new InvalidInputDimensionException("wrong dimensions");
@@ -318,7 +318,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Unknown", ex.Component);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvalidInputDimension_WithInnerException()
     {
         var inner = new Exception("source");
@@ -326,7 +326,7 @@ public class ExceptionsIntegrationTests
         Assert.Same(inner, ex.InnerException);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvalidInputDimension_WithContext()
     {
         var ex = new InvalidInputDimensionException("need 2D", "LSTM", "Forward");
@@ -337,7 +337,7 @@ public class ExceptionsIntegrationTests
         Assert.Contains("need 2D", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvalidInputDimension_WithContextAndInner()
     {
         var inner = new Exception("root");
@@ -347,7 +347,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Init", ex.Operation);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvalidInputDimension_InheritsFromAiDotNetException()
     {
         var ex = new InvalidInputDimensionException();
@@ -358,7 +358,7 @@ public class ExceptionsIntegrationTests
 
     #region InvalidInputTypeException
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvalidInputType_StoresProperties()
     {
         var ex = new InvalidInputTypeException(InputType.TwoDimensional, InputType.OneDimensional, "ConvNet");
@@ -367,7 +367,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("ConvNet", ex.NetworkType);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvalidInputType_FormatsMessage()
     {
         var ex = new InvalidInputTypeException(InputType.ThreeDimensional, InputType.OneDimensional, "ResNet");
@@ -376,7 +376,7 @@ public class ExceptionsIntegrationTests
         Assert.Contains(InputType.OneDimensional.ToString(), ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InvalidInputType_InheritsFromAiDotNetException()
     {
         var ex = new InvalidInputTypeException(InputType.OneDimensional, InputType.TwoDimensional, "Net");
@@ -387,21 +387,21 @@ public class ExceptionsIntegrationTests
 
     #region ModelTrainingException
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelTrainingException_DefaultConstructor()
     {
         var ex = new ModelTrainingException();
         Assert.NotNull(ex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelTrainingException_MessageConstructor()
     {
         var ex = new ModelTrainingException("training failed");
         Assert.Equal("training failed", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelTrainingException_WithInnerException()
     {
         var inner = new InvalidOperationException("diverged");
@@ -410,7 +410,7 @@ public class ExceptionsIntegrationTests
         Assert.Same(inner, ex.InnerException);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ModelTrainingException_InheritsFromAiDotNetException()
     {
         var ex = new ModelTrainingException();
@@ -421,7 +421,7 @@ public class ExceptionsIntegrationTests
 
     #region SerializationException
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SerializationException_DefaultConstructor()
     {
         var ex = new AiDotNet.Exceptions.SerializationException();
@@ -429,7 +429,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Unknown", ex.Operation);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SerializationException_MessageConstructor()
     {
         var ex = new AiDotNet.Exceptions.SerializationException("corrupt data");
@@ -437,7 +437,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Unknown", ex.Component);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SerializationException_WithInnerException()
     {
         var inner = new IOException("stream closed");
@@ -445,7 +445,7 @@ public class ExceptionsIntegrationTests
         Assert.Same(inner, ex.InnerException);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SerializationException_WithContext()
     {
         var ex = new AiDotNet.Exceptions.SerializationException("version mismatch", "ModelSaver", "Save");
@@ -455,7 +455,7 @@ public class ExceptionsIntegrationTests
         Assert.Contains("Save", ex.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SerializationException_WithContextAndInner()
     {
         var inner = new Exception("root");
@@ -465,7 +465,7 @@ public class ExceptionsIntegrationTests
         Assert.Equal("Load", ex.Operation);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SerializationException_InheritsFromAiDotNetException()
     {
         var ex = new AiDotNet.Exceptions.SerializationException();
@@ -476,7 +476,7 @@ public class ExceptionsIntegrationTests
 
     #region Cross-Exception - All Derive from AiDotNetException
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllExceptions_DeriveFromAiDotNetException()
     {
         // Verify the entire exception hierarchy
@@ -492,7 +492,7 @@ public class ExceptionsIntegrationTests
         Assert.True(typeof(AiDotNetException).IsAssignableFrom(typeof(AiDotNet.Exceptions.SerializationException)));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllExceptions_DeriveFromSystemException()
     {
         Assert.True(typeof(Exception).IsAssignableFrom(typeof(AiDotNetException)));

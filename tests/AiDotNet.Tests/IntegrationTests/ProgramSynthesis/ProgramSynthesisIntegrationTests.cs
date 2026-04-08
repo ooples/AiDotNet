@@ -14,7 +14,7 @@ public class ProgramSynthesisIntegrationTests
 {
     #region CodePosition Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodePosition_DefaultValues()
     {
         // Arrange & Act
@@ -26,7 +26,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Equal(0, position.Offset);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodePosition_SetProperties()
     {
         // Arrange & Act
@@ -47,7 +47,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region CodeSpan Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeSpan_DefaultValues()
     {
         // Arrange & Act
@@ -60,7 +60,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Equal(1, span.End.Line);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeSpan_SetStartAndEnd()
     {
         // Arrange & Act
@@ -83,7 +83,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region CodeLocation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeLocation_DefaultValues()
     {
         // Arrange & Act
@@ -95,7 +95,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Null(location.NodePath);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeLocation_SetProperties()
     {
         // Arrange & Act
@@ -119,7 +119,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region CodeIssue Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeIssue_DefaultValues()
     {
         // Arrange & Act
@@ -136,7 +136,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.NotNull(issue.Location);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeIssue_SetProperties()
     {
         // Arrange & Act
@@ -165,7 +165,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region CodeIssueSeverity Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeIssueSeverity_HasCorrectValues()
     {
         // Assert
@@ -175,7 +175,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Equal(3, (int)CodeIssueSeverity.Critical);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeIssueSeverity_AllValuesAreDefined()
     {
         // Assert
@@ -187,7 +187,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region ProgramLanguage Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProgramLanguage_HasExpectedValues()
     {
         // Assert
@@ -204,7 +204,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Equal(10, (int)ProgramLanguage.Generic);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProgramLanguage_AllValuesAreDefined()
     {
         // Assert
@@ -216,7 +216,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region CodeTask Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeTask_HasExpectedValues()
     {
         // Assert
@@ -235,7 +235,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Equal(12, (int)CodeTask.CodeReview);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeTask_AllValuesAreDefined()
     {
         // Assert
@@ -247,7 +247,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region Program<T> Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Program_DefaultConstructor()
     {
         // Arrange & Act
@@ -264,7 +264,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Null(program.ExecutionTimeMs);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Program_ParameterizedConstructor()
     {
         // Arrange & Act
@@ -283,7 +283,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Equal(5, program.Complexity);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Program_SetProperties()
     {
         // Arrange & Act
@@ -308,7 +308,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Equal(10.5, program.ExecutionTimeMs);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Program_ToString_ReturnsFormattedString()
     {
         // Arrange
@@ -330,7 +330,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Contains("x = 1 + 2", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Program_InvalidProgram_WithErrorMessage()
     {
         // Arrange & Act
@@ -353,7 +353,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region ProgramInputOutputExample Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProgramInputOutputExample_DefaultValues()
     {
         // Arrange & Act
@@ -364,7 +364,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Equal(string.Empty, example.ExpectedOutput);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProgramInputOutputExample_SetProperties()
     {
         // Arrange & Act
@@ -383,7 +383,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region CodeCompletionCandidate Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeCompletionCandidate_DefaultValues()
     {
         // Arrange & Act
@@ -394,7 +394,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Equal(0.0, candidate.Score);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeCompletionCandidate_SetProperties()
     {
         // Arrange & Act
@@ -413,7 +413,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region CodeComplexityMetrics Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeComplexityMetrics_DefaultValues()
     {
         // Arrange & Act
@@ -425,7 +425,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Equal(0, metrics.EstimatedCyclomaticComplexity);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeComplexityMetrics_SetProperties()
     {
         // Arrange & Act
@@ -446,7 +446,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region CodeSymbol Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeSymbol_DefaultValues()
     {
         // Arrange & Act
@@ -458,7 +458,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.NotNull(symbol.Location);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeSymbol_SetProperties()
     {
         // Arrange & Act
@@ -488,7 +488,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region CodeGenerationResult Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeGenerationResult_DefaultValues()
     {
         // Arrange & Act
@@ -504,7 +504,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.NotNull(result.Telemetry);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeGenerationResult_SetProperties()
     {
         // Arrange & Act
@@ -528,7 +528,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region CompilationDiagnostic Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompilationDiagnostic_DefaultValues()
     {
         // Arrange & Act
@@ -542,7 +542,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Null(diagnostic.Column);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompilationDiagnostic_SetProperties()
     {
         // Arrange & Act
@@ -567,7 +567,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region CompilationDiagnosticSeverity Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CompilationDiagnosticSeverity_HasExpectedValues()
     {
         // Assert
@@ -579,7 +579,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region ProgramExecuteErrorCode Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProgramExecuteErrorCode_HasValues()
     {
         // Assert
@@ -591,7 +591,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region SqlExecuteErrorCode Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SqlExecuteErrorCode_HasValues()
     {
         // Assert
@@ -603,7 +603,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region SqlValueKind Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SqlValueKind_HasValues()
     {
         // Assert
@@ -615,7 +615,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region SqlValue Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SqlValue_WithNullKind()
     {
         // Arrange & Act
@@ -625,7 +625,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Equal(SqlValueKind.Null, value.Kind);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SqlValue_SetProperties()
     {
         // Arrange & Act
@@ -644,7 +644,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region SynthesisType Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SynthesisType_HasValues()
     {
         // Assert
@@ -656,7 +656,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region SqlDialect Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SqlDialect_HasValues()
     {
         // Assert
@@ -668,7 +668,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region CodeIssueCategory Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeIssueCategory_HasValues()
     {
         // Assert
@@ -680,7 +680,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region CodeSymbolKind Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeSymbolKind_HasValues()
     {
         // Assert
@@ -692,7 +692,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region CodeCloneType Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeCloneType_HasValues()
     {
         // Assert
@@ -704,7 +704,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region CodeEditOperationType Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeEditOperationType_HasValues()
     {
         // Assert
@@ -716,7 +716,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region CodeMatchType Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CodeMatchType_HasValues()
     {
         // Assert
@@ -728,7 +728,7 @@ public class ProgramSynthesisIntegrationTests
 
     #region Integration Scenarios
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Integration_CreateProgramWithLocation()
     {
         // Arrange
@@ -755,7 +755,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Equal("/src/MyClass.cs", location.FilePath);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Integration_CreateCodeIssueWithSymbol()
     {
         // Arrange
@@ -789,7 +789,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Equal("/src/security.cs", issue.Location.FilePath);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Integration_CreateInputOutputExamples()
     {
         // Arrange
@@ -813,7 +813,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Equal(1.0, program.FitnessScore);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Integration_CreateGenerationResultWithDiagnostics()
     {
         // Arrange
@@ -836,7 +836,7 @@ public class ProgramSynthesisIntegrationTests
         Assert.Contains(diagnostics, d => d.Severity == CompilationDiagnosticSeverity.Warning);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Integration_CreateComplexityMetricsForProgram()
     {
         // Arrange
@@ -865,7 +865,7 @@ public class Calculator {
         Assert.Equal(3, metrics.EstimatedCyclomaticComplexity);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Integration_CodeCompletionCandidatesRanking()
     {
         // Arrange

@@ -16,77 +16,77 @@ public class OnnxDeepMathIntegrationTests
     // OnnxModelMetadata: Defaults
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelMetadata_Defaults_ModelNameEmpty()
     {
         var metadata = new OnnxModelMetadata();
         Assert.Equal(string.Empty, metadata.ModelName);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelMetadata_Defaults_DescriptionNull()
     {
         var metadata = new OnnxModelMetadata();
         Assert.Null(metadata.Description);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelMetadata_Defaults_ProducerNameNull()
     {
         var metadata = new OnnxModelMetadata();
         Assert.Null(metadata.ProducerName);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelMetadata_Defaults_ProducerVersionNull()
     {
         var metadata = new OnnxModelMetadata();
         Assert.Null(metadata.ProducerVersion);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelMetadata_Defaults_OpsetVersionZero()
     {
         var metadata = new OnnxModelMetadata();
         Assert.Equal(0, metadata.OpsetVersion);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelMetadata_Defaults_InputsEmpty()
     {
         var metadata = new OnnxModelMetadata();
         Assert.Empty(metadata.Inputs);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelMetadata_Defaults_OutputsEmpty()
     {
         var metadata = new OnnxModelMetadata();
         Assert.Empty(metadata.Outputs);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelMetadata_Defaults_DomainNull()
     {
         var metadata = new OnnxModelMetadata();
         Assert.Null(metadata.Domain);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelMetadata_Defaults_GraphNameNull()
     {
         var metadata = new OnnxModelMetadata();
         Assert.Null(metadata.GraphName);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelMetadata_Defaults_CustomMetadataEmpty()
     {
         var metadata = new OnnxModelMetadata();
         Assert.Empty(metadata.CustomMetadata);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelMetadata_SetProperties()
     {
         var inputs = new List<IOnnxTensorInfo>
@@ -130,21 +130,21 @@ public class OnnxDeepMathIntegrationTests
     // OnnxTensorInfo: Defaults
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxTensorInfo_Defaults_NameEmpty()
     {
         var info = new OnnxTensorInfo();
         Assert.Equal(string.Empty, info.Name);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxTensorInfo_Defaults_ShapeEmpty()
     {
         var info = new OnnxTensorInfo();
         Assert.Empty(info.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxTensorInfo_Defaults_ElementTypeFloat()
     {
         var info = new OnnxTensorInfo();
@@ -155,28 +155,28 @@ public class OnnxDeepMathIntegrationTests
     // OnnxTensorInfo: HasDynamicShape
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxTensorInfo_StaticShape_NotDynamic()
     {
         var info = new OnnxTensorInfo { Shape = new[] { 1, 3, 224, 224 } };
         Assert.False(info.HasDynamicShape);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxTensorInfo_DynamicBatchDim_IsDynamic()
     {
         var info = new OnnxTensorInfo { Shape = new[] { -1, 3, 224, 224 } };
         Assert.True(info.HasDynamicShape);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxTensorInfo_MultipleDynamic_IsDynamic()
     {
         var info = new OnnxTensorInfo { Shape = new[] { -1, -1, 224, 224 } };
         Assert.True(info.HasDynamicShape);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxTensorInfo_EmptyShape_NotDynamic()
     {
         var info = new OnnxTensorInfo { Shape = Array.Empty<int>() };
@@ -187,7 +187,7 @@ public class OnnxDeepMathIntegrationTests
     // OnnxTensorInfo: TotalElements
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxTensorInfo_TotalElements_StaticShape()
     {
         var info = new OnnxTensorInfo { Shape = new[] { 1, 3, 224, 224 } };
@@ -195,21 +195,21 @@ public class OnnxDeepMathIntegrationTests
         Assert.Equal(150528L, info.TotalElements);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxTensorInfo_TotalElements_DynamicShape_ReturnsNegativeOne()
     {
         var info = new OnnxTensorInfo { Shape = new[] { -1, 3, 224, 224 } };
         Assert.Equal(-1L, info.TotalElements);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxTensorInfo_TotalElements_SingleDim()
     {
         var info = new OnnxTensorInfo { Shape = new[] { 1000 } };
         Assert.Equal(1000L, info.TotalElements);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxTensorInfo_TotalElements_ScalarShape()
     {
         // Empty shape means scalar with 1 element (product of empty = 1)
@@ -217,7 +217,7 @@ public class OnnxDeepMathIntegrationTests
         Assert.Equal(1L, info.TotalElements);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxTensorInfo_TotalElements_LargeShape()
     {
         var info = new OnnxTensorInfo { Shape = new[] { 8, 512, 512, 3 } };
@@ -229,7 +229,7 @@ public class OnnxDeepMathIntegrationTests
     // OnnxTensorInfo: ToString
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxTensorInfo_ToString_StaticShape()
     {
         var info = new OnnxTensorInfo { Name = "input", Shape = new[] { 1, 3, 224, 224 }, ElementType = "float" };
@@ -237,7 +237,7 @@ public class OnnxDeepMathIntegrationTests
         Assert.Equal("input: float[1, 3, 224, 224]", str);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxTensorInfo_ToString_DynamicShape()
     {
         var info = new OnnxTensorInfo { Name = "output", Shape = new[] { -1, 1000 }, ElementType = "float" };
@@ -245,7 +245,7 @@ public class OnnxDeepMathIntegrationTests
         Assert.Equal("output: float[?, 1000]", str);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxTensorInfo_ToString_DoublePrecision()
     {
         var info = new OnnxTensorInfo { Name = "data", Shape = new[] { 100 }, ElementType = "double" };
@@ -257,14 +257,14 @@ public class OnnxDeepMathIntegrationTests
     // OnnxModelOptions: Defaults
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_Defaults_ExecutionProviderAuto()
     {
         var options = new OnnxModelOptions();
         Assert.Equal(OnnxExecutionProvider.Auto, options.ExecutionProvider);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_Defaults_FallbackProviders()
     {
         var options = new OnnxModelOptions();
@@ -274,28 +274,28 @@ public class OnnxDeepMathIntegrationTests
         Assert.Equal(OnnxExecutionProvider.Cpu, options.FallbackProviders[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_Defaults_GpuDeviceIdZero()
     {
         var options = new OnnxModelOptions();
         Assert.Equal(0, options.GpuDeviceId);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_Defaults_MemoryPatternEnabled()
     {
         var options = new OnnxModelOptions();
         Assert.True(options.EnableMemoryPattern);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_Defaults_MemoryArenaEnabled()
     {
         var options = new OnnxModelOptions();
         Assert.True(options.EnableMemoryArena);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_Defaults_ThreadsZero()
     {
         var options = new OnnxModelOptions();
@@ -303,14 +303,14 @@ public class OnnxDeepMathIntegrationTests
         Assert.Equal(0, options.InterOpNumThreads);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_Defaults_OptimizationLevelAll()
     {
         var options = new OnnxModelOptions();
         Assert.Equal(GraphOptimizationLevel.All, options.OptimizationLevel);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_Defaults_ProfilingDisabled()
     {
         var options = new OnnxModelOptions();
@@ -318,35 +318,35 @@ public class OnnxDeepMathIntegrationTests
         Assert.Null(options.ProfileOutputPath);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_Defaults_CustomOptionsEmpty()
     {
         var options = new OnnxModelOptions();
         Assert.Empty(options.CustomOptions);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_Defaults_LogLevelWarning()
     {
         var options = new OnnxModelOptions();
         Assert.Equal(OnnxLogLevel.Warning, options.LogLevel);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_Defaults_AutoWarmUpDisabled()
     {
         var options = new OnnxModelOptions();
         Assert.False(options.AutoWarmUp);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_Defaults_CudaMemoryLimitZero()
     {
         var options = new OnnxModelOptions();
         Assert.Equal(0, options.CudaMemoryLimit);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_Defaults_CudaArenaEnabled()
     {
         var options = new OnnxModelOptions();
@@ -357,7 +357,7 @@ public class OnnxDeepMathIntegrationTests
     // OnnxModelOptions: Factory Methods
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_ForCpu_SetsProviderAndEmptyFallbacks()
     {
         var options = OnnxModelOptions.ForCpu();
@@ -366,14 +366,14 @@ public class OnnxDeepMathIntegrationTests
         Assert.True(options.IntraOpNumThreads > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_ForCpu_CustomThreads()
     {
         var options = OnnxModelOptions.ForCpu(threads: 4);
         Assert.Equal(4, options.IntraOpNumThreads);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_ForCuda_SetsProviderAndFallback()
     {
         var options = OnnxModelOptions.ForCuda();
@@ -383,14 +383,14 @@ public class OnnxDeepMathIntegrationTests
         Assert.Equal(OnnxExecutionProvider.Cpu, options.FallbackProviders[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_ForCuda_CustomDevice()
     {
         var options = OnnxModelOptions.ForCuda(deviceId: 2);
         Assert.Equal(2, options.GpuDeviceId);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_ForDirectML_SetsProviderAndFallback()
     {
         var options = OnnxModelOptions.ForDirectML();
@@ -400,7 +400,7 @@ public class OnnxDeepMathIntegrationTests
         Assert.Equal(OnnxExecutionProvider.Cpu, options.FallbackProviders[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_ForTensorRT_SetsProviderAndFallbacks()
     {
         var options = OnnxModelOptions.ForTensorRT();
@@ -411,7 +411,7 @@ public class OnnxDeepMathIntegrationTests
         Assert.Equal(OnnxExecutionProvider.Cpu, options.FallbackProviders[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_ForTensorRT_CustomDevice()
     {
         var options = OnnxModelOptions.ForTensorRT(deviceId: 1);
@@ -422,7 +422,7 @@ public class OnnxDeepMathIntegrationTests
     // OnnxModelOptions: Custom Properties
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxModelOptions_CustomValues_AllSet()
     {
         var options = new OnnxModelOptions
@@ -461,7 +461,7 @@ public class OnnxDeepMathIntegrationTests
     // OnnxExecutionProvider Enum
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxExecutionProvider_HasNineValues()
     {
         var values = (((OnnxExecutionProvider[])Enum.GetValues(typeof(OnnxExecutionProvider))));
@@ -487,7 +487,7 @@ public class OnnxDeepMathIntegrationTests
     // GraphOptimizationLevel Enum
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphOptimizationLevel_HasFourValues()
     {
         var values = (((GraphOptimizationLevel[])Enum.GetValues(typeof(GraphOptimizationLevel))));
@@ -508,7 +508,7 @@ public class OnnxDeepMathIntegrationTests
     // OnnxLogLevel Enum
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OnnxLogLevel_HasFiveValues()
     {
         var values = (((OnnxLogLevel[])Enum.GetValues(typeof(OnnxLogLevel))));

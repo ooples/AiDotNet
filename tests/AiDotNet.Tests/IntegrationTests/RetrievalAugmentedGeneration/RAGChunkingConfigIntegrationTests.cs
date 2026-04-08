@@ -16,7 +16,7 @@ public class RAGChunkingConfigIntegrationTests
 {
     #region FixedSizeChunkingStrategy Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedSize_GoldenReference_ChunksCorrectly()
     {
         var strategy = new FixedSizeChunkingStrategy(chunkSize: 10, chunkOverlap: 0);
@@ -29,7 +29,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Equal("ABCDEFGHIJ", chunks[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedSize_WithOverlap_OverlapsCorrectly()
     {
         var strategy = new FixedSizeChunkingStrategy(chunkSize: 10, chunkOverlap: 3);
@@ -47,7 +47,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Equal(chunks[0][7..], chunks[1][..3]); // "789" overlaps
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedSize_ShortText_SingleChunk()
     {
         var strategy = new FixedSizeChunkingStrategy(chunkSize: 100, chunkOverlap: 10);
@@ -59,7 +59,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Equal("Short text.", chunks[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedSize_ChunkWithPositions_PositionsAccurate()
     {
         var strategy = new FixedSizeChunkingStrategy(chunkSize: 10, chunkOverlap: 0);
@@ -78,7 +78,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Equal(text[positions[1].StartPosition..positions[1].EndPosition], positions[1].Chunk);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedSize_UnevenLength_LastChunkSmaller()
     {
         var strategy = new FixedSizeChunkingStrategy(chunkSize: 10, chunkOverlap: 0);
@@ -91,7 +91,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Equal(5, chunks[1].Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedSize_NullText_Throws()
     {
         var strategy = new FixedSizeChunkingStrategy(chunkSize: 100);
@@ -99,7 +99,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Throws<ArgumentNullException>(() => strategy.Chunk(null!).ToList());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedSize_EmptyText_Throws()
     {
         var strategy = new FixedSizeChunkingStrategy(chunkSize: 100);
@@ -107,27 +107,27 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Throws<ArgumentException>(() => strategy.Chunk("").ToList());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedSize_InvalidChunkSize_Throws()
     {
         Assert.Throws<ArgumentException>(() => new FixedSizeChunkingStrategy(chunkSize: 0));
         Assert.Throws<ArgumentException>(() => new FixedSizeChunkingStrategy(chunkSize: -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedSize_OverlapExceedsSize_Throws()
     {
         Assert.Throws<ArgumentException>(() => new FixedSizeChunkingStrategy(chunkSize: 10, chunkOverlap: 10));
         Assert.Throws<ArgumentException>(() => new FixedSizeChunkingStrategy(chunkSize: 10, chunkOverlap: 15));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedSize_NegativeOverlap_Throws()
     {
         Assert.Throws<ArgumentException>(() => new FixedSizeChunkingStrategy(chunkSize: 10, chunkOverlap: -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedSize_DefaultParameters()
     {
         var strategy = new FixedSizeChunkingStrategy();
@@ -136,7 +136,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Equal(50, strategy.ChunkOverlap);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FixedSize_LargeDocument_AllTextCovered()
     {
         var strategy = new FixedSizeChunkingStrategy(chunkSize: 100, chunkOverlap: 20);
@@ -158,7 +158,7 @@ public class RAGChunkingConfigIntegrationTests
 
     #region SlidingWindowChunkingStrategy Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SlidingWindow_GoldenReference()
     {
         var strategy = new SlidingWindowChunkingStrategy(windowSize: 10, stride: 5);
@@ -173,7 +173,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Equal("56789ABCDE", chunks[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SlidingWindow_StrideEqualsWindow_NoOverlap()
     {
         var strategy = new SlidingWindowChunkingStrategy(windowSize: 10, stride: 10);
@@ -186,7 +186,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Equal("ABCDEFGHIJ", chunks[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SlidingWindow_SmallStride_HighOverlap()
     {
         var strategy = new SlidingWindowChunkingStrategy(windowSize: 10, stride: 2);
@@ -212,7 +212,7 @@ public class RAGChunkingConfigIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SlidingWindow_InvalidStride_Throws()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -225,14 +225,14 @@ public class RAGChunkingConfigIntegrationTests
             new SlidingWindowChunkingStrategy(windowSize: 10, stride: 11));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SlidingWindow_InvalidWindowSize_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
             new SlidingWindowChunkingStrategy(windowSize: 0, stride: 1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SlidingWindow_DefaultParameters()
     {
         var strategy = new SlidingWindowChunkingStrategy();
@@ -240,7 +240,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Equal(1000, strategy.ChunkSize); // windowSize
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SlidingWindow_Positions_AreAccurate()
     {
         var strategy = new SlidingWindowChunkingStrategy(windowSize: 10, stride: 7);
@@ -258,7 +258,7 @@ public class RAGChunkingConfigIntegrationTests
 
     #region SentenceChunkingStrategy Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sentence_SplitsAtSentenceBoundaries()
     {
         var strategy = new SentenceChunkingStrategy(targetChunkSize: 50, maxChunkSize: 100, overlapSentences: 0);
@@ -275,7 +275,7 @@ public class RAGChunkingConfigIntegrationTests
         });
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sentence_ShortText_SingleChunk()
     {
         var strategy = new SentenceChunkingStrategy(targetChunkSize: 1000, maxChunkSize: 2000, overlapSentences: 0);
@@ -287,7 +287,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Contains("Short sentence", chunks[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sentence_OverlapPreservesContext()
     {
         var strategy = new SentenceChunkingStrategy(targetChunkSize: 30, maxChunkSize: 60, overlapSentences: 1);
@@ -303,7 +303,7 @@ public class RAGChunkingConfigIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sentence_InvalidParameters_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -313,7 +313,7 @@ public class RAGChunkingConfigIntegrationTests
             new SentenceChunkingStrategy(overlapSentences: -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sentence_VeryLongSentence_GetsSplit()
     {
         var strategy = new SentenceChunkingStrategy(targetChunkSize: 20, maxChunkSize: 30, overlapSentences: 0);
@@ -327,7 +327,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.All(chunks, c => Assert.True(c.Length > 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sentence_MultipleEndingTypes_AllRecognized()
     {
         var strategy = new SentenceChunkingStrategy(targetChunkSize: 50, maxChunkSize: 100, overlapSentences: 0);
@@ -344,7 +344,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Contains("Exclamation", joined);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sentence_NullText_Throws()
     {
         var strategy = new SentenceChunkingStrategy();
@@ -352,7 +352,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Throws<ArgumentNullException>(() => strategy.Chunk(null!).ToList());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Sentence_EmptyText_Throws()
     {
         var strategy = new SentenceChunkingStrategy();
@@ -364,7 +364,7 @@ public class RAGChunkingConfigIntegrationTests
 
     #region RAGConfigurationBuilder Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_FullConfiguration_Builds()
     {
         var config = new RAGConfigurationBuilder<double>()
@@ -384,7 +384,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Equal(10, config.Retrieval.TopK);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_WithReranking_SetsEnabled()
     {
         var config = new RAGConfigurationBuilder<double>()
@@ -400,7 +400,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Equal(5, config.Reranking.TopK);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_WithQueryExpansion_SetsEnabled()
     {
         var config = new RAGConfigurationBuilder<double>()
@@ -416,7 +416,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Equal(5, config.QueryExpansion.NumExpansions);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_WithContextCompression_SetsEnabled()
     {
         var config = new RAGConfigurationBuilder<double>()
@@ -433,7 +433,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Equal(200, config.ContextCompression.MaxLength);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_ChainingMethods_ReturnsSameBuilder()
     {
         var builder = new RAGConfigurationBuilder<double>();
@@ -447,7 +447,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Same(builder, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_MissingDocumentStore_Throws()
     {
         var builder = new RAGConfigurationBuilder<double>()
@@ -458,7 +458,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Throws<InvalidOperationException>(() => builder.Build());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_MissingChunking_Throws()
     {
         var builder = new RAGConfigurationBuilder<double>()
@@ -469,7 +469,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Throws<InvalidOperationException>(() => builder.Build());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_MissingEmbedding_Throws()
     {
         var builder = new RAGConfigurationBuilder<double>()
@@ -480,7 +480,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Throws<InvalidOperationException>(() => builder.Build());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_MissingRetrieval_Throws()
     {
         var builder = new RAGConfigurationBuilder<double>()
@@ -491,7 +491,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Throws<InvalidOperationException>(() => builder.Build());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_EmptyDocumentStoreType_Throws()
     {
         var builder = new RAGConfigurationBuilder<double>();
@@ -500,7 +500,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Throws<ArgumentException>(() => builder.WithDocumentStore("  "));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_InvalidChunkSize_Throws()
     {
         var builder = new RAGConfigurationBuilder<double>();
@@ -509,7 +509,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithChunking("FixedSize", chunkSize: -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_NegativeChunkOverlap_Throws()
     {
         var builder = new RAGConfigurationBuilder<double>();
@@ -517,7 +517,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithChunking("FixedSize", chunkOverlap: -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_InvalidEmbeddingDimension_Throws()
     {
         var builder = new RAGConfigurationBuilder<double>();
@@ -525,7 +525,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithEmbedding("OpenAI", embeddingDimension: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_InvalidTopK_Throws()
     {
         var builder = new RAGConfigurationBuilder<double>();
@@ -534,7 +534,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithReranking("Diversity", topK: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_InvalidCompressionRatio_Throws()
     {
         var builder = new RAGConfigurationBuilder<double>();
@@ -545,7 +545,7 @@ public class RAGChunkingConfigIntegrationTests
             builder.WithContextCompression("Summarizer", compressionRatio: 1.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_InvalidQueryExpansionCount_Throws()
     {
         var builder = new RAGConfigurationBuilder<double>();
@@ -553,7 +553,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithQueryExpansion("HyDE", numExpansions: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_DocumentStoreWithParameters()
     {
         var parameters = new Dictionary<string, object>
@@ -573,7 +573,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Equal(10000, config.DocumentStore.Parameters["maxDocuments"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Builder_EmbeddingWithApiKey()
     {
         var config = new RAGConfigurationBuilder<double>()
@@ -590,7 +590,7 @@ public class RAGChunkingConfigIntegrationTests
 
     #region End-to-End Chunking Pipeline Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pipeline_FixedSizeChunking_CoverEntireDocument()
     {
         var strategy = new FixedSizeChunkingStrategy(chunkSize: 50, chunkOverlap: 10);
@@ -611,7 +611,7 @@ public class RAGChunkingConfigIntegrationTests
         Assert.Equal(text.Length, positions.Last().EndPosition);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pipeline_SlidingWindow_ConsistentOverlap()
     {
         int windowSize = 20;
@@ -629,7 +629,7 @@ public class RAGChunkingConfigIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pipeline_CompareChunkingStrategies_AllCoverDocument()
     {
         var text = "Machine learning is great. Neural networks are powerful. Deep learning rocks. AI will transform the world.";

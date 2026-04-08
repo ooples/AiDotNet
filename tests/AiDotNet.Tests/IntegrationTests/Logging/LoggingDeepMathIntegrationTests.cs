@@ -15,7 +15,7 @@ public class LoggingDeepMathIntegrationTests
     // VarintHelper Encoding Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WriteVarint_Zero_SingleByte_0x00()
     {
         // 0 fits in 7 bits: single byte 0x00
@@ -25,7 +25,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(0x00, bytes[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WriteVarint_One_SingleByte_0x01()
     {
         var bytes = EncodeVarint(1);
@@ -34,7 +34,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(0x01, bytes[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WriteVarint_127_SingleByte_0x7F()
     {
         // 127 = 0b01111111 fits in 7 bits
@@ -44,7 +44,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(0x7F, bytes[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WriteVarint_128_TwoBytes_HandComputed()
     {
         // 128 = 0b10000000
@@ -57,7 +57,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(0x01, bytes[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WriteVarint_300_TwoBytes_HandComputed()
     {
         // 300 = 0b100101100
@@ -70,7 +70,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(0x02, bytes[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WriteVarint_16383_TwoBytes_HandComputed()
     {
         // 16383 = 0b11111111111111 (14 bits)
@@ -83,7 +83,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(0x7F, bytes[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WriteVarint_16384_ThreeBytes_HandComputed()
     {
         // 16384 = 0b100000000000000 (15 bits)
@@ -98,7 +98,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(0x01, bytes[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WriteVarint_ByteCountFormula_HandVerified()
     {
         // Varint uses 7 bits per byte
@@ -115,7 +115,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(4, EncodeVarint(2097152).Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WriteVarint_SmallValues_AreCompact()
     {
         // Values 0-127 should be single byte
@@ -126,7 +126,7 @@ public class LoggingDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WriteVarint_MediumValues_AreTwoBytes()
     {
         // Values 128-16383 should be two bytes
@@ -136,7 +136,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(2, EncodeVarint(16383).Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WriteVarint_LargeValue_CorrectByteCount()
     {
         // int.MaxValue = 2^31 - 1 = 2147483647
@@ -150,7 +150,7 @@ public class LoggingDeepMathIntegrationTests
     // HistogramSummary Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HistogramSummary_ToBytes_ContainsMinMaxNumSumSumSquares()
     {
         var histo = new HistogramSummary
@@ -172,7 +172,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(0x09, bytes[0]); // min field tag
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HistogramSummary_ToBytes_MinValueIsEncoded()
     {
         var histo = new HistogramSummary { Min = 3.14 };
@@ -184,7 +184,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(3.14, minValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HistogramSummary_ToBytes_MaxValueIsEncoded()
     {
         var histo = new HistogramSummary { Max = 42.0 };
@@ -196,7 +196,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(42.0, maxValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HistogramSummary_ToBytes_WithBuckets_EncodesCorrectly()
     {
         var histo = new HistogramSummary
@@ -220,7 +220,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.True(bytes.Length > 45); // At minimum more than just fixed fields
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HistogramSummary_ToBytes_EmptyBuckets_HasMinimumSize()
     {
         var histo = new HistogramSummary
@@ -238,7 +238,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(45, bytes.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HistogramSummary_ToBytes_BucketLimits_PackedEncodingTag()
     {
         var histo = new HistogramSummary();
@@ -251,7 +251,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Contains((byte)0x32, bytes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HistogramSummary_ToBytes_BucketCounts_PackedEncodingTag()
     {
         var histo = new HistogramSummary();
@@ -268,7 +268,7 @@ public class LoggingDeepMathIntegrationTests
     // SummaryValue Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SummaryValue_SimpleFloat_EncodesTagAndValue()
     {
         var sv = new SummaryValue
@@ -284,7 +284,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(0x0A, bytes[0]); // Field 1: tag string
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SummaryValue_TagEncoding_ContainsTagString()
     {
         var sv = new SummaryValue
@@ -304,7 +304,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal((byte)'c', bytes[4]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SummaryValue_SimpleValueFieldTag_Is0x15()
     {
         var sv = new SummaryValue
@@ -320,7 +320,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(0x15, bytes[3]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SummaryValue_SimpleValueEncoding_HandVerified()
     {
         var sv = new SummaryValue
@@ -341,7 +341,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(2.0f, floatValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SummaryValue_NoSimpleValue_OmitsValueField()
     {
         var sv = new SummaryValue
@@ -356,7 +356,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(6, bytes.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SummaryValue_WithHistogram_ContainsHistogramData()
     {
         var sv = new SummaryValue
@@ -380,7 +380,7 @@ public class LoggingDeepMathIntegrationTests
     // TensorBoardEvent Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorBoardEvent_WallTime_EncodedAsDouble()
     {
         var evt = new TensorBoardEvent
@@ -399,7 +399,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(1234567890.123, wallTime, 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorBoardEvent_Step_EncodedAsVarint()
     {
         var evt = new TensorBoardEvent
@@ -418,7 +418,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(42, bytes[10]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorBoardEvent_LargeStep_MultiByteVarint()
     {
         var evt = new TensorBoardEvent
@@ -436,7 +436,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.True(bytes.Length > 11);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorBoardEvent_WithFileVersion_ContainsVersionString()
     {
         var evt = new TensorBoardEvent
@@ -452,7 +452,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Contains((byte)0x1A, bytes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorBoardEvent_WithSummary_ContainsSummaryField()
     {
         var summary = new Summary();
@@ -471,7 +471,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Contains((byte)0x2A, bytes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorBoardEvent_MinimalEvent_HasCorrectSize()
     {
         var evt = new TensorBoardEvent
@@ -492,7 +492,7 @@ public class LoggingDeepMathIntegrationTests
     // Summary (multi-value container) Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Summary_Empty_HasZeroBytes()
     {
         var summary = new Summary();
@@ -502,7 +502,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Empty(bytes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Summary_SingleValue_ContainsFieldTag()
     {
         var summary = new Summary();
@@ -515,7 +515,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.True(bytes.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Summary_MultipleValues_EncodesAll()
     {
         var summary = new Summary();
@@ -535,7 +535,7 @@ public class LoggingDeepMathIntegrationTests
     // Varint Round-Trip Invariant Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WriteVarint_AllSingleByte_MSBUnset()
     {
         // For values 0-127, the single output byte should have MSB = 0
@@ -546,7 +546,7 @@ public class LoggingDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WriteVarint_MultiByte_LastByteMSBUnset()
     {
         // The last byte always has MSB = 0 (no continuation)
@@ -559,7 +559,7 @@ public class LoggingDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WriteVarint_MultiByte_NonLastBytesMSBSet()
     {
         // All bytes except the last have MSB = 1 (continuation bit)
@@ -575,7 +575,7 @@ public class LoggingDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WriteVarint_ReconstructValue_HandVerified()
     {
         // Verify we can reconstruct the value from varint bytes
@@ -594,7 +594,7 @@ public class LoggingDeepMathIntegrationTests
         Assert.Equal(300, reconstructed);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WriteVarint_AllTestValues_CanReconstruct()
     {
         var testValues = new long[] { 0, 1, 42, 127, 128, 255, 300, 1000, 16383, 16384, 100000, 1000000 };

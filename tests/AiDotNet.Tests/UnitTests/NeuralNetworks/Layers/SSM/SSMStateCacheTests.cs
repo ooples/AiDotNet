@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class SSMStateCacheTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_DefaultParameters_CreatesCache()
     {
         var cache = new SSMStateCache<float>();
@@ -18,7 +18,7 @@ public class SSMStateCacheTests
         Assert.False(cache.CompressionEnabled);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithCompression_EnablesCompression()
     {
         var cache = new SSMStateCache<float>(enableCompression: true, compressionBitWidth: 8);
@@ -26,14 +26,14 @@ public class SSMStateCacheTests
         Assert.True(cache.CompressionEnabled);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ThrowsOnInvalidBitWidth()
     {
         Assert.Throws<ArgumentException>(() => new SSMStateCache<float>(true, 0));
         Assert.Throws<ArgumentException>(() => new SSMStateCache<float>(true, 33));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheSSMState_StoresAndRetrieves()
     {
         var cache = new SSMStateCache<float>();
@@ -54,7 +54,7 @@ public class SSMStateCacheTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheSSMState_OverwritesPreviousState()
     {
         var cache = new SSMStateCache<float>();
@@ -71,14 +71,14 @@ public class SSMStateCacheTests
         Assert.Equal(2.0f, retrieved[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheSSMState_ThrowsOnNull()
     {
         var cache = new SSMStateCache<float>();
         Assert.Throws<ArgumentNullException>(() => cache.CacheSSMState(0, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetSSMState_ReturnsNullForUncachedLayer()
     {
         var cache = new SSMStateCache<float>();
@@ -87,7 +87,7 @@ public class SSMStateCacheTests
         Assert.False(cache.HasSSMState(0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetSSMState_ReturnsIndependentCopy()
     {
         var cache = new SSMStateCache<float>();
@@ -102,7 +102,7 @@ public class SSMStateCacheTests
         Assert.Equal(1.0f, retrieved2![0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheConvBuffer_StoresAndRetrieves()
     {
         var cache = new SSMStateCache<float>();
@@ -119,21 +119,21 @@ public class SSMStateCacheTests
             Assert.Equal(buffer[i], retrieved[i]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CacheConvBuffer_ThrowsOnNull()
     {
         var cache = new SSMStateCache<float>();
         Assert.Throws<ArgumentNullException>(() => cache.CacheConvBuffer(0, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetConvBuffer_ReturnsNullForUncachedLayer()
     {
         var cache = new SSMStateCache<float>();
         Assert.Null(cache.GetConvBuffer(0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Reset_ClearsAllStates()
     {
         var cache = new SSMStateCache<float>();
@@ -149,7 +149,7 @@ public class SSMStateCacheTests
         Assert.Null(cache.GetConvBuffer(0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clone_ProducesIndependentCopy()
     {
         var cache = new SSMStateCache<float>();
@@ -175,7 +175,7 @@ public class SSMStateCacheTests
         Assert.True(cache.HasSSMState(0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clone_DeepCopiesStates()
     {
         var cache = new SSMStateCache<float>();
@@ -195,7 +195,7 @@ public class SSMStateCacheTests
         Assert.Equal(3.0f, originalState![0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultipleLayerStates_StoreAndRetrieveIndependently()
     {
         var cache = new SSMStateCache<float>();
@@ -217,7 +217,7 @@ public class SSMStateCacheTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StateCompression_PreservesApproximateValues()
     {
         var cache = new SSMStateCache<float>(enableCompression: true, compressionBitWidth: 8);
@@ -237,7 +237,7 @@ public class SSMStateCacheTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetMemoryUsageBytes_ReturnsNonNegative()
     {
         var cache = new SSMStateCache<float>();
@@ -247,7 +247,7 @@ public class SSMStateCacheTests
         Assert.True(cache.GetMemoryUsageBytes() > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DoubleType_StoresAndRetrieves()
     {
         var cache = new SSMStateCache<double>();

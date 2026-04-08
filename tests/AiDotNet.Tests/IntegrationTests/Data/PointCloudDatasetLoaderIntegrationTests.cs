@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.IntegrationTests.Data;
 
 public class PointCloudDatasetLoaderIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ModelNet40Loader_LoadsPointCloudsAndLabels()
     {
         string tempDir = CreateTempDirectory();
@@ -69,7 +69,7 @@ public class PointCloudDatasetLoaderIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ShapeNetCoreLoader_LoadsSegmentationLabels()
     {
         string tempDir = CreateTempDirectory();
@@ -137,7 +137,7 @@ public class PointCloudDatasetLoaderIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task ScanNetLoader_LoadsPreprocessedScene()
     {
         string tempDir = CreateTempDirectory();

@@ -35,7 +35,7 @@ public class LayoutAwareDocumentTests
 
     #region LayoutLM Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayoutLM_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -43,7 +43,7 @@ public class LayoutAwareDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayoutLM_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -55,7 +55,7 @@ public class LayoutAwareDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayoutLM_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -68,7 +68,7 @@ public class LayoutAwareDocumentTests
 
     #region LayoutLMv2 Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayoutLMv2_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -76,7 +76,7 @@ public class LayoutAwareDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayoutLMv2_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -88,7 +88,7 @@ public class LayoutAwareDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayoutLMv2_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -101,7 +101,7 @@ public class LayoutAwareDocumentTests
 
     #region LayoutLMv3 Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayoutLMv3_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -109,7 +109,7 @@ public class LayoutAwareDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayoutLMv3_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -121,7 +121,7 @@ public class LayoutAwareDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayoutLMv3_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -134,7 +134,7 @@ public class LayoutAwareDocumentTests
 
     #region LayoutXLM Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayoutXLM_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -142,7 +142,7 @@ public class LayoutAwareDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayoutXLM_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -154,7 +154,7 @@ public class LayoutAwareDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayoutXLM_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -167,7 +167,7 @@ public class LayoutAwareDocumentTests
 
     #region DocFormer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DocFormer_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -175,7 +175,7 @@ public class LayoutAwareDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DocFormer_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -187,7 +187,7 @@ public class LayoutAwareDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DocFormer_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -200,7 +200,7 @@ public class LayoutAwareDocumentTests
 
     #region DiT Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiT_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -208,7 +208,7 @@ public class LayoutAwareDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiT_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -220,7 +220,7 @@ public class LayoutAwareDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiT_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -233,7 +233,7 @@ public class LayoutAwareDocumentTests
 
     #region LiLT Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LiLT_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -241,7 +241,7 @@ public class LayoutAwareDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LiLT_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -253,7 +253,7 @@ public class LayoutAwareDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LiLT_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -266,7 +266,7 @@ public class LayoutAwareDocumentTests
 
     #region Cross-Model Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllLayoutAwareModels_RequiresOCR_IsTrue()
     {
         var arch = CreateArchitecture();
@@ -287,7 +287,7 @@ public class LayoutAwareDocumentTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiT_RequiresOCR_IsFalse()
     {
         var arch = CreateArchitecture();

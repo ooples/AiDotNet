@@ -51,7 +51,7 @@ public class GpuAccelerationTests
 
     #region GpuPINNTrainingOptions Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuPINNTrainingOptions_Default_HasCorrectSettings()
     {
         // Arrange & Act
@@ -69,7 +69,7 @@ public class GpuAccelerationTests
         Assert.Equal(2, options.NumStreams);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuPINNTrainingOptions_HighEnd_HasAggressiveSettings()
     {
         // Arrange & Act
@@ -84,7 +84,7 @@ public class GpuAccelerationTests
         Assert.Equal(GpuUsageLevel.Aggressive, options.GpuConfig.UsageLevel);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuPINNTrainingOptions_LowMemory_HasConservativeSettings()
     {
         // Arrange & Act
@@ -100,7 +100,7 @@ public class GpuAccelerationTests
         Assert.Equal(GpuUsageLevel.Conservative, options.GpuConfig.UsageLevel);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuPINNTrainingOptions_CpuOnly_DisablesGpu()
     {
         // Arrange & Act
@@ -111,7 +111,7 @@ public class GpuAccelerationTests
         Assert.Equal(GpuDeviceType.CPU, options.GpuConfig.DeviceType);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuPINNTrainingOptions_CustomSettings_AppliesCorrectly()
     {
         // Arrange & Act
@@ -144,7 +144,7 @@ public class GpuAccelerationTests
 
     #region GpuAccelerationConfig Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuAccelerationConfig_Default_HasCorrectSettings()
     {
         // Arrange & Act
@@ -158,7 +158,7 @@ public class GpuAccelerationTests
         Assert.True(config.EnableForInference);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuAccelerationConfig_ToString_ReturnsFormattedString()
     {
         // Arrange
@@ -180,7 +180,7 @@ public class GpuAccelerationTests
         Assert.Contains("DeviceIndex=1", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuDeviceType_HasAllExpectedValues()
     {
         // Assert
@@ -190,7 +190,7 @@ public class GpuAccelerationTests
         Assert.True(Enum.IsDefined(typeof(GpuDeviceType), GpuDeviceType.CPU));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuUsageLevel_HasAllExpectedValues()
     {
         // Assert
@@ -205,7 +205,7 @@ public class GpuAccelerationTests
 
     #region GpuPINNTrainer Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuPINNTrainer_Constructor_CreatesTrainer()
     {
         // Arrange
@@ -236,7 +236,7 @@ public class GpuAccelerationTests
         Assert.NotNull(trainer.Options);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuPINNTrainer_Constructor_WithOptions_AppliesOptions()
     {
         // Arrange
@@ -272,7 +272,7 @@ public class GpuAccelerationTests
         Assert.True(trainer.Options.VerboseLogging);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuPINNTrainer_Constructor_ThrowsOnNullPinn()
     {
         // Act & Assert
@@ -280,7 +280,7 @@ public class GpuAccelerationTests
             new GpuPINNTrainer<double>(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuPINNTrainer_UpdateOptions_ChangesOptions()
     {
         // Arrange
@@ -317,7 +317,7 @@ public class GpuAccelerationTests
         Assert.False(trainer.Options.EnableGpu);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuPINNTrainer_UpdateOptions_ThrowsOnNull()
     {
         // Arrange
@@ -346,7 +346,7 @@ public class GpuAccelerationTests
             trainer.UpdateOptions(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuPINNTrainer_TryInitializeGpu_ReturnsResult()
     {
         // Arrange
@@ -377,7 +377,7 @@ public class GpuAccelerationTests
         Assert.IsType<bool>(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuPINNTrainer_ReleaseGpuResources_DoesNotThrow()
     {
         // Arrange
@@ -410,7 +410,7 @@ public class GpuAccelerationTests
 
     #region GpuTrainingHistory Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuTrainingHistory_TracksGpuMetrics()
     {
         // Arrange
@@ -431,7 +431,7 @@ public class GpuAccelerationTests
         Assert.Equal(1024 * 1024 * 100, history.PeakManagedMemoryBytes);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuTrainingHistory_AverageEpochTime_CalculatesCorrectly()
     {
         // Arrange
@@ -447,7 +447,7 @@ public class GpuAccelerationTests
         Assert.Equal(500, avgTime);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuTrainingHistory_AverageEpochTime_ReturnsZeroWhenEmpty()
     {
         // Arrange
@@ -461,7 +461,7 @@ public class GpuAccelerationTests
         Assert.Equal(0, avgTime);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GpuTrainingHistory_InheritsFromTrainingHistory()
     {
         // Arrange & Act
@@ -475,7 +475,7 @@ public class GpuAccelerationTests
 
     #region PINNGpuMemoryInfo Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PINNGpuMemoryInfo_UsagePercentage_CalculatesCorrectly()
     {
         // Arrange
@@ -493,7 +493,7 @@ public class GpuAccelerationTests
         Assert.Equal(25, usagePercent);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PINNGpuMemoryInfo_UsagePercentage_ReturnsZeroWhenTotalIsZero()
     {
         // Arrange

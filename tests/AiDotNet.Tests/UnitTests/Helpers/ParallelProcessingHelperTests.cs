@@ -10,7 +10,7 @@ namespace AiDotNetTests.UnitTests.Helpers
 {
     public class ParallelProcessingHelperTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_WithEmptyList_ReturnsEmptyList()
         {
             // Arrange
@@ -24,7 +24,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Empty(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_WithSingleTask_ReturnsCorrectResult()
         {
             // Arrange
@@ -41,7 +41,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(42, result[0]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_WithMultipleTasks_ReturnsAllResults()
         {
             // Arrange
@@ -66,7 +66,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Contains(5, result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_WithCustomMaxDegree_RespectsLimit()
         {
             // Arrange
@@ -100,7 +100,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.True(maxConcurrent <= 2, $"Max concurrent was {maxConcurrent}, expected <= 2");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_WithNullMaxDegree_UsesProcessorCount()
         {
             // Arrange
@@ -118,7 +118,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(3, result.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_WithDifferentReturnTypes_WorksCorrectly()
         {
             // Arrange
@@ -139,7 +139,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Contains("test", result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_WithLongRunningTasks_CompletesAll()
         {
             // Arrange
@@ -160,7 +160,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Contains(3, result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_PreCreatedTasks_WithEmptyList_ReturnsEmptyList()
         {
             // Arrange
@@ -174,7 +174,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Empty(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_PreCreatedTasks_WithSingleTask_ReturnsCorrectResult()
         {
             // Arrange
@@ -191,7 +191,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(42, result[0]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_PreCreatedTasks_WithMultipleTasks_ReturnsAllResults()
         {
             // Arrange
@@ -216,7 +216,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(5, result[4]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_PreCreatedTasks_WithCustomMaxDegree_ProcessesInBatches()
         {
             // Arrange
@@ -231,7 +231,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(10, result.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_PreCreatedTasks_WithNullMaxDegree_UsesProcessorCount()
         {
             // Arrange
@@ -249,7 +249,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(3, result.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_PreCreatedTasks_WithDifferentReturnTypes_WorksCorrectly()
         {
             // Arrange
@@ -270,7 +270,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal("gamma", result[2]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_WithLargeNumberOfTasks_HandlesCorrectly()
         {
             // Arrange
@@ -283,7 +283,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(100, result.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_WithTasksThatReturnSameValue_HandlesCorrectly()
         {
             // Arrange
@@ -297,7 +297,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.All(result, r => Assert.Equal(42, r));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_PreCreatedTasks_WithCompletedTasks_ReturnsImmediately()
         {
             // Arrange
@@ -320,7 +320,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.True(duration.TotalMilliseconds < 1000, "Should complete quickly with already completed tasks");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_WithMixedTaskDurations_CompletesAllCorrectly()
         {
             // Arrange
@@ -342,7 +342,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(15, sum); // 1+2+3+4+5 = 15
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_WithMaxDegreeOne_ExecutesSequentially()
         {
             // Arrange
@@ -366,7 +366,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(5, executionOrder.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_PreCreatedTasks_WithLargeNumberOfTasks_HandlesCorrectly()
         {
             // Arrange
@@ -382,7 +382,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(4950, result.Sum()); // Sum of 0 to 99
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_WithComplexObjects_WorksCorrectly()
         {
             // Arrange
@@ -403,7 +403,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.Equal(6, result[1][2]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public async Task ProcessTasksInParallel_PreCreatedTasks_MaintainsOrder()
         {
             // Arrange

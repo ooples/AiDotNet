@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class OrdinalClassifierTestBase : ClassificationModelTestBase
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OrdinalPredictions_ShouldBeValidIndices()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -28,7 +28,7 @@ public abstract class OrdinalClassifierTestBase : ClassificationModelTestBase
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OrdinalPredictions_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

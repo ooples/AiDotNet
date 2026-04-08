@@ -12,7 +12,7 @@ public class CrossValidationDeepMathIntegrationTests
 {
     #region KFoldStrategy - Fold Size Distribution
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KFold_EvenSplit_AllFoldsSameSize()
     {
         // 10 samples, 5 folds => each fold has exactly 2 samples
@@ -28,7 +28,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KFold_UnevenSplit_RemainderDistributed()
     {
         // 11 samples, 3 folds:
@@ -50,7 +50,7 @@ public class CrossValidationDeepMathIntegrationTests
         Assert.Equal(8, splits[2].TrainIndices.Length);  // 11 - 3 = 8
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KFold_NoShuffle_IndicesAreSequential()
     {
         // Without shuffling, fold i gets indices [i*foldSize .. (i+1)*foldSize-1]
@@ -64,7 +64,7 @@ public class CrossValidationDeepMathIntegrationTests
         Assert.Equal(new[] { 6, 7 }, splits[3].ValidationIndices.OrderBy(x => x).ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KFold_AllIndicesCoveredExactlyOnce()
     {
         // Every index appears in exactly one validation fold
@@ -81,7 +81,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KFold_TrainAndValidationAreDisjoint()
     {
         var strategy = new KFoldStrategy<double>(k: 3, shuffle: false);
@@ -100,7 +100,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KFold_MinimumK2_Works()
     {
         var strategy = new KFoldStrategy<double>(k: 2, shuffle: false);
@@ -112,7 +112,7 @@ public class CrossValidationDeepMathIntegrationTests
         Assert.Equal(3, splits[1].ValidationIndices.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KFold_KEqualsN_EquivalentToLOOCV()
     {
         // K=N is essentially Leave-One-Out
@@ -132,7 +132,7 @@ public class CrossValidationDeepMathIntegrationTests
 
     #region LeaveOneOutStrategy
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeaveOneOut_GeneratesNSplits()
     {
         int n = 7;
@@ -142,7 +142,7 @@ public class CrossValidationDeepMathIntegrationTests
         Assert.Equal(n, splits.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeaveOneOut_EachSampleValidatedExactlyOnce()
     {
         int n = 6;
@@ -161,7 +161,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeaveOneOut_TrainingSizeIsNMinus1()
     {
         int n = 10;
@@ -179,7 +179,7 @@ public class CrossValidationDeepMathIntegrationTests
 
     #region LeavePOutStrategy - Combinatorial Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeavePOut_P2_GeneratesC_N_2_Splits()
     {
         // C(5,2) = 10 combinations
@@ -191,7 +191,7 @@ public class CrossValidationDeepMathIntegrationTests
         Assert.Equal(10, splits.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeavePOut_P1_SameAsLOOCV()
     {
         int n = 4;
@@ -208,7 +208,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeavePOut_P2_EachValidationHas2Samples()
     {
         int n = 6;
@@ -222,7 +222,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeavePOut_P2_AllPairsGenerated()
     {
         int n = 4;
@@ -242,7 +242,7 @@ public class CrossValidationDeepMathIntegrationTests
         Assert.Equal(expected, pairs);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeavePOut_MaxFoldsLimitsOutput()
     {
         // C(10,2) = 45, but maxFolds limits to 10
@@ -252,7 +252,7 @@ public class CrossValidationDeepMathIntegrationTests
         Assert.Equal(10, splits.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeavePOut_P3_CorrectCount()
     {
         // C(6,3) = 6!/(3!*3!) = 20
@@ -266,7 +266,7 @@ public class CrossValidationDeepMathIntegrationTests
 
     #region StratifiedKFoldStrategy - Class Distribution Preservation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StratifiedKFold_PreservesClassProportions()
     {
         // 10 samples: 7 class 0, 3 class 1
@@ -291,7 +291,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StratifiedKFold_NoShuffle_EachClassSplitEvenly()
     {
         // 6 class-0 samples and 4 class-1 samples, 2 folds
@@ -319,7 +319,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StratifiedKFold_RequiresLabels()
     {
         var strategy = new StratifiedKFoldStrategy<double>(k: 3);
@@ -327,7 +327,7 @@ public class CrossValidationDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => strategy.Split(10).ToList());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StratifiedKFold_AllIndicesCoveredExactlyOnce()
     {
         var labels = new double[] { 0, 0, 0, 1, 1, 1, 2, 2, 2 };
@@ -346,7 +346,7 @@ public class CrossValidationDeepMathIntegrationTests
 
     #region BootstrapStrategy - Statistical Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Bootstrap_TrainSizeEqualsDataSize()
     {
         // Bootstrap samples WITH replacement => train set size == data size
@@ -359,7 +359,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Bootstrap_TrainIndicesMayRepeat()
     {
         // Sampling with replacement means some indices appear multiple times
@@ -375,7 +375,7 @@ public class CrossValidationDeepMathIntegrationTests
             $"Expected duplicates in bootstrap sample. Unique: {uniqueCount}, Total: {train.Length}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Bootstrap_OOBSamplesAreNotInTraining()
     {
         var strategy = new BootstrapStrategy<double>(numBootstraps: 3, randomSeed: 42);
@@ -393,7 +393,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Bootstrap_OOBSizeApproximately37Percent()
     {
         // Theoretically, P(sample not selected) = (1 - 1/N)^N ≈ 1/e ≈ 0.368
@@ -408,7 +408,7 @@ public class CrossValidationDeepMathIntegrationTests
         Assert.InRange(avgOOBFraction, 0.30, 0.43);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Bootstrap_Reproducible_WithSeed()
     {
         var strategy1 = new BootstrapStrategy<double>(numBootstraps: 3, randomSeed: 123);
@@ -428,7 +428,7 @@ public class CrossValidationDeepMathIntegrationTests
 
     #region ShuffleSplitStrategy - Split Sizes
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShuffleSplit_CorrectTestAndTrainSizes()
     {
         // 20% test on 100 samples => 20 test, 80 train
@@ -444,7 +444,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShuffleSplit_TrainAndTestAreDisjoint()
     {
         var strategy = new ShuffleSplitStrategy<double>(numSplits: 5, testSize: 0.3, randomSeed: 42);
@@ -460,7 +460,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShuffleSplit_SplitsAreIndependent()
     {
         // Different splits can have different samples in test
@@ -483,7 +483,7 @@ public class CrossValidationDeepMathIntegrationTests
         Assert.False(allSame, "Shuffle split should produce different validation sets across splits");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShuffleSplit_SmallDataset_AtLeastOneTest()
     {
         // testSize = 0.1 on 5 samples => Math.Max(1, (int)(5 * 0.1)) = Math.Max(1, 0) = 1
@@ -498,7 +498,7 @@ public class CrossValidationDeepMathIntegrationTests
 
     #region TimeSeriesSplitStrategy - Temporal Order
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeSeriesSplit_TrainingAlwaysBeforeValidation()
     {
         var strategy = new TimeSeriesSplitStrategy<double>(numSplits: 4);
@@ -514,7 +514,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeSeriesSplit_ExpandingTrainingWindow()
     {
         var strategy = new TimeSeriesSplitStrategy<double>(numSplits: 3);
@@ -529,7 +529,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeSeriesSplit_IndicesAreContiguous()
     {
         var strategy = new TimeSeriesSplitStrategy<double>(numSplits: 3);
@@ -553,7 +553,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeSeriesSplit_WithGap_RespectsGap()
     {
         var strategy = new TimeSeriesSplitStrategy<double>(numSplits: 3, gap: 2);
@@ -570,7 +570,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeSeriesSplit_FixedTestSize()
     {
         var strategy = new TimeSeriesSplitStrategy<double>(numSplits: 3, testSize: 5);
@@ -582,7 +582,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeSeriesSplit_MaxTrainSize_LimitsTraining()
     {
         var strategy = new TimeSeriesSplitStrategy<double>(numSplits: 3, maxTrainSize: 5);
@@ -595,7 +595,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeSeriesSplit_DefaultTestSize_Calculation()
     {
         // Default: testSizePerFold = dataSize / (numSplits + 1)
@@ -613,7 +613,7 @@ public class CrossValidationDeepMathIntegrationTests
 
     #region Cross-Strategy Comparison Properties
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KFold_TotalValidationSamples_EqualsDataSize()
     {
         // In K-Fold, every sample is validated exactly once
@@ -625,7 +625,7 @@ public class CrossValidationDeepMathIntegrationTests
         Assert.Equal(n, totalValSamples);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeavePOut_TrainValidationSizesCorrect()
     {
         // Leave-P-Out: train = N-P, val = P
@@ -644,7 +644,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KFold_Reproducible_WithSeed()
     {
         var s1 = new KFoldStrategy<double>(k: 3, shuffle: true, randomSeed: 99);
@@ -660,7 +660,7 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeSeriesSplit_NoDataLeakage_FutureNotInTraining()
     {
         // Core property: for each split, no validation index should appear in training
@@ -681,7 +681,7 @@ public class CrossValidationDeepMathIntegrationTests
 
     #region Edge Cases and Error Handling
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KFold_KEqualsDataSize_Works()
     {
         var strategy = new KFoldStrategy<double>(k: 3, shuffle: false);
@@ -695,20 +695,20 @@ public class CrossValidationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KFold_K1_Throws()
     {
         Assert.Throws<ArgumentException>(() => new KFoldStrategy<double>(k: 1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KFold_MoreFoldsThanSamples_Throws()
     {
         var strategy = new KFoldStrategy<double>(k: 10, shuffle: false);
         Assert.Throws<ArgumentException>(() => strategy.Split(5).ToList());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeaveOneOut_MinimumSamples()
     {
         var strategy = new LeaveOneOutStrategy<double>();
@@ -721,21 +721,21 @@ public class CrossValidationDeepMathIntegrationTests
         Assert.Equal(new[] { 0 }, splits[1].TrainIndices);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeaveOneOut_OneSample_Throws()
     {
         var strategy = new LeaveOneOutStrategy<double>();
         Assert.Throws<ArgumentException>(() => strategy.Split(1).ToList());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LeavePOut_PGreaterThanN_Throws()
     {
         var strategy = new LeavePOutStrategy<double>(p: 5);
         Assert.Throws<ArgumentException>(() => strategy.Split(3).ToList());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShuffleSplit_Reproducible_WithSeed()
     {
         var s1 = new ShuffleSplitStrategy<double>(numSplits: 3, testSize: 0.3, randomSeed: 77);

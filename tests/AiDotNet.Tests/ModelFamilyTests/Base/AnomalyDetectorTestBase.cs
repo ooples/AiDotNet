@@ -33,7 +33,7 @@ public abstract class AnomalyDetectorTestBase
         return (x, y);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Outliers_ShouldHaveHigherScores()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -71,7 +71,7 @@ public abstract class AnomalyDetectorTestBase
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Scores_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -87,7 +87,7 @@ public abstract class AnomalyDetectorTestBase
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Predict_ShouldBeDeterministic()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -101,7 +101,7 @@ public abstract class AnomalyDetectorTestBase
             Assert.Equal(scores1[i], scores2[i]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Clone_ShouldProduceSameScores()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -116,7 +116,7 @@ public abstract class AnomalyDetectorTestBase
             Assert.Equal(scores1[i], scores2[i]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OutputDimension_ShouldMatchInputRows()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -126,7 +126,7 @@ public abstract class AnomalyDetectorTestBase
         Assert.Equal(TrainSamples, model.Predict(trainX).Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Metadata_ShouldExistAfterTraining()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -136,7 +136,7 @@ public abstract class AnomalyDetectorTestBase
         Assert.NotNull(model.GetModelMetadata());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Parameters_ShouldBeNonEmpty()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

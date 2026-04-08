@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.UnitTests.KnowledgeDistillation;
 /// </summary>
 public class TeacherModelWrapperTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithValidParameters_InitializesCorrectly()
     {
         // Arrange
@@ -25,7 +25,7 @@ public class TeacherModelWrapperTests
         Assert.Equal(3, wrapper.OutputDimension);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithNullForwardFunc_ThrowsArgumentNullException()
     {
         // Arrange, Act & Assert
@@ -33,7 +33,7 @@ public class TeacherModelWrapperTests
             new TeacherModelWrapper<double>(null!, outputDimension: 3));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithInvalidOutputDimension_ThrowsArgumentException()
     {
         // Arrange
@@ -47,7 +47,7 @@ public class TeacherModelWrapperTests
             new TeacherModelWrapper<double>(forwardFunc, outputDimension: -1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetLogits_WithValidInput_ReturnsCorrectOutput()
     {
         // Arrange
@@ -68,7 +68,7 @@ public class TeacherModelWrapperTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetLogits_WithNullInput_ThrowsArgumentNullException()
     {
         // Arrange

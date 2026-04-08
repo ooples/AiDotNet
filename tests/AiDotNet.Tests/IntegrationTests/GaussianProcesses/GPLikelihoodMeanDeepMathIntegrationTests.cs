@@ -107,7 +107,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
 
     #region Gaussian Likelihood
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianLikelihood_LogLikelihood_HandCalculated()
     {
         // p(y|f) = N(y; f, σ²) for each element
@@ -130,7 +130,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(expected, actual, Tolerance, "Gaussian LogLikelihood: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianLikelihood_LogLikelihood_PerfectPrediction()
     {
         // When y == f, residuals are zero, so loglik = n * logNorm
@@ -147,7 +147,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(expected, actual, Tolerance, "Gaussian LogLikelihood perfect: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianLikelihood_Gradient_MatchesNumerical()
     {
         double sigma2 = 0.2;
@@ -163,7 +163,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertVectorsClose(numericalGrad, analyticalGrad, GradientTolerance, "Gaussian gradient: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianLikelihood_Gradient_HandCalculated()
     {
         // ∂log p/∂fi = (yi - fi) / σ²
@@ -180,7 +180,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(-1.0, grad[1], Tolerance, "Gaussian grad[1]: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianLikelihood_HessianDiag_IsConstant()
     {
         // Hessian = -1/σ² for all elements (independent of y and f values)
@@ -197,7 +197,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
             AssertClose(expected, hess[i], Tolerance, $"Gaussian hessian[{i}]: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianLikelihood_HessianDiag_MatchesNumerical()
     {
         double sigma2 = 0.3;
@@ -213,7 +213,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertVectorsClose(numericalHess, analyticalHess, GradientTolerance, "Gaussian hessian: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianLikelihood_PredictiveVariance_AddsNoiseVariance()
     {
         double sigma2 = 0.3;
@@ -226,7 +226,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(fVariance + sigma2, result, Tolerance, "Gaussian PredictiveVariance: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianLikelihood_TransformMean_IsIdentity()
     {
         var likelihood = new GaussianLikelihood<double>(0.1);
@@ -242,7 +242,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
 
     #region Bernoulli Likelihood
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BernoulliLikelihood_LogLikelihood_HandCalculated()
     {
         // log p(y|f) = y*f - log(1 + exp(f))
@@ -259,7 +259,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(expected, actual, Tolerance, "Bernoulli LogLikelihood y=1: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BernoulliLikelihood_LogLikelihood_NegativeClass()
     {
         // y=0, f=-1.0
@@ -275,7 +275,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(expected, actual, Tolerance, "Bernoulli LogLikelihood y=0: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BernoulliLikelihood_LogLikelihood_MultipleObservations()
     {
         var likelihood = new BernoulliLikelihood<double>();
@@ -294,7 +294,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(expected, actual, Tolerance, "Bernoulli LogLikelihood multi: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BernoulliLikelihood_Gradient_MatchesNumerical()
     {
         var likelihood = new BernoulliLikelihood<double>();
@@ -309,7 +309,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertVectorsClose(numericalGrad, analyticalGrad, GradientTolerance, "Bernoulli gradient: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BernoulliLikelihood_Gradient_HandCalculated()
     {
         // ∂log p/∂fi = yi - σ(fi)
@@ -327,7 +327,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(-0.5, grad[1], Tolerance, "Bernoulli grad[1]: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BernoulliLikelihood_HessianDiag_HandCalculated()
     {
         // Hessian = -σ(f) * (1 - σ(f))
@@ -342,7 +342,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(-0.25, hess[0], Tolerance, "Bernoulli hessian at f=0: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BernoulliLikelihood_HessianDiag_MatchesNumerical()
     {
         var likelihood = new BernoulliLikelihood<double>();
@@ -357,7 +357,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertVectorsClose(numericalHess, analyticalHess, GradientTolerance, "Bernoulli hessian: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BernoulliLikelihood_HessianDiag_AlwaysNegative()
     {
         // -σ(f)*(1-σ(f)) is always negative
@@ -372,7 +372,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
             Assert.True(hess[i] < 0, $"Bernoulli hessian[{i}] should be negative, got {hess[i]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BernoulliLikelihood_HessianDiag_MaxMagnitudeAtZero()
     {
         // |Hessian| is maximized at f=0 (σ=0.5, so -0.5*0.5=-0.25)
@@ -389,7 +389,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
             $"|H(0)|={Math.Abs(hessZero[0])} should be > |H(3)|={Math.Abs(hessLarge[0])}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BernoulliLikelihood_TransformMean_IsSigmoid()
     {
         var likelihood = new BernoulliLikelihood<double>();
@@ -404,7 +404,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         Assert.True(likelihood.TransformMean(-10.0) < 0.001, "sigmoid(-10) should be near 0");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BernoulliLikelihood_LogLikelihood_ConvertsNegativeLabels()
     {
         // Labels -1 should be converted to 0
@@ -426,7 +426,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
 
     #region Poisson Likelihood
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonLikelihood_LogLikelihood_HandCalculated()
     {
         // log p(y|f) = y*f - exp(f) - log(y!)
@@ -443,7 +443,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(expected, actual, Tolerance, "Poisson LogLikelihood: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonLikelihood_LogLikelihood_ZeroCount()
     {
         // y=0, f=0.5
@@ -459,7 +459,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(expected, actual, Tolerance, "Poisson LogLikelihood y=0: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonLikelihood_Gradient_MatchesNumerical()
     {
         var likelihood = new PoissonLikelihood<double>();
@@ -474,7 +474,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertVectorsClose(numericalGrad, analyticalGrad, GradientTolerance, "Poisson gradient: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonLikelihood_Gradient_HandCalculated()
     {
         // ∂log p/∂fi = yi - exp(fi)
@@ -491,7 +491,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(0.0, grad[1], Tolerance, "Poisson grad[1]: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonLikelihood_HessianDiag_HandCalculated()
     {
         // Hessian = -exp(fi)
@@ -506,7 +506,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(-Math.Exp(1.0), hess[1], Tolerance, "Poisson hessian[1]: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonLikelihood_HessianDiag_MatchesNumerical()
     {
         var likelihood = new PoissonLikelihood<double>();
@@ -521,7 +521,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertVectorsClose(numericalHess, analyticalHess, GradientTolerance, "Poisson hessian: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonLikelihood_TransformMean_IsExp()
     {
         var likelihood = new PoissonLikelihood<double>();
@@ -536,7 +536,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(Math.Exp(-1.0), likelihood.TransformMean(-1.0), Tolerance, "Poisson TransformMean(-1): ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonLikelihood_GradientIsZero_WhenCountEqualsRate()
     {
         // When y == exp(f), gradient = y - exp(f) = 0
@@ -556,7 +556,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
 
     #region Student-t Likelihood
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StudentTLikelihood_LogLikelihood_HandCalculated()
     {
         // log p(y|f) = logΓ((ν+1)/2) - logΓ(ν/2) - 0.5*log(νπσ²) - (ν+1)/2 * log(1 + (y-f)²/(νσ²))
@@ -579,7 +579,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(expected, actual, 1e-3, "StudentT LogLikelihood: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StudentTLikelihood_Gradient_MatchesNumerical()
     {
         var likelihood = new StudentTLikelihood<double>(0.5, 4.0);
@@ -594,7 +594,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertVectorsClose(numericalGrad, analyticalGrad, GradientTolerance, "StudentT gradient: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StudentTLikelihood_Gradient_HandCalculated()
     {
         // ∂log p/∂fi = (ν+1) * (yi-fi) / (νσ² + (yi-fi)²)
@@ -614,7 +614,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(expected, grad[0], Tolerance, "StudentT gradient hand: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StudentTLikelihood_HessianDiag_MatchesNumerical()
     {
         var likelihood = new StudentTLikelihood<double>(0.5, 4.0);
@@ -629,7 +629,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertVectorsClose(numericalHess, analyticalHess, GradientTolerance, "StudentT hessian: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StudentTLikelihood_Gradient_BoundedForOutliers()
     {
         // Student-t gradient is bounded: |(ν+1)*r/(νσ²+r²)| ≤ (ν+1)/(2√(νσ²))
@@ -650,7 +650,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
             $"StudentT outlier gradient should be bounded, got {outlierGradMagnitude}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StudentTLikelihood_PredictiveVariance_CorrectFormula()
     {
         // For ν>2: noise variance = νσ²/(ν-2)
@@ -667,7 +667,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(expected, result, Tolerance, "StudentT PredictiveVariance: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StudentTLikelihood_HessianDiag_HandCalculated()
     {
         // ∂²/∂f² = -(ν+1) * (νσ² - (y-f)²) / (νσ² + (y-f)²)²
@@ -695,7 +695,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
 
     #region ZeroMean
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ZeroMean_EvaluateSingle_ReturnsZero()
     {
         var mean = new ZeroMean<double>();
@@ -705,7 +705,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(0.0, result, Tolerance, "ZeroMean single: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ZeroMean_EvaluateMatrix_ReturnsZeros()
     {
         var mean = new ZeroMean<double>();
@@ -724,7 +724,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
 
     #region ConstantMean
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConstantMean_EvaluateSingle_ReturnsConstant()
     {
         var mean = new ConstantMean<double>(5.0);
@@ -734,7 +734,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(5.0, result, Tolerance, "ConstantMean single: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConstantMean_EvaluateMatrix_ReturnsSameConstant()
     {
         var mean = new ConstantMean<double>(3.14);
@@ -747,7 +747,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
             AssertClose(3.14, result[i], Tolerance, $"ConstantMean matrix[{i}]: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConstantMean_NegativeConstant()
     {
         var mean = new ConstantMean<double>(-2.5);
@@ -763,7 +763,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
 
     #region LinearMean
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearMean_EvaluateSingle_HandCalculated()
     {
         // m(x) = w^T * x + b = 2*1 + 3*2 + 1 = 9
@@ -774,7 +774,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(9.0, result, Tolerance, "LinearMean single: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearMean_EvaluateMatrix_HandCalculated()
     {
         var mean = new LinearMean<double>(new double[] { 1.0, -1.0 }, 0.5);
@@ -793,7 +793,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(0.5, result[2], Tolerance, "LinearMean row 2: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearMean_ZeroWeights_ReturnsBias()
     {
         var mean = new LinearMean<double>(new double[] { 0.0, 0.0 }, 7.0);
@@ -803,7 +803,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(7.0, result, Tolerance, "LinearMean zero weights: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearMean_DimensionMismatch_Throws()
     {
         var mean = new LinearMean<double>(new double[] { 1.0, 2.0 }, 0.0);
@@ -812,7 +812,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => mean.Evaluate(x));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearMean_FromData_FitsLinearTrend()
     {
         // y = 2*x + 1 (perfect linear data)
@@ -834,7 +834,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(1.0, mean.Bias, 0.01, "LinearMean.FromData bias: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearMean_FromData_2D_FitsCorrectly()
     {
         // y = 1*x1 + 2*x2 + 3
@@ -862,7 +862,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
 
     #region PolynomialMean
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialMean_Constant_ReturnsCoeff0()
     {
         // m(x) = 5.0
@@ -873,7 +873,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(5.0, result, Tolerance, "PolynomialMean constant: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialMean_Linear_HandCalculated()
     {
         // m(x) = 2 + 3x
@@ -885,7 +885,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(14.0, result, Tolerance, "PolynomialMean linear: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialMean_Quadratic_HandCalculated()
     {
         // m(x) = 1 + 0*x + 2*x²
@@ -897,7 +897,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(19.0, result, Tolerance, "PolynomialMean quadratic: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialMean_Cubic_HandCalculated()
     {
         // m(x) = 1 + 2x + 3x² + 4x³
@@ -909,7 +909,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(49.0, result, Tolerance, "PolynomialMean cubic: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialMean_AtZero_ReturnsConstant()
     {
         var mean = new PolynomialMean<double>(new double[] { 7.0, 3.0, 5.0 });
@@ -920,7 +920,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(7.0, result, Tolerance, "PolynomialMean at zero: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialMean_NegativeInput_HandCalculated()
     {
         // m(x) = 1 + 2x + 3x², x = -1
@@ -932,7 +932,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(2.0, result, Tolerance, "PolynomialMean negative input: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialMean_EvaluateMatrix_HandCalculated()
     {
         // m(x) = 1 + 2x
@@ -954,7 +954,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
 
     #region BetaLikelihood
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BetaLikelihood_GetMeans_IsSigmoid()
     {
         var likelihood = new BetaLikelihood<double>(10.0);
@@ -974,7 +974,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(expected, mu[2], Tolerance, "BetaLikelihood sigmoid(-2): ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BetaLikelihood_GetBetaParameters_HandCalculated()
     {
         var likelihood = new BetaLikelihood<double>(10.0);
@@ -988,7 +988,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(3.0, beta, Tolerance, "Beta beta: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BetaLikelihood_GetBetaParameters_Symmetry()
     {
         var likelihood = new BetaLikelihood<double>(10.0);
@@ -1000,7 +1000,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(5.0, beta, Tolerance, "Beta symmetric beta: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BetaLikelihood_GetMeans_OutputInRange()
     {
         var likelihood = new BetaLikelihood<double>(10.0);
@@ -1021,7 +1021,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
 
     #region Cross-Likelihood Consistency
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianLikelihood_LogLikelihood_IncreasesWithBetterFit()
     {
         var likelihood = new GaussianLikelihood<double>(0.1);
@@ -1037,7 +1037,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
             $"Good fit LogLik ({llGood}) should be > bad fit ({llBad})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonLikelihood_LogLikelihood_IncreasesWithBetterFit()
     {
         var likelihood = new PoissonLikelihood<double>();
@@ -1054,7 +1054,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
             $"Good fit LogLik ({llGood}) should be > bad fit ({llBad})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BernoulliLikelihood_LogLikelihood_IncreasesWithBetterFit()
     {
         var likelihood = new BernoulliLikelihood<double>();
@@ -1070,7 +1070,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
             $"Good fit LogLik ({llGood}) should be > bad fit ({llBad})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StudentTLikelihood_MoreRobust_ThanGaussian()
     {
         // With outliers, Student-t log-likelihood should degrade less than Gaussian
@@ -1090,7 +1090,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
             $"|Gaussian LL| ({Math.Abs(gaussianLL)}) should be > |StudentT LL| ({Math.Abs(studentLL)}) with outliers");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllLikelihoods_GradientZero_AtOptimalPrediction()
     {
         // Gaussian: grad=0 when y==f
@@ -1114,7 +1114,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianLikelihood_SmallVariance_HighPenaltyForMismatch()
     {
         // With σ²=0.001 and residual=1.0: penalty = 1.0²/(2*0.001) = 500
@@ -1128,7 +1128,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         Assert.True(ll < -100.0, $"Small variance with large residual should give very negative LL, got {ll}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BernoulliLikelihood_ExtremeF_Stable()
     {
         var likelihood = new BernoulliLikelihood<double>();
@@ -1142,7 +1142,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         Assert.False(double.IsInfinity(ll), "LogLikelihood should not be Infinity for extreme f");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonLikelihood_ClipsLargeF()
     {
         var likelihood = new PoissonLikelihood<double>();
@@ -1156,7 +1156,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         Assert.False(double.IsPositiveInfinity(ll), "Poisson LogLikelihood should not be +Inf");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StudentTLikelihood_ZeroResidual_GradientIsZero()
     {
         var likelihood = new StudentTLikelihood<double>(0.5, 4.0);
@@ -1168,7 +1168,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(0.0, grad[0], Tolerance, "StudentT zero-residual gradient: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianLikelihood_LargeVariance_MildPenalty()
     {
         var largeVar = new GaussianLikelihood<double>(100.0);
@@ -1181,7 +1181,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         Assert.True(ll > -5.0, $"Large variance should give mild penalty, got {ll}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialMean_HighDegree_HornersMethod()
     {
         // Test that Horner's method works correctly for degree 5
@@ -1194,7 +1194,7 @@ public class GPLikelihoodMeanDeepMathIntegrationTests
         AssertClose(63.0, result, Tolerance, "PolynomialMean degree 5: ");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearMean_FromData_Overdetermined_LeastSquares()
     {
         // Noisy data: y ≈ 3*x + 2 with noise

@@ -17,7 +17,7 @@ public class DataVersionControlDeepMathIntegrationTests
     // Hash-Based Integrity: SHA-256 Properties
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashMath_SHA256_Deterministic()
     {
         byte[] data = Encoding.UTF8.GetBytes("Hello, dataset version control!");
@@ -27,7 +27,7 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.Equal(hash1, hash2);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashMath_SHA256_FixedLength()
     {
         // SHA-256 always produces 256 bits = 64 hex characters
@@ -38,7 +38,7 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.Equal(64, hash2.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashMath_SHA256_AvalancheEffect()
     {
         // A single bit change should produce a completely different hash
@@ -76,7 +76,7 @@ public class DataVersionControlDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HashMath_CollisionResistance_BirthdayBound()
     {
         // Birthday bound for SHA-256: ~2^128 hashes needed for 50% collision probability
@@ -147,7 +147,7 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.Equal(expectedPercent, changePercent, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComparisonMath_SchemaCompatibility_ColumnsAdded()
     {
         string[] originalColumns = { "id", "name", "age" };
@@ -161,7 +161,7 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.Empty(removed);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ComparisonMath_SchemaCompatibility_ColumnsRemoved()
     {
         string[] originalColumns = { "id", "name", "age", "address" };
@@ -205,7 +205,7 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.Equal(expectedEffect, effect);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DriftMath_PopulationStabilityIndex()
     {
         // PSI = sum((actual_i - expected_i) * ln(actual_i / expected_i))
@@ -249,7 +249,7 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.Equal(expectedTotalBytes, totalBytes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StorageMath_DeltaStorage_SavingsEstimate()
     {
         // If only 10% of data changes between versions, delta storage saves 90%
@@ -269,7 +269,7 @@ public class DataVersionControlDeepMathIntegrationTests
     // Lineage Math: DAG Properties
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LineageMath_DAG_TransitiveReachability()
     {
         // Dataset lineage forms a DAG (Directed Acyclic Graph)
@@ -306,7 +306,7 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.Contains("validation_set", reachable);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LineageMath_DAG_NoCycles()
     {
         // A proper lineage DAG has no cycles
@@ -322,7 +322,7 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.False(hasCycle, "Lineage graph should not contain cycles");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LineageMath_TopologicalSort_ValidOrdering()
     {
         // Topological sort gives valid processing order
@@ -346,7 +346,7 @@ public class DataVersionControlDeepMathIntegrationTests
     // Data Integrity: Checksum Verification
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntegrityMath_ChecksumVerification_ValidData()
     {
         byte[] data = Encoding.UTF8.GetBytes("important dataset contents");
@@ -357,7 +357,7 @@ public class DataVersionControlDeepMathIntegrationTests
         Assert.Equal(expectedHash, actualHash);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntegrityMath_ChecksumVerification_CorruptedData()
     {
         byte[] originalData = Encoding.UTF8.GetBytes("important dataset contents");

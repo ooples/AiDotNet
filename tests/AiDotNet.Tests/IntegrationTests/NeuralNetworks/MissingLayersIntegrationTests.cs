@@ -113,7 +113,7 @@ public class MissingLayersIntegrationTests
 
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DiffusionConvLayer_Forward_BatchedInputProducesExpectedShape()
     {
         int batchSize = 2;
@@ -145,7 +145,7 @@ public class MissingLayersIntegrationTests
 
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MeshPoolLayer_Forward_ProducesExpectedShape()
     {
         int numEdges = 6;
@@ -172,7 +172,7 @@ public class MissingLayersIntegrationTests
 
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpatialPoolerLayer_Forward_ProducesExpectedShape()
     {
         int inputSize = 8;
@@ -185,7 +185,7 @@ public class MissingLayersIntegrationTests
         Assert.Equal(new[] { columnCount }, output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpiralConvLayer_Forward_BatchedInputProducesExpectedShape()
     {
         int batchSize = 2;
@@ -210,7 +210,7 @@ public class MissingLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TemporalMemoryLayer_Forward_ProducesExpectedShape()
     {
         int columns = 4;

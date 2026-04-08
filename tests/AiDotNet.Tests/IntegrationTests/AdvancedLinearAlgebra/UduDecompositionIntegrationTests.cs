@@ -192,7 +192,7 @@ public class UduDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UduDecomposition_IdentityMatrix_HasAllOnesInD()
     {
         // Arrange
@@ -209,7 +209,7 @@ public class UduDecompositionIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UduDecomposition_DiagonalMatrix_PreservesDiagonalInD()
     {
         // Arrange - Diagonal matrix with positive values
@@ -225,7 +225,7 @@ public class UduDecompositionIntegrationTests
         Assert.True(maxDiff < Tolerance, $"Diagonal matrix reconstruction failed. Max diff: {maxDiff}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UduDecomposition_SpdMatrix_HasPositiveD()
     {
         // Arrange - Positive definite matrix
@@ -279,7 +279,7 @@ public class UduDecompositionIntegrationTests
 
     #region Validation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UduDecomposition_NonSquareMatrix_ThrowsException()
     {
         // Arrange
@@ -294,7 +294,7 @@ public class UduDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UduDecomposition_LargeMatrix_CorrectDecomposition()
     {
         // Arrange

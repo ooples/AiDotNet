@@ -11,7 +11,7 @@ public class AdvancedAlgebraLayerTests
 {
     #region OctonionLinearLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OctonionLinearLayer_Construction_SetsCorrectShape()
     {
         // Arrange & Act
@@ -24,7 +24,7 @@ public class AdvancedAlgebraLayerTests
         // (InputShape and OutputShape are protected, so we test via Forward)
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OctonionLinearLayer_ParameterCount_IsCorrect()
     {
         // Arrange
@@ -38,7 +38,7 @@ public class AdvancedAlgebraLayerTests
         Assert.Equal(80, paramCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OctonionLinearLayer_Forward_ProducesCorrectShape()
     {
         // Arrange
@@ -64,7 +64,7 @@ public class AdvancedAlgebraLayerTests
         Assert.Equal(16, output.Shape[1]); // 2 octonions * 8 components
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OctonionLinearLayer_GetSetParameters_RoundTrips()
     {
         // Arrange
@@ -90,7 +90,7 @@ public class AdvancedAlgebraLayerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OctonionLinearLayer_ResetState_ClearsInternalState()
     {
         // Arrange
@@ -108,7 +108,7 @@ public class AdvancedAlgebraLayerTests
         Assert.NotNull(output);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OctonionLinearLayer_SupportsTraining_IsTrue()
     {
         // Arrange
@@ -125,7 +125,7 @@ public class AdvancedAlgebraLayerTests
 
     #region HyperbolicLinearLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HyperbolicLinearLayer_Construction_SetsCorrectShape()
     {
         // Arrange & Act
@@ -136,7 +136,7 @@ public class AdvancedAlgebraLayerTests
         Assert.Equal(5, layer.OutputFeatures);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HyperbolicLinearLayer_Construction_RequiresNegativeCurvature()
     {
         // Act & Assert
@@ -144,7 +144,7 @@ public class AdvancedAlgebraLayerTests
         Assert.Throws<ArgumentException>(() => new HyperbolicLinearLayer<double>(10, 5, curvature: 0.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HyperbolicLinearLayer_Forward_ProducesCorrectShape()
     {
         // Arrange
@@ -170,7 +170,7 @@ public class AdvancedAlgebraLayerTests
         Assert.Equal(5, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HyperbolicLinearLayer_ParameterCount_IsCorrect()
     {
         // Arrange
@@ -185,7 +185,7 @@ public class AdvancedAlgebraLayerTests
         Assert.Equal(55, paramCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HyperbolicLinearLayer_GetSetParameters_RoundTrips()
     {
         // Arrange
@@ -211,7 +211,7 @@ public class AdvancedAlgebraLayerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void HyperbolicLinearLayer_SupportsTraining_IsTrue()
     {
         // Arrange
@@ -225,7 +225,7 @@ public class AdvancedAlgebraLayerTests
 
     #region SparseLinearLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SparseLinearLayer_Construction_SetsCorrectShape()
     {
         // Arrange & Act
@@ -236,7 +236,7 @@ public class AdvancedAlgebraLayerTests
         Assert.Equal(50, layer.OutputFeatures);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SparseLinearLayer_Construction_RequiresValidSparsity()
     {
         // Act & Assert
@@ -245,7 +245,7 @@ public class AdvancedAlgebraLayerTests
         Assert.Throws<ArgumentException>(() => new SparseLinearLayer<double>(100, 50, sparsity: 1.5));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SparseLinearLayer_Forward_ProducesCorrectShape()
     {
         // Arrange
@@ -271,7 +271,7 @@ public class AdvancedAlgebraLayerTests
         Assert.Equal(10, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SparseLinearLayer_ParameterCount_ReflectsSparsity()
     {
         // Arrange
@@ -287,7 +287,7 @@ public class AdvancedAlgebraLayerTests
         Assert.True(paramCount > 100, $"Parameter count {paramCount} should be greater than 100");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SparseLinearLayer_GetSetParameters_RoundTrips()
     {
         // Arrange
@@ -313,7 +313,7 @@ public class AdvancedAlgebraLayerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SparseLinearLayer_SupportsTraining_IsTrue()
     {
         // Arrange
@@ -336,7 +336,7 @@ public class AdvancedAlgebraLayerTests
 
     #region InstanceNormalizationLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InstanceNormalizationLayer_Construction_SetsCorrectProperties()
     {
         // Arrange & Act
@@ -348,7 +348,7 @@ public class AdvancedAlgebraLayerTests
         Assert.True(layer.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InstanceNormalizationLayer_Construction_RequiresPositiveChannels()
     {
         // Act & Assert
@@ -356,7 +356,7 @@ public class AdvancedAlgebraLayerTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new InstanceNormalizationLayer<double>(-1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InstanceNormalizationLayer_Forward_ProducesCorrectShape_2D()
     {
         // Arrange
@@ -378,7 +378,7 @@ public class AdvancedAlgebraLayerTests
         Assert.Equal(10, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InstanceNormalizationLayer_Forward_ProducesCorrectShape_4D()
     {
         // Arrange
@@ -406,7 +406,7 @@ public class AdvancedAlgebraLayerTests
         Assert.Equal(width, output.Shape[3]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InstanceNormalizationLayer_ParameterCount_IsCorrect()
     {
         // Arrange - with affine (default)
@@ -418,7 +418,7 @@ public class AdvancedAlgebraLayerTests
         Assert.Equal(0, layerNonAffine.ParameterCount); // no learnable params
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InstanceNormalizationLayer_GetSetParameters_RoundTrips()
     {
         // Arrange
@@ -444,7 +444,7 @@ public class AdvancedAlgebraLayerTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InstanceNormalizationLayer_ResetState_ClearsInternalState()
     {
         // Arrange
@@ -469,7 +469,7 @@ public class AdvancedAlgebraLayerTests
     // InstanceNormalizationLayer JIT test removed — JIT moved to Tensors engine level (v0.28.0).
 
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InstanceNormalizationLayer_NonAffine_HasNoParameters()
     {
         // Arrange

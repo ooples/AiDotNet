@@ -8,7 +8,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
 {
     public class ContinuumMemorySystemLayerTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithValidParameters_InitializesCorrectly()
         {
             // Arrange & Act
@@ -25,7 +25,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Equal(3, layer.GetMLPBlocks().Length);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullInputShape_ThrowsArgumentException()
         {
             // Act & Assert
@@ -35,7 +35,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 numFrequencyLevels: 3));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithEmptyInputShape_ThrowsArgumentException()
         {
             // Act & Assert
@@ -45,7 +45,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 numFrequencyLevels: 3));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNegativeInputDim_ThrowsArgumentException()
         {
             // Act & Assert
@@ -55,7 +55,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 numFrequencyLevels: 3));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNegativeHiddenDim_ThrowsArgumentException()
         {
             // Act & Assert
@@ -65,7 +65,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 numFrequencyLevels: 3));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithZeroFrequencyLevels_ThrowsArgumentException()
         {
             // Act & Assert
@@ -75,7 +75,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 numFrequencyLevels: 0));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithTooManyFrequencyLevels_ThrowsArgumentException()
         {
             // Act & Assert
@@ -85,7 +85,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 numFrequencyLevels: 15));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithMismatchedUpdateFrequenciesLength_ThrowsArgumentException()
         {
             // Act & Assert
@@ -96,7 +96,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 updateFrequencies: new[] { 1, 10 })); // Wrong length
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNegativeUpdateFrequency_ThrowsArgumentException()
         {
             // Act & Assert
@@ -107,7 +107,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 updateFrequencies: new[] { 1, -10, 100 }));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithDefaultUpdateFrequencies_CreatesCorrectSequence()
         {
             // Arrange & Act
@@ -123,7 +123,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Equal(1000, layer.UpdateFrequencies[3]); // 10^3
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_CalculatesChunkSizesCorrectly()
         {
             // Arrange & Act
@@ -140,7 +140,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Equal(1, layer.ChunkSizes[2]);   // 100/100
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Forward_WithValidInput_ReturnsCorrectShape()
         {
             // Arrange
@@ -165,7 +165,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Equal(128, output.Shape[1]); // Hidden dim
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Forward_WithNullInput_ThrowsArgumentNullException()
         {
             // Arrange
@@ -178,7 +178,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Throws<ArgumentNullException>(() => layer.Forward((Tensor<double>)null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Forward_ProcessesSequentiallyThroughAllMLPBlocks()
         {
             // Arrange
@@ -210,7 +210,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
 
 
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ResetMemory_ResetsAllMLPBlocksSuccessfully()
         {
             // Arrange
@@ -236,7 +236,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Equal(3, mlpBlocks.Length);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ConsolidateMemory_TransfersKnowledgeBetweenLevels()
         {
             // Arrange
@@ -266,7 +266,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void UpdateFrequencies_DefaultValues_MatchPaperSpecification()
         {
             // Arrange & Act
@@ -283,7 +283,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             Assert.Equal(1000, frequencies[3]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetMLPBlocks_ReturnsCorrectNumberOfBlocks()
         {
             // Arrange

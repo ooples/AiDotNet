@@ -15,7 +15,7 @@ namespace AiDotNet.Tests.UnitTests.KnowledgeDistillation;
 /// </summary>
 public class TeacherModelFactoryTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateTeacher_NeuralNetwork_WithModel_ReturnsTeacherModelWrapper()
     {
         // Arrange
@@ -33,7 +33,7 @@ public class TeacherModelFactoryTests
         Assert.Equal(5, teacher.OutputDimension);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateTeacher_NeuralNetwork_WithoutModel_ThrowsArgumentException()
     {
         // Arrange, Act & Assert
@@ -43,7 +43,7 @@ public class TeacherModelFactoryTests
         Assert.Contains("Model is required", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateTeacher_Ensemble_WithModels_ReturnsEnsembleTeacher()
     {
         // Arrange
@@ -65,7 +65,7 @@ public class TeacherModelFactoryTests
         Assert.IsType<EnsembleTeacherModel<double>>(teacher);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateTeacher_Ensemble_WithoutModels_ThrowsArgumentException()
     {
         // Arrange, Act & Assert
@@ -75,7 +75,7 @@ public class TeacherModelFactoryTests
         Assert.Contains("Ensemble models are required", exception.Message);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateTeacher_Pretrained_WithModel_ReturnsPretrainedTeacher()
     {
         // Arrange
@@ -92,7 +92,7 @@ public class TeacherModelFactoryTests
         Assert.IsType<PretrainedTeacherModel<double>>(teacher);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateTeacher_Transformer_WithModel_ReturnsTransformerTeacher()
     {
         // Arrange
@@ -109,7 +109,7 @@ public class TeacherModelFactoryTests
         Assert.IsType<TransformerTeacherModel<double>>(teacher);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateTeacher_MultiModal_WithModels_ReturnsMultiModalTeacher()
     {
         // Arrange
@@ -131,7 +131,7 @@ public class TeacherModelFactoryTests
         Assert.IsType<MultiModalTeacherModel<double>>(teacher);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateTeacher_Adaptive_WithModel_ReturnsAdaptiveTeacher()
     {
         // Arrange
@@ -149,7 +149,7 @@ public class TeacherModelFactoryTests
         Assert.Equal(5, teacher.OutputDimension);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateTeacher_Online_WithModel_ReturnsOnlineTeacher()
     {
         // Arrange
@@ -166,7 +166,7 @@ public class TeacherModelFactoryTests
         Assert.IsType<OnlineTeacherModel<double>>(teacher);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateTeacher_Curriculum_WithModel_ReturnsCurriculumTeacher()
     {
         // Arrange
@@ -184,7 +184,7 @@ public class TeacherModelFactoryTests
         Assert.Equal(5, teacher.OutputDimension);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateTeacher_Self_WithoutModel_ReturnsSelfTeacher()
     {
         // Arrange & Act
@@ -198,7 +198,7 @@ public class TeacherModelFactoryTests
         Assert.Equal(10, teacher.OutputDimension);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateTeacher_Quantized_WithModel_ReturnsQuantizedTeacher()
     {
         // Arrange
@@ -216,7 +216,7 @@ public class TeacherModelFactoryTests
         Assert.Equal(5, teacher.OutputDimension);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateTeacher_Distributed_WithModels_ReturnsDistributedTeacher()
     {
         // Arrange

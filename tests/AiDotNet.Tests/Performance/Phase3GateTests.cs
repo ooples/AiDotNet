@@ -17,7 +17,7 @@ public class Phase3GateTests
 {
     #region InferenceContext Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceContext_Rent_ReturnsValidTensor()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 10);
@@ -32,7 +32,7 @@ public class Phase3GateTests
         Assert.Equal(32, tensor.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceContext_Rent1D_ReturnsCorrectShape()
     {
         using var context = new InferenceContext<float>();
@@ -43,7 +43,7 @@ public class Phase3GateTests
         Assert.Equal(100, tensor.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceContext_Rent2D_ReturnsCorrectShape()
     {
         using var context = new InferenceContext<float>();
@@ -55,7 +55,7 @@ public class Phase3GateTests
         Assert.Equal(64, tensor.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceContext_Rent3D_ReturnsCorrectShape()
     {
         using var context = new InferenceContext<float>();
@@ -68,7 +68,7 @@ public class Phase3GateTests
         Assert.Equal(64, tensor.Shape[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceContext_Rent4D_ReturnsCorrectShape()
     {
         using var context = new InferenceContext<float>();
@@ -82,7 +82,7 @@ public class Phase3GateTests
         Assert.Equal(32, tensor.Shape[3]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceContext_RentLike_MatchesTemplate()
     {
         using var context = new InferenceContext<float>();
@@ -96,7 +96,7 @@ public class Phase3GateTests
         Assert.Equal(32, tensor.Shape[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceContext_TracksRentedTensorCount()
     {
         using var context = new InferenceContext<float>();
@@ -113,7 +113,7 @@ public class Phase3GateTests
         Assert.Equal(3, context.RentedTensorCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceContext_DisposedReturnsToPool()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 10);
@@ -133,7 +133,7 @@ public class Phase3GateTests
         Assert.Equal(3, pool.TotalPooledTensors);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceContext_Release_ReturnsImmediately()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 10);
@@ -146,7 +146,7 @@ public class Phase3GateTests
         Assert.Equal(1, pool.TotalPooledTensors);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceContext_DisablePooling_AllocatesNew()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 10);
@@ -167,7 +167,7 @@ public class Phase3GateTests
         Assert.Equal(1, pool.TotalPooledTensors);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceContext_DisposeAfterObjectDisposed_ThrowsException()
     {
         var context = new InferenceContext<float>();
@@ -180,7 +180,7 @@ public class Phase3GateTests
 
     #region InferenceScope Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceScope_Current_IsNullByDefault()
     {
         // Ensure no context is set
@@ -190,7 +190,7 @@ public class Phase3GateTests
         Assert.False(InferenceScope<float>.IsActive);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceScope_Begin_SetsCurrentContext()
     {
         var context = new InferenceContext<float>();
@@ -206,7 +206,7 @@ public class Phase3GateTests
         Assert.False(InferenceScope<float>.IsActive);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceScope_NestedScopes_RestoreCorrectly()
     {
         var context1 = new InferenceContext<float>();
@@ -229,7 +229,7 @@ public class Phase3GateTests
         Assert.Null(InferenceScope<float>.Current);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceScope_RentOrCreate_UsesPoolWhenActive()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 10);
@@ -250,7 +250,7 @@ public class Phase3GateTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceScope_RentOrCreateLike_MatchesTemplate()
     {
         var template = new Tensor<float>(new[] { 8, 16 });
@@ -265,7 +265,7 @@ public class Phase3GateTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceScope_IsThreadLocal()
     {
         var context1 = new InferenceContext<float>();
@@ -305,7 +305,7 @@ public class Phase3GateTests
 
     #region CrossAttentionLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CrossAttentionLayer_Forward_ProducesValidOutput()
     {
         // Test that CrossAttentionLayer still works after refactoring
@@ -343,7 +343,7 @@ public class Phase3GateTests
         Assert.Equal(64, output.Shape[2]); // queryDim
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CrossAttentionLayer_Forward_DifferentContextLength()
     {
         // Context can have different sequence length than query
@@ -371,7 +371,7 @@ public class Phase3GateTests
         Assert.Equal(new[] { 1, 8, 32 }, output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CrossAttentionLayer_Forward_IsDeterministic()
     {
         var layer = new CrossAttentionLayer<float>(
@@ -407,7 +407,7 @@ public class Phase3GateTests
 
     #region SelfAttentionLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SelfAttentionLayer_Forward_ProducesValidOutput()
     {
         // Constructor: (sequenceLength, embeddingDimension, headCount, activationFunction?)
@@ -437,7 +437,7 @@ public class Phase3GateTests
         Assert.Equal(64, output.Shape[2]); // embeddingDim
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SelfAttentionLayer_Forward_IsDeterministic()
     {
         var layer = new SelfAttentionLayer<float>(
@@ -468,7 +468,7 @@ public class Phase3GateTests
 
     #region GraphAttentionLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GraphAttentionLayer_Forward_ProducesValidOutput()
     {
         // Constructor: (inputFeatures, outputFeatures, numHeads, alpha, dropoutRate, ...)
@@ -509,7 +509,7 @@ public class Phase3GateTests
 
     #region Performance Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceContext_RentReturn_IsFast()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 100);
@@ -537,7 +537,7 @@ public class Phase3GateTests
         Assert.True(usPerIteration < 500, $"Context cycle took {usPerIteration:F2} microseconds, expected < 500");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void InferenceScope_RentOrCreate_WithPooling_IsFasterThanWithout()
     {
         var pool = new TensorPool<float>(maxPoolSizeMB: 100);
@@ -581,7 +581,7 @@ public class Phase3GateTests
             $"Pooled ({swPooled.ElapsedMilliseconds}ms) should not be >10x slower than allocation ({swAlloc.ElapsedMilliseconds}ms)");
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CrossAttentionLayer_Forward_ExecutesInReasonableTime()
     {
         var layer = new CrossAttentionLayer<float>(

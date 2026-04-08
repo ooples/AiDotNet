@@ -25,7 +25,7 @@ public class RBFDeepMathIntegrationTests
     // GaussianRBF: f(r) = exp(-ε*r²)
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianRBF_HandCalculated_Epsilon1_r1()
     {
         // f(1) = exp(-1*1²) = exp(-1) ≈ 0.367879441
@@ -33,7 +33,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(Math.Exp(-1.0), rbf.Compute(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianRBF_HandCalculated_Epsilon2_r1()
     {
         // f(1) = exp(-2*1²) = exp(-2) ≈ 0.135335283
@@ -41,7 +41,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(Math.Exp(-2.0), rbf.Compute(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianRBF_HandCalculated_Epsilon1_r2()
     {
         // f(2) = exp(-1*4) = exp(-4) ≈ 0.018315639
@@ -49,7 +49,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(Math.Exp(-4.0), rbf.Compute(2.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianRBF_Derivative_MatchesNumerical()
     {
         // f'(r) = -2εr * exp(-ε*r²)
@@ -60,7 +60,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianRBF_Derivative_HandCalculated_r1_epsilon1()
     {
         // f'(1) = -2*1*1 * exp(-1) = -2*exp(-1) ≈ -0.735758882
@@ -69,7 +69,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(expected, rbf.ComputeDerivative(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianRBF_WidthDerivative_MatchesNumerical()
     {
         // df/dε = -r² * exp(-ε*r²)
@@ -88,7 +88,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianRBF_WidthDerivative_HandCalculated()
     {
         // df/dε at r=1, ε=1: -1² * exp(-1) = -exp(-1) ≈ -0.367879441
@@ -96,7 +96,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(-Math.Exp(-1.0), rbf.ComputeWidthDerivative(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianRBF_Symmetry_PositiveEqualsNegativeR()
     {
         var rbf = new GaussianRBF<double>(1.5);
@@ -107,7 +107,7 @@ public class RBFDeepMathIntegrationTests
     // MultiquadricRBF: f(r) = √(r² + ε²)
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiquadricRBF_HandCalculated_AtZero()
     {
         // f(0) = √(0 + 1²) = 1
@@ -115,7 +115,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(1.0, rbf.Compute(0.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiquadricRBF_HandCalculated_r3_epsilon4()
     {
         // f(3) = √(9 + 16) = √25 = 5
@@ -123,7 +123,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(5.0, rbf.Compute(3.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiquadricRBF_HandCalculated_r1_epsilon1()
     {
         // f(1) = √(1 + 1) = √2 ≈ 1.41421356
@@ -131,7 +131,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(2.0), rbf.Compute(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiquadricRBF_Derivative_MatchesNumerical()
     {
         // f'(r) = r / √(r² + ε²)
@@ -141,7 +141,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiquadricRBF_Derivative_HandCalculated()
     {
         // f'(3) with ε=4: 3/√(9+16) = 3/5 = 0.6
@@ -149,7 +149,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.6, rbf.ComputeDerivative(3.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiquadricRBF_WidthDerivative_MatchesNumerical()
     {
         // df/dε = ε / √(r² + ε²)
@@ -166,7 +166,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiquadricRBF_WidthDerivative_HandCalculated()
     {
         // df/dε at r=3, ε=4: 4/√(9+16) = 4/5 = 0.8
@@ -174,7 +174,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.8, rbf.ComputeWidthDerivative(3.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiquadricRBF_Monotonically_Increasing()
     {
         var rbf = new MultiquadricRBF<double>(1.0);
@@ -191,7 +191,7 @@ public class RBFDeepMathIntegrationTests
     // InverseMultiquadricRBF: f(r) = 1/√(r² + ε²)
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseMultiquadricRBF_HandCalculated_AtZero()
     {
         // f(0) = 1/√(0 + 1) = 1
@@ -199,7 +199,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(1.0, rbf.Compute(0.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseMultiquadricRBF_HandCalculated_r3_epsilon4()
     {
         // f(3) = 1/√(9 + 16) = 1/5 = 0.2
@@ -207,7 +207,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.2, rbf.Compute(3.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseMultiquadricRBF_Derivative_MatchesNumerical()
     {
         // f'(r) = -r / (r² + ε²)^(3/2)
@@ -217,7 +217,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseMultiquadricRBF_Derivative_HandCalculated()
     {
         // f'(3) with ε=4: -3 / (9+16)^(3/2) = -3 / 125 = -0.024
@@ -225,7 +225,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(-3.0 / 125.0, rbf.ComputeDerivative(3.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseMultiquadricRBF_WidthDerivative_MatchesNumerical()
     {
         double r = 2.0;
@@ -241,7 +241,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseMultiquadricRBF_IsReciprocal_OfMultiquadric()
     {
         // InverseMultiquadric(r) = 1 / Multiquadric(r)
@@ -257,7 +257,7 @@ public class RBFDeepMathIntegrationTests
     // LinearRBF: f(r) = r
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearRBF_ComputeIsIdentity()
     {
         var rbf = new LinearRBF<double>();
@@ -266,7 +266,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(100.0, rbf.Compute(100.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearRBF_DerivativeAlwaysOne()
     {
         var rbf = new LinearRBF<double>();
@@ -275,7 +275,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(1.0, rbf.ComputeDerivative(999.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearRBF_WidthDerivativeAlwaysZero()
     {
         var rbf = new LinearRBF<double>();
@@ -287,7 +287,7 @@ public class RBFDeepMathIntegrationTests
     // CubicRBF: f(r) = (r/width)³
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CubicRBF_HandCalculated_Width1()
     {
         // f(2) = (2/1)³ = 8
@@ -295,7 +295,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(8.0, rbf.Compute(2.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CubicRBF_HandCalculated_Width2()
     {
         // f(4) = (4/2)³ = 8
@@ -303,14 +303,14 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(8.0, rbf.Compute(4.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CubicRBF_AtZero_ReturnsZero()
     {
         var rbf = new CubicRBF<double>(1.0);
         Assert.Equal(0.0, rbf.Compute(0.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CubicRBF_Derivative_MatchesNumerical()
     {
         // f'(r) = 3r²/width³
@@ -320,7 +320,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CubicRBF_Derivative_HandCalculated()
     {
         // f'(3) with width=1: 3*9/1 = 27
@@ -328,7 +328,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(27.0, rbf.ComputeDerivative(3.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CubicRBF_WidthDerivative_MatchesNumerical()
     {
         // df/dwidth = -3r³/width⁴
@@ -345,7 +345,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CubicRBF_WidthDerivative_HandCalculated()
     {
         // df/dwidth at r=2, width=1: -3*8/1 = -24
@@ -357,7 +357,7 @@ public class RBFDeepMathIntegrationTests
     // ExponentialRBF: f(r) = exp(-ε*r)
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExponentialRBF_HandCalculated_AtZero()
     {
         // f(0) = exp(0) = 1
@@ -365,7 +365,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(1.0, rbf.Compute(0.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExponentialRBF_HandCalculated_Epsilon1_r1()
     {
         // f(1) = exp(-1) ≈ 0.367879441
@@ -373,7 +373,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(Math.Exp(-1.0), rbf.Compute(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExponentialRBF_HandCalculated_Epsilon2_r3()
     {
         // f(3) = exp(-2*3) = exp(-6) ≈ 0.002478752
@@ -381,7 +381,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(Math.Exp(-6.0), rbf.Compute(3.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExponentialRBF_Derivative_MatchesNumerical()
     {
         // f'(r) = -ε * exp(-ε*r)
@@ -391,7 +391,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExponentialRBF_Derivative_HandCalculated()
     {
         // f'(1) with ε=1: -1 * exp(-1) ≈ -0.367879441
@@ -399,7 +399,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(-Math.Exp(-1.0), rbf.ComputeDerivative(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExponentialRBF_WidthDerivative_MatchesNumerical()
     {
         // df/dε = -r * exp(-ε*r)
@@ -416,7 +416,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExponentialRBF_WidthDerivative_HandCalculated()
     {
         // df/dε at r=3, ε=1: -3 * exp(-3) ≈ -0.149361
@@ -424,7 +424,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(-3.0 * Math.Exp(-3.0), rbf.ComputeWidthDerivative(3.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExponentialRBF_MonotonicallyDecreasing()
     {
         var rbf = new ExponentialRBF<double>(1.0);
@@ -441,14 +441,14 @@ public class RBFDeepMathIntegrationTests
     // ThinPlateSplineRBF: f(r) = r² * log(r)
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThinPlateSplineRBF_AtZero_ReturnsZero()
     {
         var rbf = new ThinPlateSplineRBF<double>();
         Assert.Equal(0.0, rbf.Compute(0.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThinPlateSplineRBF_HandCalculated_r1()
     {
         // f(1) = 1² * log(1) = 0
@@ -456,7 +456,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.0, rbf.Compute(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThinPlateSplineRBF_HandCalculated_rE()
     {
         // f(e) = e² * log(e) = e² * 1 = e² ≈ 7.389056
@@ -464,7 +464,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(Math.E * Math.E, rbf.Compute(Math.E), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThinPlateSplineRBF_HandCalculated_r2()
     {
         // f(2) = 4 * log(2) ≈ 2.772589
@@ -472,7 +472,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(4.0 * Math.Log(2.0), rbf.Compute(2.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThinPlateSplineRBF_NegativeForSmallR()
     {
         // For 0 < r < 1, log(r) < 0 so r²*log(r) < 0
@@ -480,7 +480,7 @@ public class RBFDeepMathIntegrationTests
         Assert.True(rbf.Compute(0.5) < 0.0, "TPS should be negative for 0 < r < 1");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThinPlateSplineRBF_Derivative_MatchesNumerical()
     {
         // f'(r) = r * (2*log(r) + 1)
@@ -490,7 +490,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThinPlateSplineRBF_Derivative_HandCalculated_r1()
     {
         // f'(1) = 1 * (2*log(1) + 1) = 1 * (0 + 1) = 1
@@ -498,7 +498,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(1.0, rbf.ComputeDerivative(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ThinPlateSplineRBF_WidthDerivativeAlwaysZero()
     {
         var rbf = new ThinPlateSplineRBF<double>();
@@ -510,7 +510,7 @@ public class RBFDeepMathIntegrationTests
     // InverseQuadraticRBF: f(r) = 1/(1 + (εr)²)
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseQuadraticRBF_HandCalculated_AtZero()
     {
         // f(0) = 1/(1 + 0) = 1
@@ -518,7 +518,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(1.0, rbf.Compute(0.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseQuadraticRBF_HandCalculated_r1_epsilon1()
     {
         // f(1) = 1/(1 + 1) = 0.5
@@ -526,7 +526,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.5, rbf.Compute(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseQuadraticRBF_HandCalculated_r2_epsilon1()
     {
         // f(2) = 1/(1 + 4) = 0.2
@@ -534,7 +534,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.2, rbf.Compute(2.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseQuadraticRBF_HandCalculated_r1_epsilon2()
     {
         // f(1) = 1/(1 + (2*1)²) = 1/(1 + 4) = 0.2
@@ -542,7 +542,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.2, rbf.Compute(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseQuadraticRBF_Derivative_MatchesNumerical()
     {
         // f'(r) = -2ε²r / (1 + (εr)²)²
@@ -552,7 +552,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseQuadraticRBF_Derivative_HandCalculated()
     {
         // f'(1) with ε=1: -2*1*1 / (1+1)² = -2/4 = -0.5
@@ -560,7 +560,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(-0.5, rbf.ComputeDerivative(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseQuadraticRBF_WidthDerivative_MatchesNumerical()
     {
         double r = 2.0;
@@ -576,7 +576,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseQuadraticRBF_WidthDerivative_HandCalculated()
     {
         // df/dε at r=1, ε=1: -2*1*1 / (1+1)² = -2/4 = -0.5
@@ -588,14 +588,14 @@ public class RBFDeepMathIntegrationTests
     // SquaredExponentialRBF: f(r) = exp(-(εr)²)
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SquaredExponentialRBF_HandCalculated_AtZero()
     {
         var rbf = new SquaredExponentialRBF<double>(1.0);
         Assert.Equal(1.0, rbf.Compute(0.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SquaredExponentialRBF_HandCalculated_r1_epsilon1()
     {
         // f(1) = exp(-(1*1)²) = exp(-1) ≈ 0.367879441
@@ -603,7 +603,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(Math.Exp(-1.0), rbf.Compute(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SquaredExponentialRBF_HandCalculated_r1_epsilon2()
     {
         // f(1) = exp(-(2*1)²) = exp(-4) ≈ 0.018315639
@@ -611,7 +611,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(Math.Exp(-4.0), rbf.Compute(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SquaredExponentialRBF_Derivative_MatchesNumerical()
     {
         // f'(r) = -2ε²r * exp(-(εr)²)
@@ -621,7 +621,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SquaredExponentialRBF_Derivative_HandCalculated()
     {
         // f'(1) with ε=1: -2*1*1 * exp(-1) = -2*exp(-1) ≈ -0.735759
@@ -629,7 +629,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(-2.0 * Math.Exp(-1.0), rbf.ComputeDerivative(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SquaredExponentialRBF_WidthDerivative_MatchesNumerical()
     {
         double r = 2.0;
@@ -645,7 +645,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SquaredExponentialRBF_Relationship_ToGaussianRBF()
     {
         // SquaredExponential f(r)=exp(-(εr)²) and GaussianRBF f(r)=exp(-ε*r²)
@@ -660,7 +660,7 @@ public class RBFDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SquaredExponentialRBF_Relationship_ToGaussianRBF_DifferentEpsilon()
     {
         // SquaredExponential f(r) = exp(-(εr)²) = exp(-ε²*r²)
@@ -679,14 +679,14 @@ public class RBFDeepMathIntegrationTests
     // RationalQuadraticRBF: f(r) = 1 - r²/(r² + ε²)
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RationalQuadraticRBF_HandCalculated_AtZero()
     {
         var rbf = new RationalQuadraticRBF<double>(1.0);
         Assert.Equal(1.0, rbf.Compute(0.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RationalQuadraticRBF_HandCalculated_r1_epsilon1()
     {
         // f(1) = 1 - 1/(1+1) = 1 - 0.5 = 0.5
@@ -694,7 +694,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.5, rbf.Compute(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RationalQuadraticRBF_HandCalculated_r3_epsilon4()
     {
         // f(3) = 1 - 9/(9+16) = 1 - 9/25 = 1 - 0.36 = 0.64
@@ -702,7 +702,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.64, rbf.Compute(3.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RationalQuadraticRBF_SimplifiesTo_EpsilonSquaredOverSum()
     {
         // f(r) = 1 - r²/(r²+ε²) = ε²/(r²+ε²)
@@ -712,7 +712,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(expected, rbf.Compute(r), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RationalQuadraticRBF_Derivative_MatchesNumerical()
     {
         var rbf = new RationalQuadraticRBF<double>(1.0);
@@ -721,7 +721,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RationalQuadraticRBF_Derivative_HandCalculated()
     {
         // f'(r) = -2rε²/(r²+ε²)²
@@ -730,7 +730,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(-0.5, rbf.ComputeDerivative(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RationalQuadraticRBF_WidthDerivative_MatchesNumerical()
     {
         double r = 2.0;
@@ -746,7 +746,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RationalQuadraticRBF_WidthDerivative_IsPositive()
     {
         // Increasing ε should increase f(r) for r > 0 (wider spread)
@@ -759,14 +759,14 @@ public class RBFDeepMathIntegrationTests
     // SphericalRBF: f(r) = 1 - 1.5(r/ε) + 0.5(r/ε)³ for r ≤ ε, else 0
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SphericalRBF_HandCalculated_AtZero()
     {
         var rbf = new SphericalRBF<double>(1.0);
         Assert.Equal(1.0, rbf.Compute(0.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SphericalRBF_HandCalculated_AtBoundary()
     {
         // f(ε) = 1 - 1.5*1 + 0.5*1 = 1 - 1.5 + 0.5 = 0
@@ -774,7 +774,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.0, rbf.Compute(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SphericalRBF_BeyondBoundary_ReturnsZero()
     {
         var rbf = new SphericalRBF<double>(1.0);
@@ -782,7 +782,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.0, rbf.Compute(10.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SphericalRBF_HandCalculated_HalfRadius()
     {
         // f(0.5) with ε=1: 1 - 1.5*0.5 + 0.5*0.125 = 1 - 0.75 + 0.0625 = 0.3125
@@ -790,7 +790,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.3125, rbf.Compute(0.5), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SphericalRBF_Derivative_MatchesNumerical()
     {
         var rbf = new SphericalRBF<double>(2.0);
@@ -799,7 +799,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SphericalRBF_Derivative_HandCalculated_AtZero()
     {
         // f'(0) = (1.5/ε)[(0)² - 1] = 1.5 * (-1) = -1.5
@@ -807,7 +807,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(-1.5, rbf.ComputeDerivative(0.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SphericalRBF_Derivative_AtBoundary_IsZero()
     {
         // f'(ε) = (1.5/ε)[(ε/ε)² - 1] = (1.5/ε)[1 - 1] = 0
@@ -815,7 +815,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.0, rbf.ComputeDerivative(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SphericalRBF_WidthDerivative_MatchesNumerical()
     {
         double r = 0.5;
@@ -831,7 +831,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SphericalRBF_CompactSupport()
     {
         // Values inside support must be positive, outside must be zero
@@ -847,7 +847,7 @@ public class RBFDeepMathIntegrationTests
     // WendlandRBF: compact support with different smoothness orders
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_K0_HandCalculated_AtZero()
     {
         // f(0) = (1-0)² = 1
@@ -855,7 +855,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(1.0, rbf.Compute(0.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_K0_HandCalculated_AtHalf()
     {
         // f(0.5) = (1-0.5)² = 0.25
@@ -863,7 +863,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.25, rbf.Compute(0.5), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_K0_AtBoundary_ReturnsZero()
     {
         // f(1) = (1-1)² = 0
@@ -871,7 +871,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.0, rbf.Compute(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_K1_HandCalculated_AtZero()
     {
         // f(0) = (1-0)⁴*(1+4*0) = 1*1 = 1  ... wait: k=1 formula is (1-r)^4*(1+4r)
@@ -880,7 +880,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(1.0, rbf.Compute(0.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_K1_HandCalculated_AtHalf()
     {
         // f(0.5) = (0.5)⁴ * (1+2) = 0.0625 * 3 = 0.1875
@@ -888,7 +888,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.1875, rbf.Compute(0.5), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_K2_HandCalculated_AtZero()
     {
         // f(0) = (1-0)⁶*(3+18*0+35*0²) = 1*3 = 3
@@ -896,7 +896,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(3.0, rbf.Compute(0.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_K2_HandCalculated_AtHalf()
     {
         // f(0.5) = (0.5)⁶ * (3 + 9 + 8.75) = (1/64) * 20.75 = 0.32421875
@@ -905,7 +905,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(expected, rbf.Compute(0.5), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_CompactSupport_AllK()
     {
         // Beyond support radius, all k values should give zero
@@ -917,7 +917,7 @@ public class RBFDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_K0_Derivative_MatchesNumerical()
     {
         var rbf = new WendlandRBF<double>(k: 0, supportRadius: 1.0);
@@ -926,7 +926,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_K1_Derivative_MatchesNumerical()
     {
         var rbf = new WendlandRBF<double>(k: 1, supportRadius: 1.0);
@@ -935,7 +935,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_K2_Derivative_MatchesNumerical()
     {
         var rbf = new WendlandRBF<double>(k: 2, supportRadius: 1.0);
@@ -944,7 +944,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_K0_Derivative_HandCalculated()
     {
         // f'(r) = -2(1-r) at r=0.5: -2*0.5 = -1.0
@@ -956,7 +956,7 @@ public class RBFDeepMathIntegrationTests
     // PolyharmonicSplineRBF: odd k: r^k, even k: r^k*log(r)
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolyharmonicSplineRBF_K1_IsLinear()
     {
         // k=1: f(r) = r
@@ -965,7 +965,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(3.5, rbf.Compute(3.5), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolyharmonicSplineRBF_K2_IsThinPlateSpline()
     {
         // k=2: f(r) = r²*log(r)
@@ -977,7 +977,7 @@ public class RBFDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolyharmonicSplineRBF_K3_IsCubic()
     {
         // k=3: f(r) = r³
@@ -987,7 +987,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(27.0, rbf.Compute(3.0), Tolerance); // 3³ = 27
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolyharmonicSplineRBF_K4_HandCalculated()
     {
         // k=4 (even): f(r) = r⁴*log(r)
@@ -996,7 +996,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(16.0 * Math.Log(2.0), rbf.Compute(2.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolyharmonicSplineRBF_Derivative_K1_MatchesNumerical()
     {
         var rbf = new PolyharmonicSplineRBF<double>(k: 1);
@@ -1004,7 +1004,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(1.0, rbf.ComputeDerivative(5.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolyharmonicSplineRBF_Derivative_K3_MatchesNumerical()
     {
         var rbf = new PolyharmonicSplineRBF<double>(k: 3);
@@ -1013,7 +1013,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolyharmonicSplineRBF_Derivative_K2_MatchesNumerical()
     {
         var rbf = new PolyharmonicSplineRBF<double>(k: 2);
@@ -1022,7 +1022,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolyharmonicSplineRBF_Derivative_K3_HandCalculated()
     {
         // k=3: f'(r) = 3r², f'(2) = 12
@@ -1030,7 +1030,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(12.0, rbf.ComputeDerivative(2.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolyharmonicSplineRBF_WidthDerivativeAlwaysZero()
     {
         for (int k = 1; k <= 4; k++)
@@ -1044,14 +1044,14 @@ public class RBFDeepMathIntegrationTests
     // MaternRBF: special cases at ν=0.5, 1.5, 2.5
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaternRBF_Nu05_AtZero_ReturnsOne()
     {
         var rbf = new MaternRBF<double>(nu: 0.5, lengthScale: 1.0);
         Assert.Equal(1.0, rbf.Compute(0.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaternRBF_Nu05_IsExponential()
     {
         // ν=0.5: k(r) = exp(-√(2*0.5)*r/l) = exp(-r/l)
@@ -1061,7 +1061,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(expected, rbf.Compute(r), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaternRBF_Nu15_HandCalculated()
     {
         // ν=1.5: k(r) = (1 + √3*r/l) * exp(-√3*r/l)
@@ -1072,7 +1072,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(expected, rbf.Compute(r), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaternRBF_Nu25_HandCalculated()
     {
         // ν=2.5: k(r) = (1 + √5*r/l + 5r²/(3l²)) * exp(-√5*r/l)
@@ -1083,7 +1083,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(expected, rbf.Compute(r), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaternRBF_Nu05_Derivative_MatchesNumerical()
     {
         var rbf = new MaternRBF<double>(nu: 0.5, lengthScale: 1.0);
@@ -1092,7 +1092,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaternRBF_Nu15_Derivative_MatchesNumerical()
     {
         var rbf = new MaternRBF<double>(nu: 1.5, lengthScale: 1.0);
@@ -1101,7 +1101,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaternRBF_Nu25_Derivative_MatchesNumerical()
     {
         var rbf = new MaternRBF<double>(nu: 2.5, lengthScale: 1.0);
@@ -1110,7 +1110,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaternRBF_Nu05_WidthDerivative_MatchesNumerical()
     {
         double r = 2.0;
@@ -1126,7 +1126,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaternRBF_AllNu_DerivativeAtZero_IsZero()
     {
         // Symmetry: derivative at r=0 should be zero for all ν
@@ -1137,7 +1137,7 @@ public class RBFDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaternRBF_MonotonicallyDecreasing()
     {
         foreach (double nu in new[] { 0.5, 1.5, 2.5 })
@@ -1157,7 +1157,7 @@ public class RBFDeepMathIntegrationTests
     // Cross-RBF identity tests
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolyharmonicK1_Matches_LinearRBF()
     {
         var poly = new PolyharmonicSplineRBF<double>(k: 1);
@@ -1168,7 +1168,7 @@ public class RBFDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CubicRBF_Width1_Matches_PolyharmonicK3()
     {
         var cubic = new CubicRBF<double>(1.0);
@@ -1179,7 +1179,7 @@ public class RBFDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaternNu05_Matches_ExponentialRBF()
     {
         // Matérn(ν=0.5, l=1) = exp(-r) and Exponential(ε=1) = exp(-r)
@@ -1195,7 +1195,7 @@ public class RBFDeepMathIntegrationTests
     // Derivative correctness for Wendland width derivatives
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_K0_WidthDerivative_MatchesNumerical()
     {
         double r = 0.5;
@@ -1211,7 +1211,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_K1_WidthDerivative_MatchesNumerical()
     {
         double r = 0.3;
@@ -1227,7 +1227,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(numerical, analytical, DerivTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WendlandRBF_K2_WidthDerivative_MatchesNumerical()
     {
         double r = 0.3;
@@ -1247,7 +1247,7 @@ public class RBFDeepMathIntegrationTests
     // Boundary and special value tests
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllDecayingRBFs_AtZero_ReturnOne()
     {
         // All bell-shaped RBFs should return 1 at r=0
@@ -1260,7 +1260,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(1.0, new MaternRBF<double>(1.5, 1.0).Compute(0.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllDecayingRBFs_DerivativeAtZero_IsZero()
     {
         // Symmetric RBFs should have zero derivative at r=0
@@ -1271,7 +1271,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.0, new MaternRBF<double>(1.5, 1.0).ComputeDerivative(0.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllGrowingRBFs_AtZero_ReturnZero()
     {
         // Growing RBFs should return 0 at r=0
@@ -1280,7 +1280,7 @@ public class RBFDeepMathIntegrationTests
         Assert.Equal(0.0, new ThinPlateSplineRBF<double>().Compute(0.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllWidthFreeRBFs_WidthDerivative_IsZero()
     {
         // RBFs without width parameter should always have zero width derivative
@@ -1293,7 +1293,7 @@ public class RBFDeepMathIntegrationTests
     // Numerical stability / large values
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianRBF_LargeR_ApproachesZero()
     {
         var rbf = new GaussianRBF<double>(1.0);
@@ -1302,7 +1302,7 @@ public class RBFDeepMathIntegrationTests
         Assert.True(val < 1e-10, $"GaussianRBF at r=10 should be very small, got {val}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExponentialRBF_LargeR_ApproachesZero()
     {
         var rbf = new ExponentialRBF<double>(1.0);
@@ -1311,7 +1311,7 @@ public class RBFDeepMathIntegrationTests
         Assert.True(val < 1e-8, $"ExponentialRBF at r=20 should be very small, got {val}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InverseQuadraticRBF_LargeR_ApproachesZero()
     {
         var rbf = new InverseQuadraticRBF<double>(1.0);

@@ -154,7 +154,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullGenerator_ThrowsArgumentNullException()
         {
             // Arrange
@@ -165,7 +165,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new SelfCorrectingRetriever<double>(null!, retriever));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullRetriever_ThrowsArgumentNullException()
         {
             // Arrange
@@ -208,7 +208,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(selfCorrector);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithDefaultMaxIterations_InitializesCorrectly()
         {
             // Arrange
@@ -226,7 +226,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region RetrieveAndAnswer Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RetrieveAndAnswer_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -239,7 +239,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 selfCorrector.RetrieveAndAnswer(null!, 10));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RetrieveAndAnswer_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -268,7 +268,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 selfCorrector.RetrieveAndAnswer("What caused the fall of Rome?", topK));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RetrieveAndAnswer_WithValidQuery_ReturnsAnswer()
         {
             // Arrange
@@ -284,7 +284,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotEmpty(result);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RetrieveAndAnswer_WithNoDocuments_ReturnsNoInfoMessage()
         {
             // Arrange
@@ -354,7 +354,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Should have additional retrieval attempts due to negative critique
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RetrieveAndAnswer_CountsPositiveVsNegativeIndicators()
         {
             // Arrange - Critique with more positive than negative indicators
@@ -376,7 +376,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(1, retriever.RetrievalCallCount);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RetrieveAndAnswer_MixedIndicators_ComparesCount()
         {
             // Arrange - Critique with mixed indicators
@@ -435,7 +435,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Should have extracted missing info and done additional retrieval
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RetrieveAndAnswer_StopsIfNoMissingInfoExtracted()
         {
             // Arrange - Negative critique but no extractable missing info pattern
@@ -459,7 +459,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Iteration Limit Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RetrieveAndAnswer_RespectsMaxIterations()
         {
             // Arrange - Always negative critiques to force max iterations
@@ -483,7 +483,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 $"Expected at most 6 retrieval calls but got {retriever.RetrievalCallCount}");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RetrieveAndAnswer_WithMaxIterationsOne_OnlyIteratesOnce()
         {
             // Arrange
@@ -505,7 +505,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Document Deduplication Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RetrieveAndAnswer_DoesNotAddDuplicateDocuments()
         {
             // Arrange - Additional docs are same as initial (by ID)
@@ -531,7 +531,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Early Termination Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RetrieveAndAnswer_StopsWhenNoNewDocumentsFound()
         {
             // Arrange - Return empty list for additional retrieval
@@ -558,7 +558,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Metadata Filter Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RetrieveAndAnswer_PassesMetadataFilters()
         {
             // Arrange
@@ -579,7 +579,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Filters should be passed to retriever (verified by retriever mock if extended)
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RetrieveAndAnswer_WithNullFilters_UsesEmptyDictionary()
         {
             // Arrange
@@ -598,7 +598,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RetrieveAndAnswer_HandlesEmptyAnswer()
         {
             // Arrange - Generator returns empty grounded answer
@@ -617,7 +617,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Should handle empty answer gracefully
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RetrieveAndAnswer_WithVeryLargeCritique_HandlesCorrectly()
         {
             // Arrange - Very long critique

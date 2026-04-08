@@ -228,7 +228,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             return new MockModel(paramCount);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithGenes_InitializesCorrectly()
         {
             // Arrange
@@ -247,7 +247,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(3, individual.GetGenes().Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithModel_InitializesCorrectly()
         {
             // Arrange
@@ -266,7 +266,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(2, individual.GetGenes().Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Train_DelegatesToInnerModel()
         {
             // Arrange
@@ -285,7 +285,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.NotEqual(paramsBefore, paramsAfter); // Parameters should change after training
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetModelMetadata_DelegatesToInnerModel()
         {
             // Arrange
@@ -304,7 +304,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(1, metadata.Complexity);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetActiveFeatureIndices_DelegatesToInnerModel()
         {
             // Arrange
@@ -320,7 +320,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(new[] { 0, 1, 2 }, indices);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetFeatureImportance_DelegatesToInnerModel()
         {
             // Arrange
@@ -339,7 +339,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(0.2, importance["feature_2"]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SetActiveFeatureIndices_DelegatesToInnerModel()
         {
             // Arrange
@@ -352,7 +352,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             individual.SetActiveFeatureIndices(newIndices);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void IsFeatureUsed_DelegatesToInnerModel()
         {
             // Arrange
@@ -371,7 +371,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.False(isUsed5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DeepCopy_CreatesIndependentCopy()
         {
             // Arrange
@@ -405,7 +405,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.NotEqual(originalParams[0] + 100.0, copyParams[0], 5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Clone_CreatesIndependentCopy()
         {
             // Arrange
@@ -434,7 +434,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SetParameters_UpdatesModelParameters()
         {
             // Arrange
@@ -458,7 +458,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ParameterCount_ReturnsCorrectCount()
         {
             // Arrange
@@ -473,7 +473,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(5, count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ParameterCount_IsCached()
         {
             // Arrange
@@ -490,7 +490,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(5, count1);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SetParameters_InvalidatesParameterCountCache()
         {
             // Arrange
@@ -513,7 +513,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(3, newCount);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Predict_DelegatesToInnerModel()
         {
             // Arrange
@@ -531,7 +531,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(12.0, output[0]); // Sum is 6.0, multiplied by 2.0
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SaveAndLoadModel_WorksCorrectly()
         {
             // Arrange
@@ -565,7 +565,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SaveModel_ThrowsOnNullPath()
         {
             // Arrange
@@ -579,7 +579,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Throws<ArgumentException>(() => individual.SaveModel("   "));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void LoadModel_ThrowsOnNullPath()
         {
             // Arrange
@@ -593,7 +593,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Throws<ArgumentException>(() => individual.LoadModel("   "));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void LoadModel_ThrowsOnNonExistentFile()
         {
             // Arrange
@@ -606,7 +606,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Throws<FileNotFoundException>(() => individual.LoadModel(nonExistentFile));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetGenes_ReturnsGeneCollection()
         {
             // Arrange
@@ -626,7 +626,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(3, retrievedGenes.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SetGenes_UpdatesGenesAndModel()
         {
             // Arrange
@@ -652,7 +652,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(3, retrievedGenes.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Fitness_CanBeSetAndRetrieved()
         {
             // Arrange
@@ -667,7 +667,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             Assert.Equal(0.85, fitness);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EvolvableClone_CreatesIndependentClone()
         {
             // Arrange

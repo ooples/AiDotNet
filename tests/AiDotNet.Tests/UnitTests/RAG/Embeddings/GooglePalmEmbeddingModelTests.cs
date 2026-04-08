@@ -10,7 +10,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
 {
     public class GooglePalmEmbeddingModelTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -22,7 +22,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(2048, model.MaxTokens);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithDefaultDimension_CreatesInstance()
         {
             // Arrange & Act
@@ -34,7 +34,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(2048, model.MaxTokens);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullProjectId_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
@@ -42,7 +42,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
                 new GooglePalmEmbeddingModel<double>(null, "us-central1", "textembedding-gecko@001", "test-api-key"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullLocation_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
@@ -50,7 +50,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
                 new GooglePalmEmbeddingModel<double>("test-project-id", null, "textembedding-gecko@001", "test-api-key"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullModel_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
@@ -58,7 +58,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
                 new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", null, "test-api-key"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullApiKey_ThrowsArgumentNullException()
         {
             // Arrange & Act & Assert
@@ -66,7 +66,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
                 new GooglePalmEmbeddingModel<double>("test-project-id", "us-central1", "textembedding-gecko@001", null));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithValidText_ReturnsVectorOfCorrectDimension()
         {
             // Arrange
@@ -81,7 +81,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(768, embedding.Length);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithSameTextTwice_ReturnsSameEmbedding()
         {
             // Arrange
@@ -99,7 +99,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithDifferentTexts_ReturnsDifferentEmbeddings()
         {
             // Arrange
@@ -124,7 +124,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.True(hasDifference, "Embeddings for different texts should be different");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_ReturnsNormalizedVector()
         {
             // Arrange
@@ -144,7 +144,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1.0, magnitude, 5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithNullText_ThrowsArgumentException()
         {
             // Arrange
@@ -154,7 +154,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(null));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithEmptyText_ThrowsArgumentException()
         {
             // Arrange
@@ -164,7 +164,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(string.Empty));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithWhitespaceText_ThrowsArgumentException()
         {
             // Arrange
@@ -174,7 +174,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed("   "));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithValidTexts_ReturnsMatrixOfCorrectDimensions()
         {
             // Arrange
@@ -190,7 +190,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(768, embeddings.Columns);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
         {
             // Arrange
@@ -200,7 +200,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentNullException>(() => model.EmbedBatch(null));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
         {
             // Arrange
@@ -211,7 +211,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_ProducesSameEmbeddingsAsIndividualCalls()
         {
             // Arrange
@@ -232,7 +232,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -256,7 +256,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1.0f, magnitude, 5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithCustomDimension_ReturnsCorrectSize()
         {
             // Arrange
@@ -271,7 +271,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(customDimension, embedding.Length);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_Deterministic_MultipleInstances()
         {
             // Arrange
@@ -290,7 +290,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_AllRowsAreNormalized()
         {
             // Arrange
@@ -313,7 +313,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithLongText_ReturnsEmbedding()
         {
             // Arrange
@@ -328,7 +328,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(768, embedding.Length);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithDifferentLocations_CreatesInstances()
         {
             // Arrange & Act

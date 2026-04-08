@@ -37,7 +37,7 @@ public class TrainingMonitorTests : IDisposable
 
     #region Session Management Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StartSession_WithValidName_ReturnsSessionId()
     {
         // Arrange & Act
@@ -48,7 +48,7 @@ public class TrainingMonitorTests : IDisposable
         Assert.NotEmpty(sessionId);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StartSession_WithMetadata_StoresMetadata()
     {
         // Arrange
@@ -65,21 +65,21 @@ public class TrainingMonitorTests : IDisposable
         Assert.NotNull(sessionId);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StartSession_WithNullName_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _monitor.StartSession(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StartSession_WithEmptyName_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _monitor.StartSession(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EndSession_WithValidId_CompletesSession()
     {
         // Arrange
@@ -93,7 +93,7 @@ public class TrainingMonitorTests : IDisposable
         Assert.NotNull(metrics);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void EndSession_WithInvalidId_ThrowsArgumentException()
     {
         // Act & Assert
@@ -104,7 +104,7 @@ public class TrainingMonitorTests : IDisposable
 
     #region Metric Logging Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LogMetric_StoresMetricValue()
     {
         // Arrange
@@ -119,7 +119,7 @@ public class TrainingMonitorTests : IDisposable
         Assert.Equal(0.5, currentMetrics["loss"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LogMetric_WithMultipleSteps_StoresHistory()
     {
         // Arrange
@@ -138,7 +138,7 @@ public class TrainingMonitorTests : IDisposable
         Assert.Equal(0.1, history[2].Value);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LogMetric_WithNullName_ThrowsArgumentException()
     {
         // Arrange
@@ -148,7 +148,7 @@ public class TrainingMonitorTests : IDisposable
         Assert.Throws<ArgumentException>(() => _monitor.LogMetric(sessionId, null!, 0.5, step: 1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LogMetrics_StoresMultipleMetrics()
     {
         // Arrange
@@ -171,7 +171,7 @@ public class TrainingMonitorTests : IDisposable
         Assert.Equal(0.78, currentMetrics["f1_score"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LogMetrics_WithNullDictionary_ThrowsArgumentNullException()
     {
         // Arrange
@@ -181,7 +181,7 @@ public class TrainingMonitorTests : IDisposable
         Assert.Throws<ArgumentNullException>(() => _monitor.LogMetrics(sessionId, null!, step: 1));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetMetricHistory_WithNonexistentMetric_ReturnsEmptyList()
     {
         // Arrange
@@ -198,7 +198,7 @@ public class TrainingMonitorTests : IDisposable
 
     #region Resource Usage Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LogResourceUsage_StoresResourceSnapshot()
     {
         // Arrange
@@ -213,7 +213,7 @@ public class TrainingMonitorTests : IDisposable
         Assert.Equal(8192, resourceUsage.MemoryUsageMB);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LogResourceUsage_WithGpu_StoresGpuMetrics()
     {
         // Arrange
@@ -232,7 +232,7 @@ public class TrainingMonitorTests : IDisposable
 
     #region Progress Tracking Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void UpdateProgress_StoresProgressInfo()
     {
         // Arrange
@@ -247,7 +247,7 @@ public class TrainingMonitorTests : IDisposable
         Assert.Equal(1000, speedStats.TotalIterations);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetSpeedStats_CalculatesIterationsPerSecond()
     {
         // Arrange
@@ -266,7 +266,7 @@ public class TrainingMonitorTests : IDisposable
 
     #region Message Logging Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LogMessage_StoresMessage()
     {
         // Arrange
@@ -278,7 +278,7 @@ public class TrainingMonitorTests : IDisposable
         // Assert - Message logged successfully (no exception thrown)
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LogMessage_WithEmptyMessage_ThrowsArgumentException()
     {
         // Arrange
@@ -288,7 +288,7 @@ public class TrainingMonitorTests : IDisposable
         Assert.Throws<ArgumentException>(() => _monitor.LogMessage(sessionId, LogLevel.Info, ""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LogMessage_WithDifferentLevels_StoresAllLevels()
     {
         // Arrange
@@ -307,7 +307,7 @@ public class TrainingMonitorTests : IDisposable
 
     #region Epoch Tracking Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OnEpochStart_RecordsEpochStart()
     {
         // Arrange
@@ -319,7 +319,7 @@ public class TrainingMonitorTests : IDisposable
         // Assert - Epoch start recorded (no exception thrown)
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void OnEpochEnd_RecordsEpochEnd()
     {
         // Arrange
@@ -341,7 +341,7 @@ public class TrainingMonitorTests : IDisposable
 
     #region Issue Detection Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CheckForIssues_WithNoIssues_ReturnsEmptyList()
     {
         // Arrange
@@ -355,7 +355,7 @@ public class TrainingMonitorTests : IDisposable
         Assert.Empty(issues);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CheckForIssues_WithRecentErrors_ReportsIssue()
     {
         // Arrange
@@ -374,7 +374,7 @@ public class TrainingMonitorTests : IDisposable
 
     #region Export Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ExportData_ToJson_CreatesFile()
     {
         // Arrange
@@ -391,7 +391,7 @@ public class TrainingMonitorTests : IDisposable
         Assert.Contains("loss", content);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ExportData_ToCsv_CreatesFile()
     {
         // Arrange
@@ -410,7 +410,7 @@ public class TrainingMonitorTests : IDisposable
         Assert.Contains("accuracy", content);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ExportData_WithInvalidFormat_ThrowsArgumentException()
     {
         // Arrange
@@ -421,7 +421,7 @@ public class TrainingMonitorTests : IDisposable
         Assert.Throws<ArgumentException>(() => _monitor.ExportData(sessionId, exportPath, "xyz"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateVisualization_CreatesVisualizationFile()
     {
         // Arrange
@@ -440,7 +440,7 @@ public class TrainingMonitorTests : IDisposable
         Assert.Contains("visualization-test", content);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateVisualization_WithEmptyMetricList_ThrowsArgumentException()
     {
         // Arrange
@@ -455,7 +455,7 @@ public class TrainingMonitorTests : IDisposable
 
     #region Thread Safety Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LogMetric_FromMultipleThreads_IsThreadSafe()
     {
         // Arrange
@@ -477,7 +477,7 @@ public class TrainingMonitorTests : IDisposable
         Assert.Equal(metricCount, history.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void StartSession_FromMultipleThreads_IsThreadSafe()
     {
         // Arrange

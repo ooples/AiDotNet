@@ -18,7 +18,7 @@ public abstract class VideoNNModelTestBase : NeuralNetworkModelTestBase
     // At minimum, output should not be empty.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TemporalDim_Preserved()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -39,7 +39,7 @@ public abstract class VideoNNModelTestBase : NeuralNetworkModelTestBase
     // A single-frame input is a valid edge case (degenerate video).
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SingleFrame_ShouldNotCrash()
     {
         var network = CreateNetwork();
@@ -65,7 +65,7 @@ public abstract class VideoNNModelTestBase : NeuralNetworkModelTestBase
     // will cause temporal flickering artifacts.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConsecutiveFrames_SmoothOutput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();

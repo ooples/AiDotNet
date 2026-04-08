@@ -62,7 +62,7 @@ public class ARIMAStabilityTests
 
     #region Stationarity Enforcement Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EstimateARCoefficients_ShouldProduceStationaryCoefficients()
     {
         // Arrange — trending data that previously produced unstable coefficients
@@ -87,7 +87,7 @@ public class ARIMAStabilityTests
             $"Coefficients: [{string.Join(", ", Enumerable.Range(0, arCoeffs.Length).Select(i => arCoeffs[i].ToString("F6")))}]");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EstimateMACoefficients_ShouldProduceInvertibleCoefficients()
     {
         // Arrange
@@ -270,7 +270,7 @@ public class ARIMAStabilityTests
 
     #region GuardPrediction Safety Net Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GuardPrediction_ShouldClampNaNToZero()
     {
         var options = new ARIMAOptions<double> { P = 1, D = 0, Q = 0 };
@@ -281,7 +281,7 @@ public class ARIMAStabilityTests
         Assert.Equal(0.0, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GuardPrediction_ShouldClampPositiveInfinity()
     {
         var options = new ARIMAOptions<double> { P = 1, D = 0, Q = 0 };
@@ -292,7 +292,7 @@ public class ARIMAStabilityTests
         Assert.Equal(1e15, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GuardPrediction_ShouldClampNegativeInfinity()
     {
         var options = new ARIMAOptions<double> { P = 1, D = 0, Q = 0 };
@@ -303,7 +303,7 @@ public class ARIMAStabilityTests
         Assert.Equal(-1e15, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GuardPrediction_ShouldClampOverflow()
     {
         var options = new ARIMAOptions<double> { P = 1, D = 0, Q = 0 };
@@ -315,7 +315,7 @@ public class ARIMAStabilityTests
         Assert.Equal(1e15, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GuardPrediction_ShouldPassThroughFiniteValues()
     {
         var options = new ARIMAOptions<double> { P = 1, D = 0, Q = 0 };

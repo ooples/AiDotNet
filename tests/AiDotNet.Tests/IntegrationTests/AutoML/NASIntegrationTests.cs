@@ -20,7 +20,7 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
     {
         #region FBNet End-to-End Tests
 
-        [Fact]
+        [Fact(Timeout = 120000)]
         public void FBNet_EndToEnd_SearchSpaceToArchitectureDerivation()
         {
             // Arrange - Create search space with operations
@@ -66,7 +66,7 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 120000)]
         public void FBNet_EndToEnd_ConstraintSatisfaction()
         {
             // Arrange - Create FBNet with tight constraints
@@ -91,7 +91,7 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
             Assert.True(meetsConstraints, $"Architecture should meet loose constraints. Latency={cost.Latency}, Memory={cost.Memory}, Energy={cost.Energy}");
         }
 
-        [Fact]
+        [Fact(Timeout = 120000)]
         public void FBNet_EndToEnd_LossComputationWithLatencyRegularization()
         {
             // Arrange
@@ -139,7 +139,7 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
 
         #region OnceForAll End-to-End Tests
 
-        [Fact]
+        [Fact(Timeout = 120000)]
         public void OnceForAll_EndToEnd_ProgressiveShrinking()
         {
             // Arrange
@@ -180,7 +180,7 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
             Assert.True(uniqueKernels >= 2, "Stage 4 should have varied kernel sizes");
         }
 
-        [Fact]
+        [Fact(Timeout = 120000)]
         public void OnceForAll_EndToEnd_HardwareSpecialization()
         {
             // Arrange
@@ -232,7 +232,7 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
             Assert.Contains(serverConfig.Depth, new[] { 2, 4, 6 });
         }
 
-        [Fact]
+        [Fact(Timeout = 120000)]
         public void OnceForAll_EndToEnd_SharedWeights()
         {
             // Arrange
@@ -262,7 +262,7 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
 
         #region Hardware Cost Model Integration Tests
 
-        [Fact]
+        [Fact(Timeout = 120000)]
         public void HardwareCostModel_EndToEnd_ArchitectureAnalysis()
         {
             // Arrange - Build a realistic architecture
@@ -305,7 +305,7 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
                 $"Breakdown sum ({breakdownLatencySum}) should match total ({totalCost.Latency})");
         }
 
-        [Fact]
+        [Fact(Timeout = 120000)]
         public void HardwareCostModel_EndToEnd_CalibrationFlow()
         {
             // Arrange
@@ -333,7 +333,7 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
             Assert.Equal(1.0, costModel.GetCalibrationFactor("unknown_op"));
         }
 
-        [Fact]
+        [Fact(Timeout = 120000)]
         public void HardwareCostModel_EndToEnd_CrossPlatformComparison()
         {
             // Arrange - Same architecture on different platforms
@@ -375,7 +375,7 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
 
         #region Cross-Algorithm Integration Tests
 
-        [Fact]
+        [Fact(Timeout = 120000)]
         public void NAS_EndToEnd_FBNetArchitectureToOnceForAllSpecialization()
         {
             // Arrange - Use FBNet to derive an architecture
@@ -421,7 +421,7 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
             Assert.True(ofaConfig.Depth > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 120000)]
         public void NAS_EndToEnd_MultipleAlgorithmsSharedCostModel()
         {
             // Arrange - Create a shared cost model
@@ -458,7 +458,7 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
 
         #region Edge Case Integration Tests
 
-        [Fact]
+        [Fact(Timeout = 120000)]
         public void NAS_EndToEnd_MinimalConfiguration()
         {
             // Arrange - Minimal valid configuration
@@ -482,7 +482,7 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
             Assert.Equal(1, ofaConfig.Depth);
         }
 
-        [Fact]
+        [Fact(Timeout = 120000)]
         public void NAS_EndToEnd_LargeConfiguration()
         {
             // Arrange - Large configuration
@@ -517,7 +517,7 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML
             Assert.True(fbnetCost.Latency > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 120000)]
         public void NAS_EndToEnd_VeryTightConstraints()
         {
             // Arrange - Constraints that are nearly impossible to meet

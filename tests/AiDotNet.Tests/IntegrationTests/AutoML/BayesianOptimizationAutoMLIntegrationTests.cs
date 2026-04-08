@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.IntegrationTests.AutoML;
 
 public class BayesianOptimizationAutoMLIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SearchAsync_MatrixVector_ProducesBestModelAndTrialHistory()
     {
         // Arrange

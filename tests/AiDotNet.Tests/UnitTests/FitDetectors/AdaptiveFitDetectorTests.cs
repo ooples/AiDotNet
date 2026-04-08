@@ -36,7 +36,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 features: features);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithDefaultOptions_InitializesSuccessfully()
         {
             // Arrange & Act
@@ -46,7 +46,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithCustomOptions_InitializesSuccessfully()
         {
             // Arrange
@@ -63,7 +63,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(detector);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithValidData_ReturnsValidResult()
         {
             // Arrange
@@ -78,7 +78,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(result.Recommendations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_SelectsAppropriateDetector()
         {
             // Arrange
@@ -100,7 +100,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 r.Contains("performance"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ReturnsValidFitType()
         {
             // Arrange
@@ -115,7 +115,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(System.Enum.IsDefined(typeof(FitType), result.FitType));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ReturnsConfidenceLevel()
         {
             // Arrange
@@ -130,7 +130,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(result.ConfidenceLevel <= 1.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ReturnsNonEmptyRecommendations()
         {
             // Arrange
@@ -145,7 +145,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_IncludesDataCharacteristicsInRecommendations()
         {
             // Arrange
@@ -169,7 +169,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
                 r.Contains("Detector"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithCustomComplexityThreshold_AffectsDetectorSelection()
         {
             // Arrange - Use a very low complexity threshold so data appears "complex"
@@ -209,7 +209,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(highThresholdResult.ConfidenceLevel >= 0.0 && highThresholdResult.ConfidenceLevel <= 1.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithCustomPerformanceThreshold_AffectsPerformanceClassification()
         {
             // Arrange - Use different performance thresholds
@@ -253,7 +253,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(Enum.IsDefined(typeof(FitType), highThresholdResult.FitType));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithLowMse_ReturnsResult()
         {
             // Arrange
@@ -268,7 +268,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithHighMse_ReturnsResult()
         {
             // Arrange
@@ -283,7 +283,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ProducesConsistentResults()
         {
             // Arrange
@@ -299,7 +299,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.Equal(result1.ConfidenceLevel, result2.ConfidenceLevel);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithDifferentMseValues_AdaptsSelection()
         {
             // Arrange
@@ -320,7 +320,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(highMseResult.Recommendations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ResultContainsAllRequiredFields()
         {
             // Arrange
@@ -338,7 +338,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotEmpty(result.Recommendations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -406,7 +406,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.True(System.Enum.IsDefined(typeof(FitType), result.FitType));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void DetectFit_ProvidesRecommendationsBasedOnSelection()
         {
             // Arrange

@@ -31,7 +31,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region OpenVocabSAM
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OpenVocabSAM_Construction_Succeeds()
     {
         var model = new OpenVocabSAM<double>(Arch());
@@ -39,7 +39,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OpenVocabSAM_Predict_ReturnsOutput()
     {
         var model = new OpenVocabSAM<double>(Arch());
@@ -48,7 +48,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OpenVocabSAM_Dispose_DoesNotThrow()
     {
         var model = new OpenVocabSAM<double>(Arch());
@@ -59,7 +59,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region GroundedSAM2
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GroundedSAM2_Construction_Succeeds()
     {
         var model = new GroundedSAM2<double>(Arch());
@@ -67,7 +67,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GroundedSAM2_Predict_ReturnsOutput()
     {
         var model = new GroundedSAM2<double>(Arch());
@@ -76,7 +76,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GroundedSAM2_Dispose_DoesNotThrow()
     {
         var model = new GroundedSAM2<double>(Arch());
@@ -87,7 +87,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region CATSeg
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CATSeg_Construction_Succeeds()
     {
         var model = new CATSeg<double>(Arch());
@@ -95,7 +95,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CATSeg_Predict_ReturnsOutput()
     {
         var model = new CATSeg<double>(Arch());
@@ -104,7 +104,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CATSeg_Dispose_DoesNotThrow()
     {
         var model = new CATSeg<double>(Arch());
@@ -115,7 +115,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region MaskAdapter
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaskAdapter_Construction_Succeeds()
     {
         var model = new MaskAdapter<double>(Arch());
@@ -123,7 +123,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaskAdapter_Predict_ReturnsOutput()
     {
         var model = new MaskAdapter<double>(Arch());
@@ -132,7 +132,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MaskAdapter_Dispose_DoesNotThrow()
     {
         var model = new MaskAdapter<double>(Arch());
@@ -143,7 +143,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region SAN
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SAN_Construction_Succeeds()
     {
         var model = new SAN<double>(Arch());
@@ -151,7 +151,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SAN_Predict_ReturnsOutput()
     {
         var model = new SAN<double>(Arch());
@@ -160,7 +160,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SAN_Dispose_DoesNotThrow()
     {
         var model = new SAN<double>(Arch());
@@ -171,7 +171,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region SED
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SED_Construction_Succeeds()
     {
         var model = new SED<double>(Arch());
@@ -179,7 +179,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SED_Predict_ReturnsOutput()
     {
         var model = new SED<double>(Arch());
@@ -188,7 +188,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SED_Dispose_DoesNotThrow()
     {
         var model = new SED<double>(Arch());
@@ -199,7 +199,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region SegGPT
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SegGPT_Construction_Succeeds()
     {
         var model = new SegGPT<double>(Arch(), modelSize: SegGPTModelSize.ViTLarge);
@@ -207,7 +207,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SegGPT_Predict_ReturnsOutput()
     {
         var model = new SegGPT<double>(Arch(), modelSize: SegGPTModelSize.ViTLarge);
@@ -216,7 +216,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SegGPT_Dispose_DoesNotThrow()
     {
         var model = new SegGPT<double>(Arch());
@@ -227,7 +227,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region SEEM
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SEEM_Construction_Succeeds()
     {
         var model = new SEEM<double>(Arch(), modelSize: SEEMModelSize.Tiny);
@@ -235,7 +235,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SEEM_Predict_ReturnsOutput()
     {
         var model = new SEEM<double>(Arch(), modelSize: SEEMModelSize.Tiny);
@@ -244,7 +244,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SEEM_Dispose_DoesNotThrow()
     {
         var model = new SEEM<double>(Arch());
@@ -255,7 +255,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region LISA
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LISA_Construction_Succeeds()
     {
         var model = new LISA<double>(Arch());
@@ -263,7 +263,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LISA_Predict_ReturnsOutput()
     {
         var model = new LISA<double>(Arch());
@@ -272,7 +272,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LISA_Dispose_DoesNotThrow()
     {
         var model = new LISA<double>(Arch());
@@ -283,7 +283,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region VideoLISA
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VideoLISA_Construction_Succeeds()
     {
         var model = new VideoLISA<double>(Arch());
@@ -291,7 +291,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VideoLISA_Predict_ReturnsOutput()
     {
         var model = new VideoLISA<double>(Arch());
@@ -300,7 +300,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void VideoLISA_Dispose_DoesNotThrow()
     {
         var model = new VideoLISA<double>(Arch());
@@ -311,7 +311,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region GLaMM
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GLaMM_Construction_Succeeds()
     {
         var model = new GLaMM<double>(Arch());
@@ -319,7 +319,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GLaMM_Predict_ReturnsOutput()
     {
         var model = new GLaMM<double>(Arch());
@@ -328,7 +328,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GLaMM_Dispose_DoesNotThrow()
     {
         var model = new GLaMM<double>(Arch());
@@ -339,7 +339,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region OMGLLaVA
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OMGLLaVA_Construction_Succeeds()
     {
         var model = new OMGLLaVA<double>(Arch());
@@ -347,7 +347,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OMGLLaVA_Predict_ReturnsOutput()
     {
         var model = new OMGLLaVA<double>(Arch());
@@ -356,7 +356,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OMGLLaVA_Dispose_DoesNotThrow()
     {
         var model = new OMGLLaVA<double>(Arch());
@@ -367,7 +367,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
 
     #region PixelLM
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PixelLM_Construction_Succeeds()
     {
         var model = new PixelLM<double>(Arch());
@@ -375,7 +375,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PixelLM_Predict_ReturnsOutput()
     {
         var model = new PixelLM<double>(Arch());
@@ -384,7 +384,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
         Assert.True(output.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PixelLM_Dispose_DoesNotThrow()
     {
         var model = new PixelLM<double>(Arch());

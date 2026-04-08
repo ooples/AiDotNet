@@ -16,7 +16,7 @@ public class AzureOpenAIChatModelTests
     private const string ValidApiKey = "test-api-key";
     private const string ValidDeployment = "gpt-4-deployment";
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithValidParameters_InitializesSuccessfully()
     {
         // Arrange & Act
@@ -130,7 +130,7 @@ public class AzureOpenAIChatModelTests
                 presencePenalty: penalty));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithTrailingSlashInEndpoint_RemovesSlash()
     {
         // Arrange
@@ -148,7 +148,7 @@ public class AzureOpenAIChatModelTests
         // but successful construction indicates proper handling)
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithNullPrompt_ThrowsArgumentException()
     {
         // Arrange
@@ -162,7 +162,7 @@ public class AzureOpenAIChatModelTests
             model.GenerateAsync(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithEmptyPrompt_ThrowsArgumentException()
     {
         // Arrange
@@ -176,7 +176,7 @@ public class AzureOpenAIChatModelTests
             model.GenerateAsync(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithWhitespacePrompt_ThrowsArgumentException()
     {
         // Arrange
@@ -190,7 +190,7 @@ public class AzureOpenAIChatModelTests
             model.GenerateAsync("   "));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithSuccessfulResponse_ReturnsContent()
     {
         // Arrange
@@ -236,7 +236,7 @@ public class AzureOpenAIChatModelTests
         Assert.Equal("This is an Azure OpenAI response.", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithHttpError_ThrowsHttpRequestException()
     {
         // Arrange
@@ -265,7 +265,7 @@ public class AzureOpenAIChatModelTests
             model.GenerateAsync("Test prompt"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithEmptyChoices_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -297,7 +297,7 @@ public class AzureOpenAIChatModelTests
             model.GenerateAsync("Test prompt"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithEmptyMessageContent_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -336,7 +336,7 @@ public class AzureOpenAIChatModelTests
             model.GenerateAsync("Test prompt"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Generate_WithSuccessfulResponse_ReturnsContent()
     {
         // Arrange
@@ -377,7 +377,7 @@ public class AzureOpenAIChatModelTests
         Assert.Equal("Synchronous Azure response.", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateResponseAsync_WithSuccessfulResponse_ReturnsContent()
     {
         // Arrange
@@ -418,7 +418,7 @@ public class AzureOpenAIChatModelTests
         Assert.Equal("Response via GenerateResponseAsync.", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithRateLimitError_RetriesAndSucceeds()
     {
         // Arrange
@@ -478,7 +478,7 @@ public class AzureOpenAIChatModelTests
         Assert.Equal(2, callCount); // Should have retried once
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ModelName_AfterConstruction_IncludesAzurePrefix()
     {
         // Arrange

@@ -12,7 +12,7 @@ public class EmbeddingLayersIntegrationTests
 {
     #region EmbeddingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EmbeddingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - vocabulary of 1000 tokens, 64-dimensional embeddings
@@ -34,7 +34,7 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EmbeddingLayer_ForwardPass_1D_ProducesValidOutput()
     {
         // Arrange - 1D input [seqLen]
@@ -55,7 +55,7 @@ public class EmbeddingLayersIntegrationTests
 
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EmbeddingLayer_GetSetParameters_RoundTrips()
     {
         // Arrange
@@ -77,7 +77,7 @@ public class EmbeddingLayersIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EmbeddingLayer_AuxiliaryLoss_ComputesRegularization()
     {
         // Arrange
@@ -99,7 +99,7 @@ public class EmbeddingLayersIntegrationTests
 
     #region PatchEmbeddingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PatchEmbeddingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - 32x32 image with 8x8 patches
@@ -125,7 +125,7 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PatchEmbeddingLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange - 3D input [C, H, W] (no batch dimension)
@@ -149,7 +149,7 @@ public class EmbeddingLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PatchEmbeddingLayer_GetSetParameters_RoundTrips()
     {
         // Arrange
@@ -174,7 +174,7 @@ public class EmbeddingLayersIntegrationTests
 
     #region TimeEmbeddingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeEmbeddingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange - typical diffusion model configuration
@@ -195,7 +195,7 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeEmbeddingLayer_ForwardPass_2D_ProducesValidOutput()
     {
         // Arrange - 2D input [batch, 1]
@@ -216,7 +216,7 @@ public class EmbeddingLayersIntegrationTests
 
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeEmbeddingLayer_SinusoidalEncoding_UniquePerTimestep()
     {
         // Arrange
@@ -248,7 +248,7 @@ public class EmbeddingLayersIntegrationTests
 
     #region PositionalEncodingLayer Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PositionalEncodingLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
@@ -267,7 +267,7 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PositionalEncodingLayer_ForwardPass_3D_ProducesValidOutput()
     {
         // Arrange - 3D input [batch, seqLen, embedding]
@@ -285,7 +285,7 @@ public class EmbeddingLayersIntegrationTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PositionalEncodingLayer_AddsPositionalInformation()
     {
         // Arrange
@@ -311,7 +311,7 @@ public class EmbeddingLayersIntegrationTests
         Assert.True(hasNonZero, "Positional encoding should add non-zero values");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PositionalEncodingLayer_DifferentPositions_HaveDifferentEncodings()
     {
         // Arrange
@@ -343,7 +343,7 @@ public class EmbeddingLayersIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PositionalEncodingLayer_NoTrainableParameters()
     {
         // Arrange
@@ -362,7 +362,7 @@ public class EmbeddingLayersIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EmbeddingLayer_SingleToken_Works()
     {
         // Arrange
@@ -381,7 +381,7 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EmbeddingLayer_LargeVocabulary_Works()
     {
         // Arrange - large vocabulary
@@ -397,7 +397,7 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PatchEmbeddingLayer_SquareImage_Works()
     {
         // Arrange - 64x64 image with 16x16 patches
@@ -416,7 +416,7 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeEmbeddingLayer_ZeroTimestep_Works()
     {
         // Arrange
@@ -434,7 +434,7 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TimeEmbeddingLayer_MaxTimestep_Works()
     {
         // Arrange
@@ -453,7 +453,7 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PositionalEncodingLayer_ExactMaxLength_Works()
     {
         // Arrange
@@ -470,7 +470,7 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PositionalEncodingLayer_ShortSequence_Works()
     {
         // Arrange - sequence much shorter than max

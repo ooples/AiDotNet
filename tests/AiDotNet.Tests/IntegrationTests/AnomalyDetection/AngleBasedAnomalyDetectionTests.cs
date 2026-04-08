@@ -61,14 +61,14 @@ public class AngleBasedAnomalyDetectionTests
 
     #region ABODDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ABOD_Construction_NotFittedByDefault()
     {
         var detector = new ABODDetector<double>();
         Assert.False(detector.IsFitted);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ABOD_OutlierGetsHighestScore()
     {
         var detector = new ABODDetector<double>();
@@ -80,7 +80,7 @@ public class AngleBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ABOD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new ABODDetector<double>();
@@ -94,7 +94,7 @@ public class AngleBasedAnomalyDetectionTests
 
     #region FastABODDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FastABOD_OutlierGetsHighestScore()
     {
         var detector = new FastABODDetector<double>(k: 5);
@@ -105,7 +105,7 @@ public class AngleBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FastABOD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new FastABODDetector<double>(k: 5);
@@ -119,7 +119,7 @@ public class AngleBasedAnomalyDetectionTests
 
     #region OutlierRemovalAdapter Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OutlierRemovalAdapter_RemovesOutliers()
     {
         var detector = new ZScoreDetector<double>();
@@ -131,7 +131,7 @@ public class AngleBasedAnomalyDetectionTests
 
     #region NoOutlierRemoval Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NoOutlierRemoval_PassesDataThrough()
     {
         var noRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();

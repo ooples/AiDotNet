@@ -72,7 +72,7 @@ public class ModelRegistryTests : IDisposable
 
     #region RegisterModel Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RegisterModel_WithValidInput_ReturnsModelId()
     {
         // Arrange
@@ -87,7 +87,7 @@ public class ModelRegistryTests : IDisposable
         Assert.NotEmpty(modelId);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RegisterModel_WithTags_StoresTags()
     {
         // Arrange
@@ -109,7 +109,7 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal("aidotnet", registeredModel.Tags["framework"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RegisterModel_WithNullName_ThrowsArgumentException()
     {
         // Arrange
@@ -120,7 +120,7 @@ public class ModelRegistryTests : IDisposable
         Assert.Throws<ArgumentException>(() => _registry.RegisterModel(null!, model, metadata));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RegisterModel_WithNullModel_ThrowsArgumentNullException()
     {
         // Arrange
@@ -134,7 +134,7 @@ public class ModelRegistryTests : IDisposable
 
     #region GetModel Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetModel_WithoutVersion_ReturnsLatestVersion()
     {
         // Arrange
@@ -150,7 +150,7 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal(2, latestModel.Version);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetModel_WithSpecificVersion_ReturnsCorrectVersion()
     {
         // Arrange
@@ -166,14 +166,14 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal(1, v1Model.Version);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetModel_WithInvalidName_ThrowsArgumentException()
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _registry.GetModel("nonexistent-model"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetModel_WithInvalidVersion_ThrowsArgumentException()
     {
         // Arrange
@@ -184,7 +184,7 @@ public class ModelRegistryTests : IDisposable
         Assert.Throws<ArgumentException>(() => _registry.GetModel("single-version", version: 99));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetLatestModel_ReturnsHighestVersionNumber()
     {
         // Arrange
@@ -205,7 +205,7 @@ public class ModelRegistryTests : IDisposable
 
     #region CreateModelVersion Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateModelVersion_IncrementsVersionNumber()
     {
         // Arrange
@@ -221,7 +221,7 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal(3, version3);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CreateModelVersion_WithNonExistentModel_ThrowsArgumentException()
     {
         // Arrange
@@ -236,7 +236,7 @@ public class ModelRegistryTests : IDisposable
 
     #region Model Stage Transition Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TransitionModelStage_ToStaging_UpdatesStage()
     {
         // Arrange
@@ -251,7 +251,7 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal(ModelStage.Staging, registeredModel.Stage);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TransitionModelStage_ToProduction_ArchivesPreviousProduction()
     {
         // Arrange
@@ -273,7 +273,7 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal(ModelStage.Production, v2.Stage);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetModelByStage_ReturnsCorrectModel()
     {
         // Arrange
@@ -294,7 +294,7 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal(2, productionModel.Version);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetModelByStage_WhenNoModelInStage_ReturnsNull()
     {
         // Arrange
@@ -308,7 +308,7 @@ public class ModelRegistryTests : IDisposable
         Assert.Null(productionModel);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ArchiveModel_TransitionsToArchived()
     {
         // Arrange
@@ -327,7 +327,7 @@ public class ModelRegistryTests : IDisposable
 
     #region List and Search Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ListModels_ReturnsAllModelNames()
     {
         // Arrange
@@ -346,7 +346,7 @@ public class ModelRegistryTests : IDisposable
         Assert.Contains("model-c", models);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ListModels_WithFilter_ReturnsMatchingModels()
     {
         // Arrange
@@ -363,7 +363,7 @@ public class ModelRegistryTests : IDisposable
         Assert.All(models, m => Assert.Contains("classification", m));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ListModels_WithTags_ReturnsMatchingModels()
     {
         // Arrange
@@ -384,7 +384,7 @@ public class ModelRegistryTests : IDisposable
         Assert.Contains("prod-model-2", prodModels);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ListModelVersions_ReturnsAllVersions()
     {
         // Arrange
@@ -403,7 +403,7 @@ public class ModelRegistryTests : IDisposable
         Assert.Contains(versions, v => v.Version == 3);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SearchModels_ByNamePattern_ReturnsMatchingModels()
     {
         // Arrange
@@ -420,7 +420,7 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal(2, results.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void SearchModels_ByStage_ReturnsMatchingModels()
     {
         // Arrange
@@ -442,7 +442,7 @@ public class ModelRegistryTests : IDisposable
 
     #region Delete Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DeleteModelVersion_RemovesSpecificVersion()
     {
         // Arrange
@@ -460,7 +460,7 @@ public class ModelRegistryTests : IDisposable
         Assert.NotNull(v2);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DeleteModelVersion_LastVersion_RemovesEntireModel()
     {
         // Arrange
@@ -475,7 +475,7 @@ public class ModelRegistryTests : IDisposable
         Assert.DoesNotContain("delete-last-version", models);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DeleteModel_RemovesAllVersions()
     {
         // Arrange
@@ -496,7 +496,7 @@ public class ModelRegistryTests : IDisposable
 
     #region Model Comparison Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void CompareModels_ReturnsMetadataDifferences()
     {
         // Arrange
@@ -523,7 +523,7 @@ public class ModelRegistryTests : IDisposable
         Assert.True(comparison.MetadataDifferences.ContainsKey("FeatureCount"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetModelLineage_ReturnsLineageInfo()
     {
         // Arrange
@@ -543,7 +543,7 @@ public class ModelRegistryTests : IDisposable
 
     #region Update Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void UpdateModelMetadata_UpdatesMetadata()
     {
         // Arrange
@@ -564,7 +564,7 @@ public class ModelRegistryTests : IDisposable
         Assert.Equal(20, registeredModel.Metadata.FeatureCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void UpdateModelTags_AddsOrUpdatesTags()
     {
         // Arrange
@@ -591,7 +591,7 @@ public class ModelRegistryTests : IDisposable
 
     #region Persistence Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Registry_PersistsModelsToDisk()
     {
         // Arrange
@@ -606,7 +606,7 @@ public class ModelRegistryTests : IDisposable
         Assert.Contains("persistence-test", models);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Registry_PersistsVersionsToDisk()
     {
         // Arrange
@@ -626,7 +626,7 @@ public class ModelRegistryTests : IDisposable
 
     #region Storage Path Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetModelStoragePath_ReturnsValidPath()
     {
         // Arrange

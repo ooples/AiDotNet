@@ -55,7 +55,7 @@ public class GaussianProcessesIntegrationTests
 
     #region StandardGaussianProcess Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardGaussianProcess_Construction_WithGaussianKernel_Succeeds()
     {
         var kernel = new GaussianKernel<double>();
@@ -63,7 +63,7 @@ public class GaussianProcessesIntegrationTests
         Assert.NotNull(gp);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardGaussianProcess_Construction_DifferentDecompositionTypes_Succeed()
     {
         var kernel = new GaussianKernel<double>();
@@ -77,7 +77,7 @@ public class GaussianProcessesIntegrationTests
         Assert.NotNull(gpSvd);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardGP_FitAndPredict_InterpolatesTrainingPoints()
     {
         var kernel = new GaussianKernel<double>();
@@ -95,7 +95,7 @@ public class GaussianProcessesIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardGP_FitAndPredict_VarianceNearZeroAtTrainingPoints()
     {
         var kernel = new GaussianKernel<double>();
@@ -113,7 +113,7 @@ public class GaussianProcessesIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardGP_FitAndPredict_VarianceHigherFarFromData()
     {
         var kernel = new GaussianKernel<double>();
@@ -133,7 +133,7 @@ public class GaussianProcessesIntegrationTests
             $"Variance far from data ({varianceFar}) should be greater than at training point ({varianceAtData})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardGP_FitAndPredict_PredictionIsFinite()
     {
         var kernel = new GaussianKernel<double>();
@@ -151,7 +151,7 @@ public class GaussianProcessesIntegrationTests
         Assert.False(double.IsInfinity(variance), "Predicted variance should not be Infinity");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardGP_UpdateKernel_ChangesPredictions()
     {
         var gaussianKernel = new GaussianKernel<double>();
@@ -171,7 +171,7 @@ public class GaussianProcessesIntegrationTests
         Assert.False(double.IsNaN(mean2), "Prediction after kernel update should not be NaN");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StandardGP_WithLuDecomposition_ProducesValidPredictions()
     {
         var kernel = new GaussianKernel<double>();
@@ -190,7 +190,7 @@ public class GaussianProcessesIntegrationTests
 
     #region SparseGaussianProcess Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SparseGaussianProcess_Construction_WithGaussianKernel_Succeeds()
     {
         var kernel = new GaussianKernel<double>();
@@ -198,7 +198,7 @@ public class GaussianProcessesIntegrationTests
         Assert.NotNull(gp);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SparseGP_FitAndPredict_InterpolatesTrainingPoints()
     {
         var kernel = new GaussianKernel<double>();
@@ -217,7 +217,7 @@ public class GaussianProcessesIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SparseGP_FitAndPredict_VarianceNonNegative()
     {
         var kernel = new GaussianKernel<double>();
@@ -237,7 +237,7 @@ public class GaussianProcessesIntegrationTests
 
     #region MultiOutputGaussianProcess Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiOutputGaussianProcess_Construction_WithGaussianKernel_Succeeds()
     {
         var kernel = new GaussianKernel<double>();
@@ -245,7 +245,7 @@ public class GaussianProcessesIntegrationTests
         Assert.NotNull(gp);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiOutputGP_Fit_ThrowsInvalidOperation()
     {
         var kernel = new GaussianKernel<double>();
@@ -256,7 +256,7 @@ public class GaussianProcessesIntegrationTests
         Assert.Throws<InvalidOperationException>(() => gp.Fit(X, y));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiOutputGP_FitMultiOutput_InterpolatesTrainingPoints()
     {
         var kernel = new GaussianKernel<double>();
@@ -281,7 +281,7 @@ public class GaussianProcessesIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiOutputGP_FitMultiOutput_CovarianceNonNegativeDiagonal()
     {
         var kernel = new GaussianKernel<double>();
@@ -331,7 +331,7 @@ public class GaussianProcessesIntegrationTests
         Assert.False(double.IsNaN(variance), $"Variance with {kernelName} kernel should not be NaN");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Float_StandardGP_FitAndPredict_ProducesFinitePredictions()
     {
         var kernel = new GaussianKernel<float>();

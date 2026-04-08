@@ -15,7 +15,7 @@ public class TokenizationDeepMathIntegrationTests
     // Vocabulary Construction Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vocabulary_DefaultConstruction_HasUnkToken()
     {
         var vocab = new Vocabulary();
@@ -24,7 +24,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.True(vocab.ContainsToken("[UNK]"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vocabulary_CustomUnkToken()
     {
         var vocab = new Vocabulary("<unk>");
@@ -34,7 +34,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.False(vocab.ContainsToken("[UNK]"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vocabulary_FromDictionary_PreservesMapping()
     {
         var dict = new Dictionary<string, int>
@@ -51,7 +51,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal(2, vocab.GetTokenId("[UNK]"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Vocabulary_FromDictionary_NullThrows()
     {
         Dictionary<string, int>? nullDict = null;
@@ -63,7 +63,7 @@ public class TokenizationDeepMathIntegrationTests
     // Token ID Assignment Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AddToken_AssignsSequentialIds()
     {
         var vocab = new Vocabulary();
@@ -78,7 +78,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal(3, id3);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AddToken_DuplicateReturnsExistingId()
     {
         var vocab = new Vocabulary();
@@ -90,14 +90,14 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal(2, vocab.Size); // [UNK] + "hello" = 2, not 3
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AddToken_EmptyString_Throws()
     {
         var vocab = new Vocabulary();
         Assert.Throws<ArgumentException>(() => vocab.AddToken(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AddToken_NullString_Throws()
     {
         var vocab = new Vocabulary();
@@ -108,7 +108,7 @@ public class TokenizationDeepMathIntegrationTests
     // Bijective Mapping Tests (token <-> id)
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TokenToId_And_IdToToken_AreBijective()
     {
         var vocab = new Vocabulary();
@@ -126,7 +126,7 @@ public class TokenizationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllIds_MapToUniqueTokens()
     {
         var vocab = new Vocabulary();
@@ -144,7 +144,7 @@ public class TokenizationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllTokens_MapToUniqueIds()
     {
         var vocab = new Vocabulary();
@@ -165,7 +165,7 @@ public class TokenizationDeepMathIntegrationTests
     // Unknown Token Handling Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetTokenId_UnknownToken_ReturnsUnkId()
     {
         var vocab = new Vocabulary();
@@ -177,7 +177,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal(unkId, unknownId);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetToken_InvalidId_ReturnsNull()
     {
         var vocab = new Vocabulary();
@@ -186,7 +186,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Null(token);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContainsToken_ExistingToken_True()
     {
         var vocab = new Vocabulary();
@@ -195,7 +195,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.True(vocab.ContainsToken("test"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContainsToken_NonExistingToken_False()
     {
         var vocab = new Vocabulary();
@@ -203,14 +203,14 @@ public class TokenizationDeepMathIntegrationTests
         Assert.False(vocab.ContainsToken("nonexistent"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContainsId_ExistingId_True()
     {
         var vocab = new Vocabulary();
         Assert.True(vocab.ContainsId(0)); // [UNK] id
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ContainsId_NonExistingId_False()
     {
         var vocab = new Vocabulary();
@@ -221,7 +221,7 @@ public class TokenizationDeepMathIntegrationTests
     // Batch Operations Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AddTokens_AddsAllTokens()
     {
         var vocab = new Vocabulary();
@@ -234,14 +234,14 @@ public class TokenizationDeepMathIntegrationTests
             Assert.True(vocab.ContainsToken(token));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AddTokens_NullCollection_Throws()
     {
         var vocab = new Vocabulary();
         Assert.Throws<ArgumentNullException>(() => vocab.AddTokens(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AddTokens_WithDuplicates_CountsUnique()
     {
         var vocab = new Vocabulary();
@@ -250,7 +250,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal(4, vocab.Size); // [UNK], a, b, c
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetAllTokens_ReturnsAllAddedTokens()
     {
         var vocab = new Vocabulary();
@@ -268,7 +268,7 @@ public class TokenizationDeepMathIntegrationTests
     // Clear Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clear_ResetsToOnlyUnk()
     {
         var vocab = new Vocabulary();
@@ -283,7 +283,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.False(vocab.ContainsToken("a"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clear_CanAddTokensAgainAfter()
     {
         var vocab = new Vocabulary();
@@ -294,7 +294,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal(1, newId); // 0 is [UNK] after clear
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Clear_UnkIdPreserved()
     {
         var vocab = new Vocabulary();
@@ -309,7 +309,7 @@ public class TokenizationDeepMathIntegrationTests
     // Vocabulary Size Invariants
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Size_EqualsTokenToIdCount()
     {
         var vocab = new Vocabulary();
@@ -318,7 +318,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal(vocab.Size, vocab.TokenToId.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Size_EqualsIdToTokenCount()
     {
         var vocab = new Vocabulary();
@@ -327,7 +327,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal(vocab.Size, vocab.IdToToken.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TokenToId_And_IdToToken_SameSize()
     {
         var vocab = new Vocabulary();
@@ -340,7 +340,7 @@ public class TokenizationDeepMathIntegrationTests
     // Large Vocabulary Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LargeVocabulary_1000Tokens_AllRetrievable()
     {
         var vocab = new Vocabulary();
@@ -365,7 +365,7 @@ public class TokenizationDeepMathIntegrationTests
     // SpecialTokens Preset Tests
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpecialTokens_Bert_HasStandardTokens()
     {
         var tokens = SpecialTokens.Bert();
@@ -377,7 +377,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal("[MASK]", tokens.MaskToken);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpecialTokens_Gpt_HasEndOfText()
     {
         var tokens = SpecialTokens.Gpt();
@@ -388,7 +388,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal("<|endoftext|>", tokens.EosToken);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpecialTokens_T5_HasCorrectTokens()
     {
         var tokens = SpecialTokens.T5();
@@ -398,7 +398,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal("</s>", tokens.EosToken);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpecialTokens_Clip_HasStartAndEndOfText()
     {
         var tokens = SpecialTokens.Clip();
@@ -408,7 +408,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal("<|startoftext|>", tokens.ClsToken);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpecialTokens_Default_IsBert()
     {
         var defaultTokens = SpecialTokens.Default();
@@ -421,7 +421,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal(bert.MaskToken, defaultTokens.MaskToken);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpecialTokens_GetAllSpecialTokens_ReturnsNonEmpty()
     {
         var bert = SpecialTokens.Bert();
@@ -435,7 +435,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Contains("[MASK]", all);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpecialTokens_Bert_GetAll_Count5()
     {
         // BERT has 5 non-empty tokens: UNK, PAD, CLS, SEP, MASK
@@ -446,7 +446,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal(5, all.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpecialTokens_Gpt_GetAll_Count4()
     {
         // GPT has UNK, PAD, BOS, EOS all set to "<|endoftext|>"
@@ -458,7 +458,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal(4, all.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SpecialTokens_AdditionalTokens_Included()
     {
         var tokens = new SpecialTokens();
@@ -474,7 +474,7 @@ public class TokenizationDeepMathIntegrationTests
     // Vocabulary With From-Dictionary Constructor Edge Cases
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FromDictionary_WithoutUnk_AutoAdds()
     {
         var dict = new Dictionary<string, int>
@@ -490,7 +490,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal(3, vocab.Size); // hello, world, [UNK]
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FromDictionary_WithUnk_UsesExistingId()
     {
         var dict = new Dictionary<string, int>
@@ -506,7 +506,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal(3, vocab.Size);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FromDictionary_EmptyDict_OnlyUnk()
     {
         var dict = new Dictionary<string, int>();
@@ -520,7 +520,7 @@ public class TokenizationDeepMathIntegrationTests
     // Token Encoding/Decoding Consistency
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EncodeDecodeSequence_HandVerified()
     {
         var vocab = new Vocabulary();
@@ -538,7 +538,7 @@ public class TokenizationDeepMathIntegrationTests
         Assert.Equal(sentence, decoded);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EncodeWithUnknowns_HandVerified()
     {
         var vocab = new Vocabulary();

@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.InferenceOptimization;
 
 public class OptimizationGraphTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void AddNode_ShouldAddNodeToGraph()
     {
         // Arrange
@@ -25,7 +25,7 @@ public class OptimizationGraphTests
         Assert.Single(graph.Nodes);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RemoveNode_ShouldRemoveNodeFromGraph()
     {
         // Arrange
@@ -45,7 +45,7 @@ public class OptimizationGraphTests
         Assert.Empty(graph.Nodes);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FindNodeById_ShouldReturnCorrectNode()
     {
         // Arrange
@@ -66,7 +66,7 @@ public class OptimizationGraphTests
         Assert.Equal(node, found);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetTopologicalOrder_ShouldReturnValidOrder()
     {
         // Arrange
@@ -96,7 +96,7 @@ public class OptimizationGraphTests
         Assert.True(order.IndexOf(relu) < order.IndexOf(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Validate_ShouldReturnTrueForValidGraph()
     {
         // Arrange
@@ -120,7 +120,7 @@ public class OptimizationGraphTests
         Assert.True(isValid);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Clone_ShouldCreateDeepCopy()
     {
         // Arrange
@@ -147,7 +147,7 @@ public class OptimizationGraphTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GetStatistics_ShouldReturnCorrectCounts()
     {
         // Arrange

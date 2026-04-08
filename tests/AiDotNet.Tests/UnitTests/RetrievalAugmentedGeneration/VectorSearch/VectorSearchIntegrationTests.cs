@@ -12,7 +12,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
     {
         #region End-to-End Search Pipeline Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EndToEnd_SearchPipeline_WithFlatIndex_ReturnsAccurateResults()
         {
             // Arrange
@@ -38,7 +38,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EndToEnd_SearchPipeline_WithIVFIndex_ReturnsReasonableResults()
         {
             // Arrange
@@ -59,7 +59,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
             Assert.True(results.Count <= 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EndToEnd_SearchPipeline_WithHNSWIndex_ReturnsReasonableResults()
         {
             // Arrange
@@ -79,7 +79,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
             Assert.Equal(10, results.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EndToEnd_SearchPipeline_WithLSHIndex_ReturnsReasonableResults()
         {
             // Arrange
@@ -103,7 +103,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
 
         #region Multi-Vector Search Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MultiVectorSearch_WithDifferentMetrics_ProducesDifferentResults()
         {
             // Arrange
@@ -130,7 +130,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
             // (though some results may overlap)
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MultiVectorSearch_WithMultipleQueries_HandlesCorrectly()
         {
             // Arrange
@@ -153,7 +153,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
 
         #region Filtered Search Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FilteredSearch_ByRemovingVectors_WorksCorrectly()
         {
             // Arrange
@@ -185,7 +185,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
 
         #region Recall and Accuracy Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Recall_FlatIndexVsApproximateIndexes_FlatHasPerfectRecall()
         {
             // Arrange
@@ -216,7 +216,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
             Assert.True(overlap > 0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Recall_IncreasingProbes_ImprovesRecall()
         {
             // Arrange
@@ -251,7 +251,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
 
         #region Performance and Scale Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void LargeScale_SearchWithThousandsOfVectors_CompletesSuccessfully()
         {
             // Arrange
@@ -272,7 +272,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
             Assert.Equal(1000, index.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void HighDimensional_SearchWith512Dimensions_WorksCorrectly()
         {
             // Arrange
@@ -306,7 +306,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
 
         #region Edge Cases and Robustness Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void RobustnessTest_AddRemoveAddCycle_MaintainsConsistency()
         {
             // Arrange
@@ -336,7 +336,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
             Assert.Equal(10, results.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void NumericalStability_WithVerySmallVectors_WorksCorrectly()
         {
             // Arrange
@@ -360,7 +360,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch
             Assert.Equal(2, results.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ComparisonTest_AllIndexTypes_ReturnValidResults()
         {
             // Arrange

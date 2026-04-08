@@ -13,7 +13,7 @@ public class TensorIntegrationTests
 
     #region Constructor Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_ConstructWithDimensions_CreatesCorrectShape()
     {
         // Arrange & Act
@@ -26,7 +26,7 @@ public class TensorIntegrationTests
         Assert.Equal(4, tensor.Shape[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_ConstructWithVector_InitializesData()
     {
         // Arrange
@@ -42,7 +42,7 @@ public class TensorIntegrationTests
         Assert.Equal(6.0, tensor[5]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_ConstructWithMatrix_InitializesCorrectly()
     {
         // Arrange
@@ -64,7 +64,7 @@ public class TensorIntegrationTests
 
     #region Static Factory Methods
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_CreateRandom_CreatesWithCorrectDimensions()
     {
         // Arrange & Act
@@ -77,7 +77,7 @@ public class TensorIntegrationTests
         Assert.Equal(5, tensor.Shape[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_FromVector_CreatesFromVector()
     {
         // Arrange
@@ -90,7 +90,7 @@ public class TensorIntegrationTests
         Assert.Equal(4, tensor.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_FromMatrix_CreatesFromMatrix()
     {
         // Arrange
@@ -108,7 +108,7 @@ public class TensorIntegrationTests
         Assert.Equal(2, tensor.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_FromScalar_CreatesSingleValueTensor()
     {
         // Arrange & Act
@@ -119,7 +119,7 @@ public class TensorIntegrationTests
         Assert.Equal(42.0, tensor[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_CreateDefault_FillsWithValue()
     {
         // Arrange & Act
@@ -133,7 +133,7 @@ public class TensorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Empty_CreatesMinimalTensor()
     {
         // Arrange & Act
@@ -147,7 +147,7 @@ public class TensorIntegrationTests
 
     #region Arithmetic Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Add_AddsTwoTensors()
     {
         // Arrange
@@ -164,7 +164,7 @@ public class TensorIntegrationTests
         Assert.Equal(12.0, result[3], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Subtract_SubtractsTwoTensors()
     {
         // Arrange
@@ -181,7 +181,7 @@ public class TensorIntegrationTests
         Assert.Equal(4.0, result[3], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_MultiplyScalar_MultipliesByScalar()
     {
         // Arrange
@@ -197,7 +197,7 @@ public class TensorIntegrationTests
         Assert.Equal(8.0, result[3], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_ElementwiseMultiply_MultipliesElementWise()
     {
         // Arrange
@@ -214,7 +214,7 @@ public class TensorIntegrationTests
         Assert.Equal(20.0, result[3], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_PointwiseMultiply_SameAsElementwise()
     {
         // Arrange
@@ -230,7 +230,7 @@ public class TensorIntegrationTests
         Assert.Equal(18.0, result[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_OperatorAdd_WorksLikeMethod()
     {
         // Arrange
@@ -245,7 +245,7 @@ public class TensorIntegrationTests
         Assert.Equal(6.0, result[1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_DotProduct_ComputesCorrectly()
     {
         // Arrange
@@ -263,7 +263,7 @@ public class TensorIntegrationTests
 
     #region Reshape and Transform
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Reshape_ChangesShape()
     {
         // Arrange
@@ -279,7 +279,7 @@ public class TensorIntegrationTests
         Assert.Equal(6, reshaped.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Transpose_TransposesTensor()
     {
         // Arrange
@@ -293,7 +293,7 @@ public class TensorIntegrationTests
         Assert.Equal(2, transposed.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Clone_CreatesIndependentCopy()
     {
         // Arrange
@@ -308,7 +308,7 @@ public class TensorIntegrationTests
         Assert.Equal(999.0, clone[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Fill_FillsWithValue()
     {
         // Arrange
@@ -328,7 +328,7 @@ public class TensorIntegrationTests
 
     #region Aggregation Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Sum_SumsAllElements()
     {
         // Arrange
@@ -341,7 +341,7 @@ public class TensorIntegrationTests
         Assert.Equal(10.0, sum[0], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Max_FindsMaximum()
     {
         // Arrange
@@ -355,7 +355,7 @@ public class TensorIntegrationTests
         Assert.Equal(1, maxIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_SumOverAxis_SumsCorrectAxis()
     {
         // Arrange
@@ -372,7 +372,7 @@ public class TensorIntegrationTests
 
     #region Conversion Methods
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_ToVector_ConvertsToVector()
     {
         // Arrange
@@ -387,7 +387,7 @@ public class TensorIntegrationTests
         Assert.Equal(4.0, vector[3]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_ToMatrix_ConvertsToMatrix()
     {
         // Arrange
@@ -407,7 +407,7 @@ public class TensorIntegrationTests
 
     #region Stack and Concatenate
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Stack_StacksMultipleTensors()
     {
         // Arrange
@@ -422,7 +422,7 @@ public class TensorIntegrationTests
         Assert.Equal(2, stacked.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Concatenate_ConcatenatesTensors()
     {
         // Arrange
@@ -441,7 +441,7 @@ public class TensorIntegrationTests
 
     #region Row and Vector Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_GetRow_ReturnsCorrectRow()
     {
         // Arrange
@@ -454,7 +454,7 @@ public class TensorIntegrationTests
         Assert.Equal(2, row.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_SetRow_SetsRowCorrectly()
     {
         // Arrange
@@ -471,7 +471,7 @@ public class TensorIntegrationTests
         Assert.Equal(10.0, row[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_GetVector_ReturnsVectorAtIndex()
     {
         // Arrange
@@ -488,7 +488,7 @@ public class TensorIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorMatrixVector_Integration_WorksTogether()
     {
         // Arrange
@@ -510,7 +510,7 @@ public class TensorIntegrationTests
         Assert.Equal(8.0, asMatrix[1, 1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_LargeOperations_CompletesWithinTimeout()
     {
         // Arrange
@@ -529,7 +529,7 @@ public class TensorIntegrationTests
 
     #region Tensor Broadcast Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_BroadcastAdd_AddsTensorsWithBroadcasting()
     {
         // Arrange - 2D tensor + 1D tensor broadcasting
@@ -547,7 +547,7 @@ public class TensorIntegrationTests
         Assert.Equal(33.0, result[2], Tolerance); // 3 + 30
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_BroadcastMultiply_MultipliesTensorsWithBroadcasting()
     {
         // Arrange
@@ -566,7 +566,7 @@ public class TensorIntegrationTests
 
     #region Tensor Scale and Transform
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Scale_ScalesByFactor()
     {
         // Arrange
@@ -582,7 +582,7 @@ public class TensorIntegrationTests
         Assert.Equal(12.0, scaled[3], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Transform_AppliesFunctionWithIndex()
     {
         // Arrange
@@ -601,7 +601,7 @@ public class TensorIntegrationTests
 
     #region Tensor Mean and Aggregation
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Mean_ComputesMean()
     {
         // Arrange
@@ -614,7 +614,7 @@ public class TensorIntegrationTests
         Assert.Equal(5.0, mean, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_MeanOverAxis_ComputesMeanOverAxis()
     {
         // Arrange
@@ -627,7 +627,7 @@ public class TensorIntegrationTests
         Assert.Equal(3, mean.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_MaxOverAxis_ComputesMaxOverAxis()
     {
         // Arrange
@@ -644,7 +644,7 @@ public class TensorIntegrationTests
 
     #region Tensor Slice Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_SliceAxis_ReturnsSliceAlongAxis()
     {
         // Arrange
@@ -658,7 +658,7 @@ public class TensorIntegrationTests
         Assert.Equal(2, slice.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_GetSliceByBatch_ReturnsCorrectSlice()
     {
         // Arrange - Create a 2D tensor
@@ -679,7 +679,7 @@ public class TensorIntegrationTests
 
     #region Tensor SetSlice Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_SetSliceWithVector_SetsValuesCorrectly()
     {
         // Arrange
@@ -699,7 +699,7 @@ public class TensorIntegrationTests
 
     #region Tensor MatrixMultiply
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_MatrixMultiply_MultipliesCorrectly()
     {
         // Arrange - Two 2D tensors for matrix multiplication
@@ -720,7 +720,7 @@ public class TensorIntegrationTests
 
     #region Tensor Transpose Variants
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_TransposeWithPermutation_PermutesDimensions()
     {
         // Arrange - 3D tensor
@@ -735,7 +735,7 @@ public class TensorIntegrationTests
         Assert.Equal(3, transposed.Shape[2]); // Was dimension 1
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_TransposeLast2D_TransposesLastTwoDimensions()
     {
         // Arrange - 3D tensor with shape (2, 3, 4)
@@ -754,7 +754,7 @@ public class TensorIntegrationTests
 
     #region Tensor Factory Methods
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_FromRowMatrix_CreatesCorrectTensor()
     {
         // Arrange
@@ -770,7 +770,7 @@ public class TensorIntegrationTests
         Assert.Equal(3, tensor.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_FromColumnMatrix_CreatesCorrectTensor()
     {
         // Arrange
@@ -792,7 +792,7 @@ public class TensorIntegrationTests
 
     #region Tensor Flat Index Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_GetFlatIndexValue_ReturnsCorrectValue()
     {
         // Arrange
@@ -805,7 +805,7 @@ public class TensorIntegrationTests
         Assert.Equal(5.0, value, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_SetFlatIndexValue_SetsCorrectValue()
     {
         // Arrange
@@ -823,7 +823,7 @@ public class TensorIntegrationTests
 
     #region Tensor Add with Vector
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_AddVector_AddsVectorToTensor()
     {
         // Arrange
@@ -841,7 +841,7 @@ public class TensorIntegrationTests
 
     #region Tensor ElementwiseSubtract
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_ElementwiseSubtract_SubtractsElementwise()
     {
         // Arrange
@@ -862,7 +862,7 @@ public class TensorIntegrationTests
 
     #region Tensor Cast Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Cast_DoubleToFloat_ConvertsCorrectly()
     {
         // Arrange
@@ -879,7 +879,7 @@ public class TensorIntegrationTests
         Assert.Equal(4.5f, floatTensor[3], 0.001f);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Cast_PreservesShape()
     {
         // Arrange
@@ -898,7 +898,7 @@ public class TensorIntegrationTests
 
     #region SubTensor Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_SubTensor_Extracts2DSliceFrom3D()
     {
         // Arrange - 3D tensor [2, 3, 4]
@@ -919,7 +919,7 @@ public class TensorIntegrationTests
         Assert.Equal(1.0, subTensor[[0, 0]], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_SubTensor_Extracts1DSliceFrom2D()
     {
         // Arrange - 2D tensor [3, 4]
@@ -939,7 +939,7 @@ public class TensorIntegrationTests
         Assert.Equal(8.0, subTensor[3], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_SetSubTensor_SetsValuesCorrectly()
     {
         // Arrange - 3D tensor [2, 3, 4]
@@ -964,7 +964,7 @@ public class TensorIntegrationTests
 
     #region SetSlice with Tensor Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_SetSlice_DimensionIndexTensor_SetsCorrectly()
     {
         // Arrange - 3D tensor [2, 3, 4]
@@ -989,7 +989,7 @@ public class TensorIntegrationTests
 
     #region Slice Single Index Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Slice_SingleIndex_Returns2DSlice()
     {
         // Arrange - 3D tensor [2, 3, 4]
@@ -1004,7 +1004,7 @@ public class TensorIntegrationTests
         Assert.Equal(4, slice.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_Slice_SingleIndex_FromBatchTensor()
     {
         // Arrange - 4D tensor [batch=2, channels=3, height=4, width=5]
@@ -1028,7 +1028,7 @@ public class TensorIntegrationTests
 
     #region Multiply Matrix Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_MultiplyMatrix_AppliesMatrixMultiplication()
     {
         // Arrange - 3D tensor (required by Multiply(Matrix)) and a matrix
@@ -1059,7 +1059,7 @@ public class TensorIntegrationTests
 
     #region SetFlatIndex Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_SetFlatIndex_SetsValueAtFlatIndex()
     {
         // Arrange
@@ -1074,7 +1074,7 @@ public class TensorIntegrationTests
         Assert.Equal(77.0, tensor.GetFlatIndexValue(4), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_SetFlatIndex_MultipleValues()
     {
         // Arrange
@@ -1096,7 +1096,7 @@ public class TensorIntegrationTests
 
     #region Tensor SetSlice with Index
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_SetSlice_Index_SetsEntireSlice()
     {
         // Arrange - 3D tensor
@@ -1119,7 +1119,7 @@ public class TensorIntegrationTests
 
     #region GetSubTensor Operations
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Tensor_GetSubTensor_4D_ExtractsCorrectRegion()
     {
         // Arrange - 4D tensor [batch=2, channels=3, height=8, width=8]

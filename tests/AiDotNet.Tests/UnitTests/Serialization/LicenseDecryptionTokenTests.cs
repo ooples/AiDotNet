@@ -11,14 +11,14 @@ using Xunit;
 /// </summary>
 public class LicenseDecryptionTokenTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LicenseValidationResult_DecryptionToken_IsNull_ByDefault()
     {
         var result = new LicenseValidationResult(LicenseKeyStatus.Active);
         Assert.Null(result.DecryptionToken);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LicenseValidationResult_DecryptionToken_CanBeSet()
     {
         var token = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
@@ -36,7 +36,7 @@ public class LicenseDecryptionTokenTests
         Assert.Equal(token, result.DecryptionToken);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LicenseValidationResult_AllFields_ArePopulated()
     {
         var token = new byte[] { 0x42, 0x43 };
@@ -61,7 +61,7 @@ public class LicenseDecryptionTokenTests
         Assert.Equal(token, result.DecryptionToken);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LicenseValidationResult_Invalid_Status_HasNoToken()
     {
         var result = new LicenseValidationResult(
@@ -72,7 +72,7 @@ public class LicenseDecryptionTokenTests
         Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LicenseValidationResult_Revoked_Status_HasNoToken()
     {
         var result = new LicenseValidationResult(
@@ -83,7 +83,7 @@ public class LicenseDecryptionTokenTests
         Assert.Equal(LicenseKeyStatus.Revoked, result.Status);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void LicenseKeyStatus_HasExpectedValues()
     {
         Assert.True(Enum.IsDefined(typeof(LicenseKeyStatus), LicenseKeyStatus.Active));

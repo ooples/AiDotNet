@@ -53,7 +53,7 @@ public class FederatedLearningHomomorphicEncryptionIntegrationTests
         Assert.Equal("SEAL", metadata.HomomorphicEncryptionProviderUsed);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task BuildAsync_WithHomomorphicEncryption_HybridWithSecureAgg_CompletesAndReportsMode()
     {
         var (x, y) = CreateToyData();

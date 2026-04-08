@@ -109,7 +109,7 @@ public class MetaLearningAlgorithmsIntegrationTests
         };
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAML_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
@@ -144,7 +144,7 @@ public class MetaLearningAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.MAML, algorithm.AlgorithmType);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Reptile_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
@@ -181,7 +181,7 @@ public class MetaLearningAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.Reptile, algorithm.AlgorithmType);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetaSGD_MetaTrainAndAdapt_Run()
     {
         var model = new LinearVectorModel(3);
@@ -210,7 +210,7 @@ public class MetaLearningAlgorithmsIntegrationTests
         Assert.Equal(MetaLearningAlgorithmType.MetaSGD, algorithm.AlgorithmType);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ProtoNets_MetaTrainAndAdapt_Run()
     {
         var model = new TensorEmbeddingModel(3, 2);
@@ -235,7 +235,7 @@ public class MetaLearningAlgorithmsIntegrationTests
         Assert.Equal(task.NumWays, predictions.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatchingNetworks_MetaTrainAndAdapt_Run()
     {
         var model = new TensorEmbeddingModel(3, 2);

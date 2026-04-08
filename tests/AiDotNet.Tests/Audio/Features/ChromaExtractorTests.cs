@@ -22,7 +22,7 @@ namespace AiDotNet.Tests.Audio.Features
             return audio;
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ChromaExtractor_DefaultOptions_Extracts12PitchClasses()
         {
             // Arrange
@@ -37,7 +37,7 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.True(chroma.Shape[0] > 0, "Should have at least one frame");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ChromaExtractor_Name_IsChroma()
         {
             // Arrange
@@ -47,7 +47,7 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal("Chroma", extractor.Name);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ChromaExtractor_FeatureDimension_Is12()
         {
             // Arrange
@@ -57,7 +57,7 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal(12, extractor.FeatureDimension);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ChromaExtractor_OutputValues_AreFinite()
         {
             // Arrange
@@ -79,7 +79,7 @@ namespace AiDotNet.Tests.Audio.Features
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ChromaExtractor_Normalized_ValuesInRange()
         {
             // Arrange
@@ -102,7 +102,7 @@ namespace AiDotNet.Tests.Audio.Features
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetPitchClassName_ReturnsCorrectNames()
         {
             Assert.Equal("C", ChromaExtractor<float>.GetPitchClassName(0));
@@ -119,7 +119,7 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal("B", ChromaExtractor<float>.GetPitchClassName(11));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetPitchClassName_WrapsAround()
         {
             // Test that indices > 11 wrap around
@@ -127,7 +127,7 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal("D", ChromaExtractor<float>.GetPitchClassName(14));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetDominantPitchClass_ReturnsMaxIndex()
         {
             // Arrange
@@ -142,7 +142,7 @@ namespace AiDotNet.Tests.Audio.Features
             Assert.Equal(9, dominant); // A = index 9
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GetDominantPitchClass_ThrowsForWrongLength()
         {
             // Arrange

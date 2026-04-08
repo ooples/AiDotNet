@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class RiskModelTestBase : FinancialModelTestBase
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RiskEstimate_ShouldBeFinite()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -26,7 +26,7 @@ public abstract class RiskModelTestBase : FinancialModelTestBase
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void DifferentConditions_DifferentRisk()
     {
         var network = CreateNetwork();

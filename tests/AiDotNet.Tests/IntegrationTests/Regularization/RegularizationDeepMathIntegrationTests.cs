@@ -23,7 +23,7 @@ public class RegularizationDeepMathIntegrationTests
     // ─── L1 Vector: Soft Thresholding ────────────────────────────────────────
     // Formula: sign(x) * max(0, |x| - lambda)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_Vector_HandCalculated_SoftThresholding()
     {
         // lambda = 0.1
@@ -44,7 +44,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(0.9, result[4], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_Vector_ExactlyAtThreshold_BecomesZero()
     {
         // lambda = 0.3, x = 0.3 → |0.3| - 0.3 = 0 → result = 0
@@ -56,7 +56,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(0.0, result[1], Tol);  // negative at threshold also → 0
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_Vector_ZeroStrength_NoChange()
     {
         var l1 = new L1Regularization<double, Vector<double>, Vector<double>>(
@@ -68,7 +68,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(0.0, result[2], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_Vector_AllBelowThreshold_AllZero()
     {
         // lambda = 1.0, all |x_i| < 1.0 → all become 0
@@ -80,7 +80,7 @@ public class RegularizationDeepMathIntegrationTests
             Assert.Equal(0.0, result[i], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_Vector_PreservesSignAboveThreshold()
     {
         var l1 = new L1Regularization<double, Vector<double>, Vector<double>>(
@@ -95,7 +95,7 @@ public class RegularizationDeepMathIntegrationTests
 
     // ─── L1 Matrix: Soft Thresholding ────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_Matrix_HandCalculated_SoftThresholding()
     {
         // lambda = 0.2
@@ -117,7 +117,7 @@ public class RegularizationDeepMathIntegrationTests
     // ─── L1 Gradient Regularization ──────────────────────────────────────────
     // Formula: gradient + lambda * sign(coefficient)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_Gradient_HandCalculated()
     {
         var l1 = new L1Regularization<double, Vector<double>, Vector<double>>(
@@ -139,7 +139,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(-0.9, result[3], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_Gradient_ZeroCoefficients_NoRegularizationPenalty()
     {
         // If coefficients are all zero, sign(0) = 0, so gradient is unchanged
@@ -158,7 +158,7 @@ public class RegularizationDeepMathIntegrationTests
     // ─── L2 Vector: Shrinkage ────────────────────────────────────────────────
     // Formula: x * (1 - lambda)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2_Vector_HandCalculated_Shrinkage()
     {
         var l2 = new L2Regularization<double, Vector<double>, Vector<double>>(
@@ -175,7 +175,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(0.0, result[3], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2_Vector_StrongShrinkage_HalvesValues()
     {
         // strength = 0.5 → shrinkage = 0.5 → values halved
@@ -188,7 +188,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(5.0, result[2], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2_Vector_ZeroStrength_NoChange()
     {
         var l2 = new L2Regularization<double, Vector<double>, Vector<double>>(
@@ -200,7 +200,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(0.0, result[2], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2_Vector_NeverProducesZeros()
     {
         // Unlike L1, L2 never drives values to exactly zero (except zero input)
@@ -212,7 +212,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.True(result[1] < 0);   // Still negative
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2_Vector_ProportionalShrinkage()
     {
         // L2 shrinks all values by same ratio → ratios preserved
@@ -229,7 +229,7 @@ public class RegularizationDeepMathIntegrationTests
 
     // ─── L2 Matrix: Shrinkage ────────────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2_Matrix_HandCalculated_Shrinkage()
     {
         var l2 = new L2Regularization<double, Vector<double>, Vector<double>>(
@@ -247,7 +247,7 @@ public class RegularizationDeepMathIntegrationTests
     // ─── L2 Gradient Regularization ──────────────────────────────────────────
     // Formula: gradient + lambda * coefficient
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2_Gradient_HandCalculated()
     {
         var l2 = new L2Regularization<double, Vector<double>, Vector<double>>(
@@ -269,7 +269,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(-0.7, result[3], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2_Gradient_LargeCoeff_BigPenalty()
     {
         // L2 penalizes large coefficients proportionally
@@ -288,7 +288,7 @@ public class RegularizationDeepMathIntegrationTests
 
     // ─── L1 vs L2 Sparsity Comparison ────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_ProducesSparsity_L2_DoesNot()
     {
         // With strength = 0.3, values near zero should be zeroed by L1 but not L2
@@ -322,7 +322,7 @@ public class RegularizationDeepMathIntegrationTests
     // ─── ElasticNet Gradient Regularization ──────────────────────────────────
     // Formula: gradient + strength*l1Ratio*sign(c) + strength*(1-l1Ratio)*c
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNet_Gradient_HandCalculated()
     {
         var en = new ElasticNetRegularization<double, Vector<double>, Vector<double>>(
@@ -352,7 +352,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(0.0, result[2], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNet_Gradient_L1Ratio1_MatchesPureL1Gradient()
     {
         // ElasticNet with l1Ratio = 1.0 should produce same gradient as L1
@@ -371,7 +371,7 @@ public class RegularizationDeepMathIntegrationTests
             Assert.Equal(l1Result[i], enResult[i], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNet_Gradient_L1Ratio0_MatchesPureL2Gradient()
     {
         // ElasticNet with l1Ratio = 0.0 should produce same gradient as L2
@@ -394,7 +394,7 @@ public class RegularizationDeepMathIntegrationTests
     // The correct formula should be: apply L1 soft thresholding, then L2 shrinkage
     // result = sign(x) * max(0, |x| - strength*l1Ratio) * (1 - strength*(1-l1Ratio))
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNet_Vector_ZeroStrength_ReturnsOriginalValues()
     {
         // With zero strength, regularization should have no effect
@@ -410,7 +410,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(3.0, result[2], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNet_Vector_L1Ratio1_MatchesPureL1()
     {
         // ElasticNet with l1Ratio = 1.0 should behave exactly like L1
@@ -428,7 +428,7 @@ public class RegularizationDeepMathIntegrationTests
             Assert.Equal(l1Result[i], enResult[i], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNet_Vector_L1Ratio0_MatchesPureL2()
     {
         // ElasticNet with l1Ratio = 0.0 should behave exactly like L2
@@ -446,7 +446,7 @@ public class RegularizationDeepMathIntegrationTests
             Assert.Equal(l2Result[i], enResult[i], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNet_Vector_ShouldAlwaysShrinkValues()
     {
         // Regularization MUST shrink (or zero) coefficient magnitudes, never increase them
@@ -464,7 +464,7 @@ public class RegularizationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNet_Matrix_ShouldAlwaysShrinkValues()
     {
         var en = new ElasticNetRegularization<double, Vector<double>, Vector<double>>(
@@ -479,7 +479,7 @@ public class RegularizationDeepMathIntegrationTests
                     $"ElasticNet increased magnitude at [{i},{j}]: |{result[i, j]}| > |{data[i, j]}|");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNet_Vector_BetweenL1AndL2_Behavior()
     {
         // With l1Ratio = 0.5, ElasticNet should produce results between pure L1 and pure L2
@@ -508,7 +508,7 @@ public class RegularizationDeepMathIntegrationTests
 
     // ─── NoRegularization ────────────────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NoReg_Vector_ReturnsExactOriginal()
     {
         var noReg = new NoRegularization<double, Vector<double>, Vector<double>>();
@@ -519,7 +519,7 @@ public class RegularizationDeepMathIntegrationTests
             Assert.Equal(data[i], result[i], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NoReg_Gradient_ReturnsExactOriginalGradient()
     {
         var noReg = new NoRegularization<double, Vector<double>, Vector<double>>();
@@ -534,7 +534,7 @@ public class RegularizationDeepMathIntegrationTests
 
     // ─── Cross-Strategy Consistency ──────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_Gradient_SubdifferentialCorrectness()
     {
         // The L1 penalty is lambda * sum(|w_i|).
@@ -559,7 +559,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(0.3, regGrad[2], 1e-8);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2_Gradient_MatchesNumericalDerivative()
     {
         // The L2 penalty is 0.5 * lambda * sum(w_i^2).
@@ -586,7 +586,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(0.3, regGrad[2], 1e-8);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2_RepeatedApplication_DecaysGeometrically()
     {
         // Applying L2 shrinkage n times: x * (1-lambda)^n
@@ -602,7 +602,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(10.0 * Math.Pow(0.9, 10), data[0], 1e-8);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_RepeatedApplication_EventuallyZeros()
     {
         // Repeated L1 application should eventually zero out small values
@@ -624,7 +624,7 @@ public class RegularizationDeepMathIntegrationTests
 
     // ─── Tensor Support ──────────────────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_Gradient_TensorSupport_MatchesVectorResult()
     {
         var l1 = new L1Regularization<double, Matrix<double>, Tensor<double>>(
@@ -646,7 +646,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(-0.9, resultVec[3], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2_Gradient_TensorSupport_MatchesVectorResult()
     {
         var l2 = new L2Regularization<double, Matrix<double>, Tensor<double>>(
@@ -667,7 +667,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(-0.7, resultVec[3], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNet_Gradient_TensorSupport_MatchesVectorResult()
     {
         var en = new ElasticNetRegularization<double, Matrix<double>, Tensor<double>>(
@@ -689,7 +689,7 @@ public class RegularizationDeepMathIntegrationTests
 
     // ─── Edge Cases ──────────────────────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_SingleElement_HandCalculated()
     {
         var l1 = new L1Regularization<double, Vector<double>, Vector<double>>(
@@ -705,7 +705,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(0.0, l1.Regularize(Vec(0.0))[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2_SingleElement_HandCalculated()
     {
         var l2 = new L2Regularization<double, Vector<double>, Vector<double>>(
@@ -718,7 +718,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(-2.25, l2.Regularize(Vec(-3.0))[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllRegularizations_ZeroVector_StaysZero()
     {
         var l1 = new L1Regularization<double, Vector<double>, Vector<double>>(
@@ -745,7 +745,7 @@ public class RegularizationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_SymmetricBehavior_PositiveAndNegative()
     {
         var l1 = new L1Regularization<double, Vector<double>, Vector<double>>(
@@ -762,7 +762,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(-result[2], result[3], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2_SymmetricBehavior_PositiveAndNegative()
     {
         var l2 = new L2Regularization<double, Vector<double>, Vector<double>>(
@@ -777,7 +777,7 @@ public class RegularizationDeepMathIntegrationTests
 
     // ─── Default Constructor Tests ───────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_DefaultOptions_Strength01_L1Ratio10()
     {
         var l1 = new L1Regularization<double, Vector<double>, Vector<double>>();
@@ -786,7 +786,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(1.0, opts.L1Ratio, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2_DefaultOptions_Strength001_L1Ratio00()
     {
         var l2 = new L2Regularization<double, Vector<double>, Vector<double>>();
@@ -795,7 +795,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Equal(0.0, opts.L1Ratio, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNet_DefaultOptions_Strength01_L1Ratio05()
     {
         var en = new ElasticNetRegularization<double, Vector<double>, Vector<double>>();
@@ -806,7 +806,7 @@ public class RegularizationDeepMathIntegrationTests
 
     // ─── Stronger Shrinkage → Smaller Result ─────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_StrongerShrinkage_SmallerResult()
     {
         var weak = new L1Regularization<double, Vector<double>, Vector<double>>(
@@ -822,7 +822,7 @@ public class RegularizationDeepMathIntegrationTests
             Assert.True(Math.Abs(strongR[i]) <= Math.Abs(weakR[i]) + Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2_StrongerShrinkage_SmallerResult()
     {
         var weak = new L2Regularization<double, Vector<double>, Vector<double>>(
@@ -840,7 +840,7 @@ public class RegularizationDeepMathIntegrationTests
 
     // ─── Gradient Regularization: Unsupported Type ───────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_Gradient_UnsupportedType_Throws()
     {
         var l1 = new L1Regularization<double, double, double>(
@@ -849,7 +849,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Throws<InvalidOperationException>(() => l1.Regularize(1.0, 2.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2_Gradient_UnsupportedType_Throws()
     {
         var l2 = new L2Regularization<double, double, double>(
@@ -858,7 +858,7 @@ public class RegularizationDeepMathIntegrationTests
         Assert.Throws<InvalidOperationException>(() => l2.Regularize(1.0, 2.0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElasticNet_Gradient_UnsupportedType_Throws()
     {
         var en = new ElasticNetRegularization<double, double, double>(
@@ -869,7 +869,7 @@ public class RegularizationDeepMathIntegrationTests
 
     // ─── Gradient Additivity ─────────────────────────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L2_Gradient_IsAdditiveWithBaseGradient()
     {
         // reg_gradient = base_gradient + penalty_gradient
@@ -891,7 +891,7 @@ public class RegularizationDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void L1_Gradient_IsAdditiveWithBaseGradient()
     {
         var l1 = new L1Regularization<double, Vector<double>, Vector<double>>(
@@ -913,7 +913,7 @@ public class RegularizationDeepMathIntegrationTests
 
     // ─── NoRegularization Matrix Returns Zeros ───────────────────────────────
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NoReg_Matrix_ReturnsZeroMatrix()
     {
         // NoRegularization.Regularize(Matrix) returns a zero matrix (additive penalty = 0)

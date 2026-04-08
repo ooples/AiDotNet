@@ -37,7 +37,7 @@ public class VisionMambaModelTests
             outputSize: numClasses);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ValidParameters_CreatesModel()
     {
         var model = new VisionMambaModel<float>(
@@ -55,21 +55,21 @@ public class VisionMambaModelTests
         Assert.Equal(VisionScanPattern.Bidirectional, model.ScanPattern);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ThrowsWhenImageNotDivisibleByPatch()
     {
         Assert.Throws<ArgumentException>(() =>
             new VisionMambaModel<float>(CreateArch(30, 32), imageHeight: 30, imageWidth: 32, patchSize: 8));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ThrowsWhenImageHeightNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
             new VisionMambaModel<float>(CreateArch(1, 32), imageHeight: 0, imageWidth: 32, patchSize: 8));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_ThrowsWhenNumClassesNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -103,7 +103,7 @@ public class VisionMambaModelTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Predict_3D_ProducesValidOutput()
     {
         int height = 16;
@@ -127,7 +127,7 @@ public class VisionMambaModelTests
 
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Train_ForwardBackwardUpdate_NoErrors()
     {
         int height = 16;
@@ -154,7 +154,7 @@ public class VisionMambaModelTests
         Assert.False(ContainsNaN(output2));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetParameters_SetParameters_RoundTrip()
     {
         var model = new VisionMambaModel<float>(
@@ -174,7 +174,7 @@ public class VisionMambaModelTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SetParameters_ThrowsOnWrongLength()
     {
         var model = new VisionMambaModel<float>(
@@ -184,7 +184,7 @@ public class VisionMambaModelTests
         Assert.Throws<ArgumentException>(() => model.SetParameters(new Vector<float>(10)));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SupportsTraining_ReturnsTrue()
     {
         var model = new VisionMambaModel<float>(
@@ -193,7 +193,7 @@ public class VisionMambaModelTests
         Assert.True(model.SupportsTraining);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetModelMetadata_ContainsExpectedKeys()
     {
         var model = new VisionMambaModel<float>(
@@ -213,7 +213,7 @@ public class VisionMambaModelTests
         Assert.Equal("CrossScan", metadata.AdditionalInfo["ScanPattern"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ResetState_AllowsReuse()
     {
         var model = new VisionMambaModel<float>(
@@ -238,7 +238,7 @@ public class VisionMambaModelTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DifferentImageSizes_Work()
     {
         // Rectangular image
@@ -257,7 +257,7 @@ public class VisionMambaModelTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Predict_Double_ProducesValidOutput()
     {
         var model = new VisionMambaModel<double>(

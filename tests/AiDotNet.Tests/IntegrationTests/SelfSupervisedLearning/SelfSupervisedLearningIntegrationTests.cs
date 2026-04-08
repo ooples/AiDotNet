@@ -16,7 +16,7 @@ public class SelfSupervisedLearningIntegrationTests
 
     #region NT-Xent Loss Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NTXentLoss_ComputeLoss_WithIdenticalViews_ReturnsMinimalLoss()
     {
         // Arrange - Create identical embeddings (positive pairs should have highest similarity)
@@ -46,7 +46,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.True(lossValue >= 0, "Loss should be non-negative");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NTXentLoss_Temperature_AffectsLossScale()
     {
         // Arrange
@@ -66,7 +66,7 @@ public class SelfSupervisedLearningIntegrationTests
         // Lower temperature generally produces larger loss values (sharper distribution)
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NTXentLoss_ComputeLossWithGradients_ReturnsValidGradients()
     {
         // Arrange
@@ -89,7 +89,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.True(HasNonZeroElements(gradZ2), "Gradient for z2 should not be all zeros");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NTXentLoss_InvalidTemperature_ThrowsException()
     {
         // Assert
@@ -97,7 +97,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new NTXentLoss<double>(temperature: -0.1));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NTXentLoss_NullInput_ThrowsArgumentNullException()
     {
         // Arrange
@@ -113,7 +113,7 @@ public class SelfSupervisedLearningIntegrationTests
 
     #region InfoNCE Loss Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InfoNCELoss_ComputeLoss_WithMemoryBank_ReturnsValidLoss()
     {
         // Arrange
@@ -133,7 +133,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.True(lossValue > 0, "InfoNCE loss should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InfoNCELoss_ComputeLossInBatch_ReturnsValidLoss()
     {
         // Arrange
@@ -148,7 +148,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.True(lossValue > 0, "In-batch InfoNCE loss should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InfoNCELoss_ComputeAccuracy_ReturnsValidRange()
     {
         // Arrange
@@ -165,7 +165,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.True(accuracy <= 1.0, "Accuracy should not exceed 1.0");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InfoNCELoss_ComputeLossWithGradients_ReturnsValidGradients()
     {
         // Arrange
@@ -185,7 +185,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.Equal(positiveKeys.Shape[1], gradPosKeys.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InfoNCELoss_ComputeLossInBatchWithGradients_ReturnsValidGradients()
     {
         // Arrange
@@ -206,7 +206,7 @@ public class SelfSupervisedLearningIntegrationTests
 
     #region BYOL Loss Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BYOLLoss_ComputeLoss_WithIdenticalVectors_ReturnsZero()
     {
         // Arrange
@@ -222,7 +222,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.True(Math.Abs(lossValue) < 0.01, $"Loss should be near zero for identical vectors, got {lossValue}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BYOLLoss_ComputeLoss_WithOrthogonalVectors_ReturnsTwo()
     {
         // Arrange
@@ -242,7 +242,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.True(Math.Abs(lossValue - 2.0) < 0.01, $"Loss should be 2.0 for orthogonal vectors, got {lossValue}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BYOLLoss_ComputeSymmetricLoss_AveragesBothDirections()
     {
         // Arrange
@@ -265,7 +265,7 @@ public class SelfSupervisedLearningIntegrationTests
             $"Symmetric loss ({symmetricLoss}) should equal average of individual losses ({expectedSymmetric})");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BYOLLoss_ComputeLossWithGradients_ReturnsValidGradients()
     {
         // Arrange
@@ -283,7 +283,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.True(HasNonZeroElements(gradPrediction), "Gradients should have non-zero elements");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BYOLLoss_ComputeMSELoss_ReturnsValidLoss()
     {
         // Arrange
@@ -302,7 +302,7 @@ public class SelfSupervisedLearningIntegrationTests
 
     #region Linear Projector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearProjector_Project_ReturnsCorrectShape()
     {
         // Arrange
@@ -317,7 +317,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.Equal(128, output.Shape[1]); // output dimension
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearProjector_Properties_ReturnCorrectValues()
     {
         // Arrange
@@ -330,7 +330,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.Equal(64 * 128 + 128, projector.ParameterCount); // weights + bias
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearProjector_GetSetParameters_RoundTrips()
     {
         // Arrange
@@ -358,7 +358,7 @@ public class SelfSupervisedLearningIntegrationTests
 
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearProjector_NoBias_HasFewerParameters()
     {
         // Arrange
@@ -374,7 +374,7 @@ public class SelfSupervisedLearningIntegrationTests
 
     #region MLP Projector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MLPProjector_Project_ReturnsCorrectShape()
     {
         // Arrange
@@ -394,7 +394,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.Equal(32, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MLPProjector_Properties_ReturnCorrectValues()
     {
         // Arrange
@@ -411,7 +411,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.True(projector.ParameterCount > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MLPProjector_WithBatchNormOnOutput_HasMoreParameters()
     {
         // Arrange
@@ -424,7 +424,7 @@ public class SelfSupervisedLearningIntegrationTests
 
 
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MLPProjector_SetTrainingMode_AffectsBatchNorm()
     {
         // Arrange
@@ -448,7 +448,7 @@ public class SelfSupervisedLearningIntegrationTests
 
     #region Symmetric Projector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymmetricProjector_Project_ReturnsCorrectShape()
     {
         // Arrange - Projector without predictor (target branch)
@@ -469,7 +469,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.Equal(32, output.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymmetricProjector_HasPredictor_ReportsCorrectly()
     {
         // Arrange
@@ -483,7 +483,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.False(withoutPredictor.HasPredictor);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymmetricProjector_Predict_ReturnsCorrectShape()
     {
         // Arrange - Projector with predictor (online branch)
@@ -505,7 +505,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.Equal(32, prediction.Shape[1]); // Same as projection dim
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymmetricProjector_ProjectAndPredict_CombinesBothSteps()
     {
         // Arrange
@@ -531,7 +531,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.Equal(combined.Shape[1], prediction.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymmetricProjector_WithoutPredictor_PredictReturnsInput()
     {
         // Arrange
@@ -562,7 +562,7 @@ public class SelfSupervisedLearningIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymmetricProjector_GetSetParameters_RoundTrips()
     {
         // Arrange
@@ -598,7 +598,7 @@ public class SelfSupervisedLearningIntegrationTests
 
     #region Memory Bank Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MemoryBank_Enqueue_StoresEmbeddings()
     {
         // Arrange
@@ -613,7 +613,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.False(memoryBank.IsFull);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MemoryBank_Enqueue_WrapsWhenFull()
     {
         // Arrange
@@ -631,7 +631,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.True(memoryBank.IsFull);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MemoryBank_GetAll_ReturnsAllStoredEmbeddings()
     {
         // Arrange
@@ -647,7 +647,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.Equal(8, all.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MemoryBank_Sample_ReturnsRequestedCount()
     {
         // Arrange
@@ -663,7 +663,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.Equal(8, sampled.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MemoryBank_Sample_CapsAtCurrentSize()
     {
         // Arrange
@@ -678,7 +678,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.Equal(10, sampled.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MemoryBank_Clear_ResetsState()
     {
         // Arrange
@@ -696,7 +696,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.False(memoryBank.IsFull);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MemoryBank_GetAt_ReturnsSpecificEmbedding()
     {
         // Arrange
@@ -712,7 +712,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.Equal(8, retrieved.Shape[1]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MemoryBank_SetAt_UpdatesSpecificEmbedding()
     {
         // Arrange
@@ -733,7 +733,7 @@ public class SelfSupervisedLearningIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MemoryBank_UpdateWithMomentum_AppliesEMA()
     {
         // Arrange
@@ -757,7 +757,7 @@ public class SelfSupervisedLearningIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MemoryBank_Properties_ReturnCorrectValues()
     {
         // Arrange
@@ -770,7 +770,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.False(memoryBank.IsFull);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MemoryBank_DimensionMismatch_ThrowsException()
     {
         // Arrange
@@ -785,7 +785,7 @@ public class SelfSupervisedLearningIntegrationTests
 
     #region Momentum Encoder Static Methods Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MomentumEncoder_ScheduleMomentum_ComputesCosineSchedule()
     {
         // Test at various points
@@ -806,7 +806,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.True(Math.Abs(m100 - finalMomentum) < 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MomentumEncoder_ScheduleMomentum_ZeroTotalEpochs_ReturnsFinalMomentum()
     {
         // Arrange
@@ -820,7 +820,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.Equal(finalMomentum, result);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MomentumEncoder_ScheduleMomentum_ProgressBeyondTotal_ClampedToOne()
     {
         // Arrange
@@ -838,7 +838,7 @@ public class SelfSupervisedLearningIntegrationTests
 
     #region Edge Cases and Error Handling
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllLosses_EmptyBatch_HandlesGracefully()
     {
         // Note: Empty batches may throw or return special values
@@ -865,7 +865,7 @@ public class SelfSupervisedLearningIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearProjector_InvalidDimensions_ThrowsException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -874,7 +874,7 @@ public class SelfSupervisedLearningIntegrationTests
             new LinearProjector<double>(inputDim: 64, outputDim: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MLPProjector_InvalidDimensions_ThrowsException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -885,7 +885,7 @@ public class SelfSupervisedLearningIntegrationTests
             new MLPProjector<double>(inputDim: 64, hiddenDim: 64, outputDim: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MemoryBank_InvalidCapacity_ThrowsException()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -894,7 +894,7 @@ public class SelfSupervisedLearningIntegrationTests
             new MemoryBank<double>(capacity: 100, embeddingDim: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MemoryBank_GetAt_InvalidIndex_ThrowsException()
     {
         var memoryBank = new MemoryBank<double>(capacity: 100, embeddingDim: 8);

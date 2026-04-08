@@ -56,7 +56,7 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
         }
 
         // BeatTracker Tests
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void BeatTracker_Track_ReturnsResult()
         {
             // Arrange
@@ -71,7 +71,7 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
             Assert.True(result.Tempo > 0, "Tempo should be positive");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void BeatTracker_DetectTempo_ReturnsReasonableTempo()
         {
             // Arrange
@@ -86,7 +86,7 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
                 $"Tempo {result.Tempo} should be in reasonable range");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void BeatTracker_DetectBeats_ReturnsMultipleBeats()
         {
             // Arrange
@@ -101,7 +101,7 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
             Assert.True(result.BeatTimes.Count > 0, "Should detect at least some beats");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void BeatTracker_ConfidenceScore_InRange()
         {
             // Arrange
@@ -116,7 +116,7 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
                 $"Confidence {result.ConfidenceScore} should be in [0, 1]");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void BeatTracker_AverageBeatInterval_MatchesTempo()
         {
             // Arrange
@@ -132,7 +132,7 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
         }
 
         // ChordRecognizer Tests
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ChordRecognizer_Recognize_ReturnsChords()
         {
             // Arrange
@@ -147,7 +147,7 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
             Assert.True(chords.Count > 0, "Should recognize at least one chord");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ChordRecognizer_ChordSegment_HasValidProperties()
         {
             // Arrange
@@ -167,7 +167,7 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ChordRecognizer_ChordConfidence_InRange()
         {
             // Arrange
@@ -186,7 +186,7 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
         }
 
         // KeyDetector Tests
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void KeyDetector_Detect_ReturnsKey()
         {
             // Arrange
@@ -201,7 +201,7 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
             Assert.True(key.KeyIndex >= 0 && key.KeyIndex < 12, $"Key index {key.KeyIndex} should be in [0, 11]");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void KeyDetector_KeyCorrelation_InRange()
         {
             // Arrange
@@ -216,7 +216,7 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
                 $"Key correlation {key.Correlation} should be in [-1, 1]");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void KeyDetector_ModeIsValid()
         {
             // Arrange
@@ -231,7 +231,7 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
                 "Mode should be Major or Minor");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void KeyDetector_NameIsNotEmpty()
         {
             // Arrange
@@ -245,7 +245,7 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
             Assert.False(string.IsNullOrEmpty(key.Name), "Key name should not be empty");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void KeyDetector_RelativeKey_IsValid()
         {
             // Arrange

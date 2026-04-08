@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.UnitTests.ContinualLearning;
 /// </summary>
 public class ContinualLearnerConfigTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_DefaultParameters_InitializesSuccessfully()
     {
         // Act
@@ -19,7 +19,7 @@ public class ContinualLearnerConfigTests
         Assert.True(config.IsValid());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void PropertyInitialization_CustomParameters_InitializesSuccessfully()
     {
         // Arrange & Act
@@ -42,7 +42,7 @@ public class ContinualLearnerConfigTests
         Assert.True(config.IsValid());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IsValid_WithNegativeLearningRate_ReturnsFalse()
     {
         // Arrange
@@ -58,7 +58,7 @@ public class ContinualLearnerConfigTests
         Assert.False(config.IsValid());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IsValid_WithZeroEpochs_ReturnsFalse()
     {
         // Arrange
@@ -74,7 +74,7 @@ public class ContinualLearnerConfigTests
         Assert.False(config.IsValid());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IsValid_WithNegativeBatchSize_ReturnsFalse()
     {
         // Arrange
@@ -90,7 +90,7 @@ public class ContinualLearnerConfigTests
         Assert.False(config.IsValid());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_SetsDefaultLearningRate()
     {
         // Arrange & Act
@@ -100,7 +100,7 @@ public class ContinualLearnerConfigTests
         Assert.Equal(0.001, config.LearningRate);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_SetsDefaultBatchSize()
     {
         // Arrange & Act
@@ -110,7 +110,7 @@ public class ContinualLearnerConfigTests
         Assert.Equal(32, config.BatchSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_SetsDefaultEpochsPerTask()
     {
         // Arrange & Act
@@ -120,7 +120,7 @@ public class ContinualLearnerConfigTests
         Assert.Equal(10, config.EpochsPerTask);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_SetsDefaultEwcLambda()
     {
         // Arrange & Act
@@ -130,7 +130,7 @@ public class ContinualLearnerConfigTests
         Assert.Equal(1000.0, config.EwcLambda);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ForEwc_CreatesEwcOptimizedConfig()
     {
         // Act
@@ -143,7 +143,7 @@ public class ContinualLearnerConfigTests
         Assert.True(config.IsValid());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ForLwf_CreatesLwfOptimizedConfig()
     {
         // Act
@@ -156,7 +156,7 @@ public class ContinualLearnerConfigTests
         Assert.True(config.IsValid());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ForGem_CreatesGemOptimizedConfig()
     {
         // Act
@@ -169,7 +169,7 @@ public class ContinualLearnerConfigTests
         Assert.True(config.IsValid());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IsValid_WithInvalidGemMemoryStrength_ReturnsFalse()
     {
         // Arrange - GEM memory strength must be between 0 and 1
@@ -182,7 +182,7 @@ public class ContinualLearnerConfigTests
         Assert.False(config.IsValid());
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void IsValid_WithInvalidPackNetPruneRatio_ReturnsFalse()
     {
         // Arrange - PackNet prune ratio must be > 0 and < 1

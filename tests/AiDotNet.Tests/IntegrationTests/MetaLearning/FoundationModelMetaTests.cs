@@ -49,7 +49,7 @@ public class FoundationModelMetaTests
         return false;
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetaLoRA_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -69,7 +69,7 @@ public class FoundationModelMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LoRARecycle_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -89,7 +89,7 @@ public class FoundationModelMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ICMFusion_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -109,7 +109,7 @@ public class FoundationModelMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetaLoRABank_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -129,7 +129,7 @@ public class FoundationModelMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AutoLoRA_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -149,7 +149,7 @@ public class FoundationModelMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetaDiff_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -169,7 +169,7 @@ public class FoundationModelMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetaDM_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -189,7 +189,7 @@ public class FoundationModelMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetaDDPM_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
@@ -209,7 +209,7 @@ public class FoundationModelMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetaLoRA_MultiStep_StableLoss()
     {
         var model = new LinearVectorModel(3);

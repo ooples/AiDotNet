@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.UnitTests.Reasoning.Benchmarks;
 
 public sealed class HumanEvalBenchmarkExecutionHelpersTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ExtractDoctestAssertions_WithExpectedOutputs_ProducesAssertStatements()
     {
         var prompt =
@@ -24,7 +24,7 @@ public sealed class HumanEvalBenchmarkExecutionHelpersTests
         Assert.Contains("assert (has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3)) == (True)", assertions);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComposePythonSubmission_WhenCompletionIsBody_IndentsIntoPrompt()
     {
         var prompt =
@@ -37,7 +37,7 @@ public sealed class HumanEvalBenchmarkExecutionHelpersTests
         Assert.Contains("    return a + b", submission);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ComposePythonSubmission_WhenCompletionContainsDef_ReturnsCompletion()
     {
         var completion =

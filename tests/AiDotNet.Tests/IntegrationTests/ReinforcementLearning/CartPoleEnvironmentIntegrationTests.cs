@@ -7,7 +7,7 @@ namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 [Collection("NonParallelIntegration")]
 public class CartPoleEnvironmentIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Reset_ReturnsStateWithExpectedDimensionsAndRange()
     {
         var environment = new CartPoleEnvironment<double>(maxSteps: 5, seed: 123);
@@ -21,7 +21,7 @@ public class CartPoleEnvironmentIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_MaxStepsReached_EndsEpisodeAndReturnsZeroReward()
     {
         var environment = new CartPoleEnvironment<double>(maxSteps: 1, seed: 7);
@@ -39,7 +39,7 @@ public class CartPoleEnvironmentIntegrationTests
         Assert.True(info.ContainsKey("theta"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Step_InvalidActionIndex_Throws()
     {
         var environment = new CartPoleEnvironment<double>(maxSteps: 5, seed: 5);

@@ -35,7 +35,7 @@ public class PixelToSequenceDocumentTests
 
     #region Donut Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Donut_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -43,7 +43,7 @@ public class PixelToSequenceDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Donut_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -55,7 +55,7 @@ public class PixelToSequenceDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Donut_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -68,7 +68,7 @@ public class PixelToSequenceDocumentTests
 
     #region Nougat Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Nougat_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -76,7 +76,7 @@ public class PixelToSequenceDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Nougat_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -88,7 +88,7 @@ public class PixelToSequenceDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Nougat_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -101,7 +101,7 @@ public class PixelToSequenceDocumentTests
 
     #region Pix2Struct Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pix2Struct_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -109,7 +109,7 @@ public class PixelToSequenceDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pix2Struct_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -121,7 +121,7 @@ public class PixelToSequenceDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pix2Struct_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -134,7 +134,7 @@ public class PixelToSequenceDocumentTests
 
     #region Dessurt Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dessurt_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -142,7 +142,7 @@ public class PixelToSequenceDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dessurt_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -154,7 +154,7 @@ public class PixelToSequenceDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Dessurt_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -167,7 +167,7 @@ public class PixelToSequenceDocumentTests
 
     #region MATCHA Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MATCHA_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
@@ -175,7 +175,7 @@ public class PixelToSequenceDocumentTests
         Assert.NotNull(model);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MATCHA_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
@@ -187,7 +187,7 @@ public class PixelToSequenceDocumentTests
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MATCHA_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
@@ -200,7 +200,7 @@ public class PixelToSequenceDocumentTests
 
     #region Cross-Model Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllPixelToSequenceModels_RequiresOCR_IsFalse()
     {
         var arch = CreateArchitecture();

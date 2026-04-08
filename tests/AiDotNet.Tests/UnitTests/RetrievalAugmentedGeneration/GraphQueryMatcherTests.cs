@@ -10,7 +10,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
     /// Unit tests for GraphQueryMatcher.
     /// </summary>
     /// <remarks>
-    /// Note: xUnit creates a fresh instance of this test class for each [Fact] test method,
+    /// Note: xUnit creates a fresh instance of this test class for each [Fact(Timeout = 60000)] test method,
     /// so the constructor runs for each test, ensuring a fresh _graph and _matcher for every test.
     /// This provides test isolation without needing IClassFixture or explicit per-test setup.
     /// </remarks>
@@ -89,7 +89,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region FindNodes Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindNodes_ByLabel_ReturnsAllMatchingNodes()
         {
             // Act
@@ -100,7 +100,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.All(people, p => Assert.Equal("Person", p.Label));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindNodes_ByLabelAndProperty_ReturnsFilteredNodes()
         {
             // Arrange
@@ -114,7 +114,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("alice", results[0].Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindNodes_MultipleProperties_FiltersCorrectly()
         {
             // Arrange
@@ -132,7 +132,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("alice", results[0].Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindNodes_NoMatches_ReturnsEmptyList()
         {
             // Arrange
@@ -145,7 +145,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindNodes_InvalidLabel_ThrowsException()
         {
             // Act & Assert
@@ -158,7 +158,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region FindPaths Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindPaths_SimplePattern_ReturnsMatchingPaths()
         {
             // Act
@@ -174,7 +174,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             });
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindPaths_WithSourceFilter_ReturnsFilteredPaths()
         {
             // Arrange
@@ -189,7 +189,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("bob", paths[0].TargetNode.Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindPaths_WithTargetFilter_ReturnsFilteredPaths()
         {
             // Arrange
@@ -204,7 +204,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("charlie", paths[0].TargetNode.Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindPaths_DifferentLabels_WorksCorrectly()
         {
             // Act
@@ -220,7 +220,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             });
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindPaths_WithBothFilters_ReturnsSpecificPath()
         {
             // Arrange
@@ -236,7 +236,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("google", paths[0].TargetNode.Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindPaths_InvalidArguments_ThrowsException()
         {
             // Act & Assert
@@ -254,7 +254,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region FindPathsOfLength Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindPathsOfLength_Length1_ReturnsDirectNeighbors()
         {
             // Act
@@ -269,7 +269,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             });
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindPathsOfLength_Length2_ReturnsDistantNodes()
         {
             // Act
@@ -280,7 +280,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.All(paths, p => Assert.Equal(3, p.Count)); // Source + Intermediate + Target
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindPathsOfLength_WithRelationshipFilter_FiltersCorrectly()
         {
             // Act
@@ -291,7 +291,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("bob", paths[0][1].Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindPathsOfLength_AvoidsCycles()
         {
             // Act - This would create a cycle if not handled
@@ -305,7 +305,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             });
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindPathsOfLength_InvalidArguments_ThrowsException()
         {
             // Act & Assert
@@ -323,7 +323,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region FindShortestPaths Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindShortestPaths_DirectConnection_ReturnsShortestPath()
         {
             // Act
@@ -336,7 +336,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("bob", paths[0][1].Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindShortestPaths_IndirectConnection_FindsPath()
         {
             // Act
@@ -349,7 +349,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("charlie", shortestPath[^1].Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindShortestPaths_SameNode_ReturnsSingleNodePath()
         {
             // Act
@@ -361,7 +361,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("alice", paths[0][0].Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindShortestPaths_NoConnection_ReturnsEmpty()
         {
             // Arrange - Add isolated node
@@ -374,7 +374,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(paths);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindShortestPaths_InvalidArguments_ThrowsException()
         {
             // Act & Assert
@@ -385,7 +385,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 _matcher.FindShortestPaths("alice", null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindShortestPaths_RespectsMaxDepth()
         {
             // Act - Set maxDepth to 1, so can't reach Charlie from Alice
@@ -399,7 +399,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region ExecutePattern Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ExecutePattern_SimplePattern_ReturnsMatches()
         {
             // Act
@@ -409,7 +409,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, paths.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ExecutePattern_WithSourceProperty_FiltersCorrectly()
         {
             // Act
@@ -420,7 +420,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("alice", paths[0].SourceNode.Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ExecutePattern_WithTargetProperty_FiltersCorrectly()
         {
             // Act
@@ -431,7 +431,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.All(paths, p => Assert.Equal("google", p.TargetNode.Id));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ExecutePattern_WithBothProperties_FindsSpecificPath()
         {
             // Act
@@ -443,7 +443,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("google", paths[0].TargetNode.Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ExecutePattern_InvalidFormat_ThrowsException()
         {
             // Act & Assert
@@ -461,7 +461,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region GraphPath ToString Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void GraphPath_ToString_FormatsCorrectly()
         {
             // Arrange
@@ -479,7 +479,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Complex Scenario Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindPaths_ComplexQuery_HandlesMultipleCriteria()
         {
             // Arrange - Find people older than 30 who work at tech companies
@@ -494,7 +494,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("bob", paths[0].SourceNode.Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindPathsOfLength_ComplexGraph_FindsAllPaths()
         {
             // Arrange - Add more connections to create multiple paths
@@ -511,7 +511,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Numeric Property Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void FindNodes_NumericProperty_ComparesCorrectly()
         {
             // Arrange
@@ -525,7 +525,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal("alice", results[0].Id);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ExecutePattern_NumericProperty_ParsesCorrectly()
         {
             // Act - Pattern with numeric property

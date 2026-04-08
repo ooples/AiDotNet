@@ -61,7 +61,7 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region AdaptiveFitDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdaptiveFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -71,7 +71,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdaptiveFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -84,7 +84,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdaptiveFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -100,7 +100,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdaptiveFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
@@ -119,7 +119,7 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region BayesianFitDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BayesianFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -129,7 +129,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BayesianFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -142,7 +142,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BayesianFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -158,7 +158,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BayesianFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
@@ -177,7 +177,7 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region CalibratedProbabilityFitDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CalibratedProbabilityFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -187,7 +187,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CalibratedProbabilityFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -200,7 +200,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CalibratedProbabilityFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -230,7 +230,7 @@ public class AdvancedFitDetectorIntegrationTests
         };
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EnsembleFitDetector_Constructor_WithDetectors_InitializesSuccessfully()
     {
         // Arrange
@@ -243,7 +243,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EnsembleFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -257,7 +257,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EnsembleFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -274,7 +274,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EnsembleFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
@@ -294,7 +294,7 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region FeatureImportanceFitDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FeatureImportanceFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -304,7 +304,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FeatureImportanceFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -317,7 +317,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FeatureImportanceFitDetector_DetectFit_WithoutModel_ThrowsException()
     {
         // Arrange
@@ -334,7 +334,7 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region GaussianProcessFitDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianProcessFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -344,7 +344,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianProcessFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -357,7 +357,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianProcessFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -373,7 +373,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianProcessFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
@@ -392,7 +392,7 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region GradientBoostingFitDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GradientBoostingFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -402,7 +402,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GradientBoostingFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -415,7 +415,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GradientBoostingFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -431,7 +431,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GradientBoostingFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
@@ -450,7 +450,7 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region HybridFitDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HybridFitDetector_Constructor_WithDetectors_InitializesSuccessfully()
     {
         // Arrange
@@ -465,7 +465,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HybridFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -481,7 +481,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HybridFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -500,7 +500,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HybridFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
@@ -522,7 +522,7 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region NeuralNetworkFitDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NeuralNetworkFitDetector_Constructor_WithDefaultOptions_InitializesSuccessfully()
     {
         // Act
@@ -532,7 +532,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NeuralNetworkFitDetector_Constructor_WithCustomOptions_InitializesSuccessfully()
     {
         // Arrange
@@ -545,7 +545,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(detector);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NeuralNetworkFitDetector_DetectFit_WithValidData_ReturnsValidResult()
     {
         // Arrange
@@ -561,7 +561,7 @@ public class AdvancedFitDetectorIntegrationTests
         Assert.NotNull(result.Recommendations);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NeuralNetworkFitDetector_DetectFit_ReturnsValidConfidenceLevel()
     {
         // Arrange
@@ -580,7 +580,7 @@ public class AdvancedFitDetectorIntegrationTests
 
     #region Cross-Detector Consistency Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllAdvancedDetectors_WithSameData_ProduceValidResults()
     {
         // Arrange
@@ -613,7 +613,7 @@ public class AdvancedFitDetectorIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllAdvancedDetectors_ReturnValidConfidenceLevels()
     {
         // Arrange

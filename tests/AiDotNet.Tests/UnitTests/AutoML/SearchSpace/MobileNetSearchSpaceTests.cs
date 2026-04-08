@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
     /// </summary>
     public class MobileNetSearchSpaceTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
@@ -20,7 +20,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.NotNull(searchSpace.Operations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_Operations_ContainsMobileNetOperations()
         {
             // Arrange
@@ -38,7 +38,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("se_block", searchSpace.Operations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_Operations_HasNineOperations()
         {
             // Arrange
@@ -48,7 +48,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(9, searchSpace.Operations.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_MaxNodes_IsTwenty()
         {
             // Arrange
@@ -58,7 +58,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(20, searchSpace.MaxNodes);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_InputChannels_IsThree()
         {
             // Arrange
@@ -68,7 +68,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(3, searchSpace.InputChannels);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_OutputChannels_IsOneThousand()
         {
             // Arrange
@@ -78,7 +78,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(1000, searchSpace.OutputChannels);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_ExpansionRatios_ContainsThreeAndSix()
         {
             // Arrange
@@ -91,7 +91,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(6, searchSpace.ExpansionRatios);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_KernelSizes_ContainsThreeAndFive()
         {
             // Arrange
@@ -104,7 +104,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(5, searchSpace.KernelSizes);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_DepthMultiplier_DefaultIsOne()
         {
             // Arrange
@@ -114,7 +114,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(1.0, searchSpace.DepthMultiplier);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_WidthMultiplier_DefaultIsOne()
         {
             // Arrange
@@ -124,7 +124,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(1.0, searchSpace.WidthMultiplier);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_ExpansionRatios_CanBeModified()
         {
             // Arrange
@@ -140,7 +140,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(8, searchSpace.ExpansionRatios);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_KernelSizes_CanBeModified()
         {
             // Arrange
@@ -154,7 +154,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains(7, searchSpace.KernelSizes);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_DepthMultiplier_CanBeModified()
         {
             // Arrange
@@ -167,7 +167,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(1.5, searchSpace.DepthMultiplier);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_WidthMultiplier_CanBeModified()
         {
             // Arrange
@@ -180,7 +180,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(0.75, searchSpace.WidthMultiplier);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_Float_WorksCorrectly()
         {
             // Arrange & Act
@@ -192,7 +192,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(9, searchSpace.Operations.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_InheritsFromSearchSpaceBase()
         {
             // Arrange & Act
@@ -202,7 +202,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.IsAssignableFrom<SearchSpaceBase<double>>(searchSpace);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_Operations_IncludesInvertedResiduals()
         {
             // Arrange
@@ -213,7 +213,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(4, invertedResiduals.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void MobileNetSearchSpace_Operations_IncludesSqueezeExcitation()
         {
             // Arrange

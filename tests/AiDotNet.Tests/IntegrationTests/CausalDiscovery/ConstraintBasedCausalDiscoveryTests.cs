@@ -121,7 +121,7 @@ public class ConstraintBasedCausalDiscoveryTests
         Assert.Equal(childrenByIndex.Length, childrenByName.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PC_Discover_FindsCausalStructure()
     {
         var algo = new PCAlgorithm<double>();
@@ -130,7 +130,7 @@ public class ConstraintBasedCausalDiscoveryTests
         AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FCI_Discover_FindsCausalStructure()
     {
         var algo = new FCIAlgorithm<double>();
@@ -139,7 +139,7 @@ public class ConstraintBasedCausalDiscoveryTests
         AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RFCI_Discover_FindsCausalStructure()
     {
         var algo = new RFCIAlgorithm<double>();
@@ -148,7 +148,7 @@ public class ConstraintBasedCausalDiscoveryTests
         AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CPC_Discover_FindsCausalStructure()
     {
         var algo = new CPCAlgorithm<double>();
@@ -157,7 +157,7 @@ public class ConstraintBasedCausalDiscoveryTests
         AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MMPC_Discover_FindsCausalStructure()
     {
         var algo = new MMPCAlgorithm<double>();
@@ -166,7 +166,7 @@ public class ConstraintBasedCausalDiscoveryTests
         AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IAMB_Discover_FindsCausalStructure()
     {
         var algo = new IAMBAlgorithm<double>();
@@ -175,7 +175,7 @@ public class ConstraintBasedCausalDiscoveryTests
         AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FastIAMB_Discover_FindsCausalStructure()
     {
         var algo = new FastIAMBAlgorithm<double>();
@@ -184,7 +184,7 @@ public class ConstraintBasedCausalDiscoveryTests
         AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MarkovBlanket_Discover_FindsCausalStructure()
     {
         var algo = new MarkovBlanketAlgorithm<double>();
@@ -193,7 +193,7 @@ public class ConstraintBasedCausalDiscoveryTests
         AssertGraphAPIConsistency(graph);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CDNOD_Discover_FindsCausalStructure()
     {
         var algo = new CDNODAlgorithm<double>();

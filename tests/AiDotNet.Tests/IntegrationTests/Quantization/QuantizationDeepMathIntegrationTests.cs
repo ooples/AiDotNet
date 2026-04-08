@@ -18,7 +18,7 @@ public class QuantizationDeepMathIntegrationTests
     // QuantizationMode Enum
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationMode_HasSixValues()
     {
         var values = (((QuantizationMode[])Enum.GetValues(typeof(QuantizationMode))));
@@ -41,7 +41,7 @@ public class QuantizationDeepMathIntegrationTests
     // QuantizationStrategy Enum
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationStrategy_HasSevenValues()
     {
         var values = (((QuantizationStrategy[])Enum.GetValues(typeof(QuantizationStrategy))));
@@ -65,7 +65,7 @@ public class QuantizationDeepMathIntegrationTests
     // QuantizationGranularity Enum
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationGranularity_HasFiveValues()
     {
         var values = (((QuantizationGranularity[])Enum.GetValues(typeof(QuantizationGranularity))));
@@ -87,7 +87,7 @@ public class QuantizationDeepMathIntegrationTests
     // QATMethod Enum
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QATMethod_HasFiveValues()
     {
         var values = (((QATMethod[])Enum.GetValues(typeof(QATMethod))));
@@ -109,7 +109,7 @@ public class QuantizationDeepMathIntegrationTests
     // QuantizationConfiguration: Defaults
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_Defaults()
     {
         var config = new QuantizationConfiguration();
@@ -162,7 +162,7 @@ public class QuantizationDeepMathIntegrationTests
     // QuantizationConfiguration: Factory Methods
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_ForInt8()
     {
         var config = QuantizationConfiguration.ForInt8();
@@ -172,7 +172,7 @@ public class QuantizationDeepMathIntegrationTests
         Assert.Equal(8, config.EffectiveBitWidth);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_ForFloat16()
     {
         var config = QuantizationConfiguration.ForFloat16();
@@ -182,7 +182,7 @@ public class QuantizationDeepMathIntegrationTests
         Assert.Equal(16, config.EffectiveBitWidth);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_ForDynamic()
     {
         var config = QuantizationConfiguration.ForDynamic();
@@ -191,7 +191,7 @@ public class QuantizationDeepMathIntegrationTests
         Assert.False(config.QuantizeActivations);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_ForGPTQ()
     {
         var config = QuantizationConfiguration.ForGPTQ();
@@ -203,7 +203,7 @@ public class QuantizationDeepMathIntegrationTests
         Assert.False(config.QuantizeActivations);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_ForGPTQ_CustomGroupSize()
     {
         var config = QuantizationConfiguration.ForGPTQ(groupSize: 64, actOrder: false);
@@ -211,7 +211,7 @@ public class QuantizationDeepMathIntegrationTests
         Assert.False(config.GPTQActOrder);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_ForAWQ()
     {
         var config = QuantizationConfiguration.ForAWQ();
@@ -220,7 +220,7 @@ public class QuantizationDeepMathIntegrationTests
         Assert.Equal(1.0, config.AWQProtectionPercentage);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_ForSmoothQuant()
     {
         var config = QuantizationConfiguration.ForSmoothQuant();
@@ -230,14 +230,14 @@ public class QuantizationDeepMathIntegrationTests
         Assert.Equal(8, config.ActivationBitWidth);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_ForSmoothQuant_CustomAlpha()
     {
         var config = QuantizationConfiguration.ForSmoothQuant(alpha: 0.7);
         Assert.Equal(0.7, config.SmoothQuantAlpha);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_ForQAT()
     {
         var config = QuantizationConfiguration.ForQAT();
@@ -247,7 +247,7 @@ public class QuantizationDeepMathIntegrationTests
         Assert.Equal(8, config.EffectiveBitWidth);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_ForQAT_Custom()
     {
         var config = QuantizationConfiguration.ForQAT(targetBitWidth: 4, method: QATMethod.ParetoQ);
@@ -255,7 +255,7 @@ public class QuantizationDeepMathIntegrationTests
         Assert.Equal(QATMethod.ParetoQ, config.QATMethod);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_ForQLoRA()
     {
         var config = QuantizationConfiguration.ForQLoRA();
@@ -270,7 +270,7 @@ public class QuantizationDeepMathIntegrationTests
     // QuantizationConfiguration: UsePerChannelQuantization
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_UsePerChannelQuantization_SetsGranularity()
     {
         var config = new QuantizationConfiguration();
@@ -285,7 +285,7 @@ public class QuantizationDeepMathIntegrationTests
     // QuantizationConfiguration: MixedPrecision
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_ForMixedPrecision()
     {
         var config = QuantizationConfiguration.ForMixedPrecision();
@@ -298,7 +298,7 @@ public class QuantizationDeepMathIntegrationTests
         Assert.Equal(4, config.CategoryBitWidths[LayerCategory.Convolution]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_ForMixedPrecision_CustomBitWidths()
     {
         var config = QuantizationConfiguration.ForMixedPrecision(
@@ -309,7 +309,7 @@ public class QuantizationDeepMathIntegrationTests
         Assert.Equal(64, config.GroupSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_ForMixedPrecision_InvalidBitWidthThrows()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -324,14 +324,14 @@ public class QuantizationDeepMathIntegrationTests
     // QuantizationConfiguration: GetBitWidthForCategory
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_GetBitWidthForCategory_DefaultsToEffective()
     {
         var config = new QuantizationConfiguration { TargetBitWidth = 4 };
         Assert.Equal(4, config.GetBitWidthForCategory(LayerCategory.Dense));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationConfig_GetBitWidthForCategory_UsesOverride()
     {
         var config = QuantizationConfiguration.ForMixedPrecision();
@@ -343,7 +343,7 @@ public class QuantizationDeepMathIntegrationTests
     // LayerQuantizationParams: Defaults
     // ============================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayerQuantizationParams_Defaults()
     {
         var param = new LayerQuantizationParams();

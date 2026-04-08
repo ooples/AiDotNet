@@ -17,7 +17,7 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
     // networks. The model should handle it without producing NaN/Inf.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SelfLoops_ShouldNotCauseNumericalIssues()
     {
         var network = CreateNetwork();
@@ -56,7 +56,7 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
     // The model should produce finite, non-empty output.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ZeroInput_ShouldNotCrash()
     {
         var network = CreateNetwork();
@@ -82,7 +82,7 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
     // A graph network that ignores structure is fundamentally broken.
     // =====================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DifferentStructures_ProduceDifferentOutputs()
     {
         var network = CreateNetwork();

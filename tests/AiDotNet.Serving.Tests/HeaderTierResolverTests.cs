@@ -8,13 +8,13 @@ namespace AiDotNet.Serving.Tests;
 
 public class HeaderTierResolverTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_Throws_WhenOptionsNull()
     {
         Assert.Throws<ArgumentNullException>(() => new HeaderTierResolver(options: null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ResolveTier_ReturnsEnterprise_WhenEnforcementDisabled()
     {
         var resolver = new HeaderTierResolver(Options.Create(new TierEnforcementOptions { Enabled = false }));
@@ -24,7 +24,7 @@ public class HeaderTierResolverTests
         Assert.Equal(SubscriptionTier.Enterprise, tier);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ResolveTier_ReturnsDefault_WhenContextNull()
     {
         var resolver = new HeaderTierResolver(Options.Create(new TierEnforcementOptions
@@ -38,7 +38,7 @@ public class HeaderTierResolverTests
         Assert.Equal(SubscriptionTier.Free, tier);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ResolveTier_ReturnsDefault_WhenHeaderMissing()
     {
         var options = new TierEnforcementOptions
@@ -55,7 +55,7 @@ public class HeaderTierResolverTests
         Assert.Equal(SubscriptionTier.Free, tier);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ResolveTier_ReturnsParsedTier_WhenHeaderValid()
     {
         var options = new TierEnforcementOptions
@@ -73,7 +73,7 @@ public class HeaderTierResolverTests
         Assert.Equal(SubscriptionTier.Pro, tier);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ResolveTier_ReturnsDefault_WhenHeaderInvalid()
     {
         var options = new TierEnforcementOptions

@@ -16,7 +16,7 @@ public class FeatureMappingIntegrationTests
 
     #region LinearFeatureMapper Basic Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_Train_SetsIsTrainedToTrue()
     {
         // Arrange
@@ -41,7 +41,7 @@ public class FeatureMappingIntegrationTests
         Assert.True(mapper.IsTrained);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_MapToTarget_BeforeTrain_ThrowsException()
     {
         // Arrange
@@ -56,7 +56,7 @@ public class FeatureMappingIntegrationTests
         Assert.Throws<InvalidOperationException>(() => mapper.MapToTarget(sourceFeatures, 2));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_MapToSource_BeforeTrain_ThrowsException()
     {
         // Arrange
@@ -71,7 +71,7 @@ public class FeatureMappingIntegrationTests
         Assert.Throws<InvalidOperationException>(() => mapper.MapToSource(targetFeatures, 3));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_MapToTarget_ProducesCorrectDimensions()
     {
         // Arrange
@@ -105,7 +105,7 @@ public class FeatureMappingIntegrationTests
         Assert.Equal(2, mapped.Columns); // Target dimension
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_MapToSource_ProducesCorrectDimensions()
     {
         // Arrange
@@ -139,7 +139,7 @@ public class FeatureMappingIntegrationTests
         Assert.Equal(3, mapped.Columns); // Source dimension
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_GetMappingConfidence_ReturnsValueBetweenZeroAndOne()
     {
         // Arrange
@@ -169,7 +169,7 @@ public class FeatureMappingIntegrationTests
         Assert.True(confidence <= 1.0, $"Confidence {confidence} should be <= 1");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_GetMappingConfidence_BeforeTrain_ReturnsZero()
     {
         // Arrange
@@ -186,7 +186,7 @@ public class FeatureMappingIntegrationTests
 
     #region LinearFeatureMapper Dimension Reduction/Expansion Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_DimensionReduction_PreservesInformation()
     {
         // Arrange - Map from 5D to 2D
@@ -222,7 +222,7 @@ public class FeatureMappingIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_DimensionExpansion_ProducesValidOutput()
     {
         // Arrange - Map from 2D to 5D
@@ -260,7 +260,7 @@ public class FeatureMappingIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_SameDimensions_Works()
     {
         // Arrange - Map from 3D to 3D
@@ -292,7 +292,7 @@ public class FeatureMappingIntegrationTests
 
     #region LinearFeatureMapper Round-Trip Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_RoundTrip_PreservesApproximateStructure()
     {
         // Arrange
@@ -336,7 +336,7 @@ public class FeatureMappingIntegrationTests
 
     #region Edge Case Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_SingleRow_HandlesGracefully()
     {
         // Arrange
@@ -359,7 +359,7 @@ public class FeatureMappingIntegrationTests
         Assert.Equal(2, mapped.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_SingleColumn_HandlesGracefully()
     {
         // Arrange
@@ -386,7 +386,7 @@ public class FeatureMappingIntegrationTests
         Assert.Equal(1, mapped.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_LargeMatrix_HandlesWithoutOverflow()
     {
         // Arrange
@@ -418,7 +418,7 @@ public class FeatureMappingIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_ZeroVarianceColumn_HandlesGracefully()
     {
         // Arrange - Column 1 has zero variance
@@ -445,7 +445,7 @@ public class FeatureMappingIntegrationTests
         Assert.Equal(2, mapped.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_NegativeValues_HandlesCorrectly()
     {
         // Arrange
@@ -481,7 +481,7 @@ public class FeatureMappingIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_VerySmallValues_HandlesCorrectly()
     {
         // Arrange
@@ -514,7 +514,7 @@ public class FeatureMappingIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearFeatureMapper_VeryLargeValues_HandlesCorrectly()
     {
         // Arrange

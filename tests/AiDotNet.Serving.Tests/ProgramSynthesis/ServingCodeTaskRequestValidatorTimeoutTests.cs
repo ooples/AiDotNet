@@ -10,7 +10,7 @@ namespace AiDotNet.Serving.Tests;
 
 public sealed class ServingCodeTaskRequestValidatorTimeoutTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void TryValidate_RejectsMaxWallClockMillisecondsAboveTierLimit()
     {
         var options = Options.Create(new ServingProgramSynthesisOptions

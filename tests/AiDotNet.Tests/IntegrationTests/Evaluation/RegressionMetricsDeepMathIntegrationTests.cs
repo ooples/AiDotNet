@@ -18,7 +18,7 @@ public class RegressionMetricsDeepMathIntegrationTests
     // MSE / RMSE / MAE: Hand-calculated values
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_HandCalculated_MatchesExpected()
     {
         // actuals: [1, 2, 3, 4, 5], predictions: [1.5, 2.5, 3.0, 3.5, 5.5]
@@ -33,7 +33,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.2, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RMSE_EqualsSquareRootOfMSE()
     {
         var mseMetric = new MSEMetric<double>();
@@ -46,7 +46,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(Math.Sqrt(mse), rmse, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAE_HandCalculated_MatchesExpected()
     {
         // actuals: [10, 20, 30], predictions: [12, 18, 33]
@@ -60,7 +60,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(7.0 / 3.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_GreaterThanOrEqual_MAE_Squared()
     {
         // By Jensen's inequality: MSE >= MAE² (equality iff all errors are equal)
@@ -74,7 +74,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.True(mse >= mae * mae - 1e-10, $"MSE={mse} should be >= MAE²={mae * mae}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_Equals_MAE_Squared_WhenAllErrorsEqual()
     {
         // When all |errors| are equal, MSE = MAE² exactly
@@ -94,7 +94,7 @@ public class RegressionMetricsDeepMathIntegrationTests
     // R² and related metrics
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void R2_PerfectPredictions_Equals1()
     {
         var r2 = new R2ScoreMetric<double>();
@@ -105,7 +105,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void R2_MeanPredictions_Equals0()
     {
         // If predictions are always the mean, SS_res = SS_tot => R² = 0
@@ -118,7 +118,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void R2_HandCalculated_MatchesExpected()
     {
         // actuals: [3, -0.5, 2, 7], preds: [2.5, 0.0, 2, 8]
@@ -136,7 +136,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void R2_WorseThanMean_IsNegative()
     {
         // Predictions that are worse than always predicting the mean should give R² < 0
@@ -149,7 +149,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.True(result < 0, $"R²={result} should be negative for predictions worse than mean");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RSE_Plus_R2_Equals_1()
     {
         // RSE = 1 - R² by definition (RSE = SS_res / SS_tot, R² = 1 - SS_res / SS_tot)
@@ -163,7 +163,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, r2Val + rseVal, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NMSE_Equals_1MinusR2()
     {
         // NMSE = MSE / Var(y) = (SS_res/n) / (SS_tot/n) = SS_res/SS_tot = 1 - R²
@@ -177,7 +177,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0 - r2Val, nmseVal, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdjustedR2_LessThanOrEqual_R2()
     {
         // Adjusted R² penalizes model complexity, so AdjR² <= R² for p >= 1
@@ -191,7 +191,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.True(adjR2Val <= r2Val + 1e-10, $"AdjR²={adjR2Val} should be <= R²={r2Val}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AdjustedR2_HandCalculated_MatchesExpected()
     {
         // With 10 samples, 2 predictors, R² = 0.95
@@ -220,7 +220,7 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Pearson and Spearman Correlation
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pearson_PerfectLinear_Equals1()
     {
         // Perfect positive linear: y = 2x + 1
@@ -232,7 +232,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pearson_PerfectNegativeLinear_EqualsMinus1()
     {
         var pearson = new PearsonCorrelationMetric<double>();
@@ -243,7 +243,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(-1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pearson_Squared_Equals_R2_ForLinearFit()
     {
         // For unbiased linear predictions: R² = r² (Pearson squared)
@@ -264,7 +264,7 @@ public class RegressionMetricsDeepMathIntegrationTests
             $"r²={r * r} should be >= R²={r2Val} for any predictions");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pearson_HandCalculated_MatchesExpected()
     {
         // preds: [1, 2, 3], actuals: [2, 4, 5]
@@ -284,7 +284,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spearman_InvariantToMonotonicTransform()
     {
         // Spearman correlation should be identical before and after monotonic transform
@@ -300,7 +300,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(rho1, rho2, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spearman_PerfectMonotonic_Equals1()
     {
         // Even with non-linear relationship, if order is preserved, rho = 1
@@ -312,7 +312,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spearman_HandCalculated_WithTies()
     {
         // Test tie handling: actuals have ties
@@ -339,7 +339,7 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Huber Loss
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuberLoss_SmallErrors_EqualsMSEHalved()
     {
         // When all |errors| <= delta, Huber = 0.5 * MSE
@@ -353,7 +353,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.5 * mseVal, huberVal, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuberLoss_HandCalculated_MixedRegions()
     {
         // delta = 1.0
@@ -371,7 +371,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(3.625 / 3.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuberLoss_LargeErrors_ApproachesMAETimesDelta()
     {
         // For very large errors >> delta, Huber(e) ≈ delta * (|e| - 0.5*delta)
@@ -389,7 +389,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expectedApprox, huberVal, 1e-6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HuberLoss_ContinuousAtDelta()
     {
         // Huber should be continuous at the transition point
@@ -411,7 +411,7 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Quantile Loss
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantileLoss_AtHalf_EqualsMAEHalved()
     {
         // At τ=0.5: loss = 0.5*|error| for all errors => QuantileLoss = 0.5 * MAE
@@ -425,7 +425,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.5 * maeVal, qLoss, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantileLoss_HandCalculated_Asymmetric()
     {
         // τ = 0.9
@@ -443,7 +443,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(2.0 / 3.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantileLoss_Symmetry_TauAndOneMinusTau()
     {
         // QuantileLoss(τ, preds, actuals) = QuantileLoss(1-τ, actuals, preds) -- swapped
@@ -484,7 +484,7 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Log-Cosh Loss
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogCosh_SmallErrors_ApproximatesMSEHalved()
     {
         // For small x: log(cosh(x)) ≈ x²/2
@@ -500,7 +500,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.5 * mseVal, logCoshVal, 1e-10);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogCosh_LargeErrors_ApproachesMAEMinusLog2()
     {
         // For large |x|: log(cosh(x)) ≈ |x| - log(2)
@@ -515,7 +515,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(maeVal - Math.Log(2), logCoshVal, 1e-6);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogCosh_HandCalculated_MatchesExpected()
     {
         // actuals: [0], preds: [1]
@@ -529,7 +529,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogCosh_AlwaysNonNegative()
     {
         // log(cosh(x)) >= 0 since cosh(x) >= 1
@@ -545,7 +545,7 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Mean Bias Error
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MBE_HandCalculated_OverPrediction()
     {
         // MBE = mean(pred - actual) = mean of signed errors
@@ -559,7 +559,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(2.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MBE_BalancedErrors_IsZero()
     {
         // If over and under-predictions cancel: MBE = 0
@@ -571,7 +571,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MBE_CanBeNegative_UnderPrediction()
     {
         var mbe = new MeanBiasErrorMetric<double>();
@@ -586,7 +586,7 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Explained Variance
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExplainedVariance_PerfectPredictions_Equals1()
     {
         var ev = new ExplainedVarianceMetric<double>();
@@ -597,7 +597,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExplainedVariance_WithBias_DiffersFromR2()
     {
         // EV = 1 - Var(residuals)/Var(actuals)
@@ -620,7 +620,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.True(r2Val < 0, $"R²={r2Val} should be negative for biased predictions");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ExplainedVariance_EqualsR2_WhenUnbiased()
     {
         // When mean(residuals) = 0, EV = R²
@@ -640,7 +640,7 @@ public class RegressionMetricsDeepMathIntegrationTests
     // MAPE, sMAPE, wMAPE
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAPE_HandCalculated_MatchesExpected()
     {
         // actuals: [100, 200, 300], preds: [110, 190, 330]
@@ -654,7 +654,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(100.0 * 0.25 / 3.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SMAPE_HandCalculated_MatchesExpected()
     {
         // actuals: [100, 200], preds: [110, 180]
@@ -670,7 +670,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SMAPE_IsSymmetric_SwappingPredsAndActuals()
     {
         // sMAPE should be the same when swapping predictions and actuals
@@ -684,7 +684,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(smape1, smape2, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WMAPE_HandCalculated_MatchesExpected()
     {
         // wMAPE = 100 * Σ|y-yhat| / Σ|y|
@@ -700,7 +700,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(100.0 * 50.0 / 600.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WMAPE_LargeActuals_WeighMoreHeavily()
     {
         // The large actual value dominates wMAPE
@@ -725,7 +725,7 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Relative Absolute Error
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RAE_HandCalculated_MatchesExpected()
     {
         // actuals: [1, 2, 3, 4, 5], preds: [1.5, 2.5, 3.5, 4.5, 5.5]
@@ -745,7 +745,7 @@ public class RegressionMetricsDeepMathIntegrationTests
     // MSLE (Mean Squared Log Error)
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSLE_HandCalculated_MatchesExpected()
     {
         // actuals: [3, 5, 2.5], preds: [2.5, 5, 4]
@@ -763,7 +763,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSLE_PenalizesUnderPredictionMoreThanOver()
     {
         // MSLE uses log, so under-prediction of same absolute size is penalized more
@@ -782,7 +782,7 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Poisson Deviance
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonDeviance_PerfectPredictions_IsZero()
     {
         // When y = mu: deviance = 2*(y*log(1) - 0) = 0
@@ -794,7 +794,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonDeviance_HandCalculated_MatchesExpected()
     {
         // actual=5, pred=3: 2*(5*log(5/3) - (5-3)) = 2*(5*0.5108... - 2) = 2*(2.5541...-2) = 2*0.5541 = 1.1082...
@@ -807,7 +807,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(expected, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonDeviance_AlwaysNonNegative()
     {
         // Poisson deviance >= 0, with equality at y = mu
@@ -823,7 +823,7 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Tweedie Loss
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TweedieLoss_Power0_EqualsMSE()
     {
         // Tweedie with p=0 should equal MSE (normal distribution)
@@ -837,7 +837,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(mseVal, tweedieVal, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TweedieLoss_Power1_EqualsPoissonDeviance()
     {
         // Tweedie with p=1 should equal Poisson deviance
@@ -851,7 +851,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(poissonVal, tweedieVal, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TweedieLoss_Power2_EqualsGammaDeviance()
     {
         // Tweedie p=2: Gamma deviance = 2*(-log(y/mu) + (y-mu)/mu)
@@ -872,7 +872,7 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Cross-metric consistency: comprehensive data set
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllMetrics_PerfectPredictions_OptimalValues()
     {
         // For perfect predictions, all loss metrics should be 0, all score metrics should be 1
@@ -902,7 +902,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, NumOps.ToDouble(new NormalizedMSEMetric<double>().Compute(preds, actuals)), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RMSE_GreaterThanOrEqual_MAE()
     {
         // By Cauchy-Schwarz: RMSE >= MAE, with equality iff all |errors| are equal
@@ -921,7 +921,7 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Edge cases
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Metrics_SingleElement_HandleCorrectly()
     {
         double[] preds = [3.0];
@@ -937,7 +937,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, NumOps.ToDouble(new MeanBiasErrorMetric<double>().Compute(preds, actuals)), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Metrics_EmptyInput_ReturnsZero()
     {
         double[] empty = [];
@@ -948,7 +948,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, NumOps.ToDouble(new R2ScoreMetric<double>().Compute(empty, empty)), Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Metrics_LengthMismatch_ThrowsArgumentException()
     {
         double[] preds = [1, 2, 3];
@@ -960,7 +960,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Throws<ArgumentException>(() => new PearsonCorrelationMetric<double>().Compute(preds, actuals));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void R2_ConstantActuals_PerfectPrediction_Returns1()
     {
         var r2 = new R2ScoreMetric<double>();
@@ -971,7 +971,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(1.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void R2_ConstantActuals_ImperfectPrediction_Returns0()
     {
         // When SS_tot = 0 and SS_res > 0, R² should be 0 per implementation
@@ -983,7 +983,7 @@ public class RegressionMetricsDeepMathIntegrationTests
         Assert.Equal(0.0, result, Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pearson_ConstantInput_ReturnsZero()
     {
         // Pearson is undefined for constant data; implementation returns 0
@@ -999,7 +999,7 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Float type tests
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_Float_MatchesDoubleWithReasonablePrecision()
     {
         var mseFloat = new MSEMetric<float>();
@@ -1020,7 +1020,7 @@ public class RegressionMetricsDeepMathIntegrationTests
     // Bootstrap CI validation
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MSE_BootstrapCI_ContainsPointEstimate()
     {
         var mse = new MSEMetric<double>();

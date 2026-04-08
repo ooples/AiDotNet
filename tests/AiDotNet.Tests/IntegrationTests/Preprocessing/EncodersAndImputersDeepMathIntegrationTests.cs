@@ -20,7 +20,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
     // LabelEncoder - Category to Integer Mapping
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LabelEncoder_SortedMapping_ThreeCategories()
     {
         // Values: [30, 10, 20, 10, 30]
@@ -39,7 +39,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         Assert.Equal(2.0, result[4, 0], Tol); // 30 -> 2
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LabelEncoder_NClasses_IsCorrect()
     {
         var data = MakeMatrix(new double[,] { { 30 }, { 10 }, { 20 }, { 10 }, { 30 } });
@@ -50,7 +50,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         Assert.Equal(3, encoder.NClasses[0]); // 3 unique values: 10, 20, 30
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LabelEncoder_InverseTransform_RecoverOriginal()
     {
         var data = MakeMatrix(new double[,] { { 30 }, { 10 }, { 20 } });
@@ -65,7 +65,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         Assert.Equal(20.0, decoded[2, 0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LabelEncoder_SingleCategory_MapsToZero()
     {
         var data = MakeMatrix(new double[,] { { 5 }, { 5 }, { 5 } });
@@ -78,7 +78,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         Assert.Equal(0.0, result[2, 0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LabelEncoder_UnknownValue_ReturnsMinusOne()
     {
         var trainData = MakeMatrix(new double[,] { { 10 }, { 20 }, { 30 } });
@@ -92,7 +92,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         Assert.Equal(-1.0, result[0, 0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LabelEncoder_ConsecutiveIntegers_PreserveOrder()
     {
         // Values already sorted: [1, 2, 3] => 1->0, 2->1, 3->2
@@ -106,7 +106,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         Assert.Equal(2.0, result[2, 0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LabelEncoder_MultipleColumns_IndependentMapping()
     {
         // Col 0: [10, 20] => 10->0, 20->1
@@ -132,7 +132,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         Assert.Equal(1.0, result[2, 1], Tol); // 200 -> 1
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LabelEncoder_SpecificColumns_OnlyEncodesSelected()
     {
         // Only encode column 0, leave column 1 as-is
@@ -155,7 +155,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
     // OneHotEncoder - Binary Indicator Columns
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OneHot_ThreeCategories_CorrectOutput()
     {
         // Values: [10, 20, 30] => categories sorted: [10, 20, 30]
@@ -186,7 +186,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         Assert.Equal(1.0, result[2, 2], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OneHot_DropFirst_ReducesColumns()
     {
         // Values: [10, 20, 30] with dropFirst
@@ -214,7 +214,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         Assert.Equal(1.0, result[2, 1], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OneHot_NOutputFeatures_IsCorrect()
     {
         var data = MakeMatrix(new double[,] { { 10 }, { 20 }, { 30 } });
@@ -228,7 +228,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         Assert.Equal(2, encoderDrop.NOutputFeatures);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OneHot_Categories_AreSorted()
     {
         var data = MakeMatrix(new double[,] { { 30 }, { 10 }, { 20 } });
@@ -242,7 +242,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         Assert.Equal(30.0, encoder.Categories[0][2], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OneHot_EachRowSumsToOne()
     {
         var data = MakeMatrix(new double[,] { { 10 }, { 20 }, { 30 }, { 10 } });
@@ -261,7 +261,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OneHot_UnknownHandlingIgnore_AllZeros()
     {
         var trainData = MakeMatrix(new double[,] { { 10 }, { 20 } });
@@ -279,7 +279,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OneHot_InverseTransform_RecoverOriginal()
     {
         var data = MakeMatrix(new double[,] { { 10 }, { 20 }, { 30 } });
@@ -294,7 +294,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         Assert.Equal(30.0, decoded[2, 0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OneHot_TwoColumns_CorrectExpansion()
     {
         // Col 0: 2 categories [1, 2] => 2 one-hot columns
@@ -319,7 +319,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
     // SimpleImputer - Mean Strategy
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Imputer_Mean_HandComputed()
     {
         // Col 0: [1, NaN, 3, NaN, 5] => valid=[1,3,5], mean=3.0
@@ -342,7 +342,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         Assert.Equal(5.0, result[4, 0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Imputer_Mean_MultipleColumns()
     {
         // Col 0: [1, NaN, 5] => mean=3.0
@@ -365,7 +365,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         Assert.Equal(15.0, result[2, 1], Tol); // NaN replaced with mean
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Imputer_Mean_NoMissingValues_Unchanged()
     {
         var data = MakeMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
@@ -382,7 +382,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
     // SimpleImputer - Median Strategy
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Imputer_Median_OddCount()
     {
         // Col 0: [1, NaN, 3, NaN, 5] => valid=[1,3,5], median=3
@@ -397,7 +397,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         Assert.Equal(3.0, imputer.Statistics[0], Tol);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Imputer_Median_EvenCount()
     {
         // Col 0: [1, NaN, 4, NaN, 2, 3] => valid=[1,4,2,3], sorted=[1,2,3,4], median=(2+3)/2=2.5
@@ -416,7 +416,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
     // SimpleImputer - Constant Strategy
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Imputer_Constant_ReplacesWithSpecifiedValue()
     {
         var data = MakeMatrix(new double[,] {
@@ -437,7 +437,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
     // SimpleImputer - MostFrequent Strategy
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Imputer_MostFrequent_ReplacesWithMode()
     {
         // Col 0: [1, 2, 2, NaN, 3] => valid=[1,2,2,3], mode=2 (most frequent)
@@ -459,7 +459,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
     // SimpleImputer - Edge Cases
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Imputer_StrategyProperty_ReturnsCorrectly()
     {
         var mean = new SimpleImputer<double>(ImputationStrategy.Mean);
@@ -473,7 +473,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         Assert.Equal(ImputationStrategy.MostFrequent, mostFreq.Strategy);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Imputer_Mean_ExcludesNaN_FromComputation()
     {
         // If mean were computed with NaN, it would be NaN
@@ -494,7 +494,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
     // Cross-Component: Encoder + Imputer Pipeline
     // ========================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LabelEncoder_FitTransform_EquivalentToSeparate()
     {
         var data = MakeMatrix(new double[,] { { 30 }, { 10 }, { 20 } });
@@ -512,7 +512,7 @@ public class EncodersAndImputersDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OneHot_FitTransform_EquivalentToSeparate()
     {
         var data = MakeMatrix(new double[,] { { 10 }, { 20 }, { 30 } });

@@ -16,7 +16,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
 
     #region Kaplan-Meier Hand-Computed Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_SimpleNoCensoring_MatchesHandComputed()
     {
         // 5 subjects, all experience event, no censoring
@@ -45,7 +45,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.Equal(0.0, probs[4], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_WithCensoring_MatchesHandComputed()
     {
         // 6 subjects: events at times 1, 3, 5; censored at times 2, 4, 6
@@ -75,7 +75,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.Equal(5.0 / 16.0, probs[2], Tolerance);  // S(5) = 5/16
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_SimultaneousEvents_MatchesHandComputed()
     {
         // 6 subjects, 2 events at time 1, 2 events at time 3, 2 events at time 5
@@ -99,7 +99,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.Equal(0.0, probs[2], Tolerance);          // S(5) = 0
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_NumberAtRisk_MatchesHandComputed()
     {
         // Same setup as WithCensoring test
@@ -126,7 +126,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.Equal(1, numEvents[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_SurvivalIsMonotonicallyNonIncreasing()
     {
         var km = new KaplanMeierEstimator<double>();
@@ -154,7 +154,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_SurvivalBefore0_IsOne()
     {
         var km = new KaplanMeierEstimator<double>();
@@ -176,7 +176,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_AllCensored_SurvivalRemainsOne()
     {
         var km = new KaplanMeierEstimator<double>();
@@ -197,7 +197,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_HazardRatios_AllOne()
     {
         // KM doesn't use covariates, so hazard ratios = 1 for all subjects
@@ -219,7 +219,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_SameSubjectsGetSameSurvival()
     {
         // KM ignores features, so all subjects get the same survival curve
@@ -251,7 +251,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
 
     #region Nelson-Aalen Hand-Computed Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NelsonAalen_SimpleNoCensoring_MatchesHandComputed()
     {
         // 5 subjects, all events, times 1..5
@@ -285,7 +285,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.Equal(expected4, cumHazard[4], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NelsonAalen_VarianceFormula_MatchesHandComputed()
     {
         // Variance of Nelson-Aalen: Var(H(t)) = sum(d_i / n_i^2)
@@ -320,7 +320,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.Equal(v4, variance[4], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NelsonAalen_CumulativeHazardIsNonDecreasing()
     {
         var na = new NelsonAalenEstimator<double>();
@@ -348,7 +348,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NelsonAalen_SurvivalEqualsExpNegH()
     {
         // S(t) = exp(-H(t)) for Nelson-Aalen
@@ -376,7 +376,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NelsonAalen_WithCensoring_MatchesHandComputed()
     {
         // 6 subjects: events at 1, 3, 5; censored at 2, 4, 6
@@ -406,7 +406,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
 
     #region KM vs Nelson-Aalen Relationship
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KM_And_NelsonAalen_SurvivalApproximatelyEqual_ForLargeSample()
     {
         // For large samples, Kaplan-Meier S(t) ≈ exp(-H_NA(t))
@@ -443,7 +443,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KM_SurvivalAlwaysLessOrEqual_NelsonAalen_Survival()
     {
         // A well-known result: S_KM(t) <= exp(-H_NA(t)) for all t
@@ -482,7 +482,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
 
     #region Concordance Index Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConcordanceIndex_PerfectDiscrimination_ReturnsOne()
     {
         // Perfect model: higher risk → shorter survival time
@@ -511,7 +511,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.Equal(0.5, cIndex, 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConcordanceIndex_TiedRiskScores_HandComputed()
     {
         // This test verifies the concordance index handles ties correctly.
@@ -545,7 +545,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.Equal(0.5, cIndex, 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConcordanceIndex_MixedConcordantAndTied_HandComputed()
     {
         // We need a model that produces some concordant and some tied pairs.
@@ -593,7 +593,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
 
     #region Weibull AFT Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeibullAFT_SurvivalStartsAtOne()
     {
         // Use zero features to simplify optimization (only intercept and scale)
@@ -621,7 +621,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.True(survival[0, 0] > 0.99, $"S(0.001) should be near 1.0, got {survival[0, 0]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeibullAFT_SurvivalApproachesZero_ForLargeTime()
     {
         var weibull = new WeibullAFT<double>(maxIterations: 500);
@@ -647,7 +647,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.True(survival[0, 0] < 0.01, $"S(10000) should be near 0, got {survival[0, 0]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeibullAFT_SurvivalIsMonotonicallyDecreasing()
     {
         var weibull = new WeibullAFT<double>(maxIterations: 200);
@@ -682,7 +682,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeibullAFT_MedianSurvival_MatchesFormula()
     {
         // For Weibull: median = scale * (ln2)^(1/shape)
@@ -717,7 +717,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.Equal(0.5, survival[0, 0], 0.1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeibullAFT_SurvivalBetweenZeroAndOne()
     {
         var weibull = new WeibullAFT<double>(maxIterations: 200);
@@ -751,7 +751,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WeibullAFT_BaselineSurvival_MatchesPredictionWithZeroFeatures()
     {
         // Baseline survival should match prediction with all-zero features
@@ -788,7 +788,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
 
     #region LogNormal AFT Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogNormalAFT_SurvivalStartsAtOne()
     {
         var lognormal = new LogNormalAFT<double>(maxIterations: 200);
@@ -814,7 +814,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.True(survival[0, 0] > 0.99, $"LogNormal S(0.001) should be near 1.0, got {survival[0, 0]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogNormalAFT_SurvivalApproachesZero_ForLargeTime()
     {
         var lognormal = new LogNormalAFT<double>(maxIterations: 200);
@@ -840,7 +840,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.True(survival[0, 0] < 0.01, $"LogNormal S(100000) should be near 0, got {survival[0, 0]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogNormalAFT_MedianSurvival_IsExpMu()
     {
         // For log-normal: median = exp(mu) where mu is the mean of log(T)
@@ -873,7 +873,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.Equal(0.5, survival[0, 0], 0.15);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogNormalAFT_SurvivalBetweenZeroAndOne()
     {
         var lognormal = new LogNormalAFT<double>(maxIterations: 200);
@@ -907,7 +907,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogNormalAFT_CensoredGradients_MovesInterceptCorrectly()
     {
         // This test verifies that the LogNormal AFT correctly handles censored observations.
@@ -951,7 +951,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
             "This failure suggests censored gradients have the wrong sign.");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LogNormalAFT_BaselineSurvival_MatchesPredictionWithZeroFeatures()
     {
         var lognormal = new LogNormalAFT<double>(maxIterations: 200);
@@ -986,7 +986,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
 
     #region Base Class / Shared Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetUniqueEventTimes_OnlyIncludesEventTimes()
     {
         // Censored times should NOT appear in event times
@@ -1007,7 +1007,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.Equal(5.0, eventTimes[2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetUniqueEventTimes_AreSorted()
     {
         var km = new KaplanMeierEstimator<double>();
@@ -1030,7 +1030,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetUniqueEventTimes_NoDuplicates()
     {
         var km = new KaplanMeierEstimator<double>();
@@ -1047,7 +1047,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.Equal(3, eventTimes.Length); // Only 3 unique times: 3, 5, 7
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validation_NegativeTimes_Throws()
     {
         var km = new KaplanMeierEstimator<double>();
@@ -1061,7 +1061,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
             km.FitSurvival(features, times, events));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validation_InvalidEvents_Throws()
     {
         var km = new KaplanMeierEstimator<double>();
@@ -1075,7 +1075,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
             km.FitSurvival(features, times, events));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Validation_DimensionMismatch_Throws()
     {
         var km = new KaplanMeierEstimator<double>();
@@ -1089,7 +1089,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
             km.FitSurvival(features, times, events));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PredictBeforeFit_Throws()
     {
         var km = new KaplanMeierEstimator<double>();
@@ -1100,7 +1100,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
             km.Predict(features));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NelsonAalen_Serialize_Deserialize_PreservesState()
     {
         var na = new NelsonAalenEstimator<double>();
@@ -1130,7 +1130,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CumulativeHazard_EqualsSurvival_NegLogRelationship()
     {
         // H(t) = -ln(S(t)) for any model
@@ -1166,7 +1166,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
 
     #region ISurvivalModel Interface Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_FitInterface_WithVectorEvents_Works()
     {
         // Test the Fit(times, events, features) interface method
@@ -1187,7 +1187,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.Equal(3, survival.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NelsonAalen_PredictRisk_ReturnsOnesForAllSubjects()
     {
         // Non-parametric model returns risk=1 for all
@@ -1211,7 +1211,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_SingleSubjectEvent_SurvivalDropsToZero()
     {
         var km = new KaplanMeierEstimator<double>();
@@ -1229,7 +1229,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.Equal(0.0, probs[0], Tolerance); // n=1, d=1 → S = 0/1 = 0
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NelsonAalen_SingleSubjectEvent_CumulativeHazardIsOne()
     {
         // Single subject event: H = d/n = 1/1 = 1
@@ -1248,7 +1248,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         Assert.Equal(1.0, cumHazard[0], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaplanMeier_StepFunctionBehavior_SurvivalConstantBetweenEvents()
     {
         var km = new KaplanMeierEstimator<double>();

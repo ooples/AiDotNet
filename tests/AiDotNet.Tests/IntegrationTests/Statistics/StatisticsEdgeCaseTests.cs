@@ -35,7 +35,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Single value: Mean, Min, Max should all equal that value.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicStats_SingleValue_AllStatsEqualValue()
     {
         // Arrange
@@ -51,7 +51,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Two values: Median should be the average of both.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicStats_TwoValues_MedianIsAverage()
     {
         // Arrange
@@ -67,7 +67,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// All same values: Variance and StdDev should be 0.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicStats_AllSameValues_ZeroVariance()
     {
         // Arrange
@@ -83,7 +83,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Large dataset (1000 values) should compute correctly.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicStats_LargeDataset_ComputesCorrectly()
     {
         // Arrange - 1000 values from 1 to 1000
@@ -104,7 +104,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Very large values should be handled without overflow.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicStats_VeryLargeValues_HandledCorrectly()
     {
         // Arrange - Values near max double
@@ -120,7 +120,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Very small values should be handled without underflow.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicStats_VerySmallValues_HandledCorrectly()
     {
         // Arrange - Values near machine epsilon
@@ -136,7 +136,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Negative values should be handled correctly.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicStats_AllNegativeValues_HandledCorrectly()
     {
         // Arrange
@@ -153,7 +153,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Mixed positive and negative values.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicStats_MixedPositiveNegative_HandledCorrectly()
     {
         // Arrange
@@ -175,7 +175,7 @@ public class StatisticsEdgeCaseTests
     /// Two values: Q1, Q2, Q3 should be interpolated.
     /// Verified with NumPy: np.percentile([1, 5], [25, 50, 75]) = [2.0, 3.0, 4.0]
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Quartile_TwoValues_InterpolatesCorrectly()
     {
         // Arrange
@@ -193,7 +193,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// All same values: All quartiles should equal that value.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Quartile_AllSameValues_AllQuartilesEqual()
     {
         // Arrange
@@ -215,7 +215,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Single dimension: Euclidean distance equals absolute difference.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EuclideanDistance_SingleDimension_EqualsAbsDiff()
     {
         // Arrange
@@ -233,7 +233,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// High-dimensional sparse vectors.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EuclideanDistance_SparseVectors_ComputesCorrectly()
     {
         // Arrange - Mostly zeros with one non-zero
@@ -251,7 +251,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Very small differences.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EuclideanDistance_VerySmallDifferences_HandledCorrectly()
     {
         // Arrange
@@ -270,7 +270,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Cosine distance for unit vectors.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CosineDistance_UnitVectors_ComputesCorrectly()
     {
         // Arrange - Unit vectors at 60 degrees
@@ -305,7 +305,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Two data points: Metrics should still compute.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PredictionStats_TwoDataPoints_ComputesMetrics()
     {
         // Arrange
@@ -323,7 +323,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Very large errors should still compute finite metrics.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PredictionStats_LargeErrors_ComputesFiniteMetrics()
     {
         // Arrange
@@ -343,7 +343,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Perfect negative correlation (predictions reversed).
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PredictionStats_PerfectNegativeCorrelation_ReturnsNegativeOne()
     {
         // Arrange
@@ -361,7 +361,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Very similar values with small differences.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PredictionStats_SmallDifferences_HighR2()
     {
         // Arrange
@@ -392,7 +392,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Two data points: Error metrics should compute correctly.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ErrorStats_TwoDataPoints_ComputesCorrectly()
     {
         // Arrange
@@ -412,7 +412,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// All predictions exact: All error metrics should be zero.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ErrorStats_PerfectPredictions_AllZeroErrors()
     {
         // Arrange
@@ -432,7 +432,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Negative actual values: Error metrics should still compute.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ErrorStats_NegativeActualValues_ComputesCorrectly()
     {
         // Arrange
@@ -456,7 +456,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Variance should always be non-negative.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicStats_Variance_AlwaysNonNegative()
     {
         // Test with various datasets
@@ -482,7 +482,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Mean should be between Min and Max.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BasicStats_Mean_BetweenMinAndMax()
     {
         // Test with various datasets
@@ -504,7 +504,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// Pearson correlation should be in [-1, 1].
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PredictionStats_PearsonCorrelation_InValidRange()
     {
         // Test with various datasets
@@ -527,7 +527,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// MSE should equal MAE² when all errors have the same magnitude.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ErrorStats_ConstantError_MSEEqualsMAESquared()
     {
         // Arrange - All errors are exactly 2
@@ -546,7 +546,7 @@ public class StatisticsEdgeCaseTests
     /// <summary>
     /// RMSE should equal sqrt(MSE).
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ErrorStats_RMSE_EqualsSqrtMSE()
     {
         // Arrange

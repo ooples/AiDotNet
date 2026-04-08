@@ -12,7 +12,7 @@ public class FlashAttentionTests
 {
     private const double Tolerance = 1e-4;
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FlashAttention_Forward_ProducesCorrectShape()
     {
         // Arrange
@@ -33,7 +33,7 @@ public class FlashAttentionTests
         Assert.Equal(headDim, output.Shape[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FlashAttention_Forward4D_ProducesCorrectShape()
     {
         // Arrange
@@ -56,7 +56,7 @@ public class FlashAttentionTests
         Assert.Equal(headDim, output.Shape[3]);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FlashAttention_MatchesStandardAttention_3D()
     {
         // Arrange
@@ -78,7 +78,7 @@ public class FlashAttentionTests
         AssertTensorsEqual(flashOutput, standardOutput, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FlashAttention_WithCausalMask_MasksCorrectly()
     {
         // Arrange
@@ -112,7 +112,7 @@ public class FlashAttentionTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FlashAttention_AttentionWeightsRowSumToOne()
     {
         // Arrange
@@ -146,7 +146,7 @@ public class FlashAttentionTests
     }
 
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FlashAttention_DifferentBlockSizes_ProduceSameResult()
     {
         // Arrange
@@ -172,7 +172,7 @@ public class FlashAttentionTests
         AssertTensorsEqual(output2, output3, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FlashAttentionLayer_Forward_ProducesCorrectShape()
     {
         // Arrange
@@ -195,7 +195,7 @@ public class FlashAttentionTests
 
 
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FlashAttentionLayer_GetSetParameters_RoundTrip()
     {
         // Arrange
@@ -219,7 +219,7 @@ public class FlashAttentionTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FlashAttentionConfig_Presets_HaveExpectedValues()
     {
         // Act

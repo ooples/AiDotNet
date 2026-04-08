@@ -15,7 +15,7 @@ public class LinearClassifierIntegrationTests
 
     #region Perceptron Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Perceptron_LinearSeparable_ConvergesToPerfectClassification()
     {
         // Arrange: Linearly separable data
@@ -60,7 +60,7 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct == 20, $"Perceptron should converge to perfect classification on linearly separable data. Got {correct}/20");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Perceptron_UpdatesOnlyOnMistakes()
     {
         // Arrange: Simple data where perceptron should learn quickly
@@ -95,7 +95,7 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct >= 3, $"Perceptron should classify most samples correctly. Got {correct}/4");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Perceptron_ThrowsOnMulticlass()
     {
         // Arrange: 3-class data
@@ -115,7 +115,7 @@ public class LinearClassifierIntegrationTests
         Assert.Throws<NotSupportedException>(() => perceptron.Train(x, y));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Perceptron_WithL2Regularization_SmallerWeights()
     {
         // Arrange
@@ -179,7 +179,7 @@ public class LinearClassifierIntegrationTests
 
     #region Ridge Classifier Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeClassifier_ClosedFormSolution_AccurateResults()
     {
         // Arrange: Well-separated data
@@ -213,7 +213,7 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct >= 18, $"Ridge should achieve high accuracy. Got {correct}/20");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeClassifier_HigherAlpha_MoreRegularization()
     {
         // Arrange
@@ -251,7 +251,7 @@ public class LinearClassifierIntegrationTests
             $"Higher alpha should produce smaller weights. Low alpha norm: {Math.Sqrt(normLow)}, High alpha norm: {Math.Sqrt(normHigh)}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeClassifier_WithoutIntercept_CenteredData()
     {
         // Arrange: Data centered around origin
@@ -292,7 +292,7 @@ public class LinearClassifierIntegrationTests
         Assert.True(correctWithout >= 6, $"Ridge without intercept should work on centered data. Got {correctWithout}/8");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeClassifier_ThrowsOnMulticlass()
     {
         // Arrange: 3-class data
@@ -316,7 +316,7 @@ public class LinearClassifierIntegrationTests
 
     #region SGD Classifier Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_HingeLoss_SimilarToSVM()
     {
         // Arrange: Linearly separable data
@@ -354,7 +354,7 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct >= 18, $"SGD with hinge loss should achieve high accuracy. Got {correct}/20");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_LogLoss_LogisticRegression()
     {
         // Arrange
@@ -392,7 +392,7 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct >= 16, $"SGD with log loss should achieve good accuracy. Got {correct}/20");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_SquaredHingeLoss_Works()
     {
         // Arrange
@@ -428,7 +428,7 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct >= 8, $"SGD with squared hinge loss should work. Got {correct}/10");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_L1Regularization_SparseWeights()
     {
         // Arrange: Data with many irrelevant features
@@ -480,7 +480,7 @@ public class LinearClassifierIntegrationTests
             $"L1 regularization should produce sparse weights. Expected at least 3 near-zero weights, got {nearZeroCount}/{weights.Length}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_ConvergenceCheck_StopsEarly()
     {
         // Arrange: Easy data that should converge quickly
@@ -521,7 +521,7 @@ public class LinearClassifierIntegrationTests
 
     #region Passive-Aggressive Classifier Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PassiveAggressive_PA_MinimalUpdate()
     {
         // Arrange
@@ -556,7 +556,7 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct >= 8, $"PA should classify correctly. Got {correct}/10");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PassiveAggressive_PA_I_LimitedStepSize()
     {
         // Arrange
@@ -592,7 +592,7 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct >= 8, $"PA-I should classify correctly. Got {correct}/10");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PassiveAggressive_PA_II_SoftMargin()
     {
         // Arrange
@@ -628,7 +628,7 @@ public class LinearClassifierIntegrationTests
         Assert.True(correct >= 8, $"PA-II should classify correctly. Got {correct}/10");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PassiveAggressive_DifferentC_AffectsAggressiveness()
     {
         // Arrange
@@ -671,7 +671,7 @@ public class LinearClassifierIntegrationTests
         Assert.True(weightsHigh.Length > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PassiveAggressive_GetModelMetadata_ContainsC()
     {
         // Arrange
@@ -705,7 +705,7 @@ public class LinearClassifierIntegrationTests
 
     #region Clone Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Perceptron_Clone_ProducesSamePredictions()
     {
         // Arrange
@@ -736,7 +736,7 @@ public class LinearClassifierIntegrationTests
         Assert.True(Math.Abs(originalPred[0] - clonePred[0]) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeClassifier_Clone_ProducesSamePredictions()
     {
         // Arrange
@@ -766,7 +766,7 @@ public class LinearClassifierIntegrationTests
         Assert.True(Math.Abs(originalPred[0] - clonePred[0]) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_Clone_ProducesSamePredictions()
     {
         // Arrange
@@ -797,7 +797,7 @@ public class LinearClassifierIntegrationTests
         Assert.True(Math.Abs(originalPred[0] - clonePred[0]) < Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PassiveAggressive_Clone_ProducesSamePredictions()
     {
         // Arrange
@@ -832,7 +832,7 @@ public class LinearClassifierIntegrationTests
 
     #region Error Handling Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllLinearClassifiers_ThrowOnMismatchedDimensions()
     {
         // Arrange
@@ -846,7 +846,7 @@ public class LinearClassifierIntegrationTests
         Assert.Throws<ArgumentException>(() => new PassiveAggressiveClassifier<double>().Train(x, y));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearClassifiers_PredictBeforeTrain_ThrowsOrReturnsEmpty()
     {
         // Arrange
@@ -875,7 +875,7 @@ public class LinearClassifierIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SGDClassifier_LargeFeatureValues_Stable()
     {
         // Arrange: Data with large feature values
@@ -908,7 +908,7 @@ public class LinearClassifierIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void RidgeClassifier_CollinearFeatures_Regularized()
     {
         // Arrange: Nearly collinear features

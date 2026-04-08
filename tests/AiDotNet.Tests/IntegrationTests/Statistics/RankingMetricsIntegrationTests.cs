@@ -14,7 +14,7 @@ public class RankingMetricsIntegrationTests
 
     #region Mean Reciprocal Rank (MRR) Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MRR_FirstItemRelevant_ReturnsOne()
     {
         // Actual: relevant item has actual=1, others have actual=0
@@ -28,7 +28,7 @@ public class RankingMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MRR_SecondItemRelevant_ReturnsHalf()
     {
         // Relevant item is second when sorted by predicted scores
@@ -41,7 +41,7 @@ public class RankingMetricsIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MRR_ThirdItemRelevant_ReturnsOneThird()
     {
         var actual = Vector<double>.FromArray([0.0, 0.0, 1.0, 0.0, 0.0]);
@@ -53,7 +53,7 @@ public class RankingMetricsIntegrationTests
         Assert.Equal(1.0 / 3.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MRR_LastItemRelevant_ReturnsReciprocal()
     {
         var actual = Vector<double>.FromArray([0.0, 0.0, 0.0, 0.0, 1.0]);
@@ -65,7 +65,7 @@ public class RankingMetricsIntegrationTests
         Assert.Equal(0.2, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MRR_NoRelevantItems_ReturnsZero()
     {
         var actual = Vector<double>.FromArray([0.0, 0.0, 0.0, 0.0, 0.0]);
@@ -76,7 +76,7 @@ public class RankingMetricsIntegrationTests
         Assert.Equal(0.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MRR_MultipleRelevantItems_ReturnsFirstPosition()
     {
         // Multiple relevant items - MRR only considers the first one
@@ -93,7 +93,7 @@ public class RankingMetricsIntegrationTests
 
     #region Mean Average Precision (MAP) Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAP_AllRelevantAtTop_ReturnsOne()
     {
         // All relevant items are at the top
@@ -107,7 +107,7 @@ public class RankingMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAP_SingleRelevant_ReturnsReciprocalRank()
     {
         // Single relevant item
@@ -121,7 +121,7 @@ public class RankingMetricsIntegrationTests
         Assert.Equal(0.5, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAP_AlternatingRelevance_ReturnsExpectedValue()
     {
         // Relevant items at positions 1, 3, 5 when sorted by predicted
@@ -137,7 +137,7 @@ public class RankingMetricsIntegrationTests
         Assert.Equal(0.756, result, 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAP_KLessThanLength_UsesOnlyTopK()
     {
         var actual = Vector<double>.FromArray([1.0, 0.0, 1.0, 0.0, 1.0]);
@@ -156,7 +156,7 @@ public class RankingMetricsIntegrationTests
 
     #region NDCG Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NDCG_PerfectRanking_ReturnsOne()
     {
         // Items are already in perfect relevance order
@@ -169,7 +169,7 @@ public class RankingMetricsIntegrationTests
         Assert.Equal(1.0, result, 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NDCG_ReverseRanking_LowerThanPerfect()
     {
         // Items are in reverse relevance order (worst ranking)
@@ -183,7 +183,7 @@ public class RankingMetricsIntegrationTests
         Assert.True(result > 0.0, "NDCG should be positive");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NDCG_KLessThanLength_UsesOnlyTopK()
     {
         var actual = Vector<double>.FromArray([3.0, 2.0, 1.0, 0.0, 0.0]);
@@ -197,7 +197,7 @@ public class RankingMetricsIntegrationTests
         Assert.Equal(1.0, resultK5, 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NDCG_GradedRelevance_HigherRelevanceWeightsMore()
     {
         // Higher relevance scores should have more impact
@@ -212,7 +212,7 @@ public class RankingMetricsIntegrationTests
         Assert.True(resultHigh >= resultLow, "High relevance at top should give higher NDCG");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NDCG_AllZeroRelevance_ReturnsNaNOrZero()
     {
         var actual = Vector<double>.FromArray([0.0, 0.0, 0.0, 0.0, 0.0]);
@@ -224,7 +224,7 @@ public class RankingMetricsIntegrationTests
         Assert.True(double.IsNaN(result) || result == 0.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NDCG_BinaryRelevance_MatchesExpected()
     {
         // Binary relevance (0/1)
@@ -243,7 +243,7 @@ public class RankingMetricsIntegrationTests
 
     #region Float Type Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MRR_FloatType_ReturnsCorrectValue()
     {
         var actual = Vector<float>.FromArray([1.0f, 0.0f, 0.0f, 0.0f, 0.0f]);
@@ -254,7 +254,7 @@ public class RankingMetricsIntegrationTests
         Assert.Equal(1.0f, result, 1e-4f);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAP_FloatType_ReturnsCorrectValue()
     {
         var actual = Vector<float>.FromArray([1.0f, 1.0f, 0.0f, 0.0f, 0.0f]);
@@ -265,7 +265,7 @@ public class RankingMetricsIntegrationTests
         Assert.Equal(1.0f, result, 0.01f);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NDCG_FloatType_ReturnsCorrectValue()
     {
         var actual = Vector<float>.FromArray([3.0f, 2.0f, 1.0f, 0.0f, 0.0f]);
@@ -280,7 +280,7 @@ public class RankingMetricsIntegrationTests
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MRR_SingleItem_ReturnsExpected()
     {
         var actualRelevant = Vector<double>.FromArray([1.0]);
@@ -291,7 +291,7 @@ public class RankingMetricsIntegrationTests
         Assert.Equal(0.0, StatisticsHelper<double>.CalculateMeanReciprocalRank(actualIrrelevant, predicted), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MAP_SingleRelevantItem_ReturnsExpected()
     {
         var actual = Vector<double>.FromArray([1.0]);
@@ -302,7 +302,7 @@ public class RankingMetricsIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NDCG_SingleItem_ReturnsOne()
     {
         var actual = Vector<double>.FromArray([3.0]);

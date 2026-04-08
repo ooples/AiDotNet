@@ -220,7 +220,7 @@ public class PolarDecompositionIntegrationTests
 
     #region Special Matrix Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolarDecomposition_IdentityMatrix_ValidDecomposition()
     {
         // Arrange
@@ -237,7 +237,7 @@ public class PolarDecompositionIntegrationTests
             $"Identity matrix reconstruction failed. Max diff: {maxDiff}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolarDecomposition_OrthogonalMatrix_UEqualsInput()
     {
         // Arrange - Create an orthogonal matrix via QR decomposition
@@ -253,7 +253,7 @@ public class PolarDecompositionIntegrationTests
             "U of orthogonal matrix should be orthogonal");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolarDecomposition_PositiveDefiniteMatrix_ValidDecomposition()
     {
         // Arrange - Create symmetric positive definite matrix
@@ -270,7 +270,7 @@ public class PolarDecompositionIntegrationTests
             $"SPD matrix reconstruction failed. Max diff: {maxDiff}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolarDecomposition_DiagonalMatrix_ValidDecomposition()
     {
         // Arrange
@@ -329,7 +329,7 @@ public class PolarDecompositionIntegrationTests
 
     #region Numerical Stability Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolarDecomposition_LargeMatrix_ValidDecomposition()
     {
         // Arrange
@@ -350,7 +350,7 @@ public class PolarDecompositionIntegrationTests
 
     #region Validation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolarDecomposition_NonSquareMatrix_ThrowsException()
     {
         // Arrange

@@ -17,7 +17,7 @@ public class AdvancedWindowFunctionsTests
 
     #region All Windows - Size and Symmetry Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllWindows_Create_CorrectSize()
     {
         var windows = new IWindowFunction<double>[]
@@ -51,7 +51,7 @@ public class AdvancedWindowFunctionsTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllWindows_Create_NoNaN()
     {
         var windows = new IWindowFunction<double>[]
@@ -89,7 +89,7 @@ public class AdvancedWindowFunctionsTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SymmetricWindows_Create_AreSymmetric()
     {
         // These windows should produce symmetric output
@@ -122,7 +122,7 @@ public class AdvancedWindowFunctionsTests
 
     #region Hamming Window Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HammingWindow_PeakAtCenter()
     {
         var window = new HammingWindow<double>();
@@ -137,7 +137,7 @@ public class AdvancedWindowFunctionsTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HammingWindow_EdgeValues_NotZero()
     {
         // Hamming window edges are ~0.08, not zero
@@ -146,7 +146,7 @@ public class AdvancedWindowFunctionsTests
         Assert.True(result[0] > 0.05);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HammingWindow_GetWindowFunctionType_ReturnsHamming()
     {
         var window = new HammingWindow<double>();
@@ -157,7 +157,7 @@ public class AdvancedWindowFunctionsTests
 
     #region Hanning Window Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HanningWindow_EdgeValues_ApproachZero()
     {
         var window = new HanningWindow<double>();
@@ -165,7 +165,7 @@ public class AdvancedWindowFunctionsTests
         Assert.True(result[0] < 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HanningWindow_CenterValue_IsOne()
     {
         var window = new HanningWindow<double>();
@@ -177,7 +177,7 @@ public class AdvancedWindowFunctionsTests
 
     #region Blackman Window Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BlackmanWindow_EdgeValues_NearZero()
     {
         var window = new BlackmanWindow<double>();
@@ -185,7 +185,7 @@ public class AdvancedWindowFunctionsTests
         Assert.True(Math.Abs(result[0]) < 0.01);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BlackmanWindow_NarrowerMainLobeThanHanning()
     {
         // Blackman has lower sidelobes but wider main lobe
@@ -201,7 +201,7 @@ public class AdvancedWindowFunctionsTests
 
     #region Kaiser Window Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KaiserWindow_Create_AllPositive()
     {
         var window = new KaiserWindow<double>();
@@ -216,7 +216,7 @@ public class AdvancedWindowFunctionsTests
 
     #region Gaussian Window Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianWindow_PeakAtCenter()
     {
         var window = new GaussianWindow<double>();
@@ -234,7 +234,7 @@ public class AdvancedWindowFunctionsTests
         Assert.Equal(16, maxIdx);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianWindow_AllPositive()
     {
         var window = new GaussianWindow<double>();
@@ -249,7 +249,7 @@ public class AdvancedWindowFunctionsTests
 
     #region Bartlett Window Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BartlettWindow_EdgeValues_AreZero()
     {
         var window = new BartlettWindow<double>();
@@ -257,7 +257,7 @@ public class AdvancedWindowFunctionsTests
         Assert.Equal(0.0, result[0], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BartlettWindow_PeakAtCenter()
     {
         var window = new BartlettWindow<double>();
@@ -269,7 +269,7 @@ public class AdvancedWindowFunctionsTests
 
     #region Triangular Window Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TriangularWindow_Create_AllNonNegative()
     {
         var window = new TriangularWindow<double>();
@@ -284,7 +284,7 @@ public class AdvancedWindowFunctionsTests
 
     #region Welch Window Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WelchWindow_EdgeValues_AreZero()
     {
         var window = new WelchWindow<double>();
@@ -292,7 +292,7 @@ public class AdvancedWindowFunctionsTests
         Assert.Equal(0.0, result[0], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void WelchWindow_CenterValue_IsOne()
     {
         var window = new WelchWindow<double>();
@@ -304,7 +304,7 @@ public class AdvancedWindowFunctionsTests
 
     #region Tukey Window Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TukeyWindow_Create_AllNonNegative()
     {
         var window = new TukeyWindow<double>();
@@ -319,7 +319,7 @@ public class AdvancedWindowFunctionsTests
 
     #region Parzen Window Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ParzenWindow_Create_AllNonNegative()
     {
         var window = new ParzenWindow<double>();
@@ -334,7 +334,7 @@ public class AdvancedWindowFunctionsTests
 
     #region Poisson Window Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PoissonWindow_Create_AllPositive()
     {
         var window = new PoissonWindow<double>();
@@ -349,7 +349,7 @@ public class AdvancedWindowFunctionsTests
 
     #region Bohman Window Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BohmanWindow_EdgeValues_NearZero()
     {
         var window = new BohmanWindow<double>();
@@ -361,7 +361,7 @@ public class AdvancedWindowFunctionsTests
 
     #region FlatTop Window Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void FlatTopWindow_CenterValue_ApproximatelyOne()
     {
         var window = new FlatTopWindow<double>();
@@ -374,7 +374,7 @@ public class AdvancedWindowFunctionsTests
 
     #region Lanczos Window Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LanczosWindow_Create_AllNonNegative()
     {
         var window = new LanczosWindow<double>();
@@ -390,7 +390,7 @@ public class AdvancedWindowFunctionsTests
 
     #region Size 1 and Size 2 Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllWindows_SizeOne_ReturnsOneElement()
     {
         var windows = new IWindowFunction<double>[]

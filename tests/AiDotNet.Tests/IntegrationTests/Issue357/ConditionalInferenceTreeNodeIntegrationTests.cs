@@ -13,7 +13,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
 
     #region Construction and Initialization
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalInferenceTreeNode_DefaultConstructor_CreatesPValueZero()
     {
         var node = new ConditionalInferenceTreeNode<double>();
@@ -21,7 +21,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
         Assert.Equal(0.0, node.PValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalInferenceTreeNode_DefaultConstructor_IsLeafNode()
     {
         var node = new ConditionalInferenceTreeNode<double>();
@@ -31,7 +31,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
         Assert.Null(node.Right);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalInferenceTreeNode_InheritsFromDecisionTreeNode()
     {
         var node = new ConditionalInferenceTreeNode<double>();
@@ -48,7 +48,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
 
     #region PValue Property
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalInferenceTreeNode_PValue_CanBeSetAndRetrieved()
     {
         var node = new ConditionalInferenceTreeNode<double>
@@ -77,7 +77,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
         Assert.Equal(pValue, node.PValue, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalInferenceTreeNode_LowPValue_IndicatesSignificantSplit()
     {
         var node = new ConditionalInferenceTreeNode<double>
@@ -88,7 +88,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
         Assert.True(node.PValue < 0.05);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalInferenceTreeNode_HighPValue_IndicatesNonSignificantSplit()
     {
         var node = new ConditionalInferenceTreeNode<double>
@@ -103,7 +103,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
 
     #region Inherited DecisionTreeNode Functionality
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalInferenceTreeNode_CanSetFeatureIndex()
     {
         var node = new ConditionalInferenceTreeNode<double>
@@ -114,7 +114,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
         Assert.Equal(3, node.FeatureIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalInferenceTreeNode_CanSetSplitValue()
     {
         var node = new ConditionalInferenceTreeNode<double>
@@ -125,7 +125,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
         Assert.Equal(7.5, node.SplitValue, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalInferenceTreeNode_CanSetPrediction()
     {
         var node = new ConditionalInferenceTreeNode<double>
@@ -136,7 +136,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
         Assert.Equal(42.0, node.Prediction, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalInferenceTreeNode_CanBuildTreeStructure()
     {
         // Create a conditional inference tree with p-values at each node
@@ -168,7 +168,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
 
     #region Tree Traversal with P-Values
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalInferenceTreeNode_TreeTraversal_PValuesPreserved()
     {
         // Build a multi-level tree with varying p-values
@@ -198,7 +198,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
         Assert.Equal(0.0, ((ConditionalInferenceTreeNode<double>)root.Right!).PValue, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalInferenceTreeNode_CanSimulateTraversal()
     {
         // Build tree similar to DecisionTreeNode tests
@@ -251,7 +251,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
 
     #region Float Type Support
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalInferenceTreeNode_Float_WorksCorrectly()
     {
         var node = new ConditionalInferenceTreeNode<float>
@@ -272,7 +272,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
 
     #region Statistical Significance Testing Context
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalInferenceTreeNode_AllSignificantSplits()
     {
         // A tree where all splits are statistically significant (p < 0.05)
@@ -305,7 +305,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
         Assert.True(((ConditionalInferenceTreeNode<double>)root.Right!).PValue < 0.05);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalInferenceTreeNode_MixedSignificance()
     {
         // A tree with mixed significance levels
@@ -339,7 +339,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
 
     #region Sample Count Management (Inherited)
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalInferenceTreeNode_SampleCounts_WorksCorrectly()
     {
         var node = new ConditionalInferenceTreeNode<double>
@@ -355,7 +355,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
         Assert.Equal(55, node.RightSampleCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConditionalInferenceTreeNode_Samples_CanBeAddedAndAccessed()
     {
         var node = new ConditionalInferenceTreeNode<double>();

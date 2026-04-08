@@ -5,7 +5,7 @@ namespace AiDotNet.Tests.PromptEngineering;
 
 public class SimplePromptTemplateTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithValidTemplate_Succeeds()
     {
         var template = new SimplePromptTemplate("Translate {text} to {language}");
@@ -17,20 +17,20 @@ public class SimplePromptTemplateTests
         Assert.Contains("language", template.InputVariables);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithNullTemplate_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => new SimplePromptTemplate(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithEmptyTemplate_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new SimplePromptTemplate(""));
         Assert.Throws<ArgumentException>(() => new SimplePromptTemplate("   "));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_WithAllVariables_ReturnsFormattedString()
     {
         var template = new SimplePromptTemplate("Translate {text} to {language}");
@@ -45,7 +45,7 @@ public class SimplePromptTemplateTests
         Assert.Equal("Translate Hello world to Spanish", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_WithMissingVariable_ThrowsArgumentException()
     {
         var template = new SimplePromptTemplate("Translate {text} to {language}");
@@ -58,7 +58,7 @@ public class SimplePromptTemplateTests
         Assert.Throws<ArgumentException>(() => template.Format(variables));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_WithNullVariables_ThrowsArgumentNullException()
     {
         var template = new SimplePromptTemplate("Translate {text} to {language}");
@@ -66,7 +66,7 @@ public class SimplePromptTemplateTests
         Assert.Throws<ArgumentNullException>(() => template.Format(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Validate_WithAllVariables_ReturnsTrue()
     {
         var template = new SimplePromptTemplate("Translate {text} to {language}");
@@ -81,7 +81,7 @@ public class SimplePromptTemplateTests
         Assert.True(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Validate_WithMissingVariable_ReturnsFalse()
     {
         var template = new SimplePromptTemplate("Translate {text} to {language}");
@@ -95,7 +95,7 @@ public class SimplePromptTemplateTests
         Assert.False(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Validate_WithNullVariables_ReturnsFalse()
     {
         var template = new SimplePromptTemplate("Translate {text} to {language}");
@@ -105,7 +105,7 @@ public class SimplePromptTemplateTests
         Assert.False(result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FromTemplate_CreatesValidInstance()
     {
         var template = SimplePromptTemplate.FromTemplate("Summarize {document}");
@@ -116,7 +116,7 @@ public class SimplePromptTemplateTests
         Assert.Contains("document", template.InputVariables);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Format_WithMultipleOccurrencesOfSameVariable_ReplacesAll()
     {
         var template = new SimplePromptTemplate("Compare {item} with {item} carefully");

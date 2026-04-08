@@ -6,7 +6,7 @@ namespace AiDotNet.Tests.UnitTests.Groups;
 
 public class LieGroupTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void So3_ExpLog_IdentityRoundTrip()
     {
         var group = new So3Group<double>();
@@ -23,7 +23,7 @@ public class LieGroupTests
         Assert.Equal(0.0, log[2], precision: 12);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Su2_ExpLog_IdentityRoundTrip()
     {
         var group = new Su2Group<double>();
@@ -41,7 +41,7 @@ public class LieGroupTests
         Assert.Equal(0.0, log[2], precision: 12);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Se3_ExpLog_IdentityRoundTrip()
     {
         var group = new Se3Group<double>();

@@ -12,7 +12,7 @@ namespace AiDotNet.Tests.UnitTests.Inference;
 /// </summary>
 public class DoublePrecisionInferenceTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RoPE_Double_ForwardProducesValidOutput()
     {
         int headDim = 8;
@@ -25,7 +25,7 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void RoPE_Double_ApplyRoPEProducesValidOutput()
     {
         int headDim = 8;
@@ -42,7 +42,7 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(rotK));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ALiBi_Double_ComputeBiasProducesValidOutput()
     {
         int numHeads = 4;
@@ -57,7 +57,7 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(bias));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MHA_Double_ForwardProducesValidOutput()
     {
         int seqLen = 4;
@@ -72,7 +72,7 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MHA_Double_WithRoPE_ForwardProducesValidOutput()
     {
         int seqLen = 4;
@@ -88,7 +88,7 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MHA_Double_WithALiBi_ForwardProducesValidOutput()
     {
         int seqLen = 4;
@@ -104,7 +104,7 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GQA_Double_ForwardProducesValidOutput()
     {
         int seqLen = 4;
@@ -120,7 +120,7 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void GQA_Double_WithRoPE_ForwardProducesValidOutput()
     {
         int seqLen = 4;
@@ -155,7 +155,7 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FlashAttention_Double_ForwardProducesValidOutput()
     {
         int seqLen = 4;
@@ -170,7 +170,7 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FlashAttention_Double_WithRoPE_ForwardProducesValidOutput()
     {
         int seqLen = 4;
@@ -186,7 +186,7 @@ public class DoublePrecisionInferenceTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void FlashAttention_Double_WithALiBi_ForwardProducesValidOutput()
     {
         int seqLen = 4;

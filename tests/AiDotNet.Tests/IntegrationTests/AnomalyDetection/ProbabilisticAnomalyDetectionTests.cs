@@ -60,14 +60,14 @@ public class ProbabilisticAnomalyDetectionTests
 
     #region BayesianDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Bayesian_Construction_NotFittedByDefault()
     {
         var detector = new BayesianDetector<double>();
         Assert.False(detector.IsFitted);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Bayesian_OutlierGetsHighestScore()
     {
         var detector = new BayesianDetector<double>();
@@ -79,7 +79,7 @@ public class ProbabilisticAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Bayesian_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new BayesianDetector<double>();
@@ -93,7 +93,7 @@ public class ProbabilisticAnomalyDetectionTests
 
     #region GMMDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GMM_OutlierGetsHighestScore()
     {
         var detector = new GMMDetector<double>(nComponents: 2);
@@ -104,7 +104,7 @@ public class ProbabilisticAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GMM_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new GMMDetector<double>(nComponents: 2);
@@ -118,7 +118,7 @@ public class ProbabilisticAnomalyDetectionTests
 
     #region COPODDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void COPOD_OutlierGetsHighestScore()
     {
         var detector = new COPODDetector<double>();
@@ -129,7 +129,7 @@ public class ProbabilisticAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void COPOD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new COPODDetector<double>();
@@ -143,7 +143,7 @@ public class ProbabilisticAnomalyDetectionTests
 
     #region ECODDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ECOD_OutlierGetsHighestScore()
     {
         var detector = new ECODDetector<double>();
@@ -154,7 +154,7 @@ public class ProbabilisticAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ECOD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new ECODDetector<double>();
@@ -168,7 +168,7 @@ public class ProbabilisticAnomalyDetectionTests
 
     #region Cross-Detector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllProbabilisticDetectors_PredictBeforeFit_Throws()
     {
         var detectors = new AnomalyDetectorBase<double>[]

@@ -16,7 +16,7 @@ public class DataInfrastructureTests
 {
     // ── SineWaveMetaDataset ──
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SineWaveMetaDataset_SampleEpisode_ReturnsValidEpisode()
     {
         var dataset = new SineWaveMetaDataset<double, Matrix<double>, Vector<double>>(seed: 42);
@@ -27,7 +27,7 @@ public class DataInfrastructureTests
         Assert.True(episode.EpisodeId > 0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SineWaveMetaDataset_SampleMultipleEpisodes_ReturnsRequestedCount()
     {
         var dataset = new SineWaveMetaDataset<double, Matrix<double>, Vector<double>>(seed: 42);
@@ -36,7 +36,7 @@ public class DataInfrastructureTests
         Assert.Equal(5, episodes.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SineWaveMetaDataset_SupportsConfiguration_ReturnsTrueForFeasible()
     {
         var dataset = new SineWaveMetaDataset<double, Matrix<double>, Vector<double>>(numClasses: 10, examplesPerClass: 30);
@@ -46,7 +46,7 @@ public class DataInfrastructureTests
 
     // ── GaussianClassificationMetaDataset ──
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GaussianClassification_SampleEpisode_ReturnsValidTask()
     {
         var dataset = new GaussianClassificationMetaDataset<double, Matrix<double>, Vector<double>>(
@@ -62,7 +62,7 @@ public class DataInfrastructureTests
 
     // ── Episode ──
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Episode_TracksMetadata()
     {
         var mlTask = new MetaLearningTask<double, Matrix<double>, Vector<double>>
@@ -88,7 +88,7 @@ public class DataInfrastructureTests
 
     // ── EpisodeCache ──
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EpisodeCache_PutAndGet_Works()
     {
         var cache = new EpisodeCache<double, Matrix<double>, Vector<double>>(capacity: 3);
@@ -121,7 +121,7 @@ public class DataInfrastructureTests
         Assert.Equal(2, cache.HitCount);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EpisodeCache_Clear_ResetsAll()
     {
         var cache = new EpisodeCache<double, Matrix<double>, Vector<double>>(capacity: 10);
@@ -141,7 +141,7 @@ public class DataInfrastructureTests
 
     // ── UniformTaskSampler ──
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UniformTaskSampler_SampleBatch_ReturnsValidBatch()
     {
         var dataset = new GaussianClassificationMetaDataset<double, Matrix<double>, Vector<double>>(
@@ -156,7 +156,7 @@ public class DataInfrastructureTests
 
     // ── BalancedTaskSampler ──
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BalancedTaskSampler_SampleBatch_Works()
     {
         var dataset = new GaussianClassificationMetaDataset<double, Matrix<double>, Vector<double>>(
@@ -170,7 +170,7 @@ public class DataInfrastructureTests
 
     // ── DynamicTaskSampler ──
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DynamicTaskSampler_UpdateWithFeedback_TracksMeanLoss()
     {
         var dataset = new GaussianClassificationMetaDataset<double, Matrix<double>, Vector<double>>(
@@ -190,7 +190,7 @@ public class DataInfrastructureTests
 
     // ── BatchEpisodeSampler ──
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BatchEpisodeSampler_NextBatch_ReturnsCorrectSize()
     {
         var dataset = new GaussianClassificationMetaDataset<double, Matrix<double>, Vector<double>>(
@@ -209,7 +209,7 @@ public class DataInfrastructureTests
 
     // ── EpisodicDataLoaderTaskSamplerAdapter ──
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Adapter_WrapsLegacyLoader()
     {
         var supportX = new Matrix<double>(4, 3);

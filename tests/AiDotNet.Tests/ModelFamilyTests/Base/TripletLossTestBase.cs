@@ -34,7 +34,7 @@ public abstract class TripletLossTestBase
     // INVARIANT 1: Loss is finite for normal inputs
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateLoss_ShouldBeFinite()
     {
         var loss = CreateLoss();
@@ -52,7 +52,7 @@ public abstract class TripletLossTestBase
     // INVARIANT 2: Loss is non-negative
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateLoss_ShouldBeNonNegative()
     {
         var loss = CreateLoss();
@@ -68,7 +68,7 @@ public abstract class TripletLossTestBase
     // INVARIANT 3: Loss is zero when positive is much closer than negative
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateLoss_WellSeparated_ShouldBeZero()
     {
         var loss = CreateLoss();
@@ -85,7 +85,7 @@ public abstract class TripletLossTestBase
     // INVARIANT 4: Loss increases when positive moves further from anchor
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateLoss_CloserPositive_ShouldProduceSmallerLoss()
     {
         var loss = CreateLoss();
@@ -105,7 +105,7 @@ public abstract class TripletLossTestBase
     // INVARIANT 5: Gradients are finite
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateDerivative_ShouldBeFinite()
     {
         var loss = CreateLoss();
@@ -133,7 +133,7 @@ public abstract class TripletLossTestBase
     // INVARIANT 6: Dimension validation
     // =========================================================================
 
-    [Fact]
+    [Fact(Timeout = 30000)]
     public void CalculateLoss_MismatchedDimensions_ShouldThrow()
     {
         var loss = CreateLoss();

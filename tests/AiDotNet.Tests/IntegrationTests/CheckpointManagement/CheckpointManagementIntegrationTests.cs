@@ -38,7 +38,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
 
     #region CheckpointManagerBase Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CheckpointManager_Constructor_CreatesDirectory()
     {
         var checkpointDir = Path.Combine(_testDirectory, "checkpoints");
@@ -47,7 +47,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.True(Directory.Exists(checkpointDir));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CheckpointManager_GetCheckpointDirectory_ReturnsCorrectPath()
     {
         var checkpointDir = Path.Combine(_testDirectory, "test_checkpoints");
@@ -58,7 +58,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.Equal(Path.GetFullPath(checkpointDir), returnedDir);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CheckpointManager_DefaultDirectory_IsRelativeToCurrentDirectory()
     {
         // When no directory specified, should use ./checkpoints
@@ -84,7 +84,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
 
     #region Auto-Checkpointing Configuration Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConfigureAutoCheckpointing_SetsCorrectState()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -107,7 +107,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.Null(state.BestMetricValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConfigureAutoCheckpointing_ResetsPreviousState()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -130,7 +130,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.Null(state.BestMetricValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetAutoCheckpointState_WhenNotConfigured_ReturnsDisabled()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -145,7 +145,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
 
     #region ShouldAutoSaveCheckpoint Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShouldAutoSaveCheckpoint_WhenNotConfigured_ReturnsFalse()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -156,7 +156,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.False(shouldSave);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShouldAutoSaveCheckpoint_AtFrequencyInterval_ReturnsTrue()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -169,7 +169,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.True(shouldSaveAt100);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShouldAutoSaveCheckpoint_BeforeFrequencyInterval_ReturnsFalse()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -182,7 +182,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.False(shouldSaveAt50);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShouldAutoSaveCheckpoint_OnFirstImprovement_ReturnsTrue()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -195,7 +195,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.True(shouldSave);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShouldAutoSaveCheckpoint_OnMetricImprovement_WhenMinimizing_ReturnsTrue()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -211,7 +211,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.True(shouldSave);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShouldAutoSaveCheckpoint_OnMetricImprovement_WhenMaximizing_ReturnsTrue()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -227,7 +227,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.True(shouldSave);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShouldAutoSaveCheckpoint_NoImprovement_WhenMinimizing_ReturnsFalse()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -243,7 +243,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.False(shouldSave);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShouldAutoSaveCheckpoint_NoImprovement_WhenMaximizing_ReturnsFalse()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -263,7 +263,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
 
     #region UpdateAutoSaveState Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UpdateAutoSaveState_UpdatesLastSaveStep()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -276,7 +276,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.Equal(150, state.LastSaveStep);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UpdateAutoSaveState_UpdatesBestMetricValue()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -289,7 +289,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.Equal(0.5, state.BestMetricValue!.Value, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UpdateAutoSaveState_UpdatesBestMetric_WhenImprovement_Minimizing()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -305,7 +305,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.Equal(0.3, state.BestMetricValue!.Value, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UpdateAutoSaveState_DoesNotUpdateBestMetric_WhenNoImprovement_Minimizing()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -321,7 +321,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.Equal(0.5, state.BestMetricValue!.Value, Tolerance); // Should still be 0.5
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UpdateAutoSaveState_UpdatesBestMetric_WhenImprovement_Maximizing()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -341,7 +341,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
 
     #region AutoCheckpointState Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AutoCheckpointState_ToString_WhenDisabled_ReturnsDisabledMessage()
     {
         var state = new AutoCheckpointState(
@@ -358,7 +358,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.Equal("Auto-checkpointing disabled", str);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AutoCheckpointState_ToString_WhenEnabled_ReturnsFormattedString()
     {
         var state = new AutoCheckpointState(
@@ -380,7 +380,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.Contains(0.1234.ToString(System.Globalization.CultureInfo.InvariantCulture), str);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AutoCheckpointState_Properties_AreSetCorrectly()
     {
         var state = new AutoCheckpointState(
@@ -405,7 +405,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
 
     #region Path Validation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CheckpointManager_ValidatesDirectoryPath()
     {
         // Test that manager accepts valid paths within test directory
@@ -417,7 +417,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.Equal(Path.GetFullPath(validPath), manager.GetCheckpointDirectory());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CheckpointManager_AllowsNestedDirectory()
     {
         var nestedDir = Path.Combine(_testDirectory, "level1", "level2", "checkpoints");
@@ -432,7 +432,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
 
     #region Thread Safety Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CheckpointManager_ConcurrentConfigurationUpdates_AreThreadSafe()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -461,7 +461,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.NotNull(state.BestMetricValue);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CheckpointManager_ConcurrentStateReads_AreThreadSafe()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -491,7 +491,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
 
     #region ListCheckpoints Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ListCheckpoints_WhenEmpty_ReturnsEmptyList()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -506,7 +506,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
 
     #region LoadLatestCheckpoint Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LoadLatestCheckpoint_WhenEmpty_ReturnsNull()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -521,7 +521,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
 
     #region LoadBestCheckpoint Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LoadBestCheckpoint_WhenEmpty_ReturnsNull()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -532,7 +532,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.Null(best);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LoadBestCheckpoint_WhenNoMetric_ReturnsNull()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -548,7 +548,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
 
     #region CleanupOldCheckpoints Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CleanupOldCheckpoints_WhenEmpty_ReturnsZero()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -563,7 +563,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
 
     #region CleanupKeepBest Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CleanupKeepBest_WhenEmpty_ReturnsZero()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -578,13 +578,13 @@ public class CheckpointManagementIntegrationTests : IDisposable
 
     #region MetricOptimizationDirection Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetricOptimizationDirection_Minimize_IsZero()
     {
         Assert.Equal(0, (int)MetricOptimizationDirection.Minimize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MetricOptimizationDirection_Maximize_IsOne()
     {
         Assert.Equal(1, (int)MetricOptimizationDirection.Maximize);
@@ -594,7 +594,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
 
     #region Edge Cases
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShouldAutoSaveCheckpoint_WithZeroFrequency_OnlyTriggersOnImprovement()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -615,7 +615,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.True(shouldSave);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void UpdateAutoSaveState_WithNullMetric_OnlyUpdatesStep()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -633,7 +633,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.Equal(0.5, state.BestMetricValue!.Value, Tolerance); // Should remain unchanged
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShouldAutoSaveCheckpoint_ExactlyAtFrequencyBoundary_ReturnsTrue()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(
@@ -646,7 +646,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.True(shouldSave);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShouldAutoSaveCheckpoint_AfterUpdate_UsesPreviousStep()
     {
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(

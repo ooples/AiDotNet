@@ -15,7 +15,7 @@ public class InterpolationIntegrationTests
 
     #region Linear Interpolation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
@@ -30,7 +30,7 @@ public class InterpolationIntegrationTests
         Assert.Equal(9.0, interpolation.Interpolate(3.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearInterpolation_InterpolateMidpoint_ReturnsAverage()
     {
         // Arrange
@@ -45,7 +45,7 @@ public class InterpolationIntegrationTests
         Assert.Equal(2.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearInterpolation_ExtrapolateBelow_ReturnsFirstValue()
     {
         // Arrange
@@ -60,7 +60,7 @@ public class InterpolationIntegrationTests
         Assert.True(result <= 10.0);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinearInterpolation_ExtrapolateAbove_ReturnsLastValue()
     {
         // Arrange
@@ -79,7 +79,7 @@ public class InterpolationIntegrationTests
 
     #region Cubic Spline Interpolation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CubicSplineInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
@@ -93,7 +93,7 @@ public class InterpolationIntegrationTests
         Assert.Equal(0.0, interpolation.Interpolate(2.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CubicSplineInterpolation_InterpolateBetweenPoints_ReturnsSmoothValue()
     {
         // Arrange
@@ -112,7 +112,7 @@ public class InterpolationIntegrationTests
 
     #region Natural Spline Interpolation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NaturalSplineInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange - Natural spline needs more data points
@@ -129,7 +129,7 @@ public class InterpolationIntegrationTests
 
     #region Lagrange Polynomial Interpolation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LagrangeInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
@@ -143,7 +143,7 @@ public class InterpolationIntegrationTests
         Assert.Equal(5.0, interpolation.Interpolate(2.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LagrangeInterpolation_QuadraticData_InterpolatesCorrectly()
     {
         // Arrange - y = x^2
@@ -162,7 +162,7 @@ public class InterpolationIntegrationTests
 
     #region Newton Divided Difference Interpolation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NewtonInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
@@ -176,7 +176,7 @@ public class InterpolationIntegrationTests
         Assert.Equal(5.0, interpolation.Interpolate(2.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NewtonInterpolation_LinearData_InterpolatesLinearly()
     {
         // Arrange - y = 2x + 1
@@ -195,7 +195,7 @@ public class InterpolationIntegrationTests
 
     #region Hermite Interpolation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HermiteInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
@@ -214,7 +214,7 @@ public class InterpolationIntegrationTests
 
     #region Akima Interpolation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AkimaInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange - Akima requires at least 5 points and works best with more
@@ -231,7 +231,7 @@ public class InterpolationIntegrationTests
 
     #region Nearest Neighbor Interpolation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NearestNeighborInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
@@ -244,7 +244,7 @@ public class InterpolationIntegrationTests
         Assert.Equal(20.0, interpolation.Interpolate(1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NearestNeighborInterpolation_InterpolateBetweenPoints_ReturnsNearestValue()
     {
         // Arrange
@@ -265,7 +265,7 @@ public class InterpolationIntegrationTests
 
     #region Monotone Cubic Interpolation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MonotoneCubicInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
@@ -279,7 +279,7 @@ public class InterpolationIntegrationTests
         Assert.Equal(3.0, interpolation.Interpolate(2.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MonotoneCubicInterpolation_MonotonicData_PreservesMonotonicity()
     {
         // Arrange
@@ -301,7 +301,7 @@ public class InterpolationIntegrationTests
 
     #region PCHIP Interpolation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PchipInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
@@ -319,7 +319,7 @@ public class InterpolationIntegrationTests
 
     #region Barycentric Rational Interpolation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BarycentricRationalInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
@@ -337,7 +337,7 @@ public class InterpolationIntegrationTests
 
     #region Catmull-Rom Spline Interpolation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CatmullRomSplineInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
@@ -355,7 +355,7 @@ public class InterpolationIntegrationTests
 
     #region Cubic B-Spline Interpolation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CubicBSplineInterpolation_InterpolateAtKnownPoints_ReturnsCloseValues()
     {
         // Arrange - B-splines need sufficient data points
@@ -374,7 +374,7 @@ public class InterpolationIntegrationTests
 
     #region Sinc Interpolation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SincInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange
@@ -391,7 +391,7 @@ public class InterpolationIntegrationTests
 
     #region 2D Interpolation Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BilinearInterpolation_InterpolateAtKnownPoint_ReturnsExactValue()
     {
         // Arrange - Create 2x2 grid
@@ -411,7 +411,7 @@ public class InterpolationIntegrationTests
         Assert.Equal(3.0, interpolation.Interpolate(1.0, 1.0), Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BilinearInterpolation_InterpolateAtCenter_ReturnsAverage()
     {
         // Arrange
@@ -431,7 +431,7 @@ public class InterpolationIntegrationTests
         Assert.Equal(1.0, result, Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BicubicInterpolation_InterpolateAtKnownPoints_ReturnsExactValues()
     {
         // Arrange - Create 4x4 grid for bicubic
@@ -456,7 +456,7 @@ public class InterpolationIntegrationTests
 
     #region Integration Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllInterpolations_DoNotReturnNaN()
     {
         // Arrange - Use more data points for methods that require them
@@ -490,7 +490,7 @@ public class InterpolationIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllInterpolations_InterpolateAtKnownPoints_ReturnsCloseValues()
     {
         // Arrange - Use strictly increasing monotonic data for stability
@@ -527,7 +527,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// All polynomial interpolations should exactly reproduce linear functions y = mx + b
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialInterpolations_LinearFunction_ExactReproduction()
     {
         // Arrange: y = 2x + 3
@@ -560,7 +560,7 @@ public class InterpolationIntegrationTests
     /// Lagrange and Newton should exactly reproduce quadratic functions y = ax² + bx + c
     /// when given 3+ points from that quadratic
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialInterpolations_QuadraticFunction_ExactReproduction()
     {
         // Arrange: y = x² - 2x + 1 = (x-1)²
@@ -591,7 +591,7 @@ public class InterpolationIntegrationTests
     /// Lagrange and Newton should exactly reproduce cubic functions y = x³
     /// when given 4+ points from that cubic
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void PolynomialInterpolations_CubicFunction_ExactReproduction()
     {
         // Arrange: y = x³
@@ -625,7 +625,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Cubic splines should exactly pass through all known points (interpolation property)
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CubicSpline_InterpolationProperty_PassesThroughAllPoints()
     {
         // Arrange: Use sine function sampled at several points
@@ -648,7 +648,7 @@ public class InterpolationIntegrationTests
     /// Natural cubic spline should have second derivatives equal to zero at endpoints
     /// This test verifies the spline behaves correctly near boundaries
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NaturalSpline_BoundaryBehavior_SmoothAtEndpoints()
     {
         // Arrange: Linear data should give linear interpolation
@@ -671,7 +671,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Hermite interpolation should match both values and derivatives at known points
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HermiteInterpolation_ExactValuesAndDerivatives()
     {
         // Arrange: y = x², y' = 2x
@@ -707,7 +707,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Monotone cubic interpolation should preserve monotonicity of input data
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MonotoneCubic_MonotonicIncreasingData_PreservesMonotonicity()
     {
         // Arrange: Strictly increasing data
@@ -730,7 +730,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Monotone cubic interpolation should preserve monotonicity of decreasing data
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MonotoneCubic_MonotonicDecreasingData_PreservesMonotonicity()
     {
         // Arrange: Strictly decreasing data
@@ -753,7 +753,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// PCHIP should also preserve monotonicity
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Pchip_MonotonicIncreasingData_PreservesMonotonicity()
     {
         // Arrange: Strictly increasing data with varying slope
@@ -780,7 +780,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Nearest neighbor should return the value of the closest known point
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NearestNeighbor_CorrectNeighborSelection()
     {
         // Arrange
@@ -807,7 +807,7 @@ public class InterpolationIntegrationTests
     /// Bilinear interpolation center of unit square with corners (0,0,0), (1,0,1), (0,1,2), (1,1,3)
     /// should equal 1.5 (average of all corners)
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Bilinear_CenterOfSquare_ReturnsAverage()
     {
         // Arrange
@@ -829,7 +829,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Bilinear interpolation should be linear along edges
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Bilinear_AlongEdge_IsLinear()
     {
         // Arrange
@@ -861,7 +861,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Akima interpolation should pass through all known points
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AkimaInterpolation_PassesThroughKnownPoints()
     {
         // Arrange - Akima requires at least 5 points
@@ -882,7 +882,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Akima should reproduce linear functions exactly
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AkimaInterpolation_LinearData_ExactReproduction()
     {
         // Arrange: y = 2x + 1
@@ -909,7 +909,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Catmull-Rom spline should pass through all control points
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CatmullRomSpline_PassesThroughControlPoints()
     {
         // Arrange
@@ -930,7 +930,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Sinc interpolation should pass through known points
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void SincInterpolation_PassesThroughKnownPoints()
     {
         // Arrange
@@ -951,7 +951,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Barycentric rational interpolation should pass through all known points
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void BarycentricRational_PassesThroughKnownPoints()
     {
         // Arrange
@@ -976,7 +976,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Test Lanczos interpolation passes through known points
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LanczosInterpolation_PassesThroughKnownPoints()
     {
         // Arrange
@@ -1001,7 +1001,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Shepard's method (2D) should return exact values at known points
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShepardsMethod2D_PassesThroughKnownPoints()
     {
         // Arrange - scattered 2D points with z values
@@ -1023,7 +1023,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Shepard's method should produce weighted average at center of uniform data
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ShepardsMethod2D_CenterOfSquare_ReturnsWeightedAverage()
     {
         // Arrange - unit square corners with values
@@ -1046,7 +1046,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// All interpolations should handle extrapolation without crashing
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllInterpolations_Extrapolation_DoesNotCrash()
     {
         // Arrange
@@ -1081,7 +1081,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// All interpolations should handle constant function y = c
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllInterpolations_ConstantFunction_ExactReproduction()
     {
         // Arrange: y = 5 (constant)
@@ -1117,7 +1117,7 @@ public class InterpolationIntegrationTests
     /// <summary>
     /// Test minimum point requirements for various interpolations
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Interpolations_MinimumPoints_DoNotCrash()
     {
         // 2-point interpolation

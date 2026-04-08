@@ -12,7 +12,7 @@ namespace AiDotNetTests.UnitTests.LanguageModels;
 /// </summary>
 public class AnthropicChatModelTests
 {
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Constructor_WithValidApiKey_InitializesSuccessfully()
     {
         // Arrange & Act
@@ -80,7 +80,7 @@ public class AnthropicChatModelTests
             new AnthropicChatModel<double>("test-api-key", maxTokens: maxTokens));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithNullPrompt_ThrowsArgumentException()
     {
         // Arrange
@@ -91,7 +91,7 @@ public class AnthropicChatModelTests
             model.GenerateAsync(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithEmptyPrompt_ThrowsArgumentException()
     {
         // Arrange
@@ -102,7 +102,7 @@ public class AnthropicChatModelTests
             model.GenerateAsync(""));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithWhitespacePrompt_ThrowsArgumentException()
     {
         // Arrange
@@ -113,7 +113,7 @@ public class AnthropicChatModelTests
             model.GenerateAsync("   "));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithSuccessfulResponse_ReturnsContent()
     {
         // Arrange
@@ -154,7 +154,7 @@ public class AnthropicChatModelTests
         Assert.Equal("This is a test response from Claude.", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithHttpError_ThrowsHttpRequestException()
     {
         // Arrange
@@ -179,7 +179,7 @@ public class AnthropicChatModelTests
             model.GenerateAsync("Test prompt"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithEmptyContent_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -210,7 +210,7 @@ public class AnthropicChatModelTests
             model.GenerateAsync("Test prompt"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithNullContent_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -240,7 +240,7 @@ public class AnthropicChatModelTests
             model.GenerateAsync("Test prompt"));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Generate_WithSuccessfulResponse_ReturnsContent()
     {
         // Arrange
@@ -276,7 +276,7 @@ public class AnthropicChatModelTests
         Assert.Equal("Synchronous response from Claude.", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateResponseAsync_WithSuccessfulResponse_ReturnsContent()
     {
         // Arrange
@@ -312,7 +312,7 @@ public class AnthropicChatModelTests
         Assert.Equal("Response via GenerateResponseAsync.", result);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task GenerateAsync_WithRateLimitError_RetriesAndSucceeds()
     {
         // Arrange
@@ -367,7 +367,7 @@ public class AnthropicChatModelTests
         Assert.Equal(2, callCount); // Should have retried once
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void ModelName_AfterConstruction_MatchesProvidedName()
     {
         // Arrange
@@ -380,7 +380,7 @@ public class AnthropicChatModelTests
         Assert.Equal(expectedModel, model.ModelName);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void MaxContextTokens_ForAllClaudeModels_Is200000()
     {
         // Arrange & Act

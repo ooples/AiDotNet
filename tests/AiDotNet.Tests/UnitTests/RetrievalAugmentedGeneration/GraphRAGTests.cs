@@ -108,7 +108,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Constructor Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullGenerator_ThrowsArgumentNullException()
         {
             // Arrange
@@ -119,7 +119,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new GraphRAG<double>(null!, retriever));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNullRetriever_ThrowsArgumentNullException()
         {
             // Arrange
@@ -130,7 +130,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 new GraphRAG<double>(generator, null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithValidArguments_InitializesCorrectly()
         {
             // Arrange
@@ -144,7 +144,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(graphRag);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithCustomMaxHops_InitializesCorrectly()
         {
             // Arrange
@@ -177,7 +177,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region AddRelation Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddRelation_WithNullEntity_ThrowsArgumentException()
         {
             // Arrange
@@ -190,7 +190,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 graphRag.AddRelation(null!, "DISCOVERED", "Relativity"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddRelation_WithEmptyEntity_ThrowsArgumentException()
         {
             // Arrange
@@ -203,7 +203,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 graphRag.AddRelation("   ", "DISCOVERED", "Relativity"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddRelation_WithNullRelation_ThrowsArgumentException()
         {
             // Arrange
@@ -216,7 +216,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 graphRag.AddRelation("Einstein", null!, "Relativity"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddRelation_WithEmptyRelation_ThrowsArgumentException()
         {
             // Arrange
@@ -229,7 +229,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 graphRag.AddRelation("Einstein", "", "Relativity"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddRelation_WithNullTarget_ThrowsArgumentException()
         {
             // Arrange
@@ -242,7 +242,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 graphRag.AddRelation("Einstein", "DISCOVERED", null!));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddRelation_WithEmptyTarget_ThrowsArgumentException()
         {
             // Arrange
@@ -255,7 +255,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 graphRag.AddRelation("Einstein", "DISCOVERED", "   "));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddRelation_WithValidInputs_AddsRelationSuccessfully()
         {
             // Arrange
@@ -271,7 +271,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddRelation_NormalizesRelationToUpperCase()
         {
             // Arrange
@@ -297,7 +297,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddRelation_TrimsEntityAndTarget()
         {
             // Arrange
@@ -323,7 +323,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddRelation_PreventsDuplicateRelations()
         {
             // Arrange
@@ -344,7 +344,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Retrieve Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -357,7 +357,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 graphRag.Retrieve(null!, 10));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
@@ -386,7 +386,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 graphRag.Retrieve("Einstein", topK));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithValidQuery_ReturnsDocuments()
         {
             // Arrange
@@ -403,7 +403,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotEmpty(resultList);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_RespectsTopKLimit()
         {
             // Arrange
@@ -423,7 +423,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Entity Extraction Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ExtractsCapitalizedPhrases()
         {
             // Arrange
@@ -453,7 +453,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotEmpty(resultList);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_ExtractsQuotedTerms()
         {
             // Arrange
@@ -480,7 +480,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotNull(results);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_FallsBackToLLMForEntityExtraction()
         {
             // Arrange - Generator returns entities when no capitalized/quoted terms found
@@ -511,7 +511,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Graph Traversal Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_TraversesOneHopRelations()
         {
             // Arrange
@@ -542,7 +542,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Document mentioning "Theory of Relativity" should be boosted
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_AddsGraphContextToDocuments()
         {
             // Arrange
@@ -575,7 +575,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Score Boosting Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_BoostsScoresForGraphMatchedDocuments()
         {
             // Arrange
@@ -613,7 +613,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // because it's connected to "Einstein" in the graph
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_BoostFactorIsFixed1_5x()
         {
             // Arrange - Document mentions multiple graph-connected entities
@@ -648,7 +648,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(0.90, Convert.ToDouble(firstDoc.RelevanceScore), 2);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_AddsGraphMetadataToEnrichedDocuments()
         {
             // Arrange
@@ -691,7 +691,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Edge Cases
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithEmptyKnowledgeGraph_StillReturnsVectorResults()
         {
             // Arrange - No relations added
@@ -708,7 +708,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.NotEmpty(resultList);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithNoMatchingDocuments_ReturnsEmptyResults()
         {
             // Arrange
@@ -725,7 +725,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Empty(resultList);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithDocumentsWithoutScores_UsesDefaultScore()
         {
             // Arrange
@@ -754,7 +754,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Should use 0.5 default for boosting calculation
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_CapsBoostAtMaxValue()
         {
             // Arrange - Many matching entities to test boost capping
@@ -795,7 +795,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Multi-hop Traversal Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_TraversesMultipleHops_DefaultTwoHops()
         {
             // Arrange - Create a chain: Alpha -> Beta -> Gamma (2 hops needed to reach Gamma from Alpha)
@@ -831,7 +831,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True((bool)firstDoc.Metadata["graph_boosted"]);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_DoesNotExceedMaxHops()
         {
             // Arrange - Create a chain: Alpha -> Beta -> Gamma -> Delta (3 hops needed to reach Delta from Alpha)
@@ -867,7 +867,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.False(firstDoc.Metadata.ContainsKey("graph_boosted"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_WithMaxHopsThree_ReachesThreeHopEntities()
         {
             // Arrange - Create a chain: Alpha -> Beta -> Gamma -> Delta
@@ -908,7 +908,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         #region Case-Insensitive Entity Matching Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddRelation_IsCaseInsensitive()
         {
             // Arrange
@@ -943,7 +943,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(firstDoc.Metadata.ContainsKey("graph_boosted"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Retrieve_MatchesEntitiesCaseInsensitively()
         {
             // Arrange
@@ -976,7 +976,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.True(firstDoc.Metadata.ContainsKey("graph_boosted"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void AddRelation_PreventsDuplicatesRegardlessOfCase()
         {
             // Arrange

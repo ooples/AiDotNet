@@ -47,7 +47,7 @@ public class MissingModelsIntegrationTests
         return adjacency;
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ClipNeuralNetwork_InvalidOnnxModels_ThrowsOnConstruction()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
@@ -99,7 +99,7 @@ public class MissingModelsIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DDPMModel_Generate_ReturnsExpectedShape()
     {
         var model = new DDPMModel<float>();
@@ -108,7 +108,7 @@ public class MissingModelsIntegrationTests
         Assert.Equal(new[] { 1, 2 }, output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DDPMModel_PredictNoise_ReturnsExpectedShape()
     {
         var model = new DDPMModel<float>();
@@ -119,7 +119,7 @@ public class MissingModelsIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphClassificationModel_Predict_ProducesExpectedShape()
     {
         int numNodes = 4;
@@ -147,7 +147,7 @@ public class MissingModelsIntegrationTests
         Assert.Equal(new[] { 1, 6 }, output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LinkPredictionModel_Predict_ProducesExpectedShape()
     {
         int numNodes = 5;
@@ -175,7 +175,7 @@ public class MissingModelsIntegrationTests
         Assert.Equal(new[] { numNodes, embeddingDim }, output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NodeClassificationModel_Predict_ProducesExpectedShape()
     {
         int numNodes = 4;
@@ -202,7 +202,7 @@ public class MissingModelsIntegrationTests
         Assert.Equal(new[] { numNodes, numClasses }, output.Shape.ToArray());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphModels_RequireAdjacencyMatrix()
     {
         int numNodes = 3;
@@ -226,7 +226,7 @@ public class MissingModelsIntegrationTests
         Assert.Throws<InvalidOperationException>(() => nodeModel.Predict(nodeFeatures));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void NeuralNetwork_PredictAndTrain_ProduceExpectedShape()
     {
         var architecture = new NeuralNetworkArchitecture<float>(

@@ -8,7 +8,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
 {
     public class MeanBiasErrorLossTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithPerfectPredictions_ReturnsZero()
         {
             // Arrange
@@ -23,7 +23,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithUnderPredictions_ReturnsPositiveValue()
         {
             // Arrange
@@ -40,7 +40,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(2.0, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithOverPredictions_ReturnsNegativeValue()
         {
             // Arrange
@@ -57,7 +57,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(-2.0, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithMixedErrors_ReturnsCorrectValue()
         {
             // Arrange
@@ -74,7 +74,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.0, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithSingleValue_ReturnsCorrectValue()
         {
             // Arrange
@@ -90,7 +90,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(2.0, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithNegativeValues_HandlesCorrectly()
         {
             // Arrange
@@ -106,7 +106,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(4.0, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithDifferentLengths_ThrowsArgumentException()
         {
             // Arrange
@@ -118,7 +118,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateLoss(predicted, actual));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_ReturnsConstantNegativeValue()
         {
             // Arrange
@@ -135,7 +135,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.All(result, item => Assert.Equal(-0.3333333333333333, item, 10));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithPerfectPredictions_ReturnsConstantNegativeValue()
         {
             // Arrange
@@ -152,7 +152,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.All(result, item => Assert.Equal(-0.3333333333333333, item, 10));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithSingleValue_ReturnsMinusOne()
         {
             // Arrange
@@ -169,7 +169,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(-1.0, result[0], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithDifferentLengths_ThrowsArgumentException()
         {
             // Arrange
@@ -181,7 +181,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateDerivative(predicted, actual));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -197,7 +197,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(2.0f, result, 5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -213,7 +213,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.All(result, item => Assert.Equal(-0.3333333333333333f, item, 5));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithSmallBias_ReturnsSmallValue()
         {
             // Arrange
@@ -229,7 +229,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(-0.1, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_CanBePositive_Negative_OrZero()
         {
             // Arrange
@@ -254,7 +254,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.0, result3, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithLargeDataset_ComputesCorrectly()
         {
             // Arrange
@@ -276,7 +276,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.5, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_ScalesWithVectorLength()
         {
             // Arrange

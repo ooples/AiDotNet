@@ -108,7 +108,7 @@ public class EncryptionOverheadBenchmarkTests
         _output.WriteLine($"[{label}] Total crypto time: {totalCryptoMs:F1} ms ({measureIterations} iterations)");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void EncryptedPayload_SizeOverhead_IsMinimal()
     {
         if (!AesGcmAvailable)

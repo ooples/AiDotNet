@@ -60,14 +60,14 @@ public class ClusterBasedAnomalyDetectionTests
 
     #region KMeansDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KMeans_Construction_NotFittedByDefault()
     {
         var detector = new KMeansDetector<double>();
         Assert.False(detector.IsFitted);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KMeans_OutlierGetsHighestScore()
     {
         var detector = new KMeansDetector<double>(k: 3);
@@ -79,7 +79,7 @@ public class ClusterBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KMeans_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new KMeansDetector<double>(k: 3);
@@ -93,7 +93,7 @@ public class ClusterBasedAnomalyDetectionTests
 
     #region DBSCANDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DBSCAN_OutlierGetsHighestScore()
     {
         var detector = new DBSCANDetector<double>();
@@ -104,7 +104,7 @@ public class ClusterBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DBSCAN_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new DBSCANDetector<double>();
@@ -118,7 +118,7 @@ public class ClusterBasedAnomalyDetectionTests
 
     #region HDBSCANDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HDBSCAN_OutlierGetsHighestScore()
     {
         var detector = new HDBSCANDetector<double>();
@@ -129,7 +129,7 @@ public class ClusterBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void HDBSCAN_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new HDBSCANDetector<double>();
@@ -143,7 +143,7 @@ public class ClusterBasedAnomalyDetectionTests
 
     #region CBLOFDetector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CBLOF_OutlierGetsHighestScore()
     {
         var detector = new CBLOFDetector<double>();
@@ -154,7 +154,7 @@ public class ClusterBasedAnomalyDetectionTests
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CBLOF_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new CBLOFDetector<double>();
@@ -168,7 +168,7 @@ public class ClusterBasedAnomalyDetectionTests
 
     #region Cross-Detector Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AllClusterDetectors_PredictBeforeFit_Throws()
     {
         var detectors = new AnomalyDetectorBase<double>[]

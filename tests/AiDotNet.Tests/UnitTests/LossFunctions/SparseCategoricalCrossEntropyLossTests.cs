@@ -8,7 +8,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
 {
     public class SparseCategoricalCrossEntropyLossTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithPerfectPrediction_SingleSample_ReturnsNearZero()
         {
             // Arrange
@@ -26,7 +26,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.True(result >= 0.0);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithSingleSample_ReturnsCorrectValue()
         {
             // Arrange
@@ -43,7 +43,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.5108256237659907, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithMultipleSamples_ReturnsAverageLoss()
         {
             // Arrange
@@ -64,7 +64,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.9830564281864163, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithPoorPrediction_ReturnsHighLoss()
         {
             // Arrange
@@ -81,7 +81,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(2.995732273553991, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithInvalidClassIndex_ThrowsArgumentException()
         {
             // Arrange
@@ -94,7 +94,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Contains("out of bounds", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithNegativeClassIndex_ThrowsArgumentException()
         {
             // Arrange
@@ -107,7 +107,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Contains("out of bounds", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithEmptyPredicted_ThrowsArgumentException()
         {
             // Arrange
@@ -119,7 +119,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Throws<ArgumentException>(() => loss.CalculateLoss(predicted, actual));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithSingleSample_ReturnsCorrectGradient()
         {
             // Arrange
@@ -140,7 +140,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.0, result[3], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithMultipleSamples_ReturnsAveragedGradient()
         {
             // Arrange
@@ -160,7 +160,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.0, result[2], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithDifferentClassIndices_ReturnsCorrectGradient()
         {
             // Arrange
@@ -181,7 +181,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(-1.6666666666666667, result[2], 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithInvalidClassIndex_ThrowsArgumentException()
         {
             // Arrange
@@ -194,7 +194,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Contains("out of bounds", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -210,7 +210,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.5108256237659907f, result, 5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateDerivative_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -228,7 +228,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(0.0f, result[3], 5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithManyClasses_HandlesCorrectly()
         {
             // Arrange
@@ -248,7 +248,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             Assert.Equal(1.2039728043259361, result, 10);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CalculateLoss_WithVeryLowProbability_HandlesClamping()
         {
             // Arrange

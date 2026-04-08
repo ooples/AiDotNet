@@ -17,7 +17,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
     // Distance-weighted: inverse-distance weighted average
     // =====================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KNNImputer_Uniform_SimpleMean_OneNeighbor()
     {
         // 3 training rows, 2 features. Query has NaN in col 1.
@@ -48,7 +48,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Equal(10.0, result[0, 1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KNNImputer_Uniform_AverageOfKNeighbors()
     {
         // 4 training rows, query [2, NaN], k=2
@@ -87,7 +87,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
             $"Expected imputed value to be 15 or 25 (depending on tie-breaking), got {imputed}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KNNImputer_NonMissingValuesPreserved()
     {
         var trainData = new double[,]
@@ -113,7 +113,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Equal(50.0, result[0, 1], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KNNImputer_DistanceWeighted_CloserNeighborsDominateAverage()
     {
         // With distance weighting, closer neighbors have more influence
@@ -142,7 +142,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
             $"Distance-weighted imputation should favor close neighbor (100), got {result[0, 1]}");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KNNImputer_MultipleNaNsInSameRow()
     {
         var trainData = new double[,]
@@ -171,14 +171,14 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Equal(100.0, result[0, 2], Tolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KNNImputer_MinNeighborsValidation()
     {
         Assert.Throws<ArgumentException>(() =>
             new KNNImputer<double>(nNeighbors: 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void KNNImputer_AllRowsHaveNaN_FallsBackToColumnMean()
     {
         // If no valid neighbors can be found for a column, falls back to column mean
@@ -214,7 +214,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
     // Partition of Unity: sum of basis functions = 1 at any point
     // =====================================================================
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spline_OutputDimension_CorrectFormula()
     {
         // nKnots=5, degree=3, includeIntercept=true
@@ -234,7 +234,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Equal(9, result.Columns); // 5 + 3 + 1
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spline_WithoutIntercept_OneLessColumn()
     {
         var data = new double[,]
@@ -255,7 +255,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Equal(resultWith.Columns - 1, resultWithout.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spline_PartitionOfUnity_BasisFunctionsSumToOne()
     {
         // B-spline basis functions form a partition of unity:
@@ -282,7 +282,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spline_BasisFunctionsNonNegative()
     {
         // B-spline basis functions are non-negative
@@ -307,7 +307,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spline_Degree1_PiecewiseLinear()
     {
         // Degree 1 = linear B-splines (piecewise linear, hat functions)
@@ -338,7 +338,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spline_UniformKnots_EvenlySpaced()
     {
         var data = new double[,]
@@ -368,7 +368,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Equal(10.0, knots[6], Tolerance); // boundary
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spline_ConstantExtrapolation_ClipsValues()
     {
         // With constant extrapolation, values outside range get boundary basis values
@@ -408,7 +408,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Equal(1.0, aboveSum, LooseTolerance);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spline_MultiColumn_IndependentBasis()
     {
         var data = new double[,]
@@ -428,7 +428,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Equal(8, result.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spline_ValidationRejectsInvalidParams()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -439,7 +439,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
             new SplineTransformer<double>(degree: 6)); // max 5
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spline_GetFeatureNamesOut_CorrectNames()
     {
         var data = new double[,]
@@ -462,7 +462,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         Assert.Contains("spline", names[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spline_Degree0_StepFunctions()
     {
         // Degree 0 = constant/step functions
@@ -492,7 +492,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spline_AllBasisFinite()
     {
         // Test that no NaN or Infinity values are produced
@@ -517,7 +517,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Spline_BoundaryValues_HandledCorrectly()
     {
         // Test that the exact min and max values are handled

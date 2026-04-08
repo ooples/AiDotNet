@@ -7,7 +7,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
     {
         #region StepLR Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void StepLR_InitializesWithCorrectLearningRate()
         {
             var scheduler = new StepLRScheduler(0.1, stepSize: 10, gamma: 0.5);
@@ -15,7 +15,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
             Assert.Equal(0.1, scheduler.BaseLearningRate);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void StepLR_DecaysAtStepSize()
         {
             var scheduler = new StepLRScheduler(0.1, stepSize: 3, gamma: 0.5);
@@ -33,7 +33,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
             Assert.Equal(0.05, scheduler.CurrentLearningRate, 6);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void StepLR_Reset_RestoresInitialState()
         {
             var scheduler = new StepLRScheduler(0.1, stepSize: 2, gamma: 0.5);
@@ -50,14 +50,14 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
 
         #region CosineAnnealing Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CosineAnnealing_InitializesCorrectly()
         {
             var scheduler = new CosineAnnealingLRScheduler(0.1, tMax: 100, etaMin: 0.001);
             Assert.Equal(0.1, scheduler.CurrentLearningRate);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CosineAnnealing_DecreasesToMinimum()
         {
             var scheduler = new CosineAnnealingLRScheduler(0.1, tMax: 10, etaMin: 0.01);
@@ -73,7 +73,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
             Assert.True(scheduler.CurrentLearningRate >= 0.01);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CosineAnnealing_FollowsCosineShape()
         {
             var scheduler = new CosineAnnealingLRScheduler(1.0, tMax: 4, etaMin: 0.0);
@@ -92,14 +92,14 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
 
         #region OneCycle Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OneCycle_InitializesCorrectly()
         {
             var scheduler = new OneCycleLRScheduler(0.1, totalSteps: 100);
             Assert.True(scheduler.CurrentLearningRate < 0.1); // Starts low
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OneCycle_ReachesPeakAtPctStart()
         {
             var scheduler = new OneCycleLRScheduler(0.1, totalSteps: 100, pctStart: 0.3);
@@ -114,7 +114,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
             Assert.True(scheduler.CurrentLearningRate >= 0.05);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void OneCycle_DecaysAfterPeak()
         {
             var scheduler = new OneCycleLRScheduler(0.1, totalSteps: 100, pctStart: 0.3);
@@ -133,7 +133,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
 
         #region LinearWarmup Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void LinearWarmup_StartsAtInitialLr()
         {
             var scheduler = new LinearWarmupScheduler(
@@ -145,7 +145,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
             Assert.Equal(0.001, scheduler.CurrentLearningRate, 6);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void LinearWarmup_ReachesPeakAfterWarmup()
         {
             var scheduler = new LinearWarmupScheduler(
@@ -164,7 +164,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
             Assert.True(scheduler.CurrentLearningRate >= 0.09);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void LinearWarmup_DecaysAfterPeak()
         {
             var scheduler = new LinearWarmupScheduler(
@@ -189,7 +189,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
 
         #region ExponentialLR Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ExponentialLR_DecaysExponentially()
         {
             var scheduler = new ExponentialLRScheduler(1.0, gamma: 0.9);
@@ -208,7 +208,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
 
         #region ReduceOnPlateau Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ReduceOnPlateau_DoesNotReduceWhenImproving()
         {
             var scheduler = new ReduceOnPlateauScheduler(0.1, factor: 0.5, patience: 3);
@@ -222,7 +222,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
             Assert.Equal(0.1, scheduler.CurrentLearningRate, 6);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ReduceOnPlateau_ReducesAfterPatience()
         {
             var scheduler = new ReduceOnPlateauScheduler(0.1, factor: 0.5, patience: 2);
@@ -237,7 +237,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
             Assert.True(scheduler.CurrentLearningRate < 0.1);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void ReduceOnPlateau_RespectsMinLearningRate()
         {
             var scheduler = new ReduceOnPlateauScheduler(0.1, factor: 0.1, patience: 1, minLearningRate: 0.001);
@@ -255,7 +255,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
 
         #region CyclicLR Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void CyclicLR_OscillatesBetweenBounds()
         {
             var scheduler = new CyclicLRScheduler(baseLearningRate: 0.001, maxLearningRate: 0.01, stepSizeUp: 5);
@@ -278,35 +278,35 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
 
         #region Factory Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Factory_CreateForCNN_ReturnsStepLR()
         {
             var scheduler = LearningRateSchedulerFactory.CreateForCNN();
             Assert.IsType<StepLRScheduler>(scheduler);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Factory_CreateForTransformer_ReturnsLinearWarmup()
         {
             var scheduler = LearningRateSchedulerFactory.CreateForTransformer();
             Assert.IsType<LinearWarmupScheduler>(scheduler);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Factory_CreateForSuperConvergence_ReturnsOneCycle()
         {
             var scheduler = LearningRateSchedulerFactory.CreateForSuperConvergence();
             Assert.IsType<OneCycleLRScheduler>(scheduler);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Factory_CreateAdaptive_ReturnsReduceOnPlateau()
         {
             var scheduler = LearningRateSchedulerFactory.CreateAdaptive();
             Assert.IsType<ReduceOnPlateauScheduler>(scheduler);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Factory_Create_ReturnsCorrectType()
         {
             Assert.IsType<StepLRScheduler>(
@@ -321,7 +321,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
 
         #region State Serialization Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void StepLR_GetState_ContainsRequiredKeys()
         {
             var scheduler = new StepLRScheduler(0.1, 10, 0.5);
@@ -335,7 +335,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
             Assert.True(state.ContainsKey("base_lr"));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void StepLR_LoadState_RestoresState()
         {
             var scheduler1 = new StepLRScheduler(0.1, 5, 0.5);
@@ -357,7 +357,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
 
         #region SequentialLR Tests
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SequentialLR_SwitchesSchedulersAtMilestones()
         {
             var schedulers = new List<ILearningRateScheduler>

@@ -10,7 +10,7 @@ public class InputHelperIntegrationTests
 {
     #region GetBatchSize Tests - Matrix
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatchSize_Matrix_ReturnsRowCount()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -26,7 +26,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(4, batchSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatchSize_SingleRowMatrix_ReturnsOne()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -39,7 +39,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(1, batchSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatchSize_Float_Matrix_ReturnsCorrectValue()
     {
         var matrix = new Matrix<float>(5, 3);
@@ -53,7 +53,7 @@ public class InputHelperIntegrationTests
 
     #region GetBatchSize Tests - Tensor
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatchSize_Tensor2D_ReturnsFirstDimension()
     {
         var tensor = new Tensor<double>(new[] { 10, 5 });
@@ -63,7 +63,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(10, batchSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatchSize_Tensor3D_ReturnsFirstDimension()
     {
         var tensor = new Tensor<double>(new[] { 8, 28, 28 });
@@ -77,7 +77,7 @@ public class InputHelperIntegrationTests
 
     #region GetInputSize Tests - Matrix
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetInputSize_Matrix_ReturnsColumnCount()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -91,7 +91,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(5, inputSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetInputSize_SingleColumnMatrix_ReturnsOne()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -110,7 +110,7 @@ public class InputHelperIntegrationTests
 
     #region GetInputSize Tests - Tensor
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetInputSize_Tensor2D_ReturnsSecondDimension()
     {
         var tensor = new Tensor<double>(new[] { 10, 64 });
@@ -120,7 +120,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(64, inputSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetInputSize_Tensor3D_ReturnsFlattenedSize()
     {
         var tensor = new Tensor<double>(new[] { 10, 28, 28 });
@@ -131,7 +131,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(28 * 28, inputSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetInputSize_Tensor1D_ReturnsFirstDimension()
     {
         var tensor = new Tensor<double>(new[] { 100 });
@@ -145,7 +145,7 @@ public class InputHelperIntegrationTests
 
     #region GetElement Tests - Matrix
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetElement_Matrix_ReturnsCorrectValue()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -160,7 +160,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(6, element);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetElement_Matrix_FirstElement_ReturnsCorrectValue()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -174,7 +174,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(10, element);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetElement_Matrix_LastElement_ReturnsCorrectValue()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -188,7 +188,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(4, element);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetElement_Matrix_OutOfRange_ThrowsException()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -205,7 +205,7 @@ public class InputHelperIntegrationTests
 
     #region GetElement Tests - Vector
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetElement_Vector_RowIndex_ReturnsCorrectValue()
     {
         var vector = new Vector<double>(new[] { 10.0, 20.0, 30.0, 40.0 });
@@ -216,7 +216,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(30, element);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetElement_Vector_ColumnIndex_ReturnsCorrectValue()
     {
         var vector = new Vector<double>(new[] { 10.0, 20.0, 30.0, 40.0 });
@@ -227,7 +227,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(40, element);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetElement_Vector_OutOfRange_ThrowsException()
     {
         var vector = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -240,7 +240,7 @@ public class InputHelperIntegrationTests
 
     #region GetElement Tests - Tensor
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetElement_Tensor2D_ReturnsCorrectValue()
     {
         var tensor = new Tensor<double>(new[] { 3, 4 });
@@ -251,7 +251,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(42.0, element);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetElement_Tensor1D_ReturnsCorrectValue()
     {
         var tensor = new Tensor<double>(new[] { 5 });
@@ -266,7 +266,7 @@ public class InputHelperIntegrationTests
 
     #region GetBatch Tests - Matrix
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatch_Matrix_SingleIndex_ReturnsSingleRow()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -285,7 +285,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(6, batch[0, 2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatch_Matrix_MultipleIndices_ReturnsMultipleRows()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -305,7 +305,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(7, batch[2, 0]);  // Row 3
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatch_Matrix_ReorderedIndices_ReturnsReorderedRows()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -322,7 +322,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(3, batch[2, 0]);  // Original row 1
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatch_Matrix_InvalidIndex_ThrowsException()
     {
         var matrix = new Matrix<double>(3, 2);
@@ -331,7 +331,7 @@ public class InputHelperIntegrationTests
             InputHelper<double, Matrix<double>>.GetBatch(matrix, new[] { 0, 5 }));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatch_Matrix_EmptyIndices_ThrowsException()
     {
         var matrix = new Matrix<double>(3, 2);
@@ -344,7 +344,7 @@ public class InputHelperIntegrationTests
 
     #region GetBatch Tests - Vector
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatch_Vector_SingleIndex_ReturnsSingleElement()
     {
         var vector = new Vector<double>(new[] { 10.0, 20.0, 30.0, 40.0 });
@@ -355,7 +355,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(30.0, batch[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatch_Vector_MultipleIndices_ReturnsMultipleElements()
     {
         var vector = new Vector<double>(new[] { 10.0, 20.0, 30.0, 40.0, 50.0 });
@@ -372,7 +372,7 @@ public class InputHelperIntegrationTests
 
     #region GetBatch Tests - Tensor
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatch_Tensor2D_ReturnsCorrectSlices()
     {
         var tensor = new Tensor<double>(new[] { 4, 3 });
@@ -388,7 +388,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(30, batch[1, 0]);  // Original row 3: 30, 31, 32
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatch_Tensor1D_ReturnsCorrectElements()
     {
         var tensor = new Tensor<double>(new[] { 5 });
@@ -407,7 +407,7 @@ public class InputHelperIntegrationTests
 
     #region CreateSingleItemBatch Tests - Vector
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateSingleItemBatch_Vector_ReturnsMatrixWithOneRow()
     {
         // Create a vector with test values
@@ -433,7 +433,7 @@ public class InputHelperIntegrationTests
 
     #region CreateSingleItemBatch Tests - Matrix
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateSingleItemBatch_SingleRowMatrix_ReturnsSameMatrix()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -450,7 +450,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(3, batch[0, 2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateSingleItemBatch_MultiRowMatrix_ReturnsSingleRow()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -465,7 +465,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(3, batch.Columns);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateSingleItemBatch_SingleColumnMatrix_ReturnsTransposed()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -485,7 +485,7 @@ public class InputHelperIntegrationTests
 
     #region CreateSingleItemBatch Tests - Tensor
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateSingleItemBatch_Tensor_ReturnsWithBatchDimensionOne()
     {
         var tensor = new Tensor<double>(new[] { 1, 10, 10 });
@@ -495,7 +495,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(1, batch.Shape[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateSingleItemBatch_Tensor1D_AddsBatchDimension()
     {
         var tensor = new Tensor<double>(new[] { 5 });
@@ -514,7 +514,7 @@ public class InputHelperIntegrationTests
 
     #region GetItem Tests - Vector
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetItem_Vector_ReturnsSingletonVector()
     {
         var vector = new Vector<double>(new[] { 10.0, 20.0, 30.0 });
@@ -525,7 +525,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(20.0, item[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetItem_Vector_FirstElement_ReturnsCorrectValue()
     {
         var vector = new Vector<double>(new[] { 100.0, 200.0, 300.0 });
@@ -535,7 +535,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(100.0, item[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetItem_Vector_LastElement_ReturnsCorrectValue()
     {
         var vector = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 });
@@ -545,7 +545,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(4.0, item[0]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetItem_Vector_OutOfRange_ThrowsException()
     {
         var vector = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -554,7 +554,7 @@ public class InputHelperIntegrationTests
             InputHelper<double, Vector<double>>.GetItem(vector, 10));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetItem_Vector_NegativeIndex_ThrowsException()
     {
         var vector = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
@@ -567,7 +567,7 @@ public class InputHelperIntegrationTests
 
     #region GetItem Tests - Matrix
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetItem_Matrix_ReturnsRowAsVector()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -589,7 +589,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(6.0, item[0, 2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetItem_Matrix_NullInput_ThrowsException()
     {
         Matrix<double>? nullMatrix = null;
@@ -602,7 +602,7 @@ public class InputHelperIntegrationTests
 
     #region GetItem Tests - Tensor
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetItem_Tensor2D_ReturnsSlice()
     {
         var tensor = new Tensor<double>(new[] { 3, 4 });
@@ -616,7 +616,7 @@ public class InputHelperIntegrationTests
         Assert.NotNull(item);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetItem_Tensor_OutOfRange_ThrowsException()
     {
         var tensor = new Tensor<double>(new[] { 3, 4 });
@@ -629,7 +629,7 @@ public class InputHelperIntegrationTests
 
     #region GetFeatureValue Tests - Vector
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetFeatureValue_Vector_ReturnsCorrectValue()
     {
         var vector = new Vector<double>(new[] { 10.0, 20.0, 30.0, 40.0 });
@@ -639,7 +639,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(30.0, value);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetFeatureValue_Vector_FirstFeature_ReturnsCorrectValue()
     {
         var vector = new Vector<double>(new[] { 100.0, 200.0 });
@@ -649,7 +649,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(100.0, value);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetFeatureValue_Vector_OutOfRange_ThrowsException()
     {
         var vector = new Vector<double>(new[] { 1.0, 2.0 });
@@ -662,7 +662,7 @@ public class InputHelperIntegrationTests
 
     #region GetFeatureValue Tests - Matrix
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetFeatureValue_Matrix_ReturnsFirstRowFeature()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -677,7 +677,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(3, value);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetFeatureValue_Matrix_OutOfRange_ThrowsException()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -693,7 +693,7 @@ public class InputHelperIntegrationTests
 
     #region GetFeatureValue Tests - Tensor
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetFeatureValue_Tensor1D_ReturnsCorrectValue()
     {
         var tensor = new Tensor<double>(new[] { 4 });
@@ -707,7 +707,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(30, value);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetFeatureValue_Tensor2D_ReturnsCorrectValue()
     {
         var tensor = new Tensor<double>(new[] { 2, 4 });
@@ -722,7 +722,7 @@ public class InputHelperIntegrationTests
 
     #region Null Input Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetElement_NullInput_ThrowsArgumentNullException()
     {
         Matrix<double>? nullMatrix = null;
@@ -731,7 +731,7 @@ public class InputHelperIntegrationTests
             InputHelper<double, Matrix<double>>.GetElement(nullMatrix!, 0, 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatch_NullInput_ThrowsArgumentNullException()
     {
         Matrix<double>? nullMatrix = null;
@@ -740,7 +740,7 @@ public class InputHelperIntegrationTests
             InputHelper<double, Matrix<double>>.GetBatch(nullMatrix!, new[] { 0 }));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatch_NullIndices_ThrowsArgumentNullException()
     {
         var matrix = new Matrix<double>(3, 2);
@@ -749,7 +749,7 @@ public class InputHelperIntegrationTests
             InputHelper<double, Matrix<double>>.GetBatch(matrix, null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CreateSingleItemBatch_NullInput_ThrowsArgumentNullException()
     {
         Matrix<double>? nullMatrix = null;
@@ -758,7 +758,7 @@ public class InputHelperIntegrationTests
             InputHelper<double, Matrix<double>>.CreateSingleItemBatch(nullMatrix!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetFeatureValue_NullInput_ThrowsArgumentNullException()
     {
         Vector<double>? nullVector = null;
@@ -767,7 +767,7 @@ public class InputHelperIntegrationTests
             InputHelper<double, Vector<double>>.GetFeatureValue(nullVector!, 0));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetFeatureValue_NegativeIndex_ThrowsArgumentOutOfRangeException()
     {
         var vector = new Vector<double>(new[] { 1.0, 2.0 });
@@ -780,7 +780,7 @@ public class InputHelperIntegrationTests
 
     #region Float Type Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatchSize_Float_Tensor_ReturnsCorrectValue()
     {
         var tensor = new Tensor<float>(new[] { 16, 32 });
@@ -790,7 +790,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(16, batchSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetInputSize_Float_Matrix_ReturnsCorrectValue()
     {
         var matrix = new Matrix<float>(10, 20);
@@ -800,7 +800,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(20, inputSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetElement_Float_Matrix_ReturnsCorrectValue()
     {
         var matrix = new Matrix<float>(new float[,]
@@ -814,7 +814,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(4.5f, element);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatch_Float_Vector_ReturnsCorrectValues()
     {
         var vector = new Vector<float>(new[] { 1f, 2f, 3f, 4f, 5f });
@@ -830,7 +830,7 @@ public class InputHelperIntegrationTests
 
     #region Large Dataset Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatch_LargeMatrix_PerformsCorrectly()
     {
         int rows = 1000;
@@ -851,7 +851,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(100 * cols, batch[1, 0]);  // Row 100
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatch_LargeTensor_PerformsCorrectly()
     {
         var tensor = new Tensor<double>(new[] { 500, 64 });
@@ -867,7 +867,7 @@ public class InputHelperIntegrationTests
 
     #region Edge Cases Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatchSize_EmptyMatrix_ReturnsZero()
     {
         var matrix = new Matrix<double>(0, 0);
@@ -877,7 +877,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(0, batchSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetInputSize_EmptyMatrix_ReturnsZero()
     {
         var matrix = new Matrix<double>(0, 0);
@@ -887,7 +887,7 @@ public class InputHelperIntegrationTests
         Assert.Equal(0, inputSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatch_DuplicateIndices_ReturnsDuplicatedRows()
     {
         var matrix = new Matrix<double>(new double[,]
@@ -910,14 +910,14 @@ public class InputHelperIntegrationTests
 
     #region Unsupported Type Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetBatchSize_UnsupportedType_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
             InputHelper<double, string>.GetBatchSize("invalid"));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GetInputSize_UnsupportedType_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>

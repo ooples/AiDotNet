@@ -10,7 +10,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
 {
     public class StubEmbeddingModelTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -22,7 +22,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(512, model.MaxTokens);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithDefaultParameters_CreatesInstance()
         {
             // Arrange & Act
@@ -34,7 +34,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(512, model.MaxTokens);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithZeroDimension_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
@@ -42,7 +42,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Embedding dimension must be greater than zero", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNegativeDimension_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
@@ -50,7 +50,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("Embedding dimension must be greater than zero", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithZeroMaxTokens_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
@@ -58,7 +58,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("MaxTokens must be greater than zero", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Constructor_WithNegativeMaxTokens_ThrowsArgumentException()
         {
             // Arrange & Act & Assert
@@ -66,7 +66,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Contains("MaxTokens must be greater than zero", exception.Message);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithValidText_ReturnsVectorOfCorrectDimension()
         {
             // Arrange
@@ -81,7 +81,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(384, embedding.Length);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithSameTextTwice_ReturnsSameEmbedding()
         {
             // Arrange
@@ -99,7 +99,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithDifferentTexts_ReturnsDifferentEmbeddings()
         {
             // Arrange
@@ -124,7 +124,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.True(hasDifference, "Embeddings for different texts should be different");
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_ReturnsNormalizedVector()
         {
             // Arrange
@@ -144,7 +144,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1.0, magnitude, 5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithNullText_ThrowsArgumentException()
         {
             // Arrange
@@ -154,7 +154,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(null));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithEmptyText_ThrowsArgumentException()
         {
             // Arrange
@@ -164,7 +164,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed(string.Empty));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithWhitespaceText_ThrowsArgumentException()
         {
             // Arrange
@@ -174,7 +174,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.Embed("   "));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithValidTexts_ReturnsMatrixOfCorrectDimensions()
         {
             // Arrange
@@ -190,7 +190,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(384, embeddings.Columns);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithSingleText_ReturnsMatrixWithOneRow()
         {
             // Arrange
@@ -206,7 +206,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(768, embeddings.Columns);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
         {
             // Arrange
@@ -216,7 +216,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentNullException>(() => model.EmbedBatch(null));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithEmptyCollection_ThrowsArgumentException()
         {
             // Arrange
@@ -227,7 +227,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithNullTextInCollection_ThrowsArgumentException()
         {
             // Arrange
@@ -238,7 +238,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithEmptyTextInCollection_ThrowsArgumentException()
         {
             // Arrange
@@ -249,7 +249,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => model.EmbedBatch(texts));
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_ProducesSameEmbeddingsAsIndividualCalls()
         {
             // Arrange
@@ -270,7 +270,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_AllRowsAreNormalized()
         {
             // Arrange
@@ -293,7 +293,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             }
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithFloatType_WorksCorrectly()
         {
             // Arrange
@@ -317,7 +317,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(1.0f, magnitude, 5);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithCustomDimension_ReturnsCorrectSize()
         {
             // Arrange
@@ -332,7 +332,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(customDimension, embedding.Length);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_WithLongText_ReturnsEmbedding()
         {
             // Arrange
@@ -347,7 +347,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(768, embedding.Length);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void EmbedBatch_WithLargeNumberOfTexts_ReturnsCorrectMatrix()
         {
             // Arrange
@@ -362,7 +362,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(384, embeddings.Columns);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void Embed_Deterministic_MultipleInstances()
         {
             // Arrange

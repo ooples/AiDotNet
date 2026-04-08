@@ -14,7 +14,7 @@ public class InferenceOptimizationIntegrationTests
 {
     #region OptimizationNode Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationNode_Constructor_SetsDefaults()
     {
         var node = new OptimizationNode<double>();
@@ -34,7 +34,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Null(node.FusedFrom);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationNode_AddInput_EstablishesConnection()
     {
         var node1 = new OptimizationNode<double> { Name = "input" };
@@ -48,7 +48,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Contains(node2, node1.Outputs);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationNode_AddInput_DoesNotDuplicate()
     {
         var node1 = new OptimizationNode<double>();
@@ -61,7 +61,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Single(node1.Outputs);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationNode_RemoveInput_RemovesConnection()
     {
         var node1 = new OptimizationNode<double>();
@@ -74,7 +74,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Empty(node1.Outputs);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationNode_ReplaceInput_UpdatesConnection()
     {
         var oldInput = new OptimizationNode<double> { Name = "old" };
@@ -91,7 +91,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Single(newInput.Outputs);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationNode_HasConsumers_ReturnsTrueWhenOutputsExist()
     {
         var node1 = new OptimizationNode<double>();
@@ -104,7 +104,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.True(node1.HasConsumers());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationNode_ConsumerCount_ReturnsCorrectCount()
     {
         var producer = new OptimizationNode<double>();
@@ -120,7 +120,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal(2, producer.ConsumerCount());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationNode_Clone_CreatesDeepCopy()
     {
         var original = new OptimizationNode<double>
@@ -146,7 +146,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal(original.Metadata["stride"], clone.Metadata["stride"]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationNode_ToString_ReturnsFormattedString()
     {
         var node = new OptimizationNode<double>
@@ -167,7 +167,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region OptimizationGraph Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_Constructor_InitializesEmptyCollections()
     {
         var graph = new OptimizationGraph<double>();
@@ -177,7 +177,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Empty(graph.OutputNodes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_AddNode_AddsToCollection()
     {
         var graph = new OptimizationGraph<double>();
@@ -189,7 +189,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Contains(node, graph.Nodes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_AddNode_TracksInputNodes()
     {
         var graph = new OptimizationGraph<double>();
@@ -205,7 +205,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Contains(inputNode, graph.InputNodes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_AddNode_TracksOutputNodes()
     {
         var graph = new OptimizationGraph<double>();
@@ -221,7 +221,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Contains(outputNode, graph.OutputNodes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_AddNode_ThrowsOnNull()
     {
         var graph = new OptimizationGraph<double>();
@@ -229,7 +229,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Throws<ArgumentNullException>(() => graph.AddNode(null!));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_AddNode_DoesNotAddDuplicate()
     {
         var graph = new OptimizationGraph<double>();
@@ -241,7 +241,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Single(graph.Nodes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_RemoveNode_RemovesFromCollection()
     {
         var graph = new OptimizationGraph<double>();
@@ -253,7 +253,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Empty(graph.Nodes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_RemoveNode_RemovesConnections()
     {
         var graph = new OptimizationGraph<double>();
@@ -274,7 +274,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Empty(node3.Inputs);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_FindNodeById_ReturnsCorrectNode()
     {
         var graph = new OptimizationGraph<double>();
@@ -288,7 +288,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal(node, found);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_FindNodeById_ReturnsNullForMissing()
     {
         var graph = new OptimizationGraph<double>();
@@ -298,7 +298,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Null(found);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_FindNodesByName_ReturnsMatchingNodes()
     {
         var graph = new OptimizationGraph<double>();
@@ -315,7 +315,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal(2, found.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_GetTopologicalOrder_ReturnsCorrectOrder()
     {
         var graph = new OptimizationGraph<double>();
@@ -337,7 +337,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.True(order.IndexOf(middle) < order.IndexOf(output));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_GetTopologicalOrder_ThrowsOnCycle()
     {
         var graph = new OptimizationGraph<double>();
@@ -356,7 +356,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Throws<InvalidOperationException>(() => graph.GetTopologicalOrder());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_Validate_ReturnsTrueForValidGraph()
     {
         var graph = new OptimizationGraph<double>();
@@ -371,7 +371,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.True(graph.Validate());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_Validate_ReturnsFalseForCyclicGraph()
     {
         var graph = new OptimizationGraph<double>();
@@ -390,7 +390,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.False(graph.Validate());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_Clone_CreatesDeepCopy()
     {
         var graph = new OptimizationGraph<double>();
@@ -408,7 +408,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Single(clone.OutputNodes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_GetStatistics_ReturnsCorrectStats()
     {
         var graph = new OptimizationGraph<double>();
@@ -432,7 +432,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal(2, stats.OperationTypeCounts[OperationType.ReLU]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationGraph_ToString_ReturnsFormattedString()
     {
         var graph = new OptimizationGraph<double>();
@@ -453,7 +453,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region GraphStatistics Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void GraphStatistics_ToString_ReturnsFormattedString()
     {
         var stats = new GraphStatistics
@@ -479,7 +479,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region OptimizationLevel Enum Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationLevel_HasExpectedValues()
     {
         var levels = (OptimizationLevel[])Enum.GetValues(typeof(OptimizationLevel));
@@ -491,7 +491,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Contains(OptimizationLevel.Maximum, levels);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationLevel_ValuesAreOrdered()
     {
         Assert.True((int)OptimizationLevel.None < (int)OptimizationLevel.Basic);
@@ -504,7 +504,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region OptimizationOptions Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationOptions_Constructor_SetsDefaults()
     {
         var options = new OptimizationOptions();
@@ -525,7 +525,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.False(options.ValidateAfterEachPass);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationOptions_FromLevel_None_DisablesAll()
     {
         var options = OptimizationOptions.FromLevel(OptimizationLevel.None);
@@ -541,7 +541,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.False(options.EnableStrengthReduction);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationOptions_FromLevel_Basic_EnablesBasicOnly()
     {
         var options = OptimizationOptions.FromLevel(OptimizationLevel.Basic);
@@ -552,7 +552,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.False(options.EnableCSE);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationOptions_FromLevel_Standard_EnablesStandard()
     {
         var options = OptimizationOptions.FromLevel(OptimizationLevel.Standard);
@@ -563,7 +563,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.True(options.EnableAlgebraicSimplification);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationOptions_FromLevel_Aggressive_EnablesMore()
     {
         var options = OptimizationOptions.FromLevel(OptimizationLevel.Aggressive);
@@ -578,7 +578,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.True(options.EnableMemoryReuse);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationOptions_FromLevel_Maximum_EnablesAll()
     {
         var options = OptimizationOptions.FromLevel(OptimizationLevel.Maximum);
@@ -598,7 +598,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region OptimizationPassType Enum Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void OptimizationPassType_HasExpectedValues()
     {
         var passTypes = (OptimizationPassType[])Enum.GetValues(typeof(OptimizationPassType));
@@ -629,7 +629,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region DeadCodeEliminationPass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeadCodeEliminationPass_Properties()
     {
         var pass = new DeadCodeEliminationPass<double>();
@@ -638,7 +638,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal("Dead Code Elimination", pass.Name);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeadCodeEliminationPass_CanApply_ReturnsFalseForEmptyGraph()
     {
         var pass = new DeadCodeEliminationPass<double>();
@@ -647,7 +647,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.False(pass.CanApply(graph));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeadCodeEliminationPass_CanApply_ReturnsFalseWhenNoOutputs()
     {
         var pass = new DeadCodeEliminationPass<double>();
@@ -658,7 +658,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.False(pass.CanApply(graph));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeadCodeEliminationPass_CanApply_ReturnsTrueForValidGraph()
     {
         var pass = new DeadCodeEliminationPass<double>();
@@ -669,7 +669,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.True(pass.CanApply(graph));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeadCodeEliminationPass_Apply_RemovesUnreachableNodes()
     {
         var pass = new DeadCodeEliminationPass<double>();
@@ -691,7 +691,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal(2, graph.Nodes.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeadCodeEliminationPass_Apply_PreservesReachableNodes()
     {
         var pass = new DeadCodeEliminationPass<double>();
@@ -714,7 +714,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal(3, graph.Nodes.Count);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeadCodeEliminationPass_Apply_DoesNotRemoveNonEliminableNodes()
     {
         var pass = new DeadCodeEliminationPass<double>();
@@ -742,7 +742,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region IRDataType Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IRDataType_HasExpectedValues()
     {
         var types = (IRDataType[])Enum.GetValues(typeof(IRDataType));
@@ -770,7 +770,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Contains(IRDataType.Decimal, types);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IRDataTypeExtensions_IsFloatingPoint()
     {
         Assert.True(IRDataType.Float16.IsFloatingPoint());
@@ -781,7 +781,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.False(IRDataType.QInt8.IsFloatingPoint());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IRDataTypeExtensions_IsInteger()
     {
         Assert.True(IRDataType.Int8.IsInteger());
@@ -792,7 +792,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.False(IRDataType.QInt8.IsInteger());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IRDataTypeExtensions_IsQuantized()
     {
         Assert.True(IRDataType.QInt8.IsQuantized());
@@ -803,7 +803,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.False(IRDataType.Int8.IsQuantized());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IRDataTypeExtensions_ElementSizeInBytes()
     {
         Assert.Equal(1, IRDataType.Bool.ElementSizeInBytes());
@@ -814,7 +814,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal(16, IRDataType.Decimal.ElementSizeInBytes());
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IRDataTypeExtensions_FromSystemType()
     {
         Assert.Equal(IRDataType.Float32, IRDataTypeExtensions.FromSystemType(typeof(float)));
@@ -825,7 +825,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal(IRDataType.Decimal, IRDataTypeExtensions.FromSystemType(typeof(decimal)));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IRDataTypeExtensions_ToSystemType()
     {
         Assert.Equal(typeof(float), IRDataType.Float32.ToSystemType());
@@ -840,7 +840,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region MemoryLayout Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MemoryLayout_HasExpectedValues()
     {
         var layouts = (MemoryLayout[])Enum.GetValues(typeof(MemoryLayout));
@@ -857,7 +857,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region DeviceType Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void DeviceType_HasExpectedValues()
     {
         var devices = (DeviceType[])Enum.GetValues(typeof(DeviceType));
@@ -875,7 +875,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region QuantizationParams Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationParams_DefaultValues()
     {
         var qParams = new QuantizationParams();
@@ -890,7 +890,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Null(qParams.PerChannelZeroPoints);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void QuantizationParams_CanBeConfigured()
     {
         var qParams = new QuantizationParams
@@ -915,7 +915,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region TensorType Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorType_DefaultValues()
     {
         var tensorType = new TensorType();
@@ -928,7 +928,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Null(tensorType.Strides);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorType_HasDynamicShape_ReturnsTrueForDynamicDimensions()
     {
         var staticType = new TensorType { Shape = new[] { 1, 3, 224, 224 } };
@@ -938,7 +938,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.True(dynamicType.HasDynamicShape);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorType_NumElements_CalculatesCorrectly()
     {
         var scalar = new TensorType { Shape = Array.Empty<int>() };
@@ -952,7 +952,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal(24, tensor.NumElements);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorType_NumElements_ReturnsMinusOneForDynamic()
     {
         var dynamicType = new TensorType { Shape = new[] { -1, 3, 224, 224 } };
@@ -960,7 +960,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal(-1, dynamicType.NumElements);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorType_ElementSize_ReturnsCorrectSize()
     {
         var float32Type = new TensorType { DataType = IRDataType.Float32 };
@@ -972,7 +972,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal(1, int8Type.ElementSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorType_TotalBytes_CalculatesCorrectly()
     {
         var tensorType = new TensorType
@@ -985,7 +985,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal(expectedBytes, tensorType.TotalBytes);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorType_IsBroadcastCompatible_ChecksCorrectly()
     {
         var type1 = new TensorType { Shape = new[] { 1, 3, 1 } };
@@ -996,7 +996,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.False(type1.IsBroadcastCompatible(type3)); // 3 != 2
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorType_Clone_CreatesDeepCopy()
     {
         var original = new TensorType
@@ -1016,7 +1016,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal(original.Device, clone.Device);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TensorType_ToString_ReturnsFormattedString()
     {
         var tensorType = new TensorType
@@ -1036,7 +1036,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region ConstantFoldingPass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConstantFoldingPass_Properties()
     {
         var pass = new ConstantFoldingPass<double>();
@@ -1045,7 +1045,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal("Constant Folding", pass.Name);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConstantFoldingPass_CanApply_ReturnsTrueWhenConstantExists()
     {
         var pass = new ConstantFoldingPass<double>();
@@ -1056,7 +1056,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.True(pass.CanApply(graph));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConstantFoldingPass_CanApply_ReturnsFalseWhenNoConstants()
     {
         var pass = new ConstantFoldingPass<double>();
@@ -1071,7 +1071,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region AlgebraicSimplificationPass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void AlgebraicSimplificationPass_Properties()
     {
         var pass = new AlgebraicSimplificationPass<double>();
@@ -1084,7 +1084,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region CommonSubexpressionEliminationPass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CommonSubexpressionEliminationPass_Properties()
     {
         var pass = new CommonSubexpressionEliminationPass<double>();
@@ -1093,7 +1093,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal("Common Subexpression Elimination", pass.Name);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CommonSubexpressionEliminationPass_EliminatesIdenticalAddOperations()
     {
         var pass = new CommonSubexpressionEliminationPass<double>();
@@ -1128,7 +1128,7 @@ public class InferenceOptimizationIntegrationTests
     /// BUG TEST: CSE should NOT eliminate non-commutative operations with reversed operands.
     /// The current implementation incorrectly sorts input IDs which would merge a-b and b-a.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CommonSubexpressionEliminationPass_PreservesNonCommutativeOperations()
     {
         var pass = new CommonSubexpressionEliminationPass<double>();
@@ -1179,7 +1179,7 @@ public class InferenceOptimizationIntegrationTests
     /// BUG TEST: CSE should NOT eliminate division operations with reversed operands.
     /// a/b ≠ b/a, so these should not be merged.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CommonSubexpressionEliminationPass_PreservesDivisionOperandOrder()
     {
         var pass = new CommonSubexpressionEliminationPass<double>();
@@ -1226,7 +1226,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.False(modified, "Division operations with different operand order should NOT be merged");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CommonSubexpressionEliminationPass_CanApply_ReturnsTrueForGraphWithMultipleNodes()
     {
         var pass = new CommonSubexpressionEliminationPass<double>();
@@ -1240,7 +1240,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.True(pass.CanApply(graph));
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void CommonSubexpressionEliminationPass_CanApply_ReturnsFalseForSingleNodeGraph()
     {
         var pass = new CommonSubexpressionEliminationPass<double>();
@@ -1256,7 +1256,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region StrengthReductionPass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void StrengthReductionPass_Properties()
     {
         var pass = new StrengthReductionPass<double>();
@@ -1269,7 +1269,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region InPlaceOptimizationPass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InPlaceOptimizationPass_Properties()
     {
         var pass = new InPlaceOptimizationPass<double>();
@@ -1282,7 +1282,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region MemoryReuseOptimizationPass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MemoryReuseOptimizationPass_Properties()
     {
         var pass = new MemoryReuseOptimizationPass<double>();
@@ -1295,7 +1295,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region LayoutOptimizationPass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void LayoutOptimizationPass_Properties()
     {
         var pass = new LayoutOptimizationPass<double>();
@@ -1308,7 +1308,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region ElementwiseFusionPass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ElementwiseFusionPass_Properties()
     {
         var pass = new ElementwiseFusionPass<double>();
@@ -1321,7 +1321,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region ConvBatchNormFusionPass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvBatchNormFusionPass_Properties()
     {
         var pass = new ConvBatchNormFusionPass<double>();
@@ -1334,7 +1334,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region ConvBatchNormReLUFusionPass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void ConvBatchNormReLUFusionPass_Properties()
     {
         var pass = new ConvBatchNormReLUFusionPass<double>();
@@ -1347,7 +1347,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region MatMulBiasFusionPass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatMulBiasFusionPass_Properties()
     {
         var pass = new MatMulBiasFusionPass<double>();
@@ -1360,7 +1360,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region MatMulBiasActivationFusionPass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MatMulBiasActivationFusionPass_Properties()
     {
         var pass = new MatMulBiasActivationFusionPass<double>();
@@ -1373,7 +1373,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region MultiHeadAttentionFusionPass Tests
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void MultiHeadAttentionFusionPass_Properties()
     {
         var pass = new MultiHeadAttentionFusionPass<double>();
@@ -1386,7 +1386,7 @@ public class InferenceOptimizationIntegrationTests
 
     #region Integration Tests - Graph Construction and Optimization
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntegrationTest_SimpleLinearGraph()
     {
         // Create a simple Input -> ReLU -> Output graph
@@ -1431,7 +1431,7 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal(output, order[2]);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void IntegrationTest_ApplyMultiplePasses()
     {
         var graph = new OptimizationGraph<double>();

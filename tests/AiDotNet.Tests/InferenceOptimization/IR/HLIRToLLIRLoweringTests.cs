@@ -14,7 +14,7 @@ public class HLIRToLLIRLoweringTests
 {
     #region Basic Lowering Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Lower_EmptyGraph_ReturnsEmptyLLIRGraph()
     {
         var hlirGraph = new HLIRGraph<double>();
@@ -26,7 +26,7 @@ public class HLIRToLLIRLoweringTests
         Assert.Empty(llirGraph.Operations);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Lower_SingleInputNode_CreatesInputBuffer()
     {
         var hlirGraph = new HLIRGraph<double>();
@@ -43,7 +43,7 @@ public class HLIRToLLIRLoweringTests
         Assert.Contains(llirGraph.InputIds[0], llirGraph.BufferShapes.Keys);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Lower_ReLUOperation_CreatesElementwiseOp()
     {
         var hlirGraph = new HLIRGraph<double>();
@@ -64,7 +64,7 @@ public class HLIRToLLIRLoweringTests
         Assert.Equal(ElementwiseOpType.ReLU, elementwiseOp.ElementwiseType);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Lower_AddOperation_CreatesElementwiseOp()
     {
         var hlirGraph = new HLIRGraph<double>();
@@ -89,7 +89,7 @@ public class HLIRToLLIRLoweringTests
         Assert.Equal(2, addOp.InputIds.Length);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Lower_MatMulOperation_CreatesMatMulOp()
     {
         var hlirGraph = new HLIRGraph<double>();
@@ -116,7 +116,7 @@ public class HLIRToLLIRLoweringTests
         Assert.Equal(256, matmulOp.K);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Lower_Conv2DOperation_CreatesConv2DOp()
     {
         var hlirGraph = new HLIRGraph<double>();
@@ -149,7 +149,7 @@ public class HLIRToLLIRLoweringTests
         Assert.Equal(1, convOp.BatchSize);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Lower_ReshapeOperation_CreatesMemoryOp()
     {
         var hlirGraph = new HLIRGraph<double>();
@@ -170,7 +170,7 @@ public class HLIRToLLIRLoweringTests
         Assert.Equal(MemoryOpType.Reshape, memOp.MemoryOpType);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Lower_TransposeOperation_CreatesMemoryOp()
     {
         var hlirGraph = new HLIRGraph<double>();
@@ -191,7 +191,7 @@ public class HLIRToLLIRLoweringTests
         Assert.Equal(MemoryOpType.Transpose, memOp.MemoryOpType);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Lower_ConstantNode_CreatesConstantOp()
     {
         var hlirGraph = new HLIRGraph<double>();
@@ -240,7 +240,7 @@ public class HLIRToLLIRLoweringTests
 
     #region Fused Operation Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Lower_FusedNode_CreatesFusedOp()
     {
         var hlirGraph = new HLIRGraph<double>();
@@ -290,7 +290,7 @@ public class HLIRToLLIRLoweringTests
 
     #region Complex Graph Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Lower_LinearSequence_PreservesOrder()
     {
         var hlirGraph = new HLIRGraph<double>();
@@ -315,7 +315,7 @@ public class HLIRToLLIRLoweringTests
         Assert.True(elementwiseOps.Count >= 2);
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Lower_BranchingGraph_HandlesMultipleOutputs()
     {
         var hlirGraph = new HLIRGraph<double>();
@@ -371,7 +371,7 @@ public class HLIRToLLIRLoweringTests
 
     #region Provenance Tracking Tests
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public void Lower_PreservesSourceNodeId()
     {
         var hlirGraph = new HLIRGraph<double>();

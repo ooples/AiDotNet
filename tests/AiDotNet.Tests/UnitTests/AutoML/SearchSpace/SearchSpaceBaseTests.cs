@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
     /// </summary>
     public class SearchSpaceBaseTests
     {
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SearchSpaceBase_Constructor_InitializesWithDefaultValues()
         {
             // Arrange & Act
@@ -20,7 +20,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.NotNull(searchSpace.Operations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SearchSpaceBase_DefaultOperations_ContainsExpectedOperations()
         {
             // Arrange
@@ -37,7 +37,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("avgpool3x3", operations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SearchSpaceBase_DefaultOperations_HasFiveOperations()
         {
             // Arrange
@@ -47,7 +47,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(5, searchSpace.Operations.Count);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SearchSpaceBase_DefaultMaxNodes_IsEight()
         {
             // Arrange
@@ -57,7 +57,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(8, searchSpace.MaxNodes);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SearchSpaceBase_DefaultInputChannels_IsOne()
         {
             // Arrange
@@ -67,7 +67,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(1, searchSpace.InputChannels);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SearchSpaceBase_DefaultOutputChannels_IsOne()
         {
             // Arrange
@@ -77,7 +77,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(1, searchSpace.OutputChannels);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SearchSpaceBase_Operations_CanBeModified()
         {
             // Arrange
@@ -93,7 +93,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("custom_op2", searchSpace.Operations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SearchSpaceBase_MaxNodes_CanBeModified()
         {
             // Arrange
@@ -106,7 +106,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(16, searchSpace.MaxNodes);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SearchSpaceBase_InputChannels_CanBeModified()
         {
             // Arrange
@@ -119,7 +119,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(3, searchSpace.InputChannels);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SearchSpaceBase_OutputChannels_CanBeModified()
         {
             // Arrange
@@ -132,7 +132,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(1000, searchSpace.OutputChannels);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SearchSpaceBase_Float_WorksCorrectly()
         {
             // Arrange & Act
@@ -143,7 +143,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Equal(8, searchSpace.MaxNodes);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SearchSpaceBase_Operations_CanAddItems()
         {
             // Arrange
@@ -158,7 +158,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.Contains("new_operation", searchSpace.Operations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SearchSpaceBase_Operations_CanRemoveItems()
         {
             // Arrange
@@ -173,7 +173,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.SearchSpace
             Assert.DoesNotContain("identity", searchSpace.Operations);
         }
 
-        [Fact]
+        [Fact(Timeout = 60000)]
         public void SearchSpaceBase_Operations_CanClear()
         {
             // Arrange
