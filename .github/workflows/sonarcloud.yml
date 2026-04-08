@@ -99,7 +99,7 @@ jobs:
   build-windows:
     name: Build (Windows)
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     if: github.event.pull_request.draft != true
 
     steps:
@@ -139,7 +139,6 @@ jobs:
           name: build-output-${{ github.sha }}
           path: |
             **/bin/Release/
-            **/obj/Release/
           retention-days: 1
 
       - name: Build NuGet package
@@ -395,7 +394,7 @@ jobs:
           $sanitizedShardName = $shardName -replace '[\\/:*?"<>|\s-]+', '_'
           $results = Join-Path "TestResults" $sanitizedShardName
           New-Item -Path $results -ItemType Directory -Force | Out-Null
-          dotnet test ${{ matrix.shard.project }} -c Release --framework ${{ matrix.shard.framework }} --no-restore --filter "${{ matrix.shard.filter }}" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal" --results-directory $results --blame-hang-timeout 5min --blame-hang-dump-type none
+          dotnet test ${{ matrix.shard.project }} -c Release --framework ${{ matrix.shard.framework }} --no-build --no-restore --filter "${{ matrix.shard.filter }}" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal" --results-directory $results --blame-hang-timeout 5min --blame-hang-dump-type none
 
       - name: Report slow tests
         if: always()
