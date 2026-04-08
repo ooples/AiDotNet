@@ -539,10 +539,10 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
 
         if (rank == 1)
         {
-            // 1D: [features] -> add batch dim
+            // 1D: [features] -> add batch dim (tape-tracked reshape)
             batchSize = 1;
             int featureSize = input.Shape[0];
-            input2D = input.Reshape(new[] { 1, featureSize });
+            input2D = Engine.Reshape(input, new[] { 1, featureSize });
         }
         else if (rank == 2)
         {
@@ -552,13 +552,13 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         }
         else
         {
-            // Higher-rank: collapse all leading dims into batch
+            // Higher-rank: collapse all leading dims into batch (tape-tracked reshape)
             int flatBatch = 1;
             for (int d = 0; d < rank - 1; d++)
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
             int featureSize = input.Shape[rank - 1];
-            input2D = input.Reshape(new[] { flatBatch, featureSize });
+            input2D = Engine.Reshape(input, new[] { flatBatch, featureSize });
         }
 
         // Cache input for backward pass
@@ -641,12 +641,12 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
             for (int d = 0; d < _originalInputShape.Length - 1; d++)
                 newShape[d] = _originalInputShape[d];
             newShape[_originalInputShape.Length - 1] = outputFeatures;
-            output = output.Reshape(newShape);
+            output = Engine.Reshape(output, newShape);
         }
         else if (_originalInputShape != null && _originalInputShape.Length == 1)
         {
             // 1D input -> 1D output (remove batch dim)
-            output = output.Reshape(new[] { output.Shape[1] });
+            output = Engine.Reshape(output, new[] { output.Shape[1] });
         }
 
         return output;
@@ -1412,41 +1412,47 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         // expertOutputs[i] shape: [batchSize, outputDim]
         // routingWeights shape: [batchSize, numExperts]
 
-        Tensor<T>? combined = null;
         int batchSize = routingWeights.Shape[0];
+        int numExperts = routingWeights.Shape[1];
 
-        // WORKAROUND: use GetSliceAlongDimension instead of TensorGather axis=1
-        // (TensorGather axis=1 not yet implemented — tracked in ooples/AiDotNet.Tensors#109)
+        // Extract per-expert weights using TensorMatMul with one-hot selector vectors.
+        // This is fully tape-tracked (TensorMatMul has backward support for all ranks).
+        // routingWeights: [batch, numExperts] @ oneHot: [numExperts, 1] = [batch, 1]
+        // Pre-build one-hot selectors (constant, not on tape)
+        var oneHots = new Tensor<T>[expertOutputs.Count];
+        for (int i = 0; i < expertOutputs.Count; i++)
+        {
+            oneHots[i] = new Tensor<T>(new[] { numExperts, 1 });
+            oneHots[i].Fill(NumOps.Zero);
+            oneHots[i][i, 0] = NumOps.One;
+        }
+
+        Tensor<T>? combined = null;
+
         for (int i = 0; i < expertOutputs.Count; i++)
         {
             var expertOutput = expertOutputs[i];
 
-            // Extract routing weight for expert i: [batch] → reshape to [batch, 1]
-            var weightVector = routingWeights.GetSliceAlongDimension(i, 1);
-            var weightColumn2D = weightVector.Reshape([batchSize, 1]);
+            // Tape-tracked matmul: [batch, numExperts] @ [numExperts, 1] = [batch, 1]
+            var weightColumn2D = Engine.TensorMatMul(routingWeights, oneHots[i]);
 
-            // Reshape for broadcasting across any-rank expert outputs: [batchSize, 1] -> [batchSize, 1, ...]
-            var broadcastShape = new int[expertOutput.Shape.Length];
-            broadcastShape[0] = batchSize;
-            for (int d = 1; d < broadcastShape.Length; d++)
+            // Reshape for broadcasting: [batch, 1] -> [batch, 1, ...] for higher-rank expert outputs
+            if (expertOutput.Shape.Length > 2)
             {
-                broadcastShape[d] = 1;
+                var broadcastShape = new int[expertOutput.Shape.Length];
+                broadcastShape[0] = batchSize;
+                for (int d = 1; d < broadcastShape.Length; d++)
+                    broadcastShape[d] = 1;
+                weightColumn2D = Engine.Reshape(weightColumn2D, broadcastShape);
             }
 
-            var weightColumn = Engine.Reshape(weightColumn2D, broadcastShape);
+            // Tape-tracked multiply + accumulate
+            var weightedOutput = Engine.TensorBroadcastMultiply(expertOutput, weightColumn2D);
 
-            // Multiply expert output by weight (broadcasts across output dimensions) — tape-tracked
-            var weightedOutput = Engine.TensorBroadcastMultiply(expertOutput, weightColumn);
-
-            // Accumulate — first iteration sets combined, subsequent ones add
             if (combined == null)
-            {
                 combined = weightedOutput;
-            }
             else
-            {
                 combined = Engine.TensorBroadcastAdd(combined, weightedOutput);
-            }
         }
 
         return combined!;

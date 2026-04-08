@@ -240,10 +240,9 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < y.Length; i++)
             yNorm[i] = NumOps.Divide(NumOps.Subtract(y[i], yMean), yStd);
 
-        // Use a moderately aggressive learning rate for normalized data.
         // With normalization, inputs and targets are O(1), so gradients are well-scaled.
         T learningRate = NumOps.FromDouble(_options.LearningRate);
-        T gradClipThreshold = NumOps.FromDouble(1.0);
+        T gradClipThreshold = NumOps.FromDouble(5.0);
         int numSamples = x.Rows;
         var random = new Random(42);
 
