@@ -207,9 +207,8 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// </remarks>
     private List<Tensor<T>>? _lastExpertOutputs;
 
-    /// <summary>Cached per-expert index tensors — only depend on batchSize and expert count.</summary>
-    private Tensor<int>[]? _cachedGatherIndices;
-    private int _cachedGatherBatchSize;
+    // Note: TensorGather index cache removed — using GetSliceAlongDimension instead
+    // (tracked in ooples/AiDotNet.Tensors#109 for proper axis=1 gather support)
 
     /// <summary>
     /// Cached combined output before activation from the most recent forward pass.
@@ -1414,26 +1413,15 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         Tensor<T>? combined = null;
         int batchSize = routingWeights.Shape[0];
 
-        // Cache index tensors — they only depend on batchSize and expert count
-        if (_cachedGatherIndices == null || _cachedGatherBatchSize != batchSize || _cachedGatherIndices.Length != expertOutputs.Count)
-        {
-            _cachedGatherIndices = new Tensor<int>[expertOutputs.Count];
-            for (int i = 0; i < expertOutputs.Count; i++)
-            {
-                _cachedGatherIndices[i] = new Tensor<int>(new[] { batchSize, 1 });
-                for (int b = 0; b < batchSize; b++)
-                    _cachedGatherIndices[i][b, 0] = i;
-            }
-            _cachedGatherBatchSize = batchSize;
-        }
-        var indexTensors = _cachedGatherIndices;
-
+        // WORKAROUND: use GetSliceAlongDimension instead of TensorGather axis=1
+        // (TensorGather axis=1 not yet implemented — tracked in ooples/AiDotNet.Tensors#109)
         for (int i = 0; i < expertOutputs.Count; i++)
         {
             var expertOutput = expertOutputs[i];
 
-            // Gather along axis=1 gives [batchSize, 1] — tape-tracked
-            var weightColumn2D = Engine.TensorGather(routingWeights, indexTensors[i], axis: 1);
+            // Extract routing weight for expert i: [batch] → reshape to [batch, 1]
+            var weightVector = routingWeights.GetSliceAlongDimension(i, 1);
+            var weightColumn2D = weightVector.Reshape([batchSize, 1]);
 
             // Reshape for broadcasting across any-rank expert outputs: [batchSize, 1] -> [batchSize, 1, ...]
             var broadcastShape = new int[expertOutput.Shape.Length];
