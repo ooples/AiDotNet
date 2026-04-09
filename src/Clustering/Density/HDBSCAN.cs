@@ -173,11 +173,12 @@ public class HDBSCAN<T> : ClusteringBase<T>
         // Step 4: Build minimum spanning tree
         var mst = BuildMinimumSpanningTree(mrdMatrix, n);
 
-        // Step 5: Build condensed tree
-        _condensedTree = BuildCondensedTree(mst, n, _options.MinClusterSize);
+        // Step 5: Build condensed tree (also returns final union-find for point→cluster mapping)
+        int[] finalParent;
+        (_condensedTree, finalParent) = BuildCondensedTree(mst, n, _options.MinClusterSize);
 
         // Step 6: Extract clusters
-        var clusterLabels = ExtractClusters(_condensedTree, n, _options.ClusterSelection);
+        var clusterLabels = ExtractClusters(_condensedTree, n, _options.ClusterSelection, finalParent);
 
         // Compute probabilities and outlier scores
         ComputeProbabilitiesAndOutlierScores(clusterLabels, _condensedTree, n);
@@ -366,7 +367,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
         return mst;
     }
 
-    private List<CondensedTreeNode> BuildCondensedTree(List<MSTEdge> mst, int n, int minClusterSize)
+    private (List<CondensedTreeNode> tree, int[] finalParent) BuildCondensedTree(List<MSTEdge> mst, int n, int minClusterSize)
     {
         var condensedTree = new List<CondensedTreeNode>();
 
@@ -411,20 +412,47 @@ public class HDBSCAN<T> : ClusteringBase<T>
                 int smallRoot = split1 ? root1 : root2;
                 int bigRoot = split1 ? root2 : root1;
 
-                // Add noise points to tree
+                // Ensure the surviving cluster has a proper ID >= n.
+                // Union-find roots can be < n (point indices), but condensed tree
+                // clusters must have IDs >= n for correct EOM stability computation.
+                int clusterId;
+                if (bigRoot >= n)
+                {
+                    clusterId = bigRoot;
+                }
+                else
+                {
+                    clusterId = nextCluster++;
+                    // Extend arrays if needed
+                    if (clusterId >= parent.Length)
+                    {
+                        var newParent = new int[clusterId + 2];
+                        var newSize = new int[clusterId + 2];
+                        Array.Copy(parent, newParent, parent.Length);
+                        Array.Copy(size, newSize, size.Length);
+                        parent = newParent;
+                        size = newSize;
+                    }
+                    // Re-root the surviving cluster under the new cluster ID
+                    parent[bigRoot] = clusterId;
+                    parent[clusterId] = clusterId;
+                    size[clusterId] = size[bigRoot];
+                }
+
+                // Add noise points (from the too-small group) to tree
                 for (int i = 0; i < n; i++)
                 {
                     if (Find(parent, i) == smallRoot)
                     {
                         condensedTree.Add(new CondensedTreeNode(
-                            bigRoot >= n ? bigRoot : nextCluster,
+                            clusterId,
                             i,
                             edgeLambda,
                             1));
                     }
                 }
 
-                Union(parent, size, root1, root2);
+                Union(parent, size, smallRoot, clusterId);
             }
             else
             {
@@ -453,7 +481,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
             }
         }
 
-        return condensedTree;
+        return (condensedTree, parent);
     }
 
     private int Find(int[] parent, int i)
@@ -486,7 +514,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
         }
     }
 
-    private int[] ExtractClusters(List<CondensedTreeNode> condensedTree, int n, HDBSCANClusterSelection method)
+    private int[] ExtractClusters(List<CondensedTreeNode> condensedTree, int n, HDBSCANClusterSelection method, int[]? ufParent = null)
     {
         var labels = new int[n];
         for (int i = 0; i < n; i++)
@@ -499,11 +527,13 @@ public class HDBSCAN<T> : ClusteringBase<T>
             return labels;
         }
 
-        // Find all cluster nodes
+        // Find all cluster nodes. A cluster node is any entry with Size > 1
+        // (sub-cluster) or any parent. Note: union-find root IDs can be < n
+        // even for entries representing clusters, so check Size, not just ID >= n.
         var clusterNodes = new HashSet<int>();
         foreach (var node in condensedTree)
         {
-            if (node.Child >= n)
+            if (node.Child >= n || node.Size > 1)
             {
                 clusterNodes.Add(node.Child);
             }
@@ -542,35 +572,39 @@ public class HDBSCAN<T> : ClusteringBase<T>
                 }
             }
 
-            // Pass 2: Compute stability. Per the paper, stability of cluster C =
+            // Pass 2: Compute stability. Per Campello et al. 2013, stability of cluster C =
             // sum over all points p that fall out of C: (lambda_p - lambda_birth(C)).
-            // Each condensed tree edge where Child < n represents a point falling out.
-            // Each edge where Child >= n represents a sub-cluster splitting off.
+            // Only individual point events (Size == 1) contribute to stability. Entries
+            // with Size > 1 represent sub-cluster splits, not individual point departures.
+            // Union-find root IDs can be < n even for cluster-representing entries, so we
+            // filter on Size rather than Child < n.
             foreach (var node in condensedTree)
             {
-                if (stability.ContainsKey(node.Parent))
+                if (node.Size == 1 && stability.ContainsKey(node.Parent))
                 {
                     T deathLambda = node.Lambda;
                     T birth = birthLambda.ContainsKey(node.Parent) ? birthLambda[node.Parent] : NumOps.Zero;
                     // Clamp birth to deathLambda so contribution is zero (not negative or inflated)
                     if (NumOps.GreaterThan(birth, deathLambda))
                         birth = deathLambda;
-                    T sizeT = NumOps.FromDouble(node.Size);
                     stability[node.Parent] = NumOps.Add(stability[node.Parent],
-                        NumOps.Multiply(NumOps.Subtract(deathLambda, birth), sizeT));
+                        NumOps.Subtract(deathLambda, birth));
                 }
             }
 
             // Select clusters with max stability
             var selectedClusters = new HashSet<int>();
-            var clusterList = clusterNodes.Where(c => c >= n).OrderByDescending(c => c).ToList();
+            // Process clusters from leaves to root (descending order).
+            // Include all cluster nodes, not just those with ID >= n, because
+            // union-find root IDs can represent clusters even when < n.
+            var clusterList = clusterNodes.OrderByDescending(c => c).ToList();
 
             foreach (int cluster in clusterList)
             {
                 T childStability = NumOps.Zero;
                 if (children.ContainsKey(cluster))
                 {
-                    foreach (int c in children[cluster].Where(c => c >= n))
+                    foreach (int c in children[cluster].Where(c => clusterNodes.Contains(c)))
                     {
                         if (stability.ContainsKey(c))
                             childStability = NumOps.Add(childStability, stability[c]);
@@ -630,6 +664,32 @@ public class HDBSCAN<T> : ClusteringBase<T>
                     if (clusterToLabel.ContainsKey(current))
                     {
                         labels[node.Child] = clusterToLabel[current];
+                    }
+                }
+            }
+
+            // Assign points not found in the condensed tree using the union-find.
+            // These are "core" points that stayed in their cluster throughout and
+            // were never individually recorded as noise or point-level children.
+            if (ufParent != null)
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    if (labels[i] >= 0) continue; // already assigned
+
+                    // Walk the union-find to find this point's cluster root
+                    int root = Find(ufParent, i);
+                    // Walk from the root up the condensed tree to find a selected cluster
+                    int current = root;
+                    while (current >= n && !selectedClusters.Contains(current))
+                    {
+                        if (!parentLookup.TryGetValue(current, out int par) || par == current)
+                            break;
+                        current = par;
+                    }
+                    if (clusterToLabel.ContainsKey(current))
+                    {
+                        labels[i] = clusterToLabel[current];
                     }
                 }
             }

@@ -316,6 +316,10 @@ public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<
     /// <inheritdoc/>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        // Directly call the tree-based Predict to avoid any interface dispatch issues.
+        // AsyncDecisionTreeRegressionBase<T>.Predict returns averaged tree predictions.
+        if (BaseModel is AsyncDecisionTreeRegressionBase<T> treeModel)
+            return treeModel.Predict(input);
         return BaseModel.Predict(input);
     }
 
@@ -345,10 +349,12 @@ public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<
     }
 
     /// <inheritdoc/>
-    public override bool SupportsParameterInitialization =>
-        BaseModel is AsyncDecisionTreeRegressionBase<T> treeModel
-            ? treeModel.ParameterCount > 0
-            : base.SupportsParameterInitialization;
+    /// <remarks>
+    /// Tree-based models like Random Forest learn their structure during training and cannot
+    /// be meaningfully initialized from random parameters. Always return false so the builder
+    /// uses the direct training path (model.Train) instead of parameter-based optimization.
+    /// </remarks>
+    public override bool SupportsParameterInitialization => false;
 
     // --- IFeatureAware overrides ---
 

@@ -161,8 +161,10 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         var random = RandomHelper.CreateSeededRandom(42);
 
         // First layer: lookbackWindow -> hiddenLayerSize
+        // Use He initialization (sqrt(2/n_in)) for ReLU networks to prevent
+        // vanishing gradients and dead neurons.
         int inputSize = _lookbackWindow;
-        double stddev = Math.Sqrt(2.0 / (inputSize + _hiddenLayerSize));
+        double stddev = Math.Sqrt(2.0 / inputSize);
         var weight = new Matrix<T>(_hiddenLayerSize, inputSize);
         for (int i = 0; i < weight.Rows; i++)
         {
@@ -172,12 +174,17 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
             }
         }
         _fcWeights.Add(weight);
-        _fcBiases.Add(new Vector<T>(_hiddenLayerSize));
+        // Initialize biases to small positive value to keep neurons in the
+        // active ReLU region at initialization (prevents dying ReLU problem)
+        var bias = new Vector<T>(_hiddenLayerSize);
+        for (int i = 0; i < _hiddenLayerSize; i++)
+            bias[i] = NumOps.FromDouble(0.01);
+        _fcBiases.Add(bias);
 
         // Hidden layers: hiddenLayerSize -> hiddenLayerSize
         for (int layer = 1; layer < _numHiddenLayers; layer++)
         {
-            stddev = Math.Sqrt(2.0 / (_hiddenLayerSize + _hiddenLayerSize));
+            stddev = Math.Sqrt(2.0 / _hiddenLayerSize);
             weight = new Matrix<T>(_hiddenLayerSize, _hiddenLayerSize);
             for (int i = 0; i < weight.Rows; i++)
             {
@@ -187,7 +194,10 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
                 }
             }
             _fcWeights.Add(weight);
-            _fcBiases.Add(new Vector<T>(_hiddenLayerSize));
+            bias = new Vector<T>(_hiddenLayerSize);
+            for (int i = 0; i < _hiddenLayerSize; i++)
+                bias[i] = NumOps.FromDouble(0.01);
+            _fcBiases.Add(bias);
         }
 
         // Output layer for backcast theta: hiddenLayerSize -> thetaSizeBackcast
