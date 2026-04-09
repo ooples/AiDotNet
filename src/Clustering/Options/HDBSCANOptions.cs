@@ -65,7 +65,7 @@ public class HDBSCANOptions<T> : ClusteringOptions<T>
     /// Gets or sets whether to allow single-cluster result.
     /// </summary>
     /// <value>True to allow. Default is false.</value>
-    public bool AllowSingleCluster { get; set; } = true;
+    public bool AllowSingleCluster { get; set; } = false;
 
     /// <summary>
     /// Gets or sets the cluster selection epsilon.
