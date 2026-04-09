@@ -11361,8 +11361,9 @@ public static class LayerHelper<T>
             yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
         }
 
-        // 4. MLM Head (Optional, but often used in SimCSE training)
-        yield return new DenseLayer<T>(embeddingDimension, vocabSize, (IActivationFunction<T>?)null);
+        // Per Gao et al. (2021), SimCSE outputs [CLS] token embeddings (768-dim),
+        // NOT vocabulary logits. The MLM head is not part of the inference architecture.
+        // Output dimension = embeddingDimension (768 for BERT-base).
     }
 
     /// <summary>
