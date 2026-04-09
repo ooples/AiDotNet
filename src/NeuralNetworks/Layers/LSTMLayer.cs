@@ -2174,20 +2174,20 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Use Vector.Concatenate for production-grade parameter extraction
+        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
-            new Vector<T>(_weightsFi.ToArray()),
-            new Vector<T>(_weightsIi.ToArray()),
-            new Vector<T>(_weightsCi.ToArray()),
-            new Vector<T>(_weightsOi.ToArray()),
-            new Vector<T>(_weightsFh.ToArray()),
-            new Vector<T>(_weightsIh.ToArray()),
-            new Vector<T>(_weightsCh.ToArray()),
-            new Vector<T>(_weightsOh.ToArray()),
-            new Vector<T>(_biasF.ToArray()),
-            new Vector<T>(_biasI.ToArray()),
-            new Vector<T>(_biasC.ToArray()),
-            new Vector<T>(_biasO.ToArray())
+            Vector<T>.FromMemory(_weightsFi.Data),
+            Vector<T>.FromMemory(_weightsIi.Data),
+            Vector<T>.FromMemory(_weightsCi.Data),
+            Vector<T>.FromMemory(_weightsOi.Data),
+            Vector<T>.FromMemory(_weightsFh.Data),
+            Vector<T>.FromMemory(_weightsIh.Data),
+            Vector<T>.FromMemory(_weightsCh.Data),
+            Vector<T>.FromMemory(_weightsOh.Data),
+            Vector<T>.FromMemory(_biasF.Data),
+            Vector<T>.FromMemory(_biasI.Data),
+            Vector<T>.FromMemory(_biasC.Data),
+            Vector<T>.FromMemory(_biasO.Data)
         );
     }
 
@@ -2198,19 +2198,20 @@ public partial class LSTMLayer<T> : LayerBase<T>
 
         Tensor<T> Get(string key) => Gradients.TryGetValue(key, out var t) ? t : new Tensor<T>([0]);
 
+        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
-            new Vector<T>(Get("weightsFi").ToArray()),
-            new Vector<T>(Get("weightsIi").ToArray()),
-            new Vector<T>(Get("weightsCi").ToArray()),
-            new Vector<T>(Get("weightsOi").ToArray()),
-            new Vector<T>(Get("weightsFh").ToArray()),
-            new Vector<T>(Get("weightsIh").ToArray()),
-            new Vector<T>(Get("weightsCh").ToArray()),
-            new Vector<T>(Get("weightsOh").ToArray()),
-            new Vector<T>(Get("biasF").ToArray()),
-            new Vector<T>(Get("biasI").ToArray()),
-            new Vector<T>(Get("biasC").ToArray()),
-            new Vector<T>(Get("biasO").ToArray())
+            Vector<T>.FromMemory(Get("weightsFi").Data),
+            Vector<T>.FromMemory(Get("weightsIi").Data),
+            Vector<T>.FromMemory(Get("weightsCi").Data),
+            Vector<T>.FromMemory(Get("weightsOi").Data),
+            Vector<T>.FromMemory(Get("weightsFh").Data),
+            Vector<T>.FromMemory(Get("weightsIh").Data),
+            Vector<T>.FromMemory(Get("weightsCh").Data),
+            Vector<T>.FromMemory(Get("weightsOh").Data),
+            Vector<T>.FromMemory(Get("biasF").Data),
+            Vector<T>.FromMemory(Get("biasI").Data),
+            Vector<T>.FromMemory(Get("biasC").Data),
+            Vector<T>.FromMemory(Get("biasO").Data)
         );
     }
 

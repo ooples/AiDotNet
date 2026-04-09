@@ -147,12 +147,12 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var allParams = new List<T>();
-        AddParams(allParams, _patchEmbed);
-        foreach (var b in _doubleBlocks) AddParams(allParams, b);
-        foreach (var b in _singleBlocks) AddParams(allParams, b);
-        AddParams(allParams, _finalLayer);
-        return new Vector<T>(allParams.ToArray());
+        var vectors = new List<Vector<T>>();
+        vectors.Add(_patchEmbed.GetParameters());
+        foreach (var b in _doubleBlocks) vectors.Add(b.GetParameters());
+        foreach (var b in _singleBlocks) vectors.Add(b.GetParameters());
+        vectors.Add(_finalLayer.GetParameters());
+        return Vector<T>.Concatenate(vectors.ToArray());
     }
 
     /// <inheritdoc />
@@ -176,34 +176,21 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
         return clone;
     }
 
-    private static void AddParams(List<T> list, DenseLayer<T> layer)
-    {
-        var p = layer.GetParameters();
-        for (int i = 0; i < p.Length; i++) list.Add(p[i]);
-    }
-
     private static int SetParams(DenseLayer<T> layer, Vector<T> parameters, int offset)
     {
         int count = layer.ParameterCount;
-        var p = new T[count];
-        for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
-        layer.SetParameters(new Vector<T>(p));
+        var p = new Vector<T>(parameters.AsSpan().Slice(offset, count).ToArray());
+        layer.SetParameters(p);
         return offset + count;
     }
 
     protected override Vector<T> GetParameterGradients()
     {
-        var allGrads = new List<T>();
-        AddGrads(allGrads, _patchEmbed);
-        foreach (var b in _doubleBlocks) AddGrads(allGrads, b);
-        foreach (var b in _singleBlocks) AddGrads(allGrads, b);
-        AddGrads(allGrads, _finalLayer);
-        return new Vector<T>(allGrads.ToArray());
-    }
-
-    private static void AddGrads(List<T> list, DenseLayer<T> layer)
-    {
-        var g = layer.GetParameterGradients();
-        for (int i = 0; i < g.Length; i++) list.Add(g[i]);
+        var vectors = new List<Vector<T>>();
+        vectors.Add(_patchEmbed.GetParameterGradients());
+        foreach (var b in _doubleBlocks) vectors.Add(b.GetParameterGradients());
+        foreach (var b in _singleBlocks) vectors.Add(b.GetParameterGradients());
+        vectors.Add(_finalLayer.GetParameterGradients());
+        return Vector<T>.Concatenate(vectors.ToArray());
     }
 }

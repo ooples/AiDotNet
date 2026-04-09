@@ -1191,7 +1191,10 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         // Ensure weights and biases are initialized (supports lazy initialization)
         EnsureInitialized();
-        return Vector<T>.Concatenate(new Vector<T>(_weights.ToArray()), new Vector<T>(_biases.ToArray()));
+        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
+        return Vector<T>.Concatenate(
+            Vector<T>.FromMemory(_weights.Data),
+            Vector<T>.FromMemory(_biases.Data));
     }
 
     /// <summary>
@@ -1204,9 +1207,10 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             return new Vector<T>(ParameterCount);
         }
 
+        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
-            new Vector<T>(_weightsGradient.ToArray()),
-            new Vector<T>(_biasesGradient.ToArray()));
+            Vector<T>.FromMemory(_weightsGradient.Data),
+            Vector<T>.FromMemory(_biasesGradient.Data));
     }
 
     /// <summary>

@@ -435,25 +435,11 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
 
         // Compute predictions u_hat_ij = W_ij * u_i
         // prediction[b,i,c,l] = sum_d(weights[i,c,d,l] * input[b,i,d])
-        var predictions = TensorAllocator.Rent<T>([batchSize, _inputCapsules, _numClasses, _outputCapsuleDimension]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < _inputCapsules; i++)
-            {
-                for (int c = 0; c < _numClasses; c++)
-                {
-                    for (int l = 0; l < _outputCapsuleDimension; l++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int d = 0; d < _inputCapsuleDimension; d++)
-                        {
-                            sum = NumOps.Add(sum, NumOps.Multiply(_weights[i, c, d, l], processInput[b, i, d]));
-                        }
-                        predictions[b, i, c, l] = sum;
-                    }
-                }
-            }
-        }
+        // Engine-accelerated: broadcast multiply + reduce sum over the input-capsule-dim axis
+        var inputExpanded = processInput.Reshape([batchSize, _inputCapsules, 1, _inputCapsuleDimension, 1]);
+        var weightsExpanded = _weights.Reshape([1, _inputCapsules, _numClasses, _inputCapsuleDimension, _outputCapsuleDimension]);
+        var product = Engine.TensorBroadcastMultiply(inputExpanded, weightsExpanded);
+        var predictions = Engine.ReduceSum(product, new[] { 3 }, keepDims: false); // [B, I, C, D_out]
 
         var couplings = TensorAllocator.Rent<T>([batchSize, _inputCapsules, _numClasses]);
         couplings.Fill(NumOps.Zero);

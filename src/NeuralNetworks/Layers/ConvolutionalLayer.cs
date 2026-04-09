@@ -1273,34 +1273,10 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _kernels.Length + _biases.Shape[0];
-        var parameters = new Vector<T>(totalParams);
-
-        int index = 0;
-
-        // Copy kernel parameters
-        for (int o = 0; o < OutputDepth; o++)
-        {
-            for (int i = 0; i < InputDepth; i++)
-            {
-                for (int ky = 0; ky < KernelSize; ky++)
-                {
-                    for (int kx = 0; kx < KernelSize; kx++)
-                    {
-                        parameters[index++] = _kernels[o, i, ky, kx];
-                    }
-                }
-            }
-        }
-
-        // Copy bias parameters
-        for (int o = 0; o < OutputDepth; o++)
-        {
-            parameters[index++] = _biases[o];
-        }
-
-        return parameters;
+        // Bulk copy from contiguous tensor storage — replaces 4-nested scalar loops
+        return Vector<T>.Concatenate(
+            Vector<T>.FromMemory(_kernels.Data),
+            Vector<T>.FromMemory(_biases.Data));
     }
 
     /// <summary>
@@ -1316,39 +1292,16 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// <returns>A vector containing all parameter gradients (kernel gradients followed by bias gradients).</returns>
     public override Vector<T> GetParameterGradients()
     {
-        int totalParams = _kernels.Length + _biases.Shape[0];
-        var gradients = new Vector<T>(totalParams);
-
         // If gradients haven't been computed yet, return zero gradients
         if (_kernelsGradient == null || _biasesGradient == null)
         {
-            return gradients;
+            return new Vector<T>(ParameterCount);
         }
 
-        int index = 0;
-
-        // Copy kernel gradients in the same order as GetParameters
-        for (int o = 0; o < OutputDepth; o++)
-        {
-            for (int i = 0; i < InputDepth; i++)
-            {
-                for (int ky = 0; ky < KernelSize; ky++)
-                {
-                    for (int kx = 0; kx < KernelSize; kx++)
-                    {
-                        gradients[index++] = _kernelsGradient[o, i, ky, kx];
-                    }
-                }
-            }
-        }
-
-        // Copy bias gradients
-        for (int o = 0; o < OutputDepth; o++)
-        {
-            gradients[index++] = _biasesGradient[o];
-        }
-
-        return gradients;
+        // Bulk copy from contiguous tensor storage — replaces 4-nested scalar loops
+        return Vector<T>.Concatenate(
+            Vector<T>.FromMemory(_kernelsGradient.Data),
+            Vector<T>.FromMemory(_biasesGradient.Data));
     }
 
     /// <summary>
@@ -1377,33 +1330,18 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length != _kernels.Length + _biases.Shape[0])
+        int kernelLen = _kernels.Length;
+        int biasLen = _biases.Shape[0];
+        if (parameters.Length != kernelLen + biasLen)
         {
-            throw new ArgumentException($"Expected {_kernels.Length + _biases.Shape[0]} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {kernelLen + biasLen} parameters, but got {parameters.Length}");
         }
 
-        int index = 0;
-
-        // Set kernel parameters
-        for (int o = 0; o < OutputDepth; o++)
-        {
-            for (int i = 0; i < InputDepth; i++)
-            {
-                for (int ky = 0; ky < KernelSize; ky++)
-                {
-                    for (int kx = 0; kx < KernelSize; kx++)
-                    {
-                        _kernels[o, i, ky, kx] = parameters[index++];
-                    }
-                }
-            }
-        }
-
-        // Set bias parameters
-        for (int o = 0; o < OutputDepth; o++)
-        {
-            _biases[o] = parameters[index++];
-        }
+        // Bulk copy into contiguous tensor storage in-place — replaces 4-nested scalar loops
+        // Preserves tensor identity so engine persistent tensor references remain valid
+        var src = parameters.AsSpan();
+        src.Slice(0, kernelLen).CopyTo(_kernels.Data.Span);
+        src.Slice(kernelLen, biasLen).CopyTo(_biases.Data.Span);
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_kernels);

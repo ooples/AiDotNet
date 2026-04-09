@@ -83,7 +83,8 @@ public class SenseFlowModel<T> : LatentDiffusionModelBase<T>
             options ?? new DiffusionModelOptions<T>
             {
                 TrainTimesteps = 1000, BetaStart = 0.0001,
-                BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear
+                BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear,
+                DefaultInferenceSteps = 4 // SenseFlow is distilled for 4-8 step generation
             },
             scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateRectifiedFlow()),
             architecture)
@@ -113,10 +114,7 @@ public class SenseFlowModel<T> : LatentDiffusionModelBase<T>
     {
         var pp = _predictor.GetParameters();
         var vp = _vae.GetParameters();
-        var combined = new Vector<T>(pp.Length + vp.Length);
-        for (int i = 0; i < pp.Length; i++) combined[i] = pp[i];
-        for (int i = 0; i < vp.Length; i++) combined[pp.Length + i] = vp[i];
-        return combined;
+        return Vector<T>.Concatenate(new[] { pp, vp });
     }
 
     /// <inheritdoc />
@@ -126,10 +124,8 @@ public class SenseFlowModel<T> : LatentDiffusionModelBase<T>
         var vc = _vae.ParameterCount;
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
-        var pp = new Vector<T>(pc);
-        var vp = new Vector<T>(vc);
-        for (int i = 0; i < pc; i++) pp[i] = parameters[i];
-        for (int i = 0; i < vc; i++) vp[i] = parameters[pc + i];
+        var pp = new Vector<T>(parameters.AsSpan().Slice(0, pc).ToArray());
+        var vp = new Vector<T>(parameters.AsSpan().Slice(pc, vc).ToArray());
         _predictor.SetParameters(pp);
         _vae.SetParameters(vp);
     }

@@ -280,11 +280,10 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         var backcastFlat = backcast.Reshape(_lookbackWindow);
         var forecastFlat = forecast.Reshape(_forecastHorizon);
 
-        // Build concatenated output
-        var outputData = new T[_lookbackWindow + _forecastHorizon];
-        for (int i = 0; i < _lookbackWindow; i++) outputData[i] = backcastFlat[i];
-        for (int i = 0; i < _forecastHorizon; i++) outputData[_lookbackWindow + i] = forecastFlat[i];
-        var output = new Tensor<T>(new[] { _lookbackWindow + _forecastHorizon }, new Vector<T>(outputData));
+        // Engine.TensorConcatenate along axis 0 is a 1:1 replacement for the scalar
+        // copy loop: it produces the same [lookbackWindow + forecastHorizon] 1D tensor
+        // by copying backcastFlat elements followed by forecastFlat elements.
+        var output = Engine.TensorConcatenate([backcastFlat, forecastFlat], axis: 0);
 
         return output;
     }

@@ -90,7 +90,8 @@ public class LumaRay3Model<T> : VideoDiffusionModelBase<T>
                 TrainTimesteps = 1000,
                 BetaStart = 0.0001,
                 BetaEnd = 0.02,
-                BetaSchedule = BetaSchedule.Linear
+                BetaSchedule = BetaSchedule.Linear,
+                DefaultInferenceSteps = 4 // Flow matching + Hi-Fi Diffusion converges in very few steps
             },
             scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateDefault()),
             defaultNumFrames,
@@ -138,10 +139,7 @@ public class LumaRay3Model<T> : VideoDiffusionModelBase<T>
     {
         var predParams = _predictor.GetParameters();
         var vaeParams = _temporalVAE.GetParameters();
-        var combined = new Vector<T>(predParams.Length + vaeParams.Length);
-        for (int i = 0; i < predParams.Length; i++) combined[i] = predParams[i];
-        for (int i = 0; i < vaeParams.Length; i++) combined[predParams.Length + i] = vaeParams[i];
-        return combined;
+        return Vector<T>.Concatenate(new[] { predParams, vaeParams });
     }
 
     public override void SetParameters(Vector<T> parameters)
@@ -150,10 +148,8 @@ public class LumaRay3Model<T> : VideoDiffusionModelBase<T>
         var vaeCount = _temporalVAE.GetParameters().Length;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
-        var predParams = new Vector<T>(predCount);
-        var vaeParams = new Vector<T>(vaeCount);
-        for (int i = 0; i < predCount; i++) predParams[i] = parameters[i];
-        for (int i = 0; i < vaeCount; i++) vaeParams[i] = parameters[predCount + i];
+        var predParams = new Vector<T>(parameters.AsSpan().Slice(0, predCount).ToArray());
+        var vaeParams = new Vector<T>(parameters.AsSpan().Slice(predCount, vaeCount).ToArray());
         _predictor.SetParameters(predParams);
         _temporalVAE.SetParameters(vaeParams);
     }

@@ -1405,27 +1405,30 @@ public partial class GRULayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameters()
     {
+        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
-            new Vector<T>(_Wz.ToArray()),
-            new Vector<T>(_Wr.ToArray()),
-            new Vector<T>(_Wh.ToArray()),
-            new Vector<T>(_Uz.ToArray()),
-            new Vector<T>(_Ur.ToArray()),
-            new Vector<T>(_Uh.ToArray()),
-            new Vector<T>(_bz.ToArray()),
-            new Vector<T>(_br.ToArray()),
-            new Vector<T>(_bh.ToArray())
+            Vector<T>.FromMemory(_Wz.Data),
+            Vector<T>.FromMemory(_Wr.Data),
+            Vector<T>.FromMemory(_Wh.Data),
+            Vector<T>.FromMemory(_Uz.Data),
+            Vector<T>.FromMemory(_Ur.Data),
+            Vector<T>.FromMemory(_Uh.Data),
+            Vector<T>.FromMemory(_bz.Data),
+            Vector<T>.FromMemory(_br.Data),
+            Vector<T>.FromMemory(_bh.Data)
         );
     }
 
     public override void SetParameters(Vector<T> parameters)
     {
+        // Bulk copy from parameter vector into tensor storage — avoids per-element SetFlat calls
+        var src = parameters.AsSpan();
         int idx = 0;
 
         void CopyToTensor(Tensor<T> tensor)
         {
-            for (int i = 0; i < tensor.Length; i++)
-                tensor.SetFlat(i, parameters[idx++]);
+            src.Slice(idx, tensor.Length).CopyTo(tensor.Data.Span);
+            idx += tensor.Length;
         }
 
         CopyToTensor(_Wz);
@@ -1448,16 +1451,17 @@ public partial class GRULayer<T> : LayerBase<T>
             return new Vector<T>(ParameterCount);
         }
 
+        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
-            new Vector<T>(_dWz.ToArray()),
-            new Vector<T>(_dWr.ToArray()),
-            new Vector<T>(_dWh.ToArray()),
-            new Vector<T>(_dUz.ToArray()),
-            new Vector<T>(_dUr.ToArray()),
-            new Vector<T>(_dUh.ToArray()),
-            new Vector<T>(_dbz.ToArray()),
-            new Vector<T>(_dbr.ToArray()),
-            new Vector<T>(_dbh.ToArray())
+            Vector<T>.FromMemory(_dWz.Data),
+            Vector<T>.FromMemory(_dWr.Data),
+            Vector<T>.FromMemory(_dWh.Data),
+            Vector<T>.FromMemory(_dUz.Data),
+            Vector<T>.FromMemory(_dUr.Data),
+            Vector<T>.FromMemory(_dUh.Data),
+            Vector<T>.FromMemory(_dbz.Data),
+            Vector<T>.FromMemory(_dbr.Data),
+            Vector<T>.FromMemory(_dbh.Data)
         );
     }
 

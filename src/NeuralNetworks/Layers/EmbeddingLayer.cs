@@ -765,14 +765,14 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Use ToArray() for production-grade parameter extraction
-        var embeddingParams = new Vector<T>(_embeddingTensor.ToArray());
+        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
+        var embeddingParams = Vector<T>.FromMemory(_embeddingTensor.Data);
         if (_projectionWeights == null)
         {
             return embeddingParams;
         }
 
-        var projectionParams = new Vector<T>(_projectionWeights.ToArray());
+        var projectionParams = Vector<T>.FromMemory(_projectionWeights.Data);
         return Vector<T>.Concatenate(embeddingParams, projectionParams);
     }
 
@@ -1016,7 +1016,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         {
             // Return zeros for embedding params + actual projection gradients
             var embZeros = new Vector<T>(embeddingParamCount);
-            var projGrad = new Vector<T>(_projectionWeightsGradient.ToArray());
+            var projGrad = Vector<T>.FromMemory(_projectionWeightsGradient.Data);
             return Vector<T>.Concatenate(embZeros, projGrad);
         }
 
@@ -1025,10 +1025,11 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             return new Vector<T>(ParameterCount);
 
         // Discrete embedding mode: return embedding gradients (+ projection if present)
-        var embGrad = new Vector<T>(_embeddingGradient.ToArray());
+        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
+        var embGrad = Vector<T>.FromMemory(_embeddingGradient.Data);
         if (_projectionWeightsGradient == null || _projectionWeights == null)
             return embGrad;
-        return Vector<T>.Concatenate(embGrad, new Vector<T>(_projectionWeightsGradient.ToArray()));
+        return Vector<T>.Concatenate(embGrad, Vector<T>.FromMemory(_projectionWeightsGradient.Data));
     }
 
     public override void ClearGradients()

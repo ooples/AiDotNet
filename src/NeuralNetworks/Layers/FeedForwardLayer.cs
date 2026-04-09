@@ -517,28 +517,10 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _weights.Length + _biases.Length;
-        var parameters = new Vector<T>(totalParams);
-
-        int index = 0;
-
-        // Copy weights parameters
-        for (int i = 0; i < _weights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _weights.Shape[1]; j++)
-            {
-                parameters[index++] = _weights[i, j];
-            }
-        }
-
-        // Copy biases parameters
-        for (int j = 0; j < _biases.Shape[1]; j++)
-        {
-            parameters[index++] = _biases[0, j];
-        }
-
-        return parameters;
+        // Bulk copy from contiguous tensor storage — replaces nested scalar loops
+        return Vector<T>.Concatenate(
+            Vector<T>.FromMemory(_weights.Data),
+            Vector<T>.FromMemory(_biases.Data));
     }
 
     /// <summary>
@@ -569,21 +551,17 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length != _weights.Length + _biases.Length)
+        int weightLen = _weights.Length;
+        int biasLen = _biases.Length;
+        if (parameters.Length != weightLen + biasLen)
         {
-            throw new ArgumentException($"Expected {_weights.Length + _biases.Length} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {weightLen + biasLen} parameters, but got {parameters.Length}");
         }
 
-        int index = 0;
-
-        // Set weights parameters using indexer
-        for (int i = 0; i < _weights.Shape[0]; i++)
-            for (int j = 0; j < _weights.Shape[1]; j++)
-                _weights[i, j] = parameters[index++];
-
-        // Set biases parameters
-        for (int j = 0; j < _biases.Shape[1]; j++)
-            _biases[0, j] = parameters[index++];
+        // Bulk copy into contiguous tensor storage in-place — replaces nested scalar loops
+        var src = parameters.AsSpan();
+        src.Slice(0, weightLen).CopyTo(_weights.Data.Span);
+        src.Slice(weightLen, biasLen).CopyTo(_biases.Data.Span);
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_weights);
@@ -619,13 +597,10 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     {
         if (_weightsGradient == null || _biasesGradient == null || _weightsGradient.Length == 0 || _biasesGradient.Length == 0)
             return new Vector<T>(ParameterCount);
-        var result = new Vector<T>(ParameterCount);
-        int idx = 0;
-        for (int i = 0; i < _weightsGradient.Length; i++)
-            result[idx++] = _weightsGradient.Data.Span[i];
-        for (int i = 0; i < _biasesGradient.Length; i++)
-            result[idx++] = _biasesGradient.Data.Span[i];
-        return result;
+        // Bulk copy from contiguous tensor storage — replaces per-element scalar loops
+        return Vector<T>.Concatenate(
+            Vector<T>.FromMemory(_weightsGradient.Data),
+            Vector<T>.FromMemory(_biasesGradient.Data));
     }
 
     public override void ClearGradients()

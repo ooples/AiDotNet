@@ -406,7 +406,7 @@ public class BottleneckBlock<T> : LayerBase<T>
 
     private Tensor<T> ApplyReLU(Tensor<T> input)
     {
-        return input.Transform((x, _) => _relu.Activate(x));
+        return Engine.ReLU(input);
     }
 
     private Tensor<T> ApplyReLUDerivative(Tensor<T> preActivation, Tensor<T> gradient)

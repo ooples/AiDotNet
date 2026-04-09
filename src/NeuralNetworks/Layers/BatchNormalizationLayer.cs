@@ -470,42 +470,24 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// </remarks>
     private Tensor<T> ApplyInferenceAnyRank(Tensor<T> input, Tensor<T> scale, Tensor<T> shift)
     {
-        int batch = input.Shape[0];
-        int channels = input.Shape[1];
+        // Engine-accelerated batch normalization inference:
+        // output = input * scale_broadcast + shift_broadcast
+        // Reshape scale/shift to [1, C, 1, 1, ...] for broadcasting across batch and spatial dims.
+        int rank = input.Shape.Length;
 
-        // Calculate total spatial size (product of all dimensions after batch and channels)
-        int spatialSize = 1;
-        for (int d = 2; d < input.Shape.Length; d++)
-        {
-            spatialSize *= input.Shape[d];
-        }
+        // Build broadcast shape: [1, C, 1, 1, ...]
+        var broadcastShape = new int[rank];
+        broadcastShape[0] = 1;           // batch
+        broadcastShape[1] = scale.Length; // channels
+        for (int d = 2; d < rank; d++)
+            broadcastShape[d] = 1;       // spatial
 
-        var inputData = input.Data.Span;
-        var scaleData = scale.Data.Span;
-        var shiftData = shift.Data.Span;
+        var scaleReshaped = scale.Reshape(broadcastShape);
+        var shiftReshaped = shift.Reshape(broadcastShape);
 
-        // Rent output tensor (fully overwritten) and write via Span
-        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
-        var outputData = output.Data.Span;
-
-        for (int n = 0; n < batch; n++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                int batchOffset = n * channels * spatialSize;
-                int channelOffset = c * spatialSize;
-                T scaleC = scaleData[c];
-                T shiftC = shiftData[c];
-
-                for (int s = 0; s < spatialSize; s++)
-                {
-                    int idx = batchOffset + channelOffset + s;
-                    outputData[idx] = NumOps.Add(NumOps.Multiply(inputData[idx], scaleC), shiftC);
-                }
-            }
-        }
-
-        return output;
+        // Vectorized: output = input * scale + shift
+        var scaled = Engine.TensorBroadcastMultiply(input, scaleReshaped);
+        return Engine.TensorBroadcastAdd(scaled, shiftReshaped);
     }
 
     /// <summary>

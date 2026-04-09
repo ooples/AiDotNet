@@ -428,9 +428,12 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     {
         if (_depthwiseKernelsGradient == null || _pointwiseKernelsGradient == null || _biasesGradient == null)
             return new Vector<T>(ParameterCount);
+        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(new Vector<T>(_depthwiseKernelsGradient.ToArray()), new Vector<T>(_pointwiseKernelsGradient.ToArray())),
-            new Vector<T>(_biasesGradient.ToArray()));
+            Vector<T>.Concatenate(
+                Vector<T>.FromMemory(_depthwiseKernelsGradient.Data),
+                Vector<T>.FromMemory(_pointwiseKernelsGradient.Data)),
+            Vector<T>.FromMemory(_biasesGradient.Data));
     }
 
     public override void ClearGradients()

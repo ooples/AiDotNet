@@ -608,14 +608,16 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                 $"This indicates a misconfiguration in the reconstruction layer architecture.");
         }
 
-        // Compute MSE loss manually since Tensor doesn't have ToEnumerable
-        T sumSquaredError = NumOps.Zero;
-
-        for (int i = 0; i < flattenedInput.Length; i++)
-        {
-            T diff = NumOps.Subtract(flattenedInput[i], reconstruction[i]);
-            sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(diff, diff));
-        }
+        // Compute MSE loss using Engine operations for acceleration.
+        // Math: sum((flattenedInput[i] - reconstruction[i])^2) / N
+        // Engine.TensorSubtract is element-wise subtraction (same as the scalar loop).
+        // Engine.TensorMultiply is element-wise multiplication (same as squaring diffs).
+        // Engine.ReduceSum sums all elements (same as accumulating sumSquaredError).
+        var diff = Engine.TensorSubtract(flattenedInput, reconstruction);
+        var squaredDiff = Engine.TensorMultiply(diff, diff);
+        int[] allAxes = Enumerable.Range(0, squaredDiff.Rank).ToArray();
+        var sumTensor = Engine.ReduceSum(squaredDiff, allAxes, keepDims: false);
+        T sumSquaredError = sumTensor[0];
 
         return NumOps.Divide(sumSquaredError, NumOps.FromDouble(flattenedInput.Length));
     }
