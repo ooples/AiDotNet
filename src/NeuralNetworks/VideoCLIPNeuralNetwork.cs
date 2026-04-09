@@ -987,27 +987,15 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     public Tensor<T> ExtractFrameFeatures(IEnumerable<Tensor<T>> frames)
     {
         var frameList = frames.ToList();
-        var features = new List<Vector<T>>();
+        var frameTensors = new Tensor<T>[frameList.Count];
 
-        foreach (var frame in frameList)
+        for (int f = 0; f < frameList.Count; f++)
         {
-            var frameFeature = EncodeFrameNative(frame);
-            features.Add(frameFeature);
+            frameTensors[f] = EncodeFrameNativeTensor(frameList[f]); // [hiddenDim]
         }
 
-        int numFrames = features.Count;
-        int featureDim = features[0].Length;
-        var result = Tensor<T>.CreateDefault([numFrames, featureDim], NumOps.Zero);
-
-        for (int i = 0; i < numFrames; i++)
-        {
-            for (int j = 0; j < featureDim; j++)
-            {
-                result[i, j] = features[i][j];
-            }
-        }
-
-        return result;
+        // Stack into [numFrames, hiddenDim] via Engine
+        return Engine.TensorStack(frameTensors, axis: 0);
     }
 
     /// <inheritdoc/>
@@ -1015,30 +1003,12 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         IEnumerable<Tensor<T>> video1Frames,
         IEnumerable<Tensor<T>> video2Frames)
     {
-        var features1 = ExtractFrameFeatures(video1Frames);
-        var features2 = ExtractFrameFeatures(video2Frames);
+        var features1 = ExtractFrameFeatures(video1Frames); // [numFrames1, featureDim]
+        var features2 = ExtractFrameFeatures(video2Frames); // [numFrames2, featureDim]
 
-        int numFrames1 = features1.Shape[0];
-        int numFrames2 = features2.Shape[0];
-        int featureDim = features1.Shape[1];
-
-        var similarityMatrix = Tensor<T>.CreateDefault([numFrames1, numFrames2], NumOps.Zero);
-
-        for (int i = 0; i < numFrames1; i++)
-        {
-            for (int j = 0; j < numFrames2; j++)
-            {
-                T similarity = NumOps.Zero;
-                for (int k = 0; k < featureDim; k++)
-                {
-                    similarity = NumOps.Add(similarity,
-                        NumOps.Multiply(features1[i, k], features2[j, k]));
-                }
-                similarityMatrix[i, j] = similarity;
-            }
-        }
-
-        return similarityMatrix;
+        // Similarity = features1 @ features2^T via Engine matmul
+        var features2T = Engine.TensorTranspose(features2); // [featureDim, numFrames2]
+        return Engine.TensorMatMul(features1, features2T); // [numFrames1, numFrames2]
     }
 
     /// <inheritdoc/>
@@ -1071,7 +1041,11 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
 
     #region Video Encoding Methods
 
-    private Vector<T> EncodeVideoNative(List<Tensor<T>> frames)
+    /// <summary>
+    /// Encodes a video as a normalized embedding tensor using tape-tracked Engine operations.
+    /// Returns a 1D tensor [embeddingDim].
+    /// </summary>
+    private Tensor<T> EncodeVideoNativeTensor(List<Tensor<T>> frames)
     {
         // Sample frames if too many
         var sampledFrames = SampleFrames(frames, _numFrames);
@@ -1082,80 +1056,81 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             _cachedTrainingFrames = sampledFrames;
         }
 
-        // Encode each frame
-        var frameFeatures = new List<Tensor<T>>();
-        foreach (var frame in sampledFrames)
+        // Encode each frame into 1D tensors and stack via Engine
+        var frameTensors = new Tensor<T>[sampledFrames.Count];
+        for (int f = 0; f < sampledFrames.Count; f++)
         {
-            var features = EncodeFrameNative(frame);
-            var featureTensor = Tensor<T>.CreateDefault([1, features.Length], NumOps.Zero);
-            for (int i = 0; i < features.Length; i++)
-            {
-                featureTensor[0, i] = features[i];
-            }
-            frameFeatures.Add(featureTensor);
+            frameTensors[f] = EncodeFrameNativeTensor(sampledFrames[f]); // [hiddenDim]
         }
 
-        // Stack frame features
-        int numSampledFrames = frameFeatures.Count;
-        int featureDim = frameFeatures[0].Shape[1];
-        var stackedFeatures = Tensor<T>.CreateDefault([numSampledFrames, featureDim], NumOps.Zero);
+        // Stack frame features: [numFrames, hiddenDim]
+        var stackedFeatures = Engine.TensorStack(frameTensors, axis: 0);
 
-        for (int i = 0; i < numSampledFrames; i++)
-        {
-            for (int j = 0; j < featureDim; j++)
-            {
-                stackedFeatures[i, j] = frameFeatures[i][0, j];
-            }
-        }
-
-        // Add temporal positional embeddings
+        // Add temporal positional embeddings via Engine
         if (_temporalPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < numSampledFrames && i < _temporalPositionalEmbeddings.Rows; i++)
-            {
-                for (int j = 0; j < featureDim && j < _temporalPositionalEmbeddings.Columns; j++)
-                {
-                    stackedFeatures[i, j] = NumOps.Add(stackedFeatures[i, j], _temporalPositionalEmbeddings[i, j]);
-                }
-            }
+            var tempPosEmb = Tensor<T>.FromMatrix(_temporalPositionalEmbeddings);
+            int numSampledFrames = stackedFeatures.Shape[0];
+            int featureDim = stackedFeatures.Shape[1];
+            int sliceRows = Math.Min(numSampledFrames, tempPosEmb.Shape[0]);
+            int sliceCols = Math.Min(featureDim, tempPosEmb.Shape[1]);
+            var posSlice = Engine.TensorSlice(tempPosEmb, [0, 0], [sliceRows, sliceCols]);
+            stackedFeatures = Engine.TensorAdd(stackedFeatures, posSlice);
         }
 
-        // Apply temporal encoder
+        // Apply temporal encoder layers
         var temporalFeatures = stackedFeatures;
         foreach (var layer in _temporalEncoderLayers)
         {
             temporalFeatures = layer.Forward(temporalFeatures);
         }
 
-        // Aggregate (mean pooling or take CLS token)
-        var pooled = MeanPool(temporalFeatures);
+        // Mean pool along sequence dimension: [hiddenDim]
+        var pooled = MeanPoolTensor(temporalFeatures);
 
         // Project to embedding space
         if (_videoProjection is not null)
         {
-            var pooledTensor = Tensor<T>.CreateDefault([1, pooled.Length], NumOps.Zero);
-            for (int i = 0; i < pooled.Length; i++)
-            {
-                pooledTensor[0, i] = pooled[i];
-            }
-            var projected = _videoProjection.Forward(pooledTensor);
-            pooled = new Vector<T>(_embeddingDimension);
-            for (int i = 0; i < _embeddingDimension && i < projected.Shape[1]; i++)
-            {
-                pooled[i] = projected[0, i];
-            }
+            // Reshape [hiddenDim] -> [1, hiddenDim] for projection layer
+            var pooled2d = Engine.Reshape(pooled, [1, pooled.Shape[0]]);
+            var projected = _videoProjection.Forward(pooled2d);
+            // Extract [embeddingDim] from [1, embeddingDim]
+            pooled = Engine.TensorSliceAxis(projected, 0, 0);
         }
 
         // Cache pre-normalized embedding for backward L2 norm Jacobian
         if (IsTrainingMode)
         {
-            _cachedPreNormEmbedding = pooled;
+            int dim = pooled.Shape[0];
+            var preNorm = new Vector<T>(dim);
+            for (int i = 0; i < dim; i++) preNorm[i] = pooled[i];
+            _cachedPreNormEmbedding = preNorm;
         }
 
-        return Normalize(pooled);
+        // L2 normalize via Engine ops
+        return NormalizeTensor(pooled);
     }
 
-    private Vector<T> EncodeFrameNative(Tensor<T> frame)
+    /// <summary>
+    /// Legacy video encoder returning Vector for public API and non-training paths.
+    /// </summary>
+    private Vector<T> EncodeVideoNative(List<Tensor<T>> frames)
+    {
+        var tensor = EncodeVideoNativeTensor(frames);
+        int dim = tensor.Shape[0];
+        var result = new Vector<T>(dim);
+        for (int i = 0; i < dim; i++)
+        {
+            result[i] = tensor[i];
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Encodes a single frame using Engine operations for tape-tracked gradient flow.
+    /// Returns a 1D tensor [visionHiddenDim] representing the CLS token feature.
+    /// </summary>
+    private Tensor<T> EncodeFrameNativeTensor(Tensor<T> frame)
     {
         if (_patchEmbedding is null || _visionClsToken is null || _visionPositionalEmbeddings is null)
             throw new InvalidOperationException("Native layers not initialized.");
@@ -1163,10 +1138,10 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         // Patch embedding
         var patches = _patchEmbedding.Forward(frame);
 
-        // Add CLS token
+        // Add CLS token via Engine concat
         var withCls = PrependClsToken(patches, _visionClsToken);
 
-        // Add positional embeddings
+        // Add positional embeddings via Engine add
         var positioned = AddPositionalEmbeddings(withCls, _visionPositionalEmbeddings);
 
         // Apply frame encoder layers
@@ -1176,14 +1151,23 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             current = layer.Forward(current);
         }
 
-        // Take CLS token as frame representation
-        var clsFeature = new Vector<T>(_visionHiddenDim);
-        for (int i = 0; i < _visionHiddenDim && i < current.Shape[1]; i++)
-        {
-            clsFeature[i] = current[0, i];
-        }
+        // Take CLS token (row 0) as frame representation via Engine slice
+        return Engine.TensorSliceAxis(current, 0, 0); // [hiddenDim]
+    }
 
-        return clsFeature;
+    /// <summary>
+    /// Legacy frame encoder returning Vector for non-training paths.
+    /// </summary>
+    private Vector<T> EncodeFrameNative(Tensor<T> frame)
+    {
+        var tensor = EncodeFrameNativeTensor(frame);
+        int dim = Math.Min(_visionHiddenDim, tensor.Shape[0]);
+        var result = new Vector<T>(_visionHiddenDim);
+        for (int i = 0; i < dim; i++)
+        {
+            result[i] = tensor[i];
+        }
+        return result;
     }
 
     private Vector<T> EncodeVideoOnnx(List<Tensor<T>> frames)
@@ -1263,7 +1247,11 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
 
     #region Text Encoding Methods
 
-    private Vector<T> EncodeTextNative(string text)
+    /// <summary>
+    /// Encodes text as a normalized embedding tensor using tape-tracked Engine operations.
+    /// Returns a 1D tensor [embeddingDim].
+    /// </summary>
+    private Tensor<T> EncodeTextNativeTensor(string text)
     {
         if (_textTokenEmbedding is null || _textPositionalEmbeddings is null || _textProjection is null)
             throw new InvalidOperationException("Native text layers not initialized.");
@@ -1272,21 +1260,14 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         var inputIds = encoded.TokenIds;
 
         // Truncate or pad
-        var paddedIds = new List<int>();
-        for (int i = 0; i < _maxSequenceLength; i++)
-        {
-            paddedIds.Add(i < inputIds.Count ? inputIds[i] : 0);
-        }
-
-        // Token embedding
         var tokenTensor = Tensor<T>.CreateDefault([_maxSequenceLength], NumOps.Zero);
         for (int i = 0; i < _maxSequenceLength; i++)
         {
-            tokenTensor[i] = NumOps.FromDouble(paddedIds[i]);
+            tokenTensor[i] = NumOps.FromDouble(i < inputIds.Count ? inputIds[i] : 0);
         }
         var embedded = _textTokenEmbedding.Forward(tokenTensor);
 
-        // Add positional embeddings
+        // Add positional embeddings via Engine
         var positioned = AddPositionalEmbeddings(embedded, _textPositionalEmbeddings);
 
         // Apply text encoder layers
@@ -1296,24 +1277,33 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             current = layer.Forward(current);
         }
 
-        // Pool (take EOS token position or mean pool)
-        var pooled = MeanPool(current);
+        // Mean pool along sequence dimension: [hiddenDim]
+        var pooled = MeanPoolTensor(current);
 
-        // Project to embedding space
-        var pooledTensor = Tensor<T>.CreateDefault([1, pooled.Length], NumOps.Zero);
-        for (int i = 0; i < pooled.Length; i++)
-        {
-            pooledTensor[0, i] = pooled[i];
-        }
-        var projected = _textProjection.Forward(pooledTensor);
+        // Project to embedding space: reshape [hiddenDim] -> [1, hiddenDim]
+        var pooled2d = Engine.Reshape(pooled, [1, pooled.Shape[0]]);
+        var projected = _textProjection.Forward(pooled2d);
 
+        // Extract [embeddingDim] from [1, embeddingDim]
+        var result = Engine.TensorSliceAxis(projected, 0, 0);
+
+        // L2 normalize via Engine ops
+        return NormalizeTensor(result);
+    }
+
+    /// <summary>
+    /// Legacy text encoder returning Vector for public API and non-training paths.
+    /// </summary>
+    private Vector<T> EncodeTextNative(string text)
+    {
+        var tensor = EncodeTextNativeTensor(text);
+        int dim = Math.Min(_embeddingDimension, tensor.Shape[0]);
         var result = new Vector<T>(_embeddingDimension);
-        for (int i = 0; i < _embeddingDimension && i < projected.Shape[1]; i++)
+        for (int i = 0; i < dim; i++)
         {
-            result[i] = projected[0, i];
+            result[i] = tensor[i];
         }
-
-        return Normalize(result);
+        return result;
     }
 
     private Vector<T> EncodeTextOnnx(string text)
@@ -1360,25 +1350,11 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
 
     private Tensor<T> PrependClsToken(Tensor<T> sequence, Matrix<T> clsToken)
     {
-        int seqLen = sequence.Shape[0];
-        int hiddenDim = sequence.Shape[1];
+        // Convert CLS token matrix [1, hiddenDim] to tensor and expand for concat
+        var clsTensor = Tensor<T>.FromMatrix(clsToken); // [1, hiddenDim]
 
-        var result = Tensor<T>.CreateDefault([seqLen + 1, hiddenDim], NumOps.Zero);
-
-        for (int j = 0; j < hiddenDim && j < clsToken.Columns; j++)
-        {
-            result[0, j] = clsToken[0, j];
-        }
-
-        for (int i = 0; i < seqLen; i++)
-        {
-            for (int j = 0; j < hiddenDim; j++)
-            {
-                result[i + 1, j] = sequence[i, j];
-            }
-        }
-
-        return result;
+        // Concatenate CLS token with sequence along axis 0: [1+seqLen, hiddenDim]
+        return Engine.TensorConcatenate([clsTensor, sequence], axis: 0);
     }
 
     private Tensor<T> AddPositionalEmbeddings(Tensor<T> sequence, Matrix<T> posEmbeddings)
@@ -1386,39 +1362,72 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         int seqLen = sequence.Shape[0];
         int hiddenDim = sequence.Shape[1];
 
-        var result = Tensor<T>.CreateDefault([seqLen, hiddenDim], NumOps.Zero);
+        // Convert positional embeddings matrix to tensor
+        var posEmbTensor = Tensor<T>.FromMatrix(posEmbeddings);
 
-        for (int i = 0; i < seqLen && i < posEmbeddings.Rows; i++)
+        // Slice to match sequence length if needed
+        int sliceLen = Math.Min(seqLen, posEmbTensor.Shape[0]);
+        int sliceDim = Math.Min(hiddenDim, posEmbTensor.Shape[1]);
+        var posSlice = Engine.TensorSlice(posEmbTensor, [0, 0], [sliceLen, sliceDim]);
+
+        // If sequence is longer than positional embeddings, slice sequence for the add
+        // then concatenate the remainder. In practice they should match.
+        if (sliceLen < seqLen)
         {
-            for (int j = 0; j < hiddenDim && j < posEmbeddings.Columns; j++)
-            {
-                result[i, j] = NumOps.Add(sequence[i, j], posEmbeddings[i, j]);
-            }
+            var seqSlice = Engine.TensorSlice(sequence, [0, 0], [sliceLen, hiddenDim]);
+            var added = Engine.TensorAdd(seqSlice, posSlice);
+            var remainder = Engine.TensorSlice(sequence, [sliceLen, 0], [seqLen - sliceLen, hiddenDim]);
+            return Engine.TensorConcatenate([added, remainder], axis: 0);
         }
 
-        return result;
+        return Engine.TensorAdd(sequence, posSlice);
     }
 
+    /// <summary>
+    /// Mean-pools a 2D tensor [seqLen, hiddenDim] along axis 0, returning a 1D tensor [hiddenDim].
+    /// Uses Engine.ReduceMean for tape-tracked gradient flow.
+    /// </summary>
+    private Tensor<T> MeanPoolTensor(Tensor<T> tensor)
+    {
+        // ReduceMean along axis 0 (sequence dimension), producing [hiddenDim]
+        return Engine.ReduceMean(tensor, [0], keepDims: false);
+    }
+
+    /// <summary>
+    /// Legacy mean-pool returning Vector for non-training paths (ONNX, caption generation).
+    /// </summary>
     private Vector<T> MeanPool(Tensor<T> tensor)
     {
-        int seqLen = tensor.Shape[0];
-        int hiddenDim = tensor.Shape[1];
-
-        var result = new Vector<T>(hiddenDim);
-
-        for (int j = 0; j < hiddenDim; j++)
+        var pooled = MeanPoolTensor(tensor);
+        int dim = pooled.Shape[0];
+        var result = new Vector<T>(dim);
+        for (int i = 0; i < dim; i++)
         {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < seqLen; i++)
-            {
-                sum = NumOps.Add(sum, tensor[i, j]);
-            }
-            result[j] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
+            result[i] = pooled[i];
         }
-
         return result;
     }
 
+    /// <summary>
+    /// L2-normalizes a 1D tensor using Engine operations for tape-tracked gradient flow.
+    /// Computes x / (||x||_2 + epsilon).
+    /// </summary>
+    private Tensor<T> NormalizeTensor(Tensor<T> tensor)
+    {
+        // Compute squared values
+        var squared = Engine.TensorMultiply(tensor, tensor);
+        // Sum all elements to get ||x||^2
+        var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+        var sumSquared = Engine.ReduceSum(squared, allAxes, keepDims: true);
+        // Add epsilon for numerical stability, then sqrt to get ||x||
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-12)));
+        // Divide element-wise: x / ||x||
+        return Engine.TensorBroadcastDivide(tensor, norm);
+    }
+
+    /// <summary>
+    /// Legacy normalize returning Vector for non-training paths.
+    /// </summary>
     private Vector<T> Normalize(Vector<T> vector)
     {
         return VectorHelper.Normalize(vector);
@@ -1445,31 +1454,31 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
 
         SetTrainingMode(false);
 
-        // Parse input based on rank
+        var frames = ParseInputToFrames(input);
+        var embedding = GetVideoEmbedding(frames);
+        var result = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);
+        for (int i = 0; i < embedding.Length; i++)
+        {
+            result[0, i] = embedding[i];
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Parses a batched input tensor into a list of individual frame tensors.
+    /// Handles rank-4 [numFrames, C, H, W], rank-3 [C, H, W], and other shapes.
+    /// </summary>
+    private List<Tensor<T>> ParseInputToFrames(Tensor<T> input)
+    {
         var frames = new List<Tensor<T>>();
 
         if (input.Shape.Length == 4)
         {
             // Input is [numFrames, channels, height, width] - split into individual frames
             int numFrames = input.Shape[0];
-            int channels = input.Shape[1];
-            int height = input.Shape[2];
-            int width = input.Shape[3];
-
             for (int f = 0; f < numFrames; f++)
             {
-                var frame = Tensor<T>.CreateDefault([channels, height, width], NumOps.Zero);
-                for (int c = 0; c < channels; c++)
-                {
-                    for (int h = 0; h < height; h++)
-                    {
-                        for (int w = 0; w < width; w++)
-                        {
-                            frame[c, h, w] = input[f, c, h, w];
-                        }
-                    }
-                }
-                frames.Add(frame);
+                frames.Add(Engine.TensorSliceAxis(input, 0, f));
             }
         }
         else if (input.Shape.Length == 3)
@@ -1483,13 +1492,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             frames.Add(input);
         }
 
-        var embedding = GetVideoEmbedding(frames);
-        var result = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);
-        for (int i = 0; i < embedding.Length; i++)
-        {
-            result[0, i] = embedding[i];
-        }
-        return result;
+        return frames;
     }
 
     /// <inheritdoc/>
@@ -1499,45 +1502,31 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     /// encoding → projection → normalization) that isn't captured in the Layers list.
     /// Unlike Predict, this does NOT reset training mode so layers stay in training
     /// mode for tape-based gradient computation.
+    /// All operations use Engine methods for tape-tracked gradient flow.
     /// </remarks>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        // Parse input into frames (same logic as Predict but without SetTrainingMode(false))
-        var frames = new List<Tensor<T>>();
+        // Parse input into frames
+        var frames = ParseInputToFrames(input);
 
-        if (input.Shape.Length == 4)
+        if (_useNativeMode)
         {
-            int numFrames = input.Shape[0];
-            int channels = input.Shape[1];
-            int height = input.Shape[2];
-            int width = input.Shape[3];
-
-            for (int f = 0; f < numFrames; f++)
-            {
-                var frame = Tensor<T>.CreateDefault([channels, height, width], NumOps.Zero);
-                for (int c = 0; c < channels; c++)
-                    for (int h = 0; h < height; h++)
-                        for (int w = 0; w < width; w++)
-                            frame[c, h, w] = input[f, c, h, w];
-                frames.Add(frame);
-            }
-        }
-        else if (input.Shape.Length == 3)
-        {
-            frames.Add(input);
+            // Use tape-tracked tensor encoding pipeline
+            var embedding = EncodeVideoNativeTensor(frames);
+            // Reshape [embeddingDim] -> [1, embeddingDim] via Engine
+            return Engine.Reshape(embedding, [1, embedding.Shape[0]]);
         }
         else
         {
-            frames.Add(input);
+            // ONNX mode: not tape-tracked, fallback to legacy path
+            var embedding = EncodeVideoOnnx(frames);
+            var result = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);
+            for (int i = 0; i < embedding.Length; i++)
+            {
+                result[0, i] = embedding[i];
+            }
+            return result;
         }
-
-        var embedding = _useNativeMode ? EncodeVideoNative(frames) : EncodeVideoOnnx(frames);
-        var result = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);
-        for (int i = 0; i < embedding.Length; i++)
-        {
-            result[0, i] = embedding[i];
-        }
-        return result;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)

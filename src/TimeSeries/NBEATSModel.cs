@@ -1,6 +1,10 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
+using AiDotNet.LossFunctions;
+using AiDotNet.Optimizers;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.TimeSeries;
 
@@ -203,7 +207,8 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Trains the N-BEATS model using mini-batch gradient descent with proper backpropagation.
+    /// Trains the N-BEATS model using tape-based automatic differentiation with Adam optimizer.
+    /// Per Oreshkin et al. (2020), NBEATS uses Adam for optimization.
     /// </summary>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
@@ -215,7 +220,6 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         ModelParameters[0] = NumOps.FromDouble(y.Length);
 
         // Normalize the input series to zero mean / unit variance for stable gradient flow.
-        // Store shift/scale for de-normalization in Predict.
         T yMean = NumOps.Zero;
         for (int i = 0; i < y.Length; i++)
             yMean = NumOps.Add(yMean, y[i]);
@@ -240,13 +244,20 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < y.Length; i++)
             yNorm[i] = NumOps.Divide(NumOps.Subtract(y[i], yMean), yStd);
 
-        // With normalization, inputs and targets are O(1), so gradients are well-scaled.
-        // Scale learning rate by 5x to compensate for raw per-sample SGD (no momentum/Adam).
-        // Combined with gradient clipping at 3.0, this gives per-sample updates of up to
-        // 0.015, which converges within 100 epochs without oscillation.
-        double effectiveLR = _options.LearningRate * 5.0;
-        T learningRate = NumOps.FromDouble(effectiveLR);
-        T gradClipThreshold = NumOps.FromDouble(5.0);
+        // Create Adam optimizer (per Oreshkin et al. 2020)
+        var adamOptions = new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
+        {
+            InitialLearningRate = _options.LearningRate
+        };
+        var optimizer = new AdamOptimizer<T, Matrix<T>, Vector<T>>(null, adamOptions);
+
+        // Collect all trainable parameters from all blocks
+        var allBlocks = _blocks.Cast<Interfaces.ILayer<T>>().ToList();
+        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(allBlocks, -1);
+
+        // MSE loss function for tape-tracked computation
+        var mseLoss = new MeanSquaredErrorLoss<T>();
+
         int numSamples = x.Rows;
         var random = new Random(42);
 
@@ -268,53 +279,68 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                     var lookback = ExtractNormalizedLookbackWindow(x, yNorm, idx);
                     T target = yNorm[idx];
 
-                    // Forward pass through all blocks
-                    Vector<T> residual = lookback.Clone();
-                    Vector<T> aggregatedForecast = new Vector<T>(_options.ForecastHorizon);
+                    // Create input tensor from lookback vector
+                    var inputTensor = new Tensor<T>(new[] { _options.LookbackWindow }, lookback);
+                    // Create target tensor (scalar)
+                    var targetTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { target }));
+
+                    // Re-collect params (cache hit on second+ call)
+                    trainableParams = Training.TapeTrainingStep<T>.CollectParameters(allBlocks, 0);
+
+                    // Forward + backward under gradient tape
+                    using var tape = new GradientTape<T>();
+
+                    // Tape-tracked forward pass through all blocks with residual connections
+                    var residual = inputTensor;
+                    Tensor<T>? aggregatedForecast = null;
 
                     for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
                     {
-                        var (backcast, forecast) = _blocks[blockIdx].ForwardInternal(residual);
-                        residual = (Vector<T>)Engine.Subtract(residual, backcast);
-                        aggregatedForecast = (Vector<T>)Engine.Add(aggregatedForecast, forecast);
+                        var (backcast, forecast) = _blocks[blockIdx].ForwardTape(residual);
+                        // Residual: subtract backcast from input to this block
+                        residual = Engine.TensorSubtract(residual, backcast);
+                        // Accumulate forecast
+                        if (aggregatedForecast is null)
+                            aggregatedForecast = forecast;
+                        else
+                            aggregatedForecast = Engine.TensorAdd(aggregatedForecast, forecast);
                     }
 
-                    // Compute gradient of MSE loss: dL/dpred = 2*(pred - target)
-                    T prediction = aggregatedForecast[0];
-                    T error = NumOps.Subtract(prediction, target);
+                    // Extract the first forecast element as prediction
+                    // Create slice weights: one-hot vector selecting index 0
+                    var sliceWeights = new T[_options.ForecastHorizon];
+                    sliceWeights[0] = NumOps.One;
+                    var sliceTensor = new Tensor<T>(
+                        new[] { 1, _options.ForecastHorizon },
+                        new Vector<T>(sliceWeights));
+                    var forecastCol = aggregatedForecast!.Reshape(_options.ForecastHorizon, 1);
+                    var prediction = Engine.TensorMatMul(sliceTensor, forecastCol); // [1, 1]
+                    prediction = prediction.Reshape(1); // [1]
 
-                    // dL/d_aggregatedForecast: only element [0] has non-zero gradient
-                    Vector<T> dForecast = new Vector<T>(_options.ForecastHorizon);
-                    T rawGrad = NumOps.Multiply(NumOps.FromDouble(2.0), error);
+                    // Compute MSE loss via tape-tracked operations
+                    var lossTensor = mseLoss.ComputeTapeLoss(prediction, targetTensor);
 
-                    // Gradient clipping to prevent explosion
-                    T gradAbs = NumOps.Abs(rawGrad);
-                    if (NumOps.GreaterThan(gradAbs, gradClipThreshold))
-                        rawGrad = NumOps.Multiply(NumOps.Divide(gradClipThreshold, gradAbs), rawGrad);
-                    dForecast[0] = rawGrad;
-
-                    // Backward pass through blocks in reverse order
-                    Vector<T> dResidual = new Vector<T>(_options.LookbackWindow);
-
-                    for (int blockIdx = _blocks.Count - 1; blockIdx >= 0; blockIdx--)
+                    // Compute gradients for all trainable parameters
+                    var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+                    var grads = new Dictionary<Tensor<T>, Tensor<T>>(
+                        Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                    foreach (var param in trainableParams)
                     {
-                        Vector<T> dBackcast = new Vector<T>(_options.LookbackWindow);
-                        for (int i = 0; i < _options.LookbackWindow; i++)
-                            dBackcast[i] = NumOps.Negate(dResidual[i]);
-
-                        Vector<T> dInput = _blocks[blockIdx].Backward(dBackcast, dForecast);
-
-                        Vector<T> newDResidual = new Vector<T>(_options.LookbackWindow);
-                        for (int i = 0; i < _options.LookbackWindow; i++)
-                            newDResidual[i] = NumOps.Add(dResidual[i], dInput[i]);
-                        dResidual = newDResidual;
+                        if (allGrads.TryGetValue(param, out var grad))
+                            grads[param] = grad;
                     }
 
-                    // Update parameters using computed gradients
-                    for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
-                    {
-                        _blocks[blockIdx].UpdateParameters(learningRate);
-                    }
+                    // Create optimizer context and step
+                    Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> tgt) => prediction; // not used by Adam
+                    Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> tgt) =>
+                        mseLoss.ComputeTapeLoss(pred, tgt);
+
+                    var context = new TapeStepContext<T>(
+                        trainableParams, grads, lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero,
+                        inputTensor, targetTensor, ComputeForward, ComputeLoss,
+                        null);
+
+                    optimizer.Step(context);
                 }
             }
         }
@@ -361,14 +387,12 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         }
 
         // Univariate case: build lookback windows from training series + autoregressive predictions.
-        // Construct a running series combining training data and new predictions.
         var series = new List<T>(trainN + n);
         for (int i = 0; i < trainN; i++)
             series.Add(_trainingSeries[i]);
 
         for (int i = 0; i < n; i++)
         {
-            // Always produce a model prediction — never return stored training data
             int seriesLen = series.Count;
             if (seriesLen >= _options.LookbackWindow)
             {
@@ -396,10 +420,6 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Extracts a lookback window vector for a given sample index.
     /// </summary>
-    /// <param name="x">Input features matrix.</param>
-    /// <param name="y">Target values vector.</param>
-    /// <param name="sampleIdx">The index of the current sample.</param>
-    /// <returns>A vector of length <see cref="NBEATSModelOptions{T}.LookbackWindow"/>.</returns>
     private Vector<T> ExtractLookbackWindow(Matrix<T> x, Vector<T> y, int sampleIdx)
     {
         var input = new Vector<T>(_options.LookbackWindow);
@@ -459,15 +479,15 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         Vector<T> residual = normalizedInput;
         Vector<T> aggregatedForecast = new Vector<T>(_options.ForecastHorizon);
 
-        // Forward pass through all blocks
+        // Forward pass through all blocks (inference mode, no tape)
         for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
         {
             var (backcast, forecast) = _blocks[blockIdx].ForwardInternal(residual);
 
-            // Update residual for next block - vectorized with Engine.Subtract
+            // Update residual for next block
             residual = (Vector<T>)Engine.Subtract(residual, backcast);
 
-            // Accumulate forecast - vectorized with Engine.Add
+            // Accumulate forecast
             aggregatedForecast = (Vector<T>)Engine.Add(aggregatedForecast, forecast);
         }
 
@@ -480,14 +500,6 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     /// <param name="input">The input vector containing the lookback window of historical values.</param>
     /// <returns>A vector of forecasted values for all forecast horizon steps.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method predicts multiple future time steps at once.
-    /// Unlike PredictSingle which only returns the next value, this returns all values
-    /// up to the forecast horizon.
-    ///
-    /// For example, if your forecast horizon is 7, this will predict the next 7 time steps.
-    /// </para>
-    /// </remarks>
     public Vector<T> ForecastHorizon(Vector<T> input)
     {
         if (input.Length != _options.LookbackWindow)
@@ -510,10 +522,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         {
             var (backcast, forecast) = _blocks[blockIdx].ForwardInternal(residual);
 
-            // Update residual for next block - vectorized with Engine.Subtract
             residual = (Vector<T>)Engine.Subtract(residual, backcast);
-
-            // Accumulate forecast - vectorized with Engine.Add
             aggregatedForecast = (Vector<T>)Engine.Add(aggregatedForecast, forecast);
         }
 
@@ -527,7 +536,6 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Serializes model-specific data to the binary writer.
     /// </summary>
-    /// <param name="writer">The binary writer to write to.</param>
     protected override void SerializeCore(BinaryWriter writer)
     {
         // Write N-BEATS specific options
@@ -560,7 +568,6 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Deserializes model-specific data from the binary reader.
     /// </summary>
-    /// <param name="reader">The binary reader to read from.</param>
     protected override void DeserializeCore(BinaryReader reader)
     {
         // Read N-BEATS specific options
@@ -603,7 +610,6 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Gets metadata about the N-BEATS model.
     /// </summary>
-    /// <returns>A ModelMetadata object containing information about the model.</returns>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>
@@ -637,10 +643,6 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Creates a new instance of the N-BEATS model.
     /// </summary>
-    /// <returns>A new N-BEATS model instance with the same configuration.</returns>
-    /// <remarks>
-    /// Creates a deep copy of the model options to ensure the cloned model has an independent options instance.
-    /// </remarks>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new NBEATSModel<T>(new NBEATSModelOptions<T>(_options));
@@ -665,7 +667,6 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Gets all model parameters as a single vector.
     /// </summary>
-    /// <returns>A vector containing all trainable parameters from all blocks.</returns>
     public override Vector<T> GetParameters()
     {
         var allParams = new List<T>();
@@ -685,7 +686,6 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Sets all model parameters from a single vector.
     /// </summary>
-    /// <param name="parameters">A vector containing all trainable parameters.</param>
     public override void SetParameters(Vector<T> parameters)
     {
         int expectedCount = ParameterCount;
@@ -727,7 +727,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new NBEATSModel<T>(_options);
-        // Copy trained blocks (read-only after training — safe to share by reference)
+        // Copy trained blocks (read-only after training -- safe to share by reference)
         clone._blocks.Clear();
         clone._blocks.AddRange(_blocks);
         // Copy training series
@@ -740,7 +740,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         clone._normMean = _normMean;
         clone._normStd = _normStd;
         return clone;
-    
+
 
 }
 
