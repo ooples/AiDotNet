@@ -721,9 +721,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             shiftSpan[h] = shift[h % shift.Length];
         }
 
-        // y = x * (1 + scale) + shift using engine ops
-        var scaled = Engine.TensorMultiply<T>(x, scaleTensor);
-        return Engine.TensorAdd<T>(scaled, shiftTensor);
+        // y = x * (1 + scale) + shift — per DiT paper (Peebles & Xie, 2023)
+        // scale/shift are [1,1,hidden], x is [batch, seq, hidden] — requires broadcasting
+        var scaled = Engine.TensorBroadcastMultiply<T>(x, scaleTensor);
+        return Engine.TensorBroadcastAdd<T>(scaled, shiftTensor);
     }
 
     /// <summary>

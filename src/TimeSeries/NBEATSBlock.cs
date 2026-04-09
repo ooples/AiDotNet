@@ -419,12 +419,16 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         }
         else
         {
+            // Generic basis per Oreshkin et al. (2020): when thetaSize == outputLength,
+            // theta IS the output directly (identity basis). When they differ, use a
+            // simple identity-like mapping (1 on the diagonal, 0 elsewhere).
             for (int t = 0; t < outputLength; t++)
             {
                 for (int k = 0; k < thetaSize; k++)
                 {
-                    data[t * thetaSize + k] = NumOps.FromDouble(
-                        Math.Cos(2.0 * Math.PI * k * t / outputLength));
+                    data[t * thetaSize + k] = (t == k)
+                        ? NumOps.One
+                        : NumOps.Zero;
                 }
             }
         }
@@ -453,12 +457,12 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         }
         else
         {
+            // Generic basis: identity matrix (theta IS the output)
             for (int t = 0; t < outputLength; t++)
             {
                 for (int k = 0; k < thetaSize; k++)
                 {
-                    basis[t, k] = NumOps.FromDouble(
-                        Math.Cos(2.0 * Math.PI * k * t / outputLength));
+                    basis[t, k] = (t == k) ? NumOps.One : NumOps.Zero;
                 }
             }
         }
@@ -492,18 +496,10 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         }
         else
         {
+            // Generic basis: identity — theta[t] maps directly to output[t]
             for (int t = 0; t < outputLength; t++)
             {
-                T value = NumOps.Zero;
-                for (int k = 0; k < theta.Length; k++)
-                {
-                    T contribution = NumOps.Multiply(
-                        theta[k],
-                        NumOps.FromDouble(Math.Cos(2.0 * Math.PI * k * t / outputLength))
-                    );
-                    value = NumOps.Add(value, contribution);
-                }
-                output[t] = value;
+                output[t] = (t < theta.Length) ? theta[t] : NumOps.Zero;
             }
         }
 

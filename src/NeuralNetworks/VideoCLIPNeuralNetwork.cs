@@ -1474,11 +1474,19 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
 
         if (input.Shape.Length == 4)
         {
-            // Input is [numFrames, channels, height, width] - split into individual frames
+            // Input is [numFrames, channels, height, width] - split into individual 3D frames
             int numFrames = input.Shape[0];
+            int c = input.Shape[1];
+            int h = input.Shape[2];
+            int w = input.Shape[3];
+            int frameSize = c * h * w;
+            var inputSpan = input.Data.Span;
+
             for (int f = 0; f < numFrames; f++)
             {
-                frames.Add(Engine.TensorSliceAxis(input, 0, f));
+                var frameData = new T[frameSize];
+                inputSpan.Slice(f * frameSize, frameSize).CopyTo(frameData);
+                frames.Add(new Tensor<T>(new[] { c, h, w }, new Vector<T>(frameData)));
             }
         }
         else if (input.Shape.Length == 3)
