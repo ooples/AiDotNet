@@ -256,7 +256,8 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(allBlocks, -1);
 
         // MSE loss function for tape-tracked computation
-        var mseLoss = new MeanSquaredErrorLoss<T>();
+        // Per Oreshkin et al. 2020, N-BEATS uses MAE loss (not MSE)
+        var maeLoss = new MeanAbsoluteErrorLoss<T>();
 
         int numSamples = x.Rows;
         var random = new Random(42);
@@ -318,7 +319,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                     prediction = prediction.Reshape(1); // [1]
 
                     // Compute MSE loss via tape-tracked operations
-                    var lossTensor = mseLoss.ComputeTapeLoss(prediction, targetTensor);
+                    var lossTensor = maeLoss.ComputeTapeLoss(prediction, targetTensor);
 
                     // Compute gradients for all trainable parameters
                     var allGrads = tape.ComputeGradients(lossTensor, sources: null);
@@ -330,10 +331,11 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                             grads[param] = grad;
                     }
 
+
                     // Create optimizer context and step
                     Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> tgt) => prediction; // not used by Adam
                     Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> tgt) =>
-                        mseLoss.ComputeTapeLoss(pred, tgt);
+                        maeLoss.ComputeTapeLoss(pred, tgt);
 
                     var context = new TapeStepContext<T>(
                         trainableParams, grads, lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero,
@@ -341,6 +343,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                         null);
 
                     optimizer.Step(context);
+
                 }
             }
         }
@@ -745,4 +748,5 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
 }
 
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
 }
