@@ -249,12 +249,19 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         // Step 0: Project Euclidean input into Poincaré ball via exp_0.
         // The Möbius matmul M⊗_c x requires x to be inside the ball (√c·||x|| < 1).
         // exp_0(v) = tanh(√c·||v||) * v / (√c·||v||) — maps any Euclidean vector into the ball.
+        //
+        // Per Nickel & Kiela (2017), pre-normalize inputs to unit norm before exp_0
+        // to prevent tanh saturation which kills gradients for large-norm inputs.
         var rawNormSq = Engine.ReduceSum(Engine.TensorMultiply(inputTensor, inputTensor), new[] { 1 }, keepDims: true);
         var rawNorm = Engine.TensorSqrt(Engine.TensorAddScalar(rawNormSq, eps));
-        var sqrtCraw = Engine.TensorMultiplyScalar(rawNorm, sqrtC);
-        var tanhFactor0 = Engine.TensorTanh(sqrtCraw); // tanh(√c·||v||)
+        var normalizedInput = Engine.TensorBroadcastDivide(inputTensor, Engine.TensorAddScalar(rawNorm, eps));
+        // Now ||normalizedInput|| ≈ 1, so √c·||v|| ≈ √c which is well within tanh's linear region for c=1
+        var unitNormSq = Engine.ReduceSum(Engine.TensorMultiply(normalizedInput, normalizedInput), new[] { 1 }, keepDims: true);
+        var unitNorm = Engine.TensorSqrt(Engine.TensorAddScalar(unitNormSq, eps));
+        var sqrtCraw = Engine.TensorMultiplyScalar(unitNorm, sqrtC);
+        var tanhFactor0 = Engine.TensorTanh(sqrtCraw); // tanh(√c·1) ≈ tanh(1) ≈ 0.76 — good gradient region
         var projScale0 = Engine.TensorDivide(tanhFactor0, Engine.TensorAddScalar(sqrtCraw, eps));
-        var ballInput = Engine.TensorBroadcastMultiply(projScale0, inputTensor); // now inside ball
+        var ballInput = Engine.TensorBroadcastMultiply(projScale0, normalizedInput); // now inside ball
 
         // Step 1: Linear projection Mx = x_ball @ W^T
         var weightsT = IsTrainingMode

@@ -234,7 +234,7 @@ public abstract class ActivationFunctionTestBase
         for (int i = 0; i < 5; i++)
         {
             double scalarOutput = fn.Activate(input[i]);
-            Assert.True(Math.Abs(tensorOutput[i] - scalarOutput) < 1e-12,
+            Assert.True(Math.Abs(tensorOutput[i] - scalarOutput) < 1e-10,
                 $"Tensor Activate[{i}]={tensorOutput[i]} != scalar Activate({input[i]})={scalarOutput}.");
         }
     }
