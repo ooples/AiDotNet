@@ -65,7 +65,30 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         _normMean = NumOps.Zero;
         _normStd = NumOps.One;
 
+        ValidateOptions();
         InitializeComponents();
+    }
+
+    private void ValidateOptions()
+    {
+        if (_options.LookbackWindow <= 0)
+            throw new ArgumentException("LookbackWindow must be positive.", nameof(_options.LookbackWindow));
+        if (_options.ForecastHorizon <= 0)
+            throw new ArgumentException("ForecastHorizon must be positive.", nameof(_options.ForecastHorizon));
+        if (_options.HiddenSize <= 0)
+            throw new ArgumentException("HiddenSize must be positive.", nameof(_options.HiddenSize));
+        if (_options.NumAttentionHeads <= 0)
+            throw new ArgumentException("NumAttentionHeads must be positive.", nameof(_options.NumAttentionHeads));
+        if (_options.HiddenSize % _options.NumAttentionHeads != 0)
+            throw new ArgumentException(
+                $"HiddenSize ({_options.HiddenSize}) must be divisible by NumAttentionHeads ({_options.NumAttentionHeads}).");
+        if (_options.QuantileLevels == null || _options.QuantileLevels.Length == 0)
+            throw new ArgumentException("QuantileLevels must contain at least one value.");
+        foreach (var q in _options.QuantileLevels)
+        {
+            if (q <= 0.0 || q >= 1.0)
+                throw new ArgumentException($"Quantile level {q} must be in (0, 1).");
+        }
     }
 
     private void InitializeComponents()
