@@ -785,6 +785,11 @@ public enum ControlType
 /// ControlNet encoder that processes control signals.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <summary>
+/// ControlNet encoder per Zhang et al. (2023) "Adding Conditional Control to Text-to-Image Diffusion Models".
+/// Uses convolutional layers (NOT dense/fully-connected) operating on spatial [C, H, W] tensors.
+/// Zero convolutions are 1×1 convolutions initialized to zero for safe integration with pretrained models.
+/// </summary>
 public class ControlNetEncoder<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -792,9 +797,11 @@ public class ControlNetEncoder<T>
     private readonly int _inputChannels;
     private readonly int _baseChannels;
     private readonly int[] _channelMultipliers;
-    private readonly List<DenseLayer<T>> _downBlocks;
-    private readonly List<DenseLayer<T>> _zeroConvs;
     private readonly int _imageSize;
+
+    // Per the paper: convolutional down blocks + 1×1 zero convolutions
+    private readonly List<ConvolutionalLayer<T>> _downBlocks;
+    private readonly List<ConvolutionalLayer<T>> _zeroConvs;
 
     /// <summary>
     /// Gets the number of parameters in this encoder.
@@ -802,7 +809,7 @@ public class ControlNetEncoder<T>
     public int ParameterCount { get; private set; }
 
     /// <summary>
-    /// Initializes a new ControlNetEncoder.
+    /// Initializes a new ControlNetEncoder with convolutional layers per the paper.
     /// </summary>
     public ControlNetEncoder(
         int inputChannels,
@@ -816,59 +823,80 @@ public class ControlNetEncoder<T>
         _channelMultipliers = channelMultipliers;
         _imageSize = imageSize;
 
-        _downBlocks = new List<DenseLayer<T>>();
-        _zeroConvs = new List<DenseLayer<T>>();
+        _downBlocks = new List<ConvolutionalLayer<T>>();
+        _zeroConvs = new List<ConvolutionalLayer<T>>();
 
         InitializeLayers(seed);
     }
 
     private void InitializeLayers(int? seed)
     {
-        // Calculate sizes at each level (simulating stride-2 downsampling)
-        var spatialSize = _imageSize;
-        var inputDim = _inputChannels * spatialSize * spatialSize;
-        var outputDim = _baseChannels * spatialSize * spatialSize;
+        int spatialSize = _imageSize;
 
-        // Input projection
-        var inProj = new DenseLayer<T>(inputDim, outputDim, (IActivationFunction<T>?)null);
+        // Input projection: 3×3 conv, inputChannels → baseChannels, same padding
+        int padding = 1; // 3×3 kernel with padding=1 preserves spatial size
+        var inProj = new ConvolutionalLayer<T>(
+            _inputChannels, spatialSize, spatialSize,
+            _baseChannels, kernelSize: 3, stride: 1, padding: padding,
+            activationFunction: new SiLUActivation<T>());
         _downBlocks.Add(inProj);
 
-        // Zero projection for input
-        var zeroProj = new DenseLayer<T>(outputDim, outputDim, (IActivationFunction<T>?)null);
+        // Zero convolution for input: 1×1 conv initialized to zero (per paper)
+        var zeroProj = new ConvolutionalLayer<T>(
+            _baseChannels, spatialSize, spatialSize,
+            _baseChannels, kernelSize: 1, stride: 1, padding: 0,
+            activationFunction: (IActivationFunction<T>?)null);
+        ZeroInitializeConv(zeroProj);
         _zeroConvs.Add(zeroProj);
 
-        // Create down blocks with zero projections
-        var prevDim = outputDim;
+        // Down blocks with stride-2 convolution for downsampling
+        int prevChannels = _baseChannels;
         foreach (var mult in _channelMultipliers)
         {
-            // Downsample spatial dimension by 2
-            spatialSize = Math.Max(1, spatialSize / 2);
-            var channels = _baseChannels * mult;
-            var newDim = channels * spatialSize * spatialSize;
+            int channels = _baseChannels * mult;
 
-            var downBlock = new DenseLayer<T>(prevDim, newDim, (IActivationFunction<T>?)null);
+            // Stride-2 conv for downsampling: spatial /= 2
+            int outSpatial = Math.Max(1, spatialSize / 2);
+            var downBlock = new ConvolutionalLayer<T>(
+                prevChannels, spatialSize, spatialSize,
+                channels, kernelSize: 3, stride: 2, padding: 1,
+                activationFunction: new SiLUActivation<T>());
             _downBlocks.Add(downBlock);
 
-            var zc = new DenseLayer<T>(newDim, newDim, (IActivationFunction<T>?)null);
+            spatialSize = outSpatial;
+
+            // Zero convolution: 1×1 conv at this resolution
+            var zc = new ConvolutionalLayer<T>(
+                channels, spatialSize, spatialSize,
+                channels, kernelSize: 1, stride: 1, padding: 0,
+                activationFunction: (IActivationFunction<T>?)null);
+            ZeroInitializeConv(zc);
             _zeroConvs.Add(zc);
 
-            prevDim = newDim;
+            prevChannels = channels;
         }
 
         // Count parameters
         ParameterCount = 0;
         foreach (var block in _downBlocks)
-        {
             ParameterCount += block.ParameterCount;
-        }
         foreach (var zc in _zeroConvs)
-        {
             ParameterCount += zc.ParameterCount;
-        }
+    }
+
+    /// <summary>
+    /// Initializes a convolutional layer's weights and biases to zero (zero convolution per paper).
+    /// </summary>
+    private static void ZeroInitializeConv(ConvolutionalLayer<T> layer)
+    {
+        var zeroParams = new Vector<T>(layer.ParameterCount);
+        // Vector<T> is zero-initialized by default
+        layer.SetParameters(zeroParams);
     }
 
     /// <summary>
     /// Encodes a control image into multi-scale features.
+    /// Input should be [C, H, W] spatial tensor.
     /// </summary>
     public List<Tensor<T>> Encode(Tensor<T> controlImage)
     {
@@ -896,18 +924,14 @@ public class ControlNetEncoder<T>
         {
             var p = block.GetParameters();
             for (int i = 0; i < p.Length; i++)
-            {
                 allParams.Add(p[i]);
-            }
         }
 
         foreach (var zc in _zeroConvs)
         {
             var p = zc.GetParameters();
             for (int i = 0; i < p.Length; i++)
-            {
                 allParams.Add(p[i]);
-            }
         }
 
         return new Vector<T>(allParams.ToArray());
@@ -925,9 +949,7 @@ public class ControlNetEncoder<T>
             var count = block.ParameterCount;
             var p = new T[count];
             for (int i = 0; i < count; i++)
-            {
                 p[i] = parameters[offset + i];
-            }
             block.SetParameters(new Vector<T>(p));
             offset += count;
         }
@@ -937,9 +959,7 @@ public class ControlNetEncoder<T>
             var count = zc.ParameterCount;
             var p = new T[count];
             for (int i = 0; i < count; i++)
-            {
                 p[i] = parameters[offset + i];
-            }
             zc.SetParameters(new Vector<T>(p));
             offset += count;
         }
