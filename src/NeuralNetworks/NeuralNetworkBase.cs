@@ -3051,6 +3051,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // (InvalidateParameterCountCache already calls InvalidateLayerInfoCache)
         InvalidateParameterCountCache();
 
+        // Deserialized models should be in inference mode by default.
+        // This ensures BatchNorm uses running statistics (not batch statistics)
+        // and dropout is disabled, matching the behavior of the original model.
+        SetTrainingMode(false);
+
         // Read network-specific data
         DeserializeNetworkSpecificData(reader);
     }

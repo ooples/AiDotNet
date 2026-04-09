@@ -23,6 +23,10 @@ public class MixtureOfExpertsNeuralNetworkTests : NeuralNetworkModelTestBase
     protected override int[] InputShape => [64];
     protected override int[] OutputShape => [64];
 
+    // MoE uses sparse stochastic gating (Shazeer et al. 2017 §3.2) with load-balancing
+    // auxiliary loss that can cause total loss to fluctuate slightly across training runs.
+    protected override double MoreDataTolerance => 0.01;
+
     protected override INeuralNetworkModel<double> CreateNetwork()
     {
         var options = new MixtureOfExpertsOptions<double>

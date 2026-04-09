@@ -32696,24 +32696,29 @@ public static class LayerHelper<T>
         int numResidualLayers = 20,
         double dropoutRate = 0.0)
     {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        // Per Kalchbrenner et al. 2018 "Efficient Neural Audio Synthesis" and
+        // the fatchord/WaveRNN reference implementation:
+        // Architecture: MelConditioning → GRU1 → GRU2 → FC1 → FC2 → FC3(output)
+
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
 
-        // === Mel conditioning ===
-        yield return new DenseLayer<T>(melChannels, hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        // === Mel conditioning: project mel features to hidden dim ===
+        yield return new DenseLayer<T>(melChannels, hiddenDim, reluActivation);
 
-        // === Causal residual blocks (simulating dilated causal convolutions) ===
-        for (int i = 0; i < numResidualLayers; i++)
-        {
-            yield return new DenseLayer<T>(hiddenDim, hiddenDim, tanhActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        }
+        // === GRU layers (paper: 2 stacked GRUs with residual connections) ===
+        // Paper uses single large GRU (896 units); we use hiddenDim with 2 layers
+        yield return new GRULayer<T>(hiddenDim, hiddenDim, false, (IActivationFunction<T>?)null);
+        yield return new GRULayer<T>(hiddenDim, hiddenDim, false, (IActivationFunction<T>?)null);
 
-        // === Output: dual softmax (WaveRNN) or mu-law (WaveNet) ===
-        yield return new DenseLayer<T>(hiddenDim, hiddenDim, geluActivation);
+        // === Output FC chain (paper: fc1 → fc2 → fc3) ===
+        // fc1: hiddenDim → hiddenDim with ReLU
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, reluActivation);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        // fc2: hiddenDim → hiddenDim with ReLU
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, reluActivation);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        // fc3: hiddenDim → output (1 for waveform sample)
         yield return new DenseLayer<T>(hiddenDim, 1, identityActivation);
     }
 

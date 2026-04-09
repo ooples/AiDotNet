@@ -566,6 +566,30 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
 
         // Step 1: Compute routing scores
         var routingLogits = _router.Forward(input2D);
+
+        // Per Shazeer et al. 2017 §3.2: Add noisy gating during training only.
+        // H(x) = x·Wg + StandardNormal()·Softplus(x·Wnoise)
+        // During inference, use clean logits for deterministic routing.
+        if (IsTrainingMode)
+        {
+            // Softplus(x) = log(1 + exp(x)) — noise scale
+            var expLogits = Engine.TensorExp(routingLogits);
+            var onePlusExp = Engine.TensorAddScalar(expLogits, NumOps.One);
+            var noiseScale = Engine.TensorLog(onePlusExp);
+
+            // Standard normal noise via Box-Muller
+            var noiseData = new T[routingLogits.Length];
+            var rng = RandomHelper.CreateSeededRandom(42);
+            for (int i = 0; i < noiseData.Length; i++)
+            {
+                double u1 = 1.0 - rng.NextDouble();
+                double u2 = rng.NextDouble();
+                noiseData[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
+            }
+            var noise = new Tensor<T>(routingLogits.Shape.ToArray(), new Vector<T>(noiseData));
+            routingLogits = Engine.TensorAdd(routingLogits, Engine.TensorMultiply(noise, noiseScale));
+        }
+
         _lastRoutingLogits = routingLogits;
 
         // Step 2: Apply softmax to get routing probabilities

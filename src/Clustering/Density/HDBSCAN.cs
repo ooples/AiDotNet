@@ -178,7 +178,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
         (_condensedTree, finalParent) = BuildCondensedTree(mst, n, _options.MinClusterSize);
 
         // Step 6: Extract clusters
-        var clusterLabels = ExtractClusters(_condensedTree, n, _options.ClusterSelection, finalParent);
+        var clusterLabels = ExtractClusters(_condensedTree, n, _options.ClusterSelection, _options.AllowSingleCluster, finalParent);
 
         // Compute probabilities and outlier scores
         ComputeProbabilitiesAndOutlierScores(clusterLabels, _condensedTree, n);
@@ -262,6 +262,25 @@ public class HDBSCAN<T> : ClusteringBase<T>
         }
 
         return distMatrix;
+    }
+
+    /// <summary>
+    /// Recursively removes all descendants of a cluster from the selected set.
+    /// Per Campello et al. 2013, when a parent cluster is selected, all its
+    /// sub-clusters must be deselected.
+    /// </summary>
+    private static void RemoveAllDescendants(int cluster, Dictionary<int, List<int>> children,
+        HashSet<int> clusterNodes, HashSet<int> selectedClusters)
+    {
+        if (!children.TryGetValue(cluster, out var kids)) return;
+        foreach (int child in kids)
+        {
+            if (clusterNodes.Contains(child))
+            {
+                selectedClusters.Remove(child);
+                RemoveAllDescendants(child, children, clusterNodes, selectedClusters);
+            }
+        }
     }
 
     private T[] ComputeCoreDistances(T[,] distMatrix, int n, int minSamples)
@@ -514,7 +533,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
         }
     }
 
-    private int[] ExtractClusters(List<CondensedTreeNode> condensedTree, int n, HDBSCANClusterSelection method, int[]? ufParent = null)
+    private int[] ExtractClusters(List<CondensedTreeNode> condensedTree, int n, HDBSCANClusterSelection method, bool allowSingleCluster = true, int[]? ufParent = null)
     {
         var labels = new int[n];
         for (int i = 0; i < n; i++)
@@ -614,19 +633,25 @@ public class HDBSCAN<T> : ClusteringBase<T>
                 if (stability.ContainsKey(cluster) && NumOps.GreaterThan(stability[cluster], childStability))
                 {
                     selectedClusters.Add(cluster);
-                    // Remove descendants
-                    if (children.ContainsKey(cluster))
-                    {
-                        foreach (var child in children[cluster])
-                        {
-                            selectedClusters.Remove(child);
-                        }
-                    }
+                    // Per Campello et al. 2013: remove ALL descendants, not just direct children
+                    RemoveAllDescendants(cluster, children, clusterNodes, selectedClusters);
                 }
                 else if (NumOps.GreaterThan(childStability, NumOps.Zero))
                 {
                     // Propagate child stability
                     stability[cluster] = childStability;
+                }
+            }
+
+            // Per Campello et al. 2013: if AllowSingleCluster is true and EOM selects
+            // only the root (or nothing), allow the root as a valid single-cluster result.
+            // Also handles the case where all data naturally belongs to one dense cluster.
+            if (allowSingleCluster && selectedClusters.Count <= 1 && clusterList.Count > 0)
+            {
+                // If no clusters selected, select the root
+                if (selectedClusters.Count == 0)
+                {
+                    selectedClusters.Add(clusterList[^1]);
                 }
             }
 
@@ -652,13 +677,17 @@ public class HDBSCAN<T> : ClusteringBase<T>
             {
                 if (node.Child < n)
                 {
-                    // Find which selected cluster this point belongs to by walking up the tree
+                    // Find which selected cluster this point belongs to by walking up the tree.
+                    // Walk continues regardless of ID value (union-find roots can be < n).
                     int current = node.Parent;
-                    while (current >= n && !selectedClusters.Contains(current))
+                    int maxSteps = condensedTree.Count; // prevent infinite loop
+                    int steps = 0;
+                    while (!selectedClusters.Contains(current) && steps < maxSteps)
                     {
                         if (!parentLookup.TryGetValue(current, out int parent) || parent == current)
                             break;
                         current = parent;
+                        steps++;
                     }
 
                     if (clusterToLabel.ContainsKey(current))
