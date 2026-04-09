@@ -1095,7 +1095,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             var pooled2d = Engine.Reshape(pooled, [1, pooled.Shape[0]]);
             var projected = _videoProjection.Forward(pooled2d);
             // Extract [embeddingDim] from [1, embeddingDim]
-            pooled = Engine.TensorSliceAxis(projected, 0, 0);
+            pooled = projected.Reshape(projected.Shape[^1]);
         }
 
         // Cache pre-normalized embedding for backward L2 norm Jacobian
@@ -1151,8 +1151,12 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             current = layer.Forward(current);
         }
 
-        // Take CLS token (row 0) as frame representation via Engine slice
-        return Engine.TensorSliceAxis(current, 0, 0); // [hiddenDim]
+        // Take CLS token (row 0) as frame representation
+        // Extract first row from [seqLen, hiddenDim] → [hiddenDim]
+        int hiddenDim = current.Shape[^1];
+        var clsData = new T[hiddenDim];
+        current.Data.Span.Slice(0, hiddenDim).CopyTo(clsData);
+        return new Tensor<T>(new[] { hiddenDim }, new Vector<T>(clsData));
     }
 
     /// <summary>
@@ -1285,7 +1289,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         var projected = _textProjection.Forward(pooled2d);
 
         // Extract [embeddingDim] from [1, embeddingDim]
-        var result = Engine.TensorSliceAxis(projected, 0, 0);
+        var result = projected.Reshape(projected.Shape[^1]);
 
         // L2 normalize via Engine ops
         return NormalizeTensor(result);
