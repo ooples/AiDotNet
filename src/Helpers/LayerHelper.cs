@@ -23612,7 +23612,7 @@ public static class LayerHelper<T>
         int numVisionLayers = 6,
         int numTextLayers = 12,
         int numFusionLayers = 6,
-        int numHeads = 12,
+        int numHeads = 16, // Per Lu et al. 2019 (ViLBERT): 1024/16=64 per head
         double dropoutRate = 0.1)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
