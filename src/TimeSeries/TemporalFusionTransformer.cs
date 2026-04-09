@@ -850,22 +850,42 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         int n = input.Rows;
-        int trainN = _trainingSeries.Length;
+        int lookback = _options.LookbackWindow;
         var predictions = new Vector<T>(n);
+
+        // Build the full series from training data + input for lookback window construction
+        var series = new T[_trainingSeries.Length + n];
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            series[i] = _trainingSeries[i];
+        // For future points, use the last known value as placeholder
+        T lastKnown = _trainingSeries.Length > 0 ? _trainingSeries[_trainingSeries.Length - 1] : NumOps.Zero;
+        for (int i = 0; i < n; i++)
+            series[_trainingSeries.Length + i] = lastKnown;
+
         for (int i = 0; i < n; i++)
         {
-            if (i < trainN && trainN > 0)
-                predictions[i] = _trainingSeries[i];
-            else
-                predictions[i] = PredictSingle(input.GetRow(i));
+            // Construct lookback window ending at position i
+            int seriesPos = i; // position in the original timeline
+            var lookbackWindow = new Vector<T>(lookback);
+            for (int j = 0; j < lookback; j++)
+            {
+                int idx = seriesPos - lookback + 1 + j;
+                if (idx >= 0 && idx < series.Length)
+                    lookbackWindow[j] = series[idx];
+                else
+                    lookbackWindow[j] = NumOps.Zero;
+            }
+            predictions[i] = PredictSingle(lookbackWindow);
         }
         return predictions;
     }
 
     public override T PredictSingle(Vector<T> input)
     {
-        var inputTensor = new Tensor<T>([input.Length]);
-        for (int i = 0; i < input.Length; i++)
+        // Input should be a lookback window of length LookbackWindow * TimeVaryingUnknownSize
+        int expectedLen = _options.LookbackWindow * Math.Max(_options.TimeVaryingUnknownSize, 1);
+        var inputTensor = new Tensor<T>([expectedLen]);
+        for (int i = 0; i < Math.Min(input.Length, expectedLen); i++)
         {
             inputTensor[i] = input[i];
         }

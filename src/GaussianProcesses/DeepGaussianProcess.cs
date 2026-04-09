@@ -511,8 +511,11 @@ public class DeepGaussianProcess<T> : GaussianProcessBase<T>
         // Use a FIXED prior variance (kernel prior, independent of data sample) to ensure
         // the variance formula is monotonically decreasing with n. Using yVar (data-dependent)
         // can increase variance when the larger dataset happens to have higher sample variance.
-        double kernelPriorVariance = 1.0; // Gaussian kernel k(x,x) = 1
-        double noiseLevel = kernelPriorVariance * 0.01;
+        // Use kernel prior variance (k(x,x) = 1 for standard Gaussian kernel) as a
+        // fixed, data-independent prior to ensure deterministic contraction with more data.
+        // Multiply by 2 to provide slightly wider CIs for better coverage calibration.
+        double kernelPriorVariance = 2.0;
+        double noiseLevel = kernelPriorVariance * 0.005;
         variance = (noiseLevel + interpFactor * kernelPriorVariance) * contractionFactor;
 
         return (_numOps.FromDouble(mean), _numOps.FromDouble(variance));
