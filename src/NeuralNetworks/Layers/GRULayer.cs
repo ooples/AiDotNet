@@ -1422,24 +1422,16 @@ public partial class GRULayer<T> : LayerBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         // Bulk copy from parameter vector into tensor storage — avoids per-element SetFlat calls
-        var src = parameters.AsSpan();
         int idx = 0;
-
-        void CopyToTensor(Tensor<T> tensor)
-        {
-            src.Slice(idx, tensor.Length).CopyTo(tensor.Data.Span);
-            idx += tensor.Length;
-        }
-
-        CopyToTensor(_Wz);
-        CopyToTensor(_Wr);
-        CopyToTensor(_Wh);
-        CopyToTensor(_Uz);
-        CopyToTensor(_Ur);
-        CopyToTensor(_Uh);
-        CopyToTensor(_bz);
-        CopyToTensor(_br);
-        CopyToTensor(_bh);
+        parameters.Slice(idx, _Wz.Length).AsSpan().CopyTo(_Wz.Data.Span); idx += _Wz.Length;
+        parameters.Slice(idx, _Wr.Length).AsSpan().CopyTo(_Wr.Data.Span); idx += _Wr.Length;
+        parameters.Slice(idx, _Wh.Length).AsSpan().CopyTo(_Wh.Data.Span); idx += _Wh.Length;
+        parameters.Slice(idx, _Uz.Length).AsSpan().CopyTo(_Uz.Data.Span); idx += _Uz.Length;
+        parameters.Slice(idx, _Ur.Length).AsSpan().CopyTo(_Ur.Data.Span); idx += _Ur.Length;
+        parameters.Slice(idx, _Uh.Length).AsSpan().CopyTo(_Uh.Data.Span); idx += _Uh.Length;
+        parameters.Slice(idx, _bz.Length).AsSpan().CopyTo(_bz.Data.Span); idx += _bz.Length;
+        parameters.Slice(idx, _br.Length).AsSpan().CopyTo(_br.Data.Span); idx += _br.Length;
+        parameters.Slice(idx, _bh.Length).AsSpan().CopyTo(_bh.Data.Span);
     }
 
     public override Vector<T> GetParameterGradients()

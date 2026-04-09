@@ -665,26 +665,15 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         writer.Write(Stride);
         writer.Write(Padding);
 
-        // Serialize _kernels
-        for (int i = 0; i < _kernels.Shape[0]; i++)
-        {
-            for (int j = 0; j < _kernels.Shape[1]; j++)
-            {
-                for (int k = 0; k < _kernels.Shape[2]; k++)
-                {
-                    for (int l = 0; l < _kernels.Shape[3]; l++)
-                    {
-                        writer.Write(Convert.ToDouble(_kernels[i, j, k, l]));
-                    }
-                }
-            }
-        }
+        // Serialize _kernels — flat span iteration replaces 4-nested indexing loops
+        var kernelSpan = _kernels.Data.Span;
+        for (int i = 0; i < kernelSpan.Length; i++)
+            writer.Write(Convert.ToDouble(kernelSpan[i]));
 
-        // Serialize _biases
-        for (int i = 0; i < _biases.Shape[0]; i++)
-        {
-            writer.Write(Convert.ToDouble(_biases[i]));
-        }
+        // Serialize _biases — flat span iteration
+        var biasSpan = _biases.Data.Span;
+        for (int i = 0; i < biasSpan.Length; i++)
+            writer.Write(Convert.ToDouble(biasSpan[i]));
     }
 
     /// <summary>
@@ -721,30 +710,17 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         Stride = reader.ReadInt32();
         Padding = reader.ReadInt32();
 
-        // Deserialize _kernels — RentUninitialized since all elements are immediately overwritten
+        // Deserialize _kernels — flat span iteration replaces 4-nested indexing loops
         _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-        for (int i = 0; i < _kernels.Shape[0]; i++)
-        {
-            for (int j = 0; j < _kernels.Shape[1]; j++)
-            {
-                for (int k = 0; k < _kernels.Shape[2]; k++)
-                {
-                    for (int l = 0; l < _kernels.Shape[3]; l++)
-                    {
-                        double value = reader.ReadDouble();
-                        _kernels[i, j, k, l] = NumOps.FromDouble(value);
-                    }
-                }
-            }
-        }
+        var kernelSpan = _kernels.Data.Span;
+        for (int i = 0; i < kernelSpan.Length; i++)
+            kernelSpan[i] = NumOps.FromDouble(reader.ReadDouble());
 
-        // Deserialize _biases
+        // Deserialize _biases — flat span iteration
         _biases = new Tensor<T>([OutputDepth]);
-        for (int i = 0; i < _biases.Shape[0]; i++)
-        {
-            double value = reader.ReadDouble();
-            _biases[i] = NumOps.FromDouble(value);
-        }
+        var biasSpan = _biases.Data.Span;
+        for (int i = 0; i < biasSpan.Length; i++)
+            biasSpan[i] = NumOps.FromDouble(reader.ReadDouble());
 
         // Reinitialize _lastInput and _lastOutput
         _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);

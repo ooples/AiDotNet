@@ -311,10 +311,8 @@ namespace AiDotNet.NeuralNetworks
             for (int i = 0; i < textList.Count; i++)
             {
                 var embedding = Embed(textList[i]);
-                for (int j = 0; j < _embeddingDimension; j++)
-                {
-                    matrix[i, j] = embedding[j];
-                }
+                // Bulk row copy instead of element-by-element loop
+                matrix.SetRow(i, embedding);
             }
             return matrix;
         }
@@ -337,39 +335,45 @@ namespace AiDotNet.NeuralNetworks
 
             int seqLen = output.Shape.Length == 3 ? output.Shape[1] : output.Shape[0];
             int dim = output.Shape.Length == 3 ? output.Shape[2] : output.Shape[1];
-            var result = new Vector<T>(dim);
 
-            // Helper to get value regardless of rank (assuming batch index 0 for rank 3)
-            T GetVal(int s, int d) => output.Shape.Length == 3 ? output[0, s, d] : output[s, d];
+            // Normalize to 2D [seqLen, dim] for Engine operations (take batch index 0 for rank 3)
+            Tensor<T> seq2D;
+            if (output.Shape.Length == 3)
+            {
+                // Extract first batch: copy [seqLen * dim] elements from offset 0
+                var data = new T[seqLen * dim];
+                output.Data.Span.Slice(0, seqLen * dim).CopyTo(data);
+                seq2D = new Tensor<T>(data, [seqLen, dim]);
+            }
+            else
+            {
+                seq2D = output;
+            }
+
+            Vector<T> result;
 
             if (_poolingStrategy == PoolingStrategy.ClsToken)
             {
-                for (int i = 0; i < dim; i++) result[i] = GetVal(0, i);
+                // Extract first row [dim] using Engine-friendly bulk copy
+                var clsData = new T[dim];
+                seq2D.Data.Span.Slice(0, dim).CopyTo(clsData);
+                result = new Vector<T>(clsData);
             }
             else if (_poolingStrategy == PoolingStrategy.Mean)
             {
-                for (int d = 0; d < dim; d++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int s = 0; s < seqLen; s++)
-                    {
-                        sum = NumOps.Add(sum, GetVal(s, d));
-                    }
-                    result[d] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
-                }
+                // Engine-accelerated mean reduction along sequence axis (axis 0)
+                var meanTensor = Engine.ReduceMean(seq2D, [0], keepDims: false);
+                result = meanTensor.Reshape(dim).ToVector();
             }
             else if (_poolingStrategy == PoolingStrategy.Max)
             {
-                for (int d = 0; d < dim; d++)
-                {
-                    T max = GetVal(0, d);
-                    for (int s = 1; s < seqLen; s++)
-                    {
-                        T val = GetVal(s, d);
-                        if (NumOps.GreaterThan(val, max)) max = val;
-                    }
-                    result[d] = max;
-                }
+                // Engine-accelerated max reduction along sequence axis (axis 0)
+                var maxTensor = Engine.ReduceMax(seq2D, [0], keepDims: false, out _);
+                result = maxTensor.Reshape(dim).ToVector();
+            }
+            else
+            {
+                result = new Vector<T>(dim);
             }
 
             return result.SafeNormalize();

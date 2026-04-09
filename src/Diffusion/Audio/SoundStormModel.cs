@@ -191,12 +191,9 @@ public class SoundStormModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var cParams = _conformer.GetParameters();
-        var vaeParams = _audioVAE.GetParameters();
-        var combined = new Vector<T>(cParams.Length + vaeParams.Length);
-        for (int i = 0; i < cParams.Length; i++) combined[i] = cParams[i];
-        for (int i = 0; i < vaeParams.Length; i++) combined[cParams.Length + i] = vaeParams[i];
-        return combined;
+        return Vector<T>.Concatenate(
+            _conformer.GetParameters(),
+            _audioVAE.GetParameters());
     }
 
     /// <inheritdoc />
@@ -206,10 +203,9 @@ public class SoundStormModel<T> : AudioDiffusionModelBase<T>
         var vaeCount = _audioVAE.ParameterCount;
         if (parameters.Length != cCount + vaeCount)
             throw new ArgumentException($"Expected {cCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
-        var cParams = new Vector<T>(cCount);
-        var vaeParams = new Vector<T>(vaeCount);
-        for (int i = 0; i < cCount; i++) cParams[i] = parameters[i];
-        for (int i = 0; i < vaeCount; i++) vaeParams[i] = parameters[cCount + i];
+        // Use Vector.Slice for zero-copy sub-vector extraction instead of element-by-element loops
+        var cParams = parameters.Slice(0, cCount);
+        var vaeParams = parameters.Slice(cCount, vaeCount);
         _conformer.SetParameters(cParams);
         _audioVAE.SetParameters(vaeParams);
     }

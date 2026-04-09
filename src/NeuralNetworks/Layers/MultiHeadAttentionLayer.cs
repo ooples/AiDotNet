@@ -1118,12 +1118,13 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeights.ToArray()),
-            new Vector<T>(_keyWeights.ToArray()),
-            new Vector<T>(_valueWeights.ToArray()),
-            new Vector<T>(_outputWeights.ToArray()),
-            new Vector<T>(_outputBias.ToArray()));
+            Vector<T>.FromMemory(_queryWeights.Data),
+            Vector<T>.FromMemory(_keyWeights.Data),
+            Vector<T>.FromMemory(_valueWeights.Data),
+            Vector<T>.FromMemory(_outputWeights.Data),
+            Vector<T>.FromMemory(_outputBias.Data));
     }
 
     /// <summary>
@@ -1155,28 +1156,19 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
-        int index = 0;
-
         var qLen = qRows * qCols;
         var kLen = kRows * kCols;
         var vLen = vRows * vCols;
         var oLen = oRows * oCols;
 
-        // Write in-place to preserve engine persistent tensor references
-        var qSpan = _queryWeights.Data.Span;
-        for (int i = 0; i < qLen; i++) qSpan[i] = parameters[index++];
-
-        var kSpan = _keyWeights.Data.Span;
-        for (int i = 0; i < kLen; i++) kSpan[i] = parameters[index++];
-
-        var vSpan = _valueWeights.Data.Span;
-        for (int i = 0; i < vLen; i++) vSpan[i] = parameters[index++];
-
-        var oSpan = _outputWeights.Data.Span;
-        for (int i = 0; i < oLen; i++) oSpan[i] = parameters[index++];
-
-        var bSpan = _outputBias.Data.Span;
-        for (int i = 0; i < biasLen; i++) bSpan[i] = parameters[index++];
+        // Bulk copy in-place — preserves engine persistent tensor references
+        var src = parameters.AsSpan();
+        int idx = 0;
+        src.Slice(idx, qLen).CopyTo(_queryWeights.Data.Span); idx += qLen;
+        src.Slice(idx, kLen).CopyTo(_keyWeights.Data.Span); idx += kLen;
+        src.Slice(idx, vLen).CopyTo(_valueWeights.Data.Span); idx += vLen;
+        src.Slice(idx, oLen).CopyTo(_outputWeights.Data.Span); idx += oLen;
+        src.Slice(idx, biasLen).CopyTo(_outputBias.Data.Span);
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_queryWeights);
@@ -1211,12 +1203,13 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     {
         if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
             return new Vector<T>(ParameterCount);
+        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient.ToArray()),
-            new Vector<T>(_keyWeightsGradient.ToArray()),
-            new Vector<T>(_valueWeightsGradient.ToArray()),
-            new Vector<T>(_outputWeightsGradient?.ToArray() ?? new T[_outputWeights.Length]),
-            new Vector<T>(_outputBiasGradient?.ToArray() ?? new T[_outputBias.Length]));
+            Vector<T>.FromMemory(_queryWeightsGradient.Data),
+            Vector<T>.FromMemory(_keyWeightsGradient.Data),
+            Vector<T>.FromMemory(_valueWeightsGradient.Data),
+            _outputWeightsGradient != null ? Vector<T>.FromMemory(_outputWeightsGradient.Data) : new Vector<T>(_outputWeights.Length),
+            _outputBiasGradient != null ? Vector<T>.FromMemory(_outputBiasGradient.Data) : new Vector<T>(_outputBias.Length));
     }
 
     public override void ClearGradients()

@@ -324,6 +324,8 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
 
     private string DecodeOutput(Tensor<T> output, int maxLength)
     {
+        // TODO: Replace per-row argmax with Engine.ArgmaxAxis when a general (non-GPU-only)
+        // version is available. The sequential EOS-break logic requires per-row processing.
         var tokens = new List<int>();
         int seqLen = Math.Min(output.Shape[0], maxLength);
 
@@ -604,24 +606,36 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image._shape);
         double[] means = [0.485, 0.456, 0.406];
         double[] stds = [0.229, 0.224, 0.225];
+
+        // Engine-accelerated per-channel normalization: (x - mean) / std
+        // Process each (batch, channel) slice as a flat tensor for vectorized math
+        var normalized = new Tensor<T>(image._shape);
+        int spatialSize = height * width;
+        var srcSpan = image.Data.Span;
+        var dstSpan = normalized.Data.Span;
 
         for (int b = 0; b < batchSize; b++)
         {
             for (int c = 0; c < channels; c++)
             {
-                double mean = c < means.Length ? means[c] : 0.5;
-                double std = c < stds.Length ? stds[c] : 0.5;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) - mean) / std);
-                    }
-                }
+                T mean = NumOps.FromDouble(c < means.Length ? means[c] : 0.5);
+                T std = NumOps.FromDouble(c < stds.Length ? stds[c] : 0.5);
+
+                int offset = (b * channels + c) * spatialSize;
+
+                // Extract channel slice as a flat tensor
+                var sliceData = new T[spatialSize];
+                srcSpan.Slice(offset, spatialSize).CopyTo(sliceData);
+                var channelTensor = new Tensor<T>(sliceData, [spatialSize]);
+
+                // Engine-accelerated: (channel - mean) / std
+                var centered = Engine.TensorSubtractScalar(channelTensor, mean);
+                var norm = Engine.TensorDivideScalar(centered, std);
+
+                // Copy result back
+                norm.Data.Span.CopyTo(dstSpan.Slice(offset, spatialSize));
             }
         }
         return normalized;
