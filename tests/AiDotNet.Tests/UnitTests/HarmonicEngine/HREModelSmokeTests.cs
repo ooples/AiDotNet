@@ -204,4 +204,78 @@ public class HREModelSmokeTests
         // Should capture ~100% of energy since the signal is exactly 3-sparse
         Assert.True(ratio > 0.99, $"Energy ratio for exact sparsity should be ~1.0, got {ratio}");
     }
+
+    [Fact]
+    public void SpectralHebbianLayer_SerializationRoundTrip_PreservesFilter()
+    {
+        int signalLength = 64;
+        var layer = new AiDotNet.HarmonicEngine.Layers.SpectralHebbianLayer<double>(
+            signalLength, learningRate: 0.01, antiHebbianAlpha: 0.1);
+
+        // Modify the filter by running a Hebbian update
+        var input = new Tensor<double>([signalLength]);
+        for (int i = 0; i < signalLength; i++)
+        {
+            input[i] = Math.Sin(2 * Math.PI * 5 * i / signalLength);
+        }
+        layer.SetTrainingMode(true);
+        layer.Forward(input);
+
+        var target = new Vector<double>(signalLength);
+        for (int i = 0; i < signalLength; i++)
+        {
+            target[i] = 2.0 * Math.Sin(2 * Math.PI * 5 * i / signalLength);
+        }
+        layer.HebbianUpdate(target);
+
+        // Get output before serialization
+        layer.SetTrainingMode(false);
+        var outputBefore = layer.Forward(input);
+
+        // Serialize
+        using var ms = new MemoryStream();
+        using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            layer.Serialize(writer);
+        }
+
+        // Deserialize into a new layer
+        ms.Position = 0;
+        var layer2 = new AiDotNet.HarmonicEngine.Layers.SpectralHebbianLayer<double>(
+            signalLength, learningRate: 0.01, antiHebbianAlpha: 0.1);
+        using (var reader = new BinaryReader(ms))
+        {
+            layer2.Deserialize(reader);
+        }
+
+        // Get output after deserialization
+        layer2.SetTrainingMode(false);
+        var outputAfter = layer2.Forward(input);
+
+        // Outputs should match
+        for (int i = 0; i < signalLength; i++)
+        {
+            Assert.Equal(outputBefore[i], outputAfter[i], 6);
+        }
+    }
+
+    [Fact]
+    public void HREBenchmarkSuite_RunForecasterBenchmark_ProducesResults()
+    {
+        var suite = new AiDotNet.HarmonicEngine.Benchmarks.HREBenchmarkSuite<double>();
+        var gen = new AiDotNet.HarmonicEngine.Benchmarks.SyntheticSignalGenerator<double>(42);
+
+        var timeSeries = gen.GenerateComposite(256, [3, 7, 13], [1.0, 0.5, 0.3], trendSlope: 0.1);
+
+        var results = suite.RunForecasterBenchmark(timeSeries, windowSize: 64, testFraction: 0.2);
+
+        Assert.Equal(3, results.Count); // One per nonlinearity type
+        foreach (var result in results)
+        {
+            Assert.False(string.IsNullOrEmpty(result.Name));
+            Assert.True(result.ParameterCount > 0);
+            Assert.True(result.PredictionCount > 0, $"{result.Name} should make predictions");
+            Assert.False(double.IsNaN(result.MSE), $"{result.Name} MSE should not be NaN");
+        }
+    }
 }

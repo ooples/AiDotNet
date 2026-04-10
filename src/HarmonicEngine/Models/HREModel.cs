@@ -3,6 +3,7 @@ using AiDotNet.HarmonicEngine.Enums;
 using AiDotNet.HarmonicEngine.Layers;
 using AiDotNet.HarmonicEngine.Options;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.HarmonicEngine.Models;
 
@@ -213,8 +214,8 @@ public class HREModel<T>
         // Xavier initialization
         double scale = Math.Sqrt(2.0 / (_options.CarrierCount + _options.OutputSize));
         var rng = _options.Seed.HasValue
-            ? new Random(_options.Seed.Value)
-            : Random.Shared;
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         for (int i = 0; i < _outputWeights.Length; i++)
         {

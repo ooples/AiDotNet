@@ -1,3 +1,5 @@
+using AiDotNet.HarmonicEngine.Interfaces;
+
 namespace AiDotNet.HarmonicEngine.Core;
 
 /// <summary>
@@ -20,8 +22,35 @@ namespace AiDotNet.HarmonicEngine.Core;
 /// This guarantees that second-order IMD products (fi + fj and fi - fj) never collide.
 /// </para>
 /// </remarks>
-public class CarrierAllocator
+public class CarrierAllocator : ICarrierAllocator
 {
+    /// <inheritdoc/>
+    public int MaxCarriers(int fftSize, int maxOrder = 2)
+    {
+        // Estimate max carriers by trying to allocate until failure
+        int maxBin = fftSize / 2;
+        var carriers = new List<int>();
+        var allProducts = new HashSet<int>();
+        var carrierSet = new HashSet<int>();
+
+        for (int candidate = 1; candidate <= maxBin; candidate++)
+        {
+            if (CanAddCarrier(carriers, carrierSet, allProducts, candidate))
+            {
+                foreach (int existing in carriers)
+                {
+                    allProducts.Add(candidate + existing);
+                    allProducts.Add(Math.Abs(candidate - existing));
+                }
+                allProducts.Add(candidate + candidate);
+                carriers.Add(candidate);
+                carrierSet.Add(candidate);
+            }
+        }
+
+        return carriers.Count;
+    }
+
     /// <summary>
     /// Allocates carrier frequency bin indices that are IMD-collision-free up to second order.
     /// Uses a modified Sidon set construction based on quadratic residues.

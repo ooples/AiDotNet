@@ -1,3 +1,4 @@
+using AiDotNet.HarmonicEngine.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.HarmonicEngine.Learning;
@@ -28,12 +29,18 @@ namespace AiDotNet.HarmonicEngine.Learning;
 /// which is the optimal linear filter in the mean-squared-error sense.
 /// </para>
 /// </remarks>
-public class SpectralHebbianRule<T>
+public class SpectralHebbianRule<T> : ISpectralLearningRule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly INumericOperations<Complex<T>> _complexOps;
     private readonly T _learningRate;
     private readonly T _antiHebbianAlpha;
+
+    /// <inheritdoc/>
+    public string Name => "SpectralHebbian";
+
+    /// <inheritdoc/>
+    public double LearningRate => _numOps.ToDouble(_learningRate);
 
     /// <summary>
     /// Initializes a new spectral Hebbian learning rule.
