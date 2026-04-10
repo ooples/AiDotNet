@@ -70,7 +70,7 @@ public class OFDMLayer<T> : LayerBase<T>
 
         _activation = nonlinearity switch
         {
-            NonlinearityType.ModReLU => new ModReLUActivation<T>(),
+            NonlinearityType.ModReLU => new ModReLUActivation<T>(bias: -0.001),
             NonlinearityType.SpectralGating => new SpectralGatingActivation<T>(),
             NonlinearityType.InstantaneousFreq => new InstantaneousFreqActivation<T>(),
             _ => new SpectralGatingActivation<T>()
