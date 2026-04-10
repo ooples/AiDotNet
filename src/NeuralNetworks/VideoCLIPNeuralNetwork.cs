@@ -1095,7 +1095,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             var pooled2d = Engine.Reshape(pooled, [1, pooled.Shape[0]]);
             var projected = _videoProjection.Forward(pooled2d);
             // Extract [embeddingDim] from [1, embeddingDim]
-            pooled = projected.Reshape(projected.Shape[^1]);
+            pooled = Engine.Reshape(projected, [projected.Shape[^1]]);
         }
 
         // Cache pre-normalized embedding for backward L2 norm Jacobian
@@ -1289,7 +1289,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         var projected = _textProjection.Forward(pooled2d);
 
         // Extract [embeddingDim] from [1, embeddingDim]
-        var result = projected.Reshape(projected.Shape[^1]);
+        var result = Engine.Reshape(projected, [projected.Shape[^1]]);
 
         // L2 normalize via Engine ops
         return NormalizeTensor(result);
