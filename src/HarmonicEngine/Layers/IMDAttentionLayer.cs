@@ -86,28 +86,20 @@ public class IMDAttentionLayer<T> : LayerBase<T>
         // Step 1: Encode features onto carriers
         var encoded = _bus.Encode(features);
 
-        // Step 2: Apply quadratic nonlinearity (x^2) to generate IMD products
-        var squared = new Vector<T>(encoded.Length);
-        for (int i = 0; i < encoded.Length; i++)
-        {
-            squared[i] = NumOps.Multiply(encoded[i], encoded[i]);
-        }
+        // Step 2: Apply quadratic nonlinearity (x^2) via Engine element-wise multiply
+        var squared = Engine.Multiply(encoded, encoded);
 
         // Step 3: Extract attention weights from IMD products
         _lastAttentionWeights = _extractor.ExtractAttentionWeights(squared);
 
-        // Step 4: Compute weighted sum (attention output)
-        // output[i] = sum_j(attention[i,j] * value[j])
-        // Here, value = features (self-attention)
+        // Step 4: Compute weighted sum via Engine.DotProduct per output row
+        // output[i] = DotProduct(attention_row_i, features) — vectorized inner product
         var output = new Tensor<T>([_numCarriers]);
         for (int i = 0; i < _numCarriers; i++)
         {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < _numCarriers; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(_lastAttentionWeights[i, j], features[j]));
-            }
-            output[i] = sum;
+            var attnRow = new Vector<T>(_numCarriers);
+            for (int j = 0; j < _numCarriers; j++) attnRow[j] = _lastAttentionWeights[i, j];
+            output[i] = Engine.DotProduct(attnRow, features);
         }
 
         return output;

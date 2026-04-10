@@ -91,17 +91,24 @@ public class SpectralGatingActivation<T> : ActivationFunctionBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        var output = new Tensor<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            output[i] = Activate(input[i]);
-        }
-        return output;
+        // Vectorized: output = input * sigmoid(weight * |input| + bias)
+        // sigmoid(x) = 1 / (1 + exp(-x))
+        var absInput = Engine.TensorAbs(input);
+        var scaled = Engine.TensorMultiplyScalar(absInput, _weight);
+        var gateInput = Engine.TensorAddScalar(scaled, _bias);
+        var negGate = Engine.TensorMultiplyScalar(gateInput, NumOps.Negate(NumOps.One));
+        var expNeg = Engine.TensorExp(negGate);
+        var onePlusExp = Engine.TensorAddScalar(expNeg, NumOps.One);
+        var ones = new Tensor<T>(input._shape);
+        Engine.TensorFill(ones, NumOps.One);
+        var gate = Engine.TensorDivide(ones, onePlusExp);
+        return Engine.TensorMultiply(input, gate);
     }
 
     /// <inheritdoc/>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
+        // Per-element derivative (product rule involves sign, keep scalar for correctness)
         var output = new Tensor<T>(input._shape);
         for (int i = 0; i < input.Length; i++)
         {

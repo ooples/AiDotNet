@@ -94,22 +94,21 @@ public class ModReLUActivation<T> : ActivationFunctionBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        var output = new Tensor<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            output[i] = Activate(input[i]);
-        }
-        return output;
+        // Vectorized: f(x) = x * ReLU(|x| + b) / (|x| + eps)
+        var absInput = Engine.TensorAbs(input);
+        var gateInput = Engine.TensorAddScalar(absInput, _bias);
+        var gate = Engine.ReLU(gateInput);
+        var denom = Engine.TensorAddScalar(absInput, _epsilon);
+        var scaled = Engine.TensorDivide(gate, denom);
+        return Engine.TensorMultiply(input, scaled);
     }
 
     /// <inheritdoc/>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        var output = new Tensor<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            output[i] = Derivative(input[i]);
-        }
-        return output;
+        // Vectorized: 1 where |x| + bias > 0, else 0
+        var absInput = Engine.TensorAbs(input);
+        var gateInput = Engine.TensorAddScalar(absInput, _bias);
+        return Engine.TensorGreaterThan(gateInput, NumOps.Zero);
     }
 }

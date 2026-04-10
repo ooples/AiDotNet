@@ -134,19 +134,23 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             current = _attentionLayer.Forward(current);
         }
 
-        // Stage 4: Output projection (linear map from carrier features to output)
+        // Stage 4: Output projection via Engine.DotProduct per output dimension
         var output = new Tensor<T>([_options.OutputSize]);
         int carrierCount = Math.Min(current.Length, _options.CarrierCount);
 
+        // Extract features as Vector for DotProduct
+        var featureVec = new Vector<T>(carrierCount);
+        for (int i = 0; i < carrierCount; i++) featureVec[i] = current[i];
+
         for (int o = 0; o < _options.OutputSize; o++)
         {
-            T sum = _outputBias;
-            for (int i = 0; i < carrierCount; i++)
-            {
-                sum = NumOps.Add(sum,
-                    NumOps.Multiply(_outputWeights[o * _options.CarrierCount + i], current[i]));
-            }
-            output[o] = sum;
+            // Extract weight row for this output
+            var weightRow = new Vector<T>(carrierCount);
+            int offset = o * _options.CarrierCount;
+            for (int i = 0; i < carrierCount; i++) weightRow[i] = _outputWeights[offset + i];
+
+            // Vectorized dot product + bias
+            output[o] = NumOps.Add(Engine.DotProduct(weightRow, featureVec), _outputBias);
         }
 
         return output;

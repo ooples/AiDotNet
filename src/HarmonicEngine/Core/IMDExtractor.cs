@@ -1,4 +1,5 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.HarmonicEngine.Core;
 
@@ -165,33 +166,24 @@ public class IMDExtractor<T>
         int n = _carriers.Length;
         var weights = new Matrix<T>(n, n);
 
-        // Softmax per row
+        var engine = AiDotNetEngine.Current;
+
+        // Softmax per row using Engine vectorized operations
         for (int i = 0; i < n; i++)
         {
-            // Find max for numerical stability
-            T maxVal = interactions[i, 0];
-            for (int j = 1; j < n; j++)
-            {
-                var val = interactions[i, j];
-                if (_numOps.ToDouble(val) > _numOps.ToDouble(maxVal))
-                    maxVal = val;
-            }
+            // Extract row as Tensor for Engine acceleration
+            var row = new Tensor<T>([n]);
+            for (int j = 0; j < n; j++) row[j] = interactions[i, j];
 
-            // Compute exp(x - max) and sum
-            T sumExp = _numOps.Zero;
-            for (int j = 0; j < n; j++)
-            {
-                var expVal = _numOps.FromDouble(
-                    Math.Exp(_numOps.ToDouble(_numOps.Subtract(interactions[i, j], maxVal))));
-                weights[i, j] = expVal;
-                sumExp = _numOps.Add(sumExp, expVal);
-            }
+            // Numerically stable softmax: subtract max, exp, normalize
+            T maxVal = engine.TensorMaxValue(row);
+            var shifted = engine.TensorSubtractScalar(row, maxVal);
+            var expValues = engine.TensorExp(shifted);
+            T sumExp = engine.TensorSum(expValues);
+            var normalized = engine.TensorDivideScalar(expValues, sumExp);
 
-            // Normalize
-            for (int j = 0; j < n; j++)
-            {
-                weights[i, j] = _numOps.Divide(weights[i, j], sumExp);
-            }
+            // Write back
+            for (int j = 0; j < n; j++) weights[i, j] = normalized[j];
         }
 
         return weights;
