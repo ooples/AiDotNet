@@ -494,6 +494,13 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 _tapeV[param] = v;
             }
 
+            // Reshape gradient to match parameter shape if element counts match
+            // (can happen when Reshape adds/removes batch dimensions in forward pass)
+            if (!param._shape.SequenceEqual(grad._shape) && param.Length == grad.Length)
+            {
+                grad = Engine.Reshape(grad, param._shape);
+            }
+
             // m = beta1 * m + (1 - beta1) * grad  (engine-accelerated)
             var mScaled = Engine.TensorMultiplyScalar(m, beta1);
             var gradScaled = Engine.TensorMultiplyScalar(grad, oneMinusBeta1);
