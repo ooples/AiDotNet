@@ -450,5 +450,46 @@ public enum ActivationFunction
     /// LiSHT is useful when you need a self-regularizing activation function with good gradient properties.
     /// </para>
     /// </remarks>
-    LiSHT
+    LiSHT,
+
+    /// <summary>
+    /// Modified ReLU for complex/spectral signals — thresholds by magnitude while preserving phase.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ModReLU extends ReLU to work with oscillating signals by thresholding
+    /// based on absolute magnitude rather than sign. Small oscillations (noise) are zeroed out
+    /// while large oscillations pass through with their sign preserved.
+    /// Formula: f(x) = x * max(0, |x| + b) / max(|x|, epsilon)
+    /// Used in the Harmonic Resonance Engine architecture.
+    /// </para>
+    /// </remarks>
+    ModReLU,
+
+    /// <summary>
+    /// Input-dependent spectral gate — each value is scaled by a learned sigmoid of its magnitude.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Spectral Gating learns which signal amplitudes to pass and which to block.
+    /// Each value gets a gate between 0 (block) and 1 (pass) based on its magnitude.
+    /// Formula: f(x) = x * sigmoid(w * |x| + b)
+    /// Used in the Harmonic Resonance Engine architecture.
+    /// </para>
+    /// </remarks>
+    SpectralGating,
+
+    /// <summary>
+    /// Modulates a signal by its instantaneous frequency — the rate of phase change via Hilbert transform.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This activation detects whether oscillations in the signal are speeding up
+    /// or slowing down. It computes instantaneous frequency via the Hilbert transform and uses
+    /// the frequency deviation to modulate the signal. Especially powerful for time-series data
+    /// where cycle dynamics carry important information.
+    /// Used in the Harmonic Resonance Engine architecture.
+    /// </para>
+    /// </remarks>
+    InstantaneousFreq
 }
