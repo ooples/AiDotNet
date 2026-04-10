@@ -1071,7 +1071,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
             // 1D input [features]: treat as single timestep, single batch → [1, 1, features]
             batchSize = 1;
             timeSteps = 1;
-            input3D = input.Reshape([1, 1, input.Shape[0]]);
+            input3D = Engine.Reshape(input, [1, 1, input.Shape[0]]);
         }
         else if (rank == 2)
         {
@@ -1079,7 +1079,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
             batchSize = 1;
             timeSteps = input.Shape[0];
             int featureSize = input.Shape[1];
-            input3D = input.Reshape([1, timeSteps, featureSize]);
+            input3D = Engine.Reshape(input, [1, timeSteps, featureSize]);
         }
         else if (rank == 3)
         {
@@ -1096,7 +1096,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
             for (int d = 0; d < rank - 2; d++)
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
-            input3D = input.Reshape([flatBatch, timeSteps, _inputSize]);
+            input3D = Engine.Reshape(input, [flatBatch, timeSteps, _inputSize]);
         }
 
         _lastInput = input3D;
@@ -1119,10 +1119,10 @@ public partial class LSTMLayer<T> : LayerBase<T>
         var WihT = Engine.TensorTranspose(_weightsIh);
         var WchT = Engine.TensorTranspose(_weightsCh);
         var WohT = Engine.TensorTranspose(_weightsOh);
-        var biasF2D = _biasF.Reshape([1, _hiddenSize]);
-        var biasI2D = _biasI.Reshape([1, _hiddenSize]);
-        var biasC2D = _biasC.Reshape([1, _hiddenSize]);
-        var biasO2D = _biasO.Reshape([1, _hiddenSize]);
+        var biasF2D = Engine.Reshape(_biasF, [1, _hiddenSize]);
+        var biasI2D = Engine.Reshape(_biasI, [1, _hiddenSize]);
+        var biasC2D = Engine.Reshape(_biasC, [1, _hiddenSize]);
+        var biasO2D = Engine.Reshape(_biasO, [1, _hiddenSize]);
 
         for (int t = 0; t < timeSteps; t++)
         {
@@ -1181,12 +1181,12 @@ public partial class LSTMLayer<T> : LayerBase<T>
                 newShape[d] = _originalInputShape[d];
             newShape[_originalInputShape.Length - 2] = timeSteps;
             newShape[_originalInputShape.Length - 1] = _hiddenSize;
-            output = output.Reshape(newShape);
+            output = Engine.Reshape(output, newShape);
         }
         else if (_originalInputShape != null && _originalInputShape.Length == 2)
         {
             // 2D input -> 2D output (remove added batch dim)
-            output = output.Reshape([timeSteps, _hiddenSize]);
+            output = Engine.Reshape(output, [timeSteps, _hiddenSize]);
         }
 
         return output;
@@ -1823,10 +1823,10 @@ public partial class LSTMLayer<T> : LayerBase<T>
         // Forward pass calculations (needed for backward pass)
         // concat has shape [batchSize, inputSize + hiddenSize]
         var concat = Tensor<T>.Concatenate(new[] { x, prev_h }, 1);
-        var biasF2D = _biasF.Reshape([1, _hiddenSize]);
-        var biasI2D = _biasI.Reshape([1, _hiddenSize]);
-        var biasC2D = _biasC.Reshape([1, _hiddenSize]);
-        var biasO2D = _biasO.Reshape([1, _hiddenSize]);
+        var biasF2D = Engine.Reshape(_biasF, [1, _hiddenSize]);
+        var biasI2D = Engine.Reshape(_biasI, [1, _hiddenSize]);
+        var biasC2D = Engine.Reshape(_biasC, [1, _hiddenSize]);
+        var biasO2D = Engine.Reshape(_biasO, [1, _hiddenSize]);
 
         // For LSTM gate computation: f = σ(concat @ W^T + b)
         // W_fi has shape [hiddenSize, inputSize], W_fh has shape [hiddenSize, hiddenSize]
