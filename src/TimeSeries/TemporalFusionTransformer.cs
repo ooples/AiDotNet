@@ -171,10 +171,9 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 
         // Per Lim et al. 2021: train ALL parameters through backpropagation
         var allParams = CollectAllTrainableParameters();
-        var optimizer = _optimizer ?? (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>)
-            new AdamOptimizer<T, Matrix<T>, Vector<T>>(
-                null, new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
-                { InitialLearningRate = _options.LearningRate });
+        var optimizer = _optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            null, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate });
         var mseLoss = new MeanSquaredErrorLoss<T>();
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
