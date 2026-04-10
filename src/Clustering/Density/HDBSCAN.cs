@@ -178,7 +178,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
         (_condensedTree, finalParent) = BuildCondensedTree(mst, n, _options.MinClusterSize);
 
         // Step 6: Extract clusters
-        var clusterLabels = ExtractClusters(_condensedTree, n, _options.ClusterSelection, finalParent);
+        var clusterLabels = ExtractClusters(_condensedTree, n, _options.ClusterSelection, _options.AllowSingleCluster, finalParent);
 
         // Compute probabilities and outlier scores
         ComputeProbabilitiesAndOutlierScores(clusterLabels, _condensedTree, n);
@@ -514,7 +514,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
         }
     }
 
-    private int[] ExtractClusters(List<CondensedTreeNode> condensedTree, int n, HDBSCANClusterSelection method, int[]? ufParent = null)
+    private int[] ExtractClusters(List<CondensedTreeNode> condensedTree, int n, HDBSCANClusterSelection method, bool allowSingleCluster = false, int[]? ufParent = null)
     {
         var labels = new int[n];
         for (int i = 0; i < n; i++)
@@ -628,6 +628,16 @@ public class HDBSCAN<T> : ClusteringBase<T>
                     // Propagate child stability
                     stability[cluster] = childStability;
                 }
+            }
+
+            // Per Campello et al. 2013: if AllowSingleCluster and EOM selected 0 or 1 cluster,
+            // the root cluster is a valid result (all data = one cluster).
+            if (allowSingleCluster && selectedClusters.Count == 0 && clusterList.Count > 0)
+            {
+                // Select root — the cluster with smallest ID in the condensed tree
+                // (processed last in descending order)
+                var rootCluster = clusterList[^1];
+                selectedClusters.Add(rootCluster);
             }
 
             // Assign labels based on selected clusters
