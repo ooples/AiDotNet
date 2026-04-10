@@ -285,8 +285,9 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                     // Create target tensor (scalar)
                     var targetTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { target }));
 
-                    // Re-collect params (cache hit on second+ call)
-                    trainableParams = Training.TapeTrainingStep<T>.CollectParameters(allBlocks, 0);
+                    // Re-collect params — use version -1 to avoid ThreadStatic cache
+                    // returning stale parameters from a different model on the same thread
+                    trainableParams = Training.TapeTrainingStep<T>.CollectParameters(allBlocks, -1);
 
                     // Forward + backward under gradient tape
                     using var tape = new GradientTape<T>();
