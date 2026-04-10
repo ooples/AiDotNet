@@ -877,7 +877,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]
             _addedBatchDimension = true;
-            input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
+            input4D = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
         }
         else if (rank == 4)
         {
@@ -892,7 +892,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < rank - 3; d++)
                 flatBatch *= input.Shape[d];
-            input4D = input.Reshape(flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]);
+            input4D = Engine.Reshape(input, [flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
         // Validate input channels
@@ -928,7 +928,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         {
             // Single fused call: output = activation(conv(input, kernel) + bias)
             // Reshape bias to [1, C, 1, 1] for proper broadcasting with conv output [B, C, H, W]
-            _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
+            _biasReshaped4D ??= Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
             result = Engine.FusedConv2D(_lastInput, _kernels, _biasReshaped4D,
                 Stride, Stride, Padding, Padding, 1, 1, fusedActivation);
         }
@@ -938,7 +938,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             Engine.Conv2DInto(_preAllocatedOutput, _lastInput, _kernels, Stride, Padding, dilation: 1);
             var output = _preAllocatedOutput;
 
-            _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
+            _biasReshaped4D ??= Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
             Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
 
             result = ApplyActivation(output);
@@ -960,13 +960,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 3] = OutputDepth;
             outputShape[_originalInputShape.Length - 2] = result.Shape[2];
             outputShape[_originalInputShape.Length - 1] = result.Shape[3];
-            return result.Reshape(outputShape);
+            return Engine.Reshape(result, outputShape);
         }
         if (_addedBatchDimension)
         {
             // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
             // Remove the batch dimension we added
-            return result.Reshape([OutputDepth, result.Shape[2], result.Shape[3]]);
+            return Engine.Reshape(result, [OutputDepth, result.Shape[2], result.Shape[3]]);
         }
 
         return result;
@@ -1017,7 +1017,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]
             _addedBatchDimension = true;
-            input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+            input4D = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
         }
         else if (rank == 4)
         {
@@ -1034,7 +1034,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             {
                 flatBatch *= input.Shape[d];
             }
-            input4D = input.Reshape([flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+            input4D = Engine.Reshape(input, [flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
         // Validate input channels
@@ -1083,13 +1083,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 3] = OutputDepth;
             outputShape[_originalInputShape.Length - 2] = result.Shape[2];
             outputShape[_originalInputShape.Length - 1] = result.Shape[3];
-            return result.Reshape(outputShape);
+            return Engine.Reshape(result, outputShape);
         }
 
         if (_addedBatchDimension)
         {
             // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
-            return result.Reshape([OutputDepth, result.Shape[2], result.Shape[3]]);
+            return Engine.Reshape(result, [OutputDepth, result.Shape[2], result.Shape[3]]);
         }
 
         return result;
