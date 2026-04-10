@@ -520,6 +520,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             var scaledUpdate = Engine.TensorMultiplyScalar(update, CurrentLearningRate);
             Engine.TensorSubtractInPlace(param, scaledUpdate);
         }
+
     }
 
     /// <para>

@@ -244,8 +244,8 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Ensure input is a column vector [lookbackWindow, 1]
-        var x = input.Reshape(_lookbackWindow, 1);
+        // Use Engine.Reshape for tape-tracked reshaping
+        var x = Engine.Reshape(input, [_lookbackWindow, 1]);
 
         // Pass through hidden layers with ReLU
         for (int layer = 0; layer < _numHiddenLayers; layer++)
@@ -253,7 +253,7 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
             // Linear: y = W @ x + b
             var linear = Engine.TensorMatMul(_fcWeights[layer], x);
             // Add bias: reshape bias to column [hidden, 1]
-            var biasCol = _fcBiases[layer].Reshape(_hiddenLayerSize, 1);
+            var biasCol = Engine.Reshape(_fcBiases[layer], [_hiddenLayerSize, 1]);
             linear = Engine.TensorAdd(linear, biasCol);
             // ReLU activation
             x = Engine.ReLU(linear);
@@ -262,13 +262,13 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         // Compute theta for backcast: [thetaSizeBackcast, 1]
         int backcastLayerIdx = _numHiddenLayers;
         var thetaBackcast = Engine.TensorMatMul(_fcWeights[backcastLayerIdx], x);
-        var bcBiasCol = _fcBiases[backcastLayerIdx].Reshape(_thetaSizeBackcast, 1);
+        var bcBiasCol = Engine.Reshape(_fcBiases[backcastLayerIdx], [_thetaSizeBackcast, 1]);
         thetaBackcast = Engine.TensorAdd(thetaBackcast, bcBiasCol);
 
         // Compute theta for forecast: [thetaSizeForecast, 1]
         int forecastLayerIdx = _numHiddenLayers + 1;
         var thetaForecast = Engine.TensorMatMul(_fcWeights[forecastLayerIdx], x);
-        var fcBiasCol = _fcBiases[forecastLayerIdx].Reshape(_thetaSizeForecast, 1);
+        var fcBiasCol = Engine.Reshape(_fcBiases[forecastLayerIdx], [_thetaSizeForecast, 1]);
         thetaForecast = Engine.TensorAdd(thetaForecast, fcBiasCol);
 
         // Basis expansion: backcast = B_backcast @ theta_backcast
@@ -277,8 +277,8 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         var forecast = Engine.TensorMatMul(_basisForecast, thetaForecast); // [forecastHorizon, 1]
 
         // Concatenate backcast and forecast into output: flatten to 1D
-        var backcastFlat = backcast.Reshape(_lookbackWindow);
-        var forecastFlat = forecast.Reshape(_forecastHorizon);
+        var backcastFlat = Engine.Reshape(backcast, [_lookbackWindow]);
+        var forecastFlat = Engine.Reshape(forecast, [_forecastHorizon]);
 
         // Engine.TensorConcatenate along axis 0 is a 1:1 replacement for the scalar
         // copy loop: it produces the same [lookbackWindow + forecastHorizon] 1D tensor
@@ -294,14 +294,14 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
     /// </summary>
     public (Tensor<T> backcast, Tensor<T> forecast) ForwardTape(Tensor<T> input)
     {
-        // Ensure input is a column vector [lookbackWindow, 1]
-        var x = input.Reshape(_lookbackWindow, 1);
+        // Use Engine.Reshape (tape-tracked) instead of tensor.Reshape (not tracked)
+        var x = Engine.Reshape(input, [_lookbackWindow, 1]);
 
         // Pass through hidden layers with ReLU
         for (int layer = 0; layer < _numHiddenLayers; layer++)
         {
             var linear = Engine.TensorMatMul(_fcWeights[layer], x);
-            var biasCol = _fcBiases[layer].Reshape(_hiddenLayerSize, 1);
+            var biasCol = Engine.Reshape(_fcBiases[layer], [_hiddenLayerSize, 1]);
             linear = Engine.TensorAdd(linear, biasCol);
             x = Engine.ReLU(linear);
         }
@@ -309,18 +309,20 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         // Compute theta for backcast
         int backcastLayerIdx = _numHiddenLayers;
         var thetaBackcast = Engine.TensorMatMul(_fcWeights[backcastLayerIdx], x);
-        var bcBiasCol = _fcBiases[backcastLayerIdx].Reshape(_thetaSizeBackcast, 1);
+        var bcBiasCol = Engine.Reshape(_fcBiases[backcastLayerIdx], [_thetaSizeBackcast, 1]);
         thetaBackcast = Engine.TensorAdd(thetaBackcast, bcBiasCol);
 
         // Compute theta for forecast
         int forecastLayerIdx = _numHiddenLayers + 1;
         var thetaForecast = Engine.TensorMatMul(_fcWeights[forecastLayerIdx], x);
-        var fcBiasCol = _fcBiases[forecastLayerIdx].Reshape(_thetaSizeForecast, 1);
+        var fcBiasCol = Engine.Reshape(_fcBiases[forecastLayerIdx], [_thetaSizeForecast, 1]);
         thetaForecast = Engine.TensorAdd(thetaForecast, fcBiasCol);
 
-        // Basis expansion
-        var backcast = Engine.TensorMatMul(_basisBackcast, thetaBackcast).Reshape(_lookbackWindow);
-        var forecast = Engine.TensorMatMul(_basisForecast, thetaForecast).Reshape(_forecastHorizon);
+        // Basis expansion — use Engine.Reshape for tape-tracked reshape
+        var backcastRaw = Engine.TensorMatMul(_basisBackcast, thetaBackcast);
+        var backcast = Engine.Reshape(backcastRaw, [_lookbackWindow]);
+        var forecastRaw = Engine.TensorMatMul(_basisForecast, thetaForecast);
+        var forecast = Engine.Reshape(forecastRaw, [_forecastHorizon]);
 
         return (backcast, forecast);
     }

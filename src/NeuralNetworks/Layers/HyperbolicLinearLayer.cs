@@ -190,7 +190,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         {
             batchSize = 1;
             inputLen = input.Shape[0];
-            inputTensor = input.Reshape([1, inputLen]);
+            inputTensor = Engine.Reshape(input, [1, inputLen]);
         }
         else if (input.Rank == 2)
         {
@@ -207,7 +207,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
             }
             batchSize = flatBatch;
             inputLen = input.Shape[input.Rank - 1];
-            inputTensor = input.Reshape([batchSize, inputLen]);
+            inputTensor = Engine.Reshape(input, [batchSize, inputLen]);
         }
 
         // Validate input shape
@@ -237,11 +237,11 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
             _lastOutput = linear;
             var euclideanOut = ApplyActivation(linear);
             if (_originalInputShape == null || _originalInputShape.Length == 2) return euclideanOut;
-            if (_originalInputShape.Length == 1) return euclideanOut.Reshape([OutputFeatures]);
+            if (_originalInputShape.Length == 1) return Engine.Reshape(euclideanOut, [OutputFeatures]);
             var eucOutShape = new int[_originalInputShape.Length];
             for (int d = 0; d < _originalInputShape.Length - 1; d++) eucOutShape[d] = _originalInputShape[d];
             eucOutShape[_originalInputShape.Length - 1] = OutputFeatures;
-            return euclideanOut.Reshape(eucOutShape);
+            return Engine.Reshape(euclideanOut, eucOutShape);
         }
         T sqrtC = NumOps.Sqrt(c);
         T eps = NumOps.FromDouble(1e-7);
@@ -302,7 +302,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         // Step 7: Add scalar bias per output — _biases is [outputFeatures]
         // Per Ganea et al. 2018, the Möbius matmul output is a point in the Poincaré ball.
         // Output the ball coordinates directly (not distance-from-origin, which would be scalar).
-        var bias2D = _biases.Reshape([1, OutputFeatures]);
+        var bias2D = Engine.Reshape(_biases, [1, OutputFeatures]);
         var output = Engine.TensorBroadcastAdd(resultInBall, bias2D); // [batch, outputFeatures]
 
         // Project back into Poincaré ball: if ||x|| >= maxNorm, scale x to maxNorm * x/||x||
@@ -328,7 +328,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
 
         if (_originalInputShape.Length == 1)
         {
-            return activated.Reshape([OutputFeatures]);
+            return Engine.Reshape(activated, [OutputFeatures]);
         }
 
         var outputShape = new int[_originalInputShape.Length];
@@ -337,7 +337,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
             outputShape[d] = _originalInputShape[d];
         }
         outputShape[_originalInputShape.Length - 1] = OutputFeatures;
-        return activated.Reshape(outputShape);
+        return Engine.Reshape(activated, outputShape);
     }
 
     // ForwardGpu removed — Tensor<T> is natively GPU-resident.
@@ -559,20 +559,14 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         var paramArray = new T[ParameterCount];
         int idx = 0;
 
-        // Flatten weights
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            for (int i = 0; i < InputFeatures; i++)
-            {
-                paramArray[idx++] = _weights[o, i];
-            }
-        }
+        // Use Data.Span for direct access — avoids any indexer overhead
+        var wSpan = _weights.Data.Span;
+        for (int j = 0; j < wSpan.Length && idx < paramArray.Length; j++)
+            paramArray[idx++] = wSpan[j];
 
-        // Flatten biases (scalar per output)
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            paramArray[idx++] = _biases[o];
-        }
+        var bSpan = _biases.Data.Span;
+        for (int j = 0; j < bSpan.Length && idx < paramArray.Length; j++)
+            paramArray[idx++] = bSpan[j];
 
         return new Vector<T>(paramArray);
     }
