@@ -691,7 +691,7 @@ public partial class GRULayer<T> : LayerBase<T>
             }
             else
             {
-                input3D = input.Reshape([1, sequenceLength, _inputSize]);
+                input3D = Engine.Reshape(input, [1, sequenceLength, _inputSize]);
             }
         }
         else if (rank == 3)
@@ -813,7 +813,7 @@ public partial class GRULayer<T> : LayerBase<T>
             }
             else
             {
-                input3D = input.Reshape([flatBatch, sequenceLength, _inputSize]);
+                input3D = Engine.Reshape(input, [flatBatch, sequenceLength, _inputSize]);
             }
         }
 
@@ -854,7 +854,7 @@ public partial class GRULayer<T> : LayerBase<T>
         for (int t = 0; t < sequenceLength; t++)
         {
             // Extract current time step input: slice axis 1 (sequence) at timestep t
-            var xt = input3D.Slice(1, t, t + 1).Reshape([batchSize, _inputSize]);
+            var xt = Engine.Reshape(input3D.Slice(1, t, t + 1), [batchSize, _inputSize]);
 
             var z = ApplyActivation(Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WzT), Engine.TensorMatMul(currentHiddenState, UzT)), _bz), true);
             var r = ApplyActivation(Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WrT), Engine.TensorMatMul(currentHiddenState, UrT)), _br), true);
@@ -903,7 +903,7 @@ public partial class GRULayer<T> : LayerBase<T>
         {
             // Each hidden state is [batchSize, hiddenSize]
             // Concatenate along axis 1, then reshape to [batchSize, sequenceLength, hiddenSize]
-            output = Tensor<T>.Concatenate([.. _allHiddenStates], 1).Reshape([batchSize, sequenceLength, _hiddenSize]);
+            output = Engine.Reshape(Tensor<T>.Concatenate([.. _allHiddenStates], 1), [batchSize, sequenceLength, _hiddenSize]);
         }
         else
         {
@@ -931,12 +931,12 @@ public partial class GRULayer<T> : LayerBase<T>
                     newShape[d] = _originalInputShape[d];
                 newShape[_originalInputShape.Length - 2] = _hiddenSize;
             }
-            output = output.Reshape(newShape);
+            output = Engine.Reshape(output, newShape);
         }
         else if (_originalInputShape != null && _originalInputShape.Length == 2 && !_returnSequences)
         {
             // 2D input -> 1D output (remove batch dim)
-            output = output.Reshape([_hiddenSize]);
+            output = Engine.Reshape(output, [_hiddenSize]);
         }
 
         return output;

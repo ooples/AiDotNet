@@ -362,7 +362,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         _inputWas1D = input.Shape.Length == 1;
         if (_inputWas1D)
         {
-            input = input.Reshape(1, input.Length);
+            input = Engine.Reshape(input, [1, input.Length]);
         }
 
         _lastInput = input;
@@ -418,7 +418,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             // Preserve original rank
             if (_inputWas1D)
             {
-                output = output.Reshape(output.Length);
+                output = Engine.Reshape(output, [output.Length]);
             }
 
             return output;
@@ -454,7 +454,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             // Preserve original rank
             if (_inputWas1D)
             {
-                result = result.Reshape(result.Length);
+                result = Engine.Reshape(result, [result.Length]);
             }
 
             return result;
@@ -482,8 +482,8 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         for (int d = 2; d < rank; d++)
             broadcastShape[d] = 1;       // spatial
 
-        var scaleReshaped = scale.Reshape(broadcastShape);
-        var shiftReshaped = shift.Reshape(broadcastShape);
+        var scaleReshaped = Engine.Reshape(scale, broadcastShape);
+        var shiftReshaped = Engine.Reshape(shift, broadcastShape);
 
         // Vectorized: output = input * scale + shift
         var scaled = Engine.TensorBroadcastMultiply(input, scaleReshaped);

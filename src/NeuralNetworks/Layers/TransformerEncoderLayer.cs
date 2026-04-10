@@ -459,11 +459,11 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (rank == 1)
         {
             // 1D [features] → [1, 1, features] (single batch, single token)
-            input3D = input.Reshape(1, 1, input.Shape[0]);
+            input3D = Engine.Reshape(input, [1, 1, input.Shape[0]]);
         }
         else if (_inputWas2D)
         {
-            input3D = input.Reshape(1, input.Shape[0], input.Shape[1]);
+            input3D = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1]]);
         }
         else if (rank == 3)
         {
@@ -475,7 +475,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             int flatBatch = 1;
             for (int d = 0; d < rank - 2; d++)
                 flatBatch *= input.Shape[d];
-            input3D = input.Reshape(flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]);
+            input3D = Engine.Reshape(input, [flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
         var attention = _selfAttention.Forward(input3D);
@@ -497,11 +497,11 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_originalInputShape != null && _originalInputShape.Length == 1)
         {
             // 1D input → 1D output
-            output = output.Reshape(output.Shape[2]);
+            output = Engine.Reshape(output, [output.Shape[2]]);
         }
         else if (_inputWas2D)
         {
-            output = output.Reshape(output.Shape[1], output.Shape[2]);
+            output = Engine.Reshape(output, [output.Shape[1], output.Shape[2]]);
         }
         else if (_originalInputShape != null && _originalInputShape.Length > 3)
         {
@@ -511,7 +511,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 outputShape[d] = _originalInputShape[d];
             outputShape[_originalInputShape.Length - 2] = output.Shape[1];
             outputShape[_originalInputShape.Length - 1] = output.Shape[2];
-            output = output.Reshape(outputShape);
+            output = Engine.Reshape(output, outputShape);
         }
 
         return output;

@@ -808,7 +808,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (input.Rank == 1)
         {
             // 1D input [features]: reshape to [1, features]
-            flattenedInput = input.Reshape(1, inputSize);
+            flattenedInput = Engine.Reshape(input, [1, inputSize]);
             batchDim = 1;
         }
         else if (input.Rank == 2)
@@ -826,7 +826,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             {
                 batchDim *= input.Shape[i];
             }
-            flattenedInput = input.Reshape(batchDim, inputSize);
+            flattenedInput = Engine.Reshape(input, [batchDim, inputSize]);
         }
 
         // Forward: output = Activation(input @ weights + biases)
@@ -860,7 +860,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (input.Rank == 1)
         {
             // 1D input: return 1D output [outputSize]
-            result = result.Reshape(OutputShape[0]);
+            result = Engine.Reshape(result, [OutputShape[0]]);
         }
         else if (input.Rank > 2)
         {
@@ -871,7 +871,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 outputShape[i] = _originalInputShape[i];
             }
             outputShape[^1] = OutputShape[0];
-            result = result.Reshape(outputShape);
+            result = Engine.Reshape(result, outputShape);
         }
         // 2D input: result is already [batch, outputSize]
 
@@ -952,11 +952,11 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         Tensor<T> input2D = input;
         if (needsReshape && input.Shape.Length > 2)
         {
-            input2D = input.Reshape([batchDim, actualInputSize]);
+            input2D = Engine.Reshape(input, [batchDim, actualInputSize]);
         }
         else if (needsReshape && input.Shape.Length == 1)
         {
-            input2D = input.Reshape([1, actualInputSize]);
+            input2D = Engine.Reshape(input, [1, actualInputSize]);
         }
 
         // Get the fused activation type
@@ -994,7 +994,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (input.Shape.Length == 1)
         {
             // 1D input -> 1D output [outputSize]
-            result = result.Reshape([outputSize]);
+            result = Engine.Reshape(result, [outputSize]);
         }
         else if (input.Shape.Length > 2)
         {
@@ -1005,7 +1005,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 outputShape[i] = originalBatchDims[i];
             }
             outputShape[^1] = outputSize;
-            result = result.Reshape(outputShape);
+            result = Engine.Reshape(result, outputShape);
         }
         // 2D input: result is already [batch, outputSize]
 
