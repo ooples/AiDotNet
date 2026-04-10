@@ -178,7 +178,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
         (_condensedTree, finalParent) = BuildCondensedTree(mst, n, _options.MinClusterSize);
 
         // Step 6: Extract clusters
-        var clusterLabels = ExtractClusters(_condensedTree, n, _options.ClusterSelection, finalParent);
+        var clusterLabels = ExtractClusters(_condensedTree, n, _options.ClusterSelection, _options.AllowSingleCluster, finalParent);
 
         // Compute probabilities and outlier scores
         ComputeProbabilitiesAndOutlierScores(clusterLabels, _condensedTree, n);
@@ -262,6 +262,23 @@ public class HDBSCAN<T> : ClusteringBase<T>
         }
 
         return distMatrix;
+    }
+
+    /// <summary>
+    /// BFS deselect all descendants of a cluster per scikit-learn reference.
+    /// </summary>
+    private static void DeselctAllDescendants(int cluster, Dictionary<int, List<int>> children,
+        HashSet<int> clusterNodes, HashSet<int> selectedClusters)
+    {
+        if (!children.TryGetValue(cluster, out var kids)) return;
+        foreach (int child in kids)
+        {
+            if (clusterNodes.Contains(child))
+            {
+                selectedClusters.Remove(child);
+                DeselctAllDescendants(child, children, clusterNodes, selectedClusters);
+            }
+        }
     }
 
     private T[] ComputeCoreDistances(T[,] distMatrix, int n, int minSamples)
@@ -514,7 +531,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
         }
     }
 
-    private int[] ExtractClusters(List<CondensedTreeNode> condensedTree, int n, HDBSCANClusterSelection method, int[]? ufParent = null)
+    private int[] ExtractClusters(List<CondensedTreeNode> condensedTree, int n, HDBSCANClusterSelection method, bool allowSingleCluster = false, int[]? ufParent = null)
     {
         var labels = new int[n];
         for (int i = 0; i < n; i++)
@@ -572,23 +589,21 @@ public class HDBSCAN<T> : ClusteringBase<T>
                 }
             }
 
-            // Pass 2: Compute stability. Per Campello et al. 2013, stability of cluster C =
-            // sum over all points p that fall out of C: (lambda_p - lambda_birth(C)).
-            // Only individual point events (Size == 1) contribute to stability. Entries
-            // with Size > 1 represent sub-cluster splits, not individual point departures.
-            // Union-find root IDs can be < n even for cluster-representing entries, so we
-            // filter on Size rather than Child < n.
+            // Pass 2: Compute stability per scikit-learn reference implementation.
+            // Stability of cluster C = Σ (lambda_child - lambda_birth(C)) * child_size
+            // for ALL children (both individual points and sub-clusters).
             foreach (var node in condensedTree)
             {
-                if (node.Size == 1 && stability.ContainsKey(node.Parent))
+                if (stability.ContainsKey(node.Parent))
                 {
                     T deathLambda = node.Lambda;
                     T birth = birthLambda.ContainsKey(node.Parent) ? birthLambda[node.Parent] : NumOps.Zero;
-                    // Clamp birth to deathLambda so contribution is zero (not negative or inflated)
                     if (NumOps.GreaterThan(birth, deathLambda))
                         birth = deathLambda;
-                    stability[node.Parent] = NumOps.Add(stability[node.Parent],
-                        NumOps.Subtract(deathLambda, birth));
+                    T contribution = NumOps.Multiply(
+                        NumOps.Subtract(deathLambda, birth),
+                        NumOps.FromDouble(node.Size));
+                    stability[node.Parent] = NumOps.Add(stability[node.Parent], contribution);
                 }
             }
 
@@ -614,20 +629,21 @@ public class HDBSCAN<T> : ClusteringBase<T>
                 if (stability.ContainsKey(cluster) && NumOps.GreaterThan(stability[cluster], childStability))
                 {
                     selectedClusters.Add(cluster);
-                    // Remove descendants
-                    if (children.ContainsKey(cluster))
-                    {
-                        foreach (var child in children[cluster])
-                        {
-                            selectedClusters.Remove(child);
-                        }
-                    }
+                    // Per scikit-learn: BFS deselect ALL descendants, not just direct children
+                    DeselctAllDescendants(cluster, children, clusterNodes, selectedClusters);
                 }
                 else if (NumOps.GreaterThan(childStability, NumOps.Zero))
                 {
                     // Propagate child stability
                     stability[cluster] = childStability;
                 }
+            }
+
+            // Per scikit-learn: when allowSingleCluster and the result is 0 clusters,
+            // select the root as a valid single-cluster result
+            if (allowSingleCluster && selectedClusters.Count == 0 && clusterList.Count > 0)
+            {
+                selectedClusters.Add(clusterList[^1]); // root = last in descending order
             }
 
             // Assign labels based on selected clusters

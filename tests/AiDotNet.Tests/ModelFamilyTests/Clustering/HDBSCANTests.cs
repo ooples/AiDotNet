@@ -12,7 +12,8 @@ public class HDBSCANTests : ClusteringModelTestBase
         {
             MinClusterSize = 5,
             MinSamples = 3,
-            ClusterSelection = AiDotNet.Clustering.Options.HDBSCANClusterSelection.EOM
+            ClusterSelection = AiDotNet.Clustering.Options.HDBSCANClusterSelection.EOM,
+            AllowSingleCluster = true // Per Campello et al. 2013
         });
 
     // HDBSCAN is density-based — doesn't have centroid parameters
