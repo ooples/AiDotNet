@@ -314,9 +314,9 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                     var sliceTensor = new Tensor<T>(
                         new[] { 1, _options.ForecastHorizon },
                         new Vector<T>(sliceWeights));
-                    var forecastCol = aggregatedForecast!.Reshape(_options.ForecastHorizon, 1);
+                    var forecastCol = Engine.Reshape(aggregatedForecast!, [_options.ForecastHorizon, 1]);
                     var prediction = Engine.TensorMatMul(sliceTensor, forecastCol); // [1, 1]
-                    prediction = prediction.Reshape(1); // [1]
+                    prediction = Engine.Reshape(prediction, [1]); // [1]
 
                     // Compute MSE loss via tape-tracked operations
                     var lossTensor = maeLoss.ComputeTapeLoss(prediction, targetTensor);
