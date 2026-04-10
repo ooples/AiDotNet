@@ -389,32 +389,30 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
             return predictions;
         }
 
-        // Univariate case: build lookback windows from training series + autoregressive predictions.
-        var series = new List<T>(trainN + n);
+        // Univariate case: use overlapping lookback windows from training series
+        // for in-sample positions, autoregressive for out-of-sample.
+        // Per Oreshkin et al. 2020: each prediction uses the preceding lookback
+        // window from observed data when available, avoiding error compounding.
+        var series = new List<T>(trainN);
         for (int i = 0; i < trainN; i++)
             series.Add(_trainingSeries[i]);
 
         for (int i = 0; i < n; i++)
         {
-            int seriesLen = series.Count;
-            if (seriesLen >= _options.LookbackWindow)
+            // Use training series lookback for in-sample, autoregressive for out-of-sample
+            int seriesIdx = i; // position in the original timeline
+            var lookback = new Vector<T>(_options.LookbackWindow);
+
+            for (int j = 0; j < _options.LookbackWindow; j++)
             {
-                var lookback = new Vector<T>(_options.LookbackWindow);
-                int start = seriesLen - _options.LookbackWindow;
-                for (int j = 0; j < _options.LookbackWindow; j++)
-                    lookback[j] = series[start + j];
-                predictions[i] = PredictSingle(lookback);
+                int idx = seriesIdx - _options.LookbackWindow + 1 + j;
+                if (idx >= 0 && idx < series.Count)
+                    lookback[j] = series[idx];
+                else
+                    lookback[j] = NumOps.Zero;
             }
-            else
-            {
-                // Not enough history: pad with zeros
-                var lookback = new Vector<T>(_options.LookbackWindow);
-                int offset = _options.LookbackWindow - seriesLen;
-                for (int j = 0; j < seriesLen; j++)
-                    lookback[offset + j] = series[j];
-                predictions[i] = PredictSingle(lookback);
-            }
-            series.Add(predictions[i]);
+
+            predictions[i] = PredictSingle(lookback);
         }
 
         return predictions;
