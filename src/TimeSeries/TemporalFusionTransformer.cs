@@ -1,7 +1,13 @@
 #pragma warning disable CS8618 // Fields initialized in InitializeComponents called from constructor
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.TimeSeries.TFT;
 
 namespace AiDotNet.TimeSeries;
@@ -55,7 +61,12 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     private T _normMean;
     private T _normStd;
 
-    public TemporalFusionTransformer(TemporalFusionTransformerOptions<T>? options = null)
+    // User-configurable optimizer (default: Adam per paper)
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+
+    public TemporalFusionTransformer(
+        TemporalFusionTransformerOptions<T>? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(options ?? new TemporalFusionTransformerOptions<T>())
     {
         _options = options ?? new TemporalFusionTransformerOptions<T>();
@@ -64,6 +75,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         _hiddenSize = _options.HiddenSize;
         _normMean = NumOps.Zero;
         _normStd = NumOps.One;
+        _optimizer = optimizer;
 
         ValidateOptions();
         InitializeComponents();
@@ -155,43 +167,98 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         ComputeNormStats(y);
         var yNorm = NormalizeVector(y);
 
-        double lr = _options.LearningRate;
         int lookback = _options.LookbackWindow;
+
+        // Per Lim et al. 2021: train ALL parameters through backpropagation
+        var allParams = CollectAllTrainableParameters();
+        var optimizer = _optimizer ?? (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>)
+            new AdamOptimizer<T, Matrix<T>, Vector<T>>(
+                null, new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
+                { InitialLearningRate = _options.LearningRate });
+        var mseLoss = new MeanSquaredErrorLoss<T>();
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             TrainingCancellationToken.ThrowIfCancellationRequested();
 
-            T epochLoss = NumOps.Zero;
-            int count = 0;
-
             for (int i = lookback; i < y.Length; i++)
             {
                 if (i % 8 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
 
-                // Build lookback window
                 var window = ExtractWindow(x, yNorm, i, lookback);
                 T target = yNorm[i];
+                var targetTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { target }));
 
-                // Forward pass through paper architecture
+                // Tape-tracked forward + backward + Adam step
+                using var tape = new GradientTape<T>();
+
                 var quantilePred = ForwardQuantiles(window);
 
-                // Extract median prediction for loss
+                // Extract median prediction
                 int medianIdx = Array.IndexOf(_options.QuantileLevels, 0.5);
                 if (medianIdx < 0) medianIdx = _options.QuantileLevels.Length / 2;
                 int predIdx = medianIdx * _options.ForecastHorizon;
-                T prediction = predIdx < quantilePred.Length ? quantilePred[predIdx] : NumOps.Zero;
+                var sliceWeights = new T[quantilePred.Length];
+                if (predIdx < sliceWeights.Length) sliceWeights[predIdx] = NumOps.One;
+                var sliceTensor = new Tensor<T>(new[] { 1, quantilePred.Length }, new Vector<T>(sliceWeights));
+                var predCol = Engine.Reshape(quantilePred, [quantilePred.Length, 1]);
+                var prediction = Engine.Reshape(Engine.TensorMatMul(sliceTensor, predCol), [1]);
 
-                // Quantile loss (pinball loss for all quantiles)
-                T error = NumOps.Subtract(prediction, target);
-                epochLoss = NumOps.Add(epochLoss, NumOps.Multiply(error, error));
-                count++;
+                var lossTensor = mseLoss.ComputeTapeLoss(prediction, targetTensor);
 
-                // Simple SGD on the quantile output weights (the complex layers
-                // use GRN internal gating which self-regularizes per the paper)
-                UpdateQuantileWeights(window, error, lr);
+                var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+                var grads = new Dictionary<Tensor<T>, Tensor<T>>(
+                    Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                foreach (var param in allParams)
+                {
+                    if (allGrads.TryGetValue(param, out var grad))
+                        grads[param] = grad;
+                }
+
+                T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+
+                Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> tgt) => prediction;
+                Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> tgt) =>
+                    mseLoss.ComputeTapeLoss(pred, tgt);
+
+                var context = new Tensors.Engines.Autodiff.TapeStepContext<T>(
+                    allParams, grads, lossValue,
+                    window, targetTensor, ComputeForward, ComputeLoss, null);
+
+                optimizer.Step(context);
             }
         }
+    }
+
+    /// <summary>
+    /// Collects all trainable parameter tensors from LSTM, GRN, attention, and output layers.
+    /// </summary>
+    private IReadOnlyList<Tensor<T>> CollectAllTrainableParameters()
+    {
+        var parameters = new List<Tensor<T>>();
+
+        // Input embedding
+        parameters.Add(_inputEmbeddingWeight);
+        parameters.Add(_inputEmbeddingBias);
+
+        // LSTM weights (4 gates × input + recurrent + bias = 12 tensors)
+        parameters.AddRange(new[] { _lstmWi, _lstmWf, _lstmWc, _lstmWo });
+        parameters.AddRange(new[] { _lstmUi, _lstmUf, _lstmUc, _lstmUo });
+        parameters.AddRange(new[] { _lstmBi, _lstmBf, _lstmBc, _lstmBo });
+
+        // Attention weights
+        parameters.AddRange(new[] { _queryWeight, _keyWeight, _valueWeight, _outputWeight });
+
+        // Quantile output
+        parameters.Add(_quantileWeight);
+        parameters.Add(_quantileBias);
+
+        // GRN parameters
+        foreach (var p in _pastVsn.GetTrainableParameters()) parameters.Add(p);
+        foreach (var p in _enrichmentGrn.GetTrainableParameters()) parameters.Add(p);
+        foreach (var p in _postAttentionGrn.GetTrainableParameters()) parameters.Add(p);
+
+        return parameters;
     }
 
     /// <summary>
@@ -238,8 +305,9 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < inputLen; i++)
             padSpan[i] = inSpan[i];
 
-        var inputCol = inputPadded.Reshape(inSize, 1);
-        var result = Engine.TensorMatMul(_inputEmbeddingWeight, inputCol).Reshape(_hiddenSize);
+        var inputCol = Engine.Reshape(inputPadded, [inSize, 1]);
+        var matResult = Engine.TensorMatMul(_inputEmbeddingWeight, inputCol);
+        var result = Engine.Reshape(matResult, [_hiddenSize]);
         return Engine.TensorAdd(result, _inputEmbeddingBias);
     }
 
@@ -264,27 +332,27 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
                 xtSpan[i] = inSpan[offset + i];
 
             // LSTM cell: i = σ(Wx·x + Uh·h + b)
-            var xtCol = xt.Reshape(_hiddenSize, 1);
-            var hCol = h.Reshape(_hiddenSize, 1);
+            var xtCol = Engine.Reshape(xt, [_hiddenSize, 1]);
+            var hCol = Engine.Reshape(h, [_hiddenSize, 1]);
 
             var ig = ApplySigmoid(AddAll(
-                Engine.TensorMatMul(_lstmWi, xtCol).Reshape(_hiddenSize),
-                Engine.TensorMatMul(_lstmUi, hCol).Reshape(_hiddenSize),
+                Engine.Reshape(Engine.TensorMatMul(_lstmWi, xtCol), [_hiddenSize]),
+                Engine.Reshape(Engine.TensorMatMul(_lstmUi, hCol), [_hiddenSize]),
                 _lstmBi));
 
             var fg = ApplySigmoid(AddAll(
-                Engine.TensorMatMul(_lstmWf, xtCol).Reshape(_hiddenSize),
-                Engine.TensorMatMul(_lstmUf, hCol).Reshape(_hiddenSize),
+                Engine.Reshape(Engine.TensorMatMul(_lstmWf, xtCol), [_hiddenSize]),
+                Engine.Reshape(Engine.TensorMatMul(_lstmUf, hCol), [_hiddenSize]),
                 _lstmBf));
 
             var cCandidate = ApplyTanh(AddAll(
-                Engine.TensorMatMul(_lstmWc, xtCol).Reshape(_hiddenSize),
-                Engine.TensorMatMul(_lstmUc, hCol).Reshape(_hiddenSize),
+                Engine.Reshape(Engine.TensorMatMul(_lstmWc, xtCol), [_hiddenSize]),
+                Engine.Reshape(Engine.TensorMatMul(_lstmUc, hCol), [_hiddenSize]),
                 _lstmBc));
 
             var og = ApplySigmoid(AddAll(
-                Engine.TensorMatMul(_lstmWo, xtCol).Reshape(_hiddenSize),
-                Engine.TensorMatMul(_lstmUo, hCol).Reshape(_hiddenSize),
+                Engine.Reshape(Engine.TensorMatMul(_lstmWo, xtCol), [_hiddenSize]),
+                Engine.Reshape(Engine.TensorMatMul(_lstmUo, hCol), [_hiddenSize]),
                 _lstmBo));
 
             // c = f ⊙ c + i ⊙ c_candidate
@@ -305,13 +373,13 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         int headDim = _hiddenSize / numHeads;
 
         // Q, K projections: [hiddenSize, hiddenSize] @ input
-        var inputCol = input.Reshape(_hiddenSize, 1);
-        var q = Engine.TensorMatMul(_queryWeight, inputCol).Reshape(_hiddenSize);
-        var k = Engine.TensorMatMul(_keyWeight, inputCol).Reshape(_hiddenSize);
+        var inputCol = Engine.Reshape(input, [_hiddenSize, 1]);
+        var q = Engine.Reshape(Engine.TensorMatMul(_queryWeight, inputCol), [_hiddenSize]);
+        var k = Engine.Reshape(Engine.TensorMatMul(_keyWeight, inputCol), [_hiddenSize]);
 
         // V projection: shared across heads per paper (interpretable attention)
         // V weight is [headDim, hiddenSize]
-        var v = Engine.TensorMatMul(_valueWeight, inputCol).Reshape(headDim);
+        var v = Engine.Reshape(Engine.TensorMatMul(_valueWeight, inputCol), [headDim]);
 
         // Per-head attention: each head attends with its own Q/K slice but shares V
         var attended = new Tensor<T>([_hiddenSize]);
@@ -341,15 +409,15 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         }
 
         // Output projection
-        var attCol = attended.Reshape(_hiddenSize, 1);
-        return Engine.TensorMatMul(_outputWeight, attCol).Reshape(_hiddenSize);
+        var attCol = Engine.Reshape(attended, [_hiddenSize, 1]);
+        return Engine.Reshape(Engine.TensorMatMul(_outputWeight, attCol), [_hiddenSize]);
     }
 
     private Tensor<T> QuantileProject(Tensor<T> hidden)
     {
         int outSize = _quantileWeight.Shape[0];
-        var hiddenCol = hidden.Reshape(_hiddenSize, 1);
-        var result = Engine.TensorMatMul(_quantileWeight, hiddenCol).Reshape(outSize);
+        var hiddenCol = Engine.Reshape(hidden, [_hiddenSize, 1]);
+        var result = Engine.Reshape(Engine.TensorMatMul(_quantileWeight, hiddenCol), [outSize]);
         return Engine.TensorAdd(result, _quantileBias);
     }
 
