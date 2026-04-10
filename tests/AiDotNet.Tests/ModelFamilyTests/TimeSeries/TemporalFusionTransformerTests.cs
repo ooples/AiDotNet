@@ -15,7 +15,7 @@ public class TemporalFusionTransformerTests : TimeSeriesModelTestBase
             HiddenSize = 8,
             NumAttentionHeads = 2,
             NumLayers = 1,
-            Epochs = 2,
+            Epochs = 20,
             MaxTrainingTimeSeconds = 10
         });
 }

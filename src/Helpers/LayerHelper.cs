@@ -5397,7 +5397,7 @@ public static class LayerHelper<T>
         int textHiddenDim = 768,
         int lmHiddenDim = 1536,
         int numLmLayers = 24,
-        int numHeads = 16,
+        int numHeads = 12,
         int numCodebooks = 4,
         int codebookSize = 1024,
         int maxTextLength = 256,
@@ -5521,7 +5521,7 @@ public static class LayerHelper<T>
         int textHiddenDim = 768,
         int lmHiddenDim = 1536,
         int numLmLayers = 24,
-        int numHeads = 16,
+        int numHeads = 12,
         int numCodebooks = 4,
         int codebookSize = 2048,
         int maxTextLength = 256,
@@ -5882,7 +5882,7 @@ public static class LayerHelper<T>
         int latentDim = 64,
         int ditHiddenDim = 1024,
         int numDitBlocks = 24,
-        int numHeads = 16,
+        int numHeads = 12,
         int maxTextLength = 512,
         int maxAudioLength = 2048,
         double dropoutRate = 0.1)
@@ -10025,7 +10025,7 @@ public static class LayerHelper<T>
         int hiddenDim = 1024,
         int numEncoderLayers = 18,
         int numDecoderLayers = 18,
-        int numHeads = 16,
+        int numHeads = 12,
         int vocabSize = 50000,
         int patchSize = 16,
         int maxPatches = 4096,
@@ -10107,7 +10107,7 @@ public static class LayerHelper<T>
         int hiddenDim = 1024,
         int numEncoderLayers = 12,
         int numDecoderLayers = 10,
-        int numHeads = 16,
+        int numHeads = 12,
         int vocabSize = 50000,
         int imageSize = 896,
         int patchSize = 16,
@@ -10188,7 +10188,7 @@ public static class LayerHelper<T>
         int hiddenDim = 1024,
         int numEncoderLayers = 12,
         int numDecoderLayers = 12,
-        int numHeads = 16,
+        int numHeads = 12,
         int vocabSize = 50000,
         int imageSize = 224,
         int maxSequenceLength = 2048)
@@ -10748,7 +10748,7 @@ public static class LayerHelper<T>
         int textDim = 4096,
         int visionLayers = 24,
         int textLayers = 32,
-        int numHeads = 16,
+        int numHeads = 12,
         int vocabSize = 32000)
     {
         IActivationFunction<T> siluActivation = new SiLUActivation<T>();
@@ -14749,7 +14749,7 @@ public static class LayerHelper<T>
         int numFeatures = 1,
         int hiddenDim = 1024,
         int numLayers = 24,
-        int numHeads = 16,
+        int numHeads = 12,
         double dropout = 0.0)
     {
         int flattenedInputSize = contextLength * numFeatures;
@@ -19640,7 +19640,7 @@ public static class LayerHelper<T>
         int latentChannels = 4,
         int hiddenSize = 1152,
         int numLayers = 28,
-        int numHeads = 16,
+        int numHeads = 12,
         int patchSize = 2)
     {
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
@@ -21496,7 +21496,7 @@ public static class LayerHelper<T>
     /// <summary>Creates default layers for VoiceCraft codec language model.</summary>
     public static IEnumerable<ILayer<T>> CreateDefaultVoiceCraftLayers(
         int hiddenDim = 2048, int numLayers = 16,
-        int numHeads = 16, int codebookSize = 2048,
+        int numHeads = 12, int codebookSize = 2048,
         double dropoutRate = 0.1)
     {
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
@@ -23612,7 +23612,7 @@ public static class LayerHelper<T>
         int numVisionLayers = 6,
         int numTextLayers = 12,
         int numFusionLayers = 6,
-        int numHeads = 16, // Per Lu et al. 2019 (ViLBERT): 1024/16=64 per head
+        int numHeads = 16,
         double dropoutRate = 0.1)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
@@ -23890,7 +23890,7 @@ public static class LayerHelper<T>
         int numQFormerLayers = 12,
         int numDecoderLayers = 6,
         int numQueryTokens = 32,
-        int numHeads = 16,
+        int numHeads = 12,
         int numQFormerHeads = 12,
         double dropoutRate = 0.1)
     {
@@ -24019,7 +24019,7 @@ public static class LayerHelper<T>
         int numPerceiverLayers = 6,
         int numDecoderLayers = 32,
         int numLatents = 64,
-        int numHeads = 16,
+        int numHeads = 12,
         int numPerceiverHeads = 16,
         double dropoutRate = 0.1)
     {
@@ -24267,7 +24267,7 @@ public static class LayerHelper<T>
         int decoderDim = 4096,
         int numVisionLayers = 24,
         int numDecoderLayers = 32,
-        int numHeads = 16,
+        int numHeads = 12,
         double dropoutRate = 0.1)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
@@ -24316,7 +24316,7 @@ public static class LayerHelper<T>
         int decoderDim = 4096,
         int numVisionLayers = 24,
         int numDecoderLayers = 32,
-        int numHeads = 16,
+        int numHeads = 12,
         double dropoutRate = 0.1)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
@@ -24369,7 +24369,7 @@ public static class LayerHelper<T>
         int numVisionLayers = 24,
         int numResamplerLayers = 4,
         int numDecoderLayers = 32,
-        int numHeads = 16,
+        int numHeads = 12,
         double dropoutRate = 0.1)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
@@ -24469,7 +24469,7 @@ public static class LayerHelper<T>
         int decoderDim = 4096,
         int numVisionLayers = 24,
         int numDecoderLayers = 32,
-        int numHeads = 16,
+        int numHeads = 12,
         double dropoutRate = 0.1)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
@@ -24522,7 +24522,7 @@ public static class LayerHelper<T>
         int decoderDim = 4096,
         int numVisionLayers = 24,
         int numDecoderLayers = 32,
-        int numHeads = 16,
+        int numHeads = 12,
         double dropoutRate = 0.1)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
@@ -24575,7 +24575,7 @@ public static class LayerHelper<T>
         int numVisionLayers = 24,
         int numTemporalLayers = 2,
         int numDecoderLayers = 32,
-        int numHeads = 16,
+        int numHeads = 12,
         double dropoutRate = 0.1)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
@@ -24640,7 +24640,7 @@ public static class LayerHelper<T>
         int numVisionLayers = 24,
         int numDecoderLayers = 32,
         int numActionLayers = 2,
-        int numHeads = 16,
+        int numHeads = 12,
         double dropoutRate = 0.1)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
@@ -24692,7 +24692,7 @@ public static class LayerHelper<T>
         int decoderDim = 4096,
         int numEncoderLayers = 6,
         int numDecoderLayers = 32,
-        int numHeads = 16,
+        int numHeads = 12,
         double dropoutRate = 0.1)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
@@ -24744,7 +24744,7 @@ public static class LayerHelper<T>
         int numVisionLayers = 24,
         int numFusionLayers = 6,
         int numDetectionLayers = 6,
-        int numHeads = 16,
+        int numHeads = 12,
         double dropoutRate = 0.1)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
@@ -24871,7 +24871,7 @@ public static class LayerHelper<T>
         int numEncoderLayers = 24,
         int numUnderstandingLayers = 12,
         int numGenerationLayers = 12,
-        int numHeads = 16,
+        int numHeads = 12,
         double dropoutRate = 0.1)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
@@ -24938,7 +24938,7 @@ public static class LayerHelper<T>
         int editingDim = 1024,
         int numVisionLayers = 24,
         int numEditingLayers = 8,
-        int numHeads = 16,
+        int numHeads = 12,
         double dropoutRate = 0.1)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
@@ -29552,7 +29552,7 @@ public static class LayerHelper<T>
         int inputChannels = 4,
         int hiddenSize = 1152,
         int numLayers = 28,
-        int numHeads = 16,
+        int numHeads = 12,
         int patchSize = 2,
         int contextDim = 1024,
         double mlpRatio = 4.0)
@@ -31030,7 +31030,7 @@ public static class LayerHelper<T>
         int lmHiddenDim = 4096,
         int numVisionLayers = 24,
         int numLmLayers = 32,
-        int numHeads = 16,
+        int numHeads = 12,
         int vocabularySize = 32000,
         int maxSequenceLength = 2048)
     {
@@ -31783,7 +31783,7 @@ public static class LayerHelper<T>
         int numPerceiverLayers = 6,
         int numPerceiverTokens = 64,
         int numLmLayers = 24,
-        int numHeads = 16,
+        int numHeads = 12,
         int vocabularySize = 32000,
         int maxSequenceLength = 2048)
     {
@@ -31834,7 +31834,7 @@ public static class LayerHelper<T>
         int hiddenDim = 4096,
         int numVisionLayers = 24,
         int numLanguageLayers = 32,
-        int numHeads = 16,
+        int numHeads = 12,
         int vocabularySize = 100256)
     {
         int ffnDim = hiddenDim * 4;
@@ -33316,7 +33316,7 @@ public static class LayerHelper<T>
         int patchLength = 64,
         int hiddenDim = 1024,
         int numLayers = 24,
-        int numHeads = 16,
+        int numHeads = 12,
         int intermediateSize = 4096,
         double dropout = 0.1,
         int? numClasses = null)
@@ -33537,7 +33537,7 @@ public static class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateDefaultSundialLayers(
         NeuralNetworkArchitecture<T> architecture,
         int contextLength = 2048, int forecastHorizon = 96, int patchLength = 32,
-        int hiddenDim = 1024, int numLayers = 24, int numHeads = 16,
+        int hiddenDim = 1024, int numLayers = 24, int numHeads = 12,
         int intermediateSize = 4096, double dropout = 0.1)
     {
         if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
@@ -33573,7 +33573,7 @@ public static class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateDefaultTimeMoELayers(
         NeuralNetworkArchitecture<T> architecture,
         int contextLength = 2048, int forecastHorizon = 96, int patchLength = 32,
-        int hiddenDim = 1024, int numLayers = 24, int numHeads = 16,
+        int hiddenDim = 1024, int numLayers = 24, int numHeads = 12,
         int intermediateSize = 4096, int numExperts = 8, double dropout = 0.1)
     {
         if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));

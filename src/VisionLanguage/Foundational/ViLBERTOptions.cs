@@ -57,5 +57,6 @@ public class ViLBERTOptions : FoundationalVLMOptions
         TextDim = 768;
         FusionDim = 1024;
         NumFusionLayers = 6;
+        NumHeads = 16; // Per Lu et al. 2019: 1024/16=64 per head
     }
 }
