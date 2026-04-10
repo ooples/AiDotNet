@@ -251,7 +251,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
             batch = 1;
             queryLen = queryShape[0];
             queryDimActual = queryShape[1];
-            query = query.Reshape(new[] { 1, queryLen, queryDimActual });
+            query = Engine.Reshape(query, new[] { 1, queryLen, queryDimActual });
         }
         else if (queryRank == 3)
         {
@@ -280,7 +280,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
             batch = flatBatch;
             queryLen = queryShape[queryRank - 2];
             queryDimActual = queryShape[queryRank - 1];
-            query = query.Reshape(new[] { flatBatch, queryLen, queryDimActual });
+            query = Engine.Reshape(query, new[] { flatBatch, queryLen, queryDimActual });
         }
 
         if (queryDimActual != _queryDim)
@@ -301,7 +301,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
             contextBatch = 1;
             contextLen = 1;
             contextDimActual = contextShape[0];
-            context = context.Reshape(new[] { 1, 1, contextDimActual });
+            context = Engine.Reshape(context, new[] { 1, 1, contextDimActual });
         }
         else if (contextRank == 2)
         {
@@ -310,7 +310,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
             contextLen = contextShape[0];
             contextDimActual = contextShape[1];
             // Add batch dimension of 1, broadcast later if needed
-            context = context.Reshape(new[] { 1, contextLen, contextDimActual });
+            context = Engine.Reshape(context, new[] { 1, contextLen, contextDimActual });
         }
         else
         {
@@ -323,7 +323,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
             contextBatch = flatBatch;
             if (contextRank != 3)
             {
-                context = context.Reshape(new[] { flatBatch, contextLen, contextDimActual });
+                context = Engine.Reshape(context, new[] { flatBatch, contextLen, contextDimActual });
             }
         }
 
@@ -394,7 +394,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
             if (origRank == 2)
             {
                 // 2D input -> 2D output (remove batch dim)
-                output = output.Reshape(new[] { queryLen, _queryDim });
+                output = Engine.Reshape(output, new[] { queryLen, _queryDim });
             }
             else if (is4D)
             {
@@ -409,7 +409,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
                     newShape[d] = _originalQueryShape[d];
                 newShape[origRank - 2] = queryLen;
                 newShape[origRank - 1] = _queryDim;
-                output = output.Reshape(newShape);
+                output = Engine.Reshape(output, newShape);
             }
         }
 
