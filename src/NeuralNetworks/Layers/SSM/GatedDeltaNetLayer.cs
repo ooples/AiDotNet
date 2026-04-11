@@ -513,38 +513,6 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>
         return ones;
     }
 
-    private Tensor<T> DepthwiseConv1DBackward(
-        Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
-    {
-        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        var weightSlices = new Tensor<T>[_convKernelSize];
-        for (int ki = 0; ki < _convKernelSize; ki++)
-        {
-            weightSlices[ki] = _convWeights.GetSliceAlongDimension(ki, 1)
-                .Reshape(1, _modelDimension);
-        }
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            var dOut_t = dOutput.GetSliceAlongDimension(t, 1);
-
-            for (int ki = 0; ki < _convKernelSize; ki++)
-            {
-                int srcT = t - ki;
-                if (srcT >= 0)
-                {
-                    var dInputContrib = Engine.TensorBroadcastMultiply(dOut_t, weightSlices[ki]);
-                    var dInput_srcT = dInput.GetSliceAlongDimension(srcT, 1);
-                    dInput_srcT = Engine.TensorAdd(dInput_srcT, dInputContrib);
-                    dInput.SetSlice(1, srcT, dInput_srcT);
-                }
-            }
-        }
-
-        return dInput;
-    }
-
     #region Parameter Management
 
     /// <inheritdoc />

@@ -522,51 +522,6 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Backward through Householder product: apply reflections in reverse and accumulate gradients.
-    /// </summary>
-    private void BackwardHouseholderProduct(
-        Tensor<T> dState, Tensor<T> hVecs, Tensor<T> dHVecs,
-        int bi, int hi, int posFlat)
-    {
-        for (int mi = _numHouseholders - 1; mi >= 0; mi--)
-        {
-            T normSq = NumOps.Zero;
-            for (int d = 0; d < _headDimension; d++)
-            {
-                T u = hVecs[new[] { posFlat, mi, hi, d }];
-                normSq = NumOps.Add(normSq, NumOps.Multiply(u, u));
-            }
-            T eps = NumOps.FromDouble(1e-8);
-            normSq = NumOps.Add(normSq, eps);
-            T twoOverNormSq = NumOps.Divide(NumOps.FromDouble(2.0), normSq);
-
-            for (int j = 0; j < _headDimension; j++)
-            {
-                T dot = NumOps.Zero;
-                for (int d = 0; d < _headDimension; d++)
-                {
-                    T u = hVecs[new[] { posFlat, mi, hi, d }];
-                    dot = NumOps.Add(dot, NumOps.Multiply(u, dState[new[] { bi, hi, d, j }]));
-                }
-                T factor = NumOps.Multiply(twoOverNormSq, dot);
-
-                for (int d = 0; d < _headDimension; d++)
-                {
-                    T u = hVecs[new[] { posFlat, mi, hi, d }];
-
-                    dHVecs[new[] { posFlat, mi, hi, d }] = NumOps.Add(
-                        dHVecs[new[] { posFlat, mi, hi, d }],
-                        NumOps.Negate(NumOps.Multiply(factor, dState[new[] { bi, hi, d, j }])));
-
-                    dState[new[] { bi, hi, d, j }] = NumOps.Subtract(
-                        dState[new[] { bi, hi, d, j }],
-                        NumOps.Multiply(factor, u));
-                }
-            }
-        }
-    }
-
-    /// <summary>
     /// Accumulates Householder weight gradients from per-position gradients.
     /// </summary>
     private void AccumulateHouseholderWeightGradients(

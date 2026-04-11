@@ -641,21 +641,6 @@ public class ResidualDenseBlock<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Backward pass through LeakyReLU activation.
-    /// </summary>
-    private Tensor<T> BackwardActivation(Tensor<T> activationOutput, Tensor<T> gradient)
-    {
-        var output = TensorAllocator.Rent<T>(gradient._shape);
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            output.Data.Span[i] = NumOps.Multiply(
-                gradient.Data.Span[i],
-                _activation.Derivative(activationOutput.Data.Span[i]));
-        }
-        return output;
-    }
-
-    /// <summary>
     /// Adds residual with scaling: output = a * scale + b.
     /// </summary>
     private Tensor<T> AddResidual(Tensor<T> a, Tensor<T> b, double scale)

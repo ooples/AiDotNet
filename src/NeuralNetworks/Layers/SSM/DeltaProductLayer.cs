@@ -468,57 +468,6 @@ public partial class DeltaProductLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Backward through Householder product: H is symmetric and orthogonal, so H^T = H.
-    /// We apply the reverse sequence of reflections and accumulate gradients for each u vector.
-    /// </summary>
-    private void BackwardHouseholderProduct(
-        Tensor<T> dState, Tensor<T> hVecs, Tensor<T> dHVecs,
-        int bi, int hi, int posFlat)
-    {
-        // Apply Householder reflections in reverse order (M-1 down to 0)
-        for (int mi = _numHouseholders - 1; mi >= 0; mi--)
-        {
-            T normSq = NumOps.Zero;
-            for (int d = 0; d < _headDimension; d++)
-            {
-                T u = hVecs[new[] { posFlat, mi, hi, d }];
-                normSq = NumOps.Add(normSq, NumOps.Multiply(u, u));
-            }
-            T eps = NumOps.FromDouble(1e-8);
-            normSq = NumOps.Add(normSq, eps);
-            T twoOverNormSq = NumOps.Divide(NumOps.FromDouble(2.0), normSq);
-
-            // For each column j: accumulate gradient for u from dS[:,j]
-            // dS[:,j] = dS[:,j] - (2/||u||^2) * u * (u^T * dS[:,j])
-            // du += -(2/||u||^2) * (dS * S^T + S * dS^T) * u  (simplified)
-            for (int j = 0; j < _headDimension; j++)
-            {
-                T dot = NumOps.Zero;
-                for (int d = 0; d < _headDimension; d++)
-                {
-                    T u = hVecs[new[] { posFlat, mi, hi, d }];
-                    dot = NumOps.Add(dot, NumOps.Multiply(u, dState[new[] { bi, hi, d, j }]));
-                }
-                T factor = NumOps.Multiply(twoOverNormSq, dot);
-
-                // Accumulate gradient for u and update dState
-                for (int d = 0; d < _headDimension; d++)
-                {
-                    T u = hVecs[new[] { posFlat, mi, hi, d }];
-
-                    dHVecs[new[] { posFlat, mi, hi, d }] = NumOps.Add(
-                        dHVecs[new[] { posFlat, mi, hi, d }],
-                        NumOps.Negate(NumOps.Multiply(factor, dState[new[] { bi, hi, d, j }])));
-
-                    dState[new[] { bi, hi, d, j }] = NumOps.Subtract(
-                        dState[new[] { bi, hi, d, j }],
-                        NumOps.Multiply(factor, u));
-                }
-            }
-        }
-    }
-
-    /// <summary>
     /// Accumulates Householder weight gradients from per-position gradients.
     /// </summary>
     private void AccumulateHouseholderWeightGradients(

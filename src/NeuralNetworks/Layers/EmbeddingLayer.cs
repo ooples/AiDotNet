@@ -662,30 +662,6 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         return false;
     }
 
-    private Tensor<T> BackwardContinuous(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _projectionWeights == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int inputFeatures = _projectionWeights.Shape[0];
-        int embeddingDim = _projectionWeights.Shape[1];
-        int totalSamples = outputGradient.Length / embeddingDim;
-
-        var input2D = _lastInput.Length == inputFeatures
-            ? _lastInput.Reshape([1, inputFeatures])
-            : _lastInput.Reshape([_lastInput.Length / inputFeatures, inputFeatures]);
-        var grad2D = outputGradient.Reshape([totalSamples, embeddingDim]);
-
-        var input2DTransposed = Engine.TensorTranspose(input2D);
-        _projectionWeightsGradient = Engine.TensorMatMul(input2DTransposed, grad2D);
-
-        var projectionWeightsTransposed = Engine.TensorTranspose(_projectionWeights);
-        var inputGrad2D = Engine.TensorMatMul(grad2D, projectionWeightsTransposed);
-
-        _embeddingGradient = null;
-        return inputGrad2D.Reshape(_originalInputShape);
-    }
-
     /// <summary>
     /// Updates the embedding matrix using the calculated gradients and the specified learning rate.
     /// </summary>
