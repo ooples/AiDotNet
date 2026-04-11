@@ -236,7 +236,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         {
             // 2D [nodes, features]: add batch dim
             batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
+            processInput = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1]]);
         }
         else if (rank == 3)
         {
@@ -251,13 +251,13 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             for (int d = 0; d < rank - 2; d++)
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+            processInput = Engine.Reshape(input, [flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
         else
         {
             // 1D: treat as single node with features
             batchSize = 1;
-            processInput = input.Reshape([1, 1, input.Shape[0]]);
+            processInput = Engine.Reshape(input, [1, 1, input.Shape[0]]);
         }
 
         _lastInput = processInput;
@@ -271,12 +271,12 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             // Reshape 2D adjacency [nodes, nodes] to 3D [1, nodes, nodes] and broadcast to [batchSize, nodes, nodes]
             if (batchSize == 1)
             {
-                adjForBatch = _adjacencyMatrix.Reshape([1, numNodes, numNodes]);
+                adjForBatch = Engine.Reshape(_adjacencyMatrix, [1, numNodes, numNodes]);
             }
             else
             {
                 // Broadcast: repeat adjacency matrix for each batch item using Engine.TensorTile
-                var adjReshaped = _adjacencyMatrix.Reshape([1, numNodes, numNodes]);
+                var adjReshaped = Engine.Reshape(_adjacencyMatrix, [1, numNodes, numNodes]);
                 adjForBatch = Engine.TensorTile(adjReshaped, [batchSize, 1, 1]);
             }
         }
@@ -335,12 +335,12 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             if (_originalInputShape.Length == 2)
             {
                 // Was 2D, return [nodes, outputFeatures]
-                return result.Reshape([numNodes, _outputFeatures]);
+                return Engine.Reshape(result, [numNodes, _outputFeatures]);
             }
             else if (_originalInputShape.Length == 1)
             {
                 // Was 1D, return [outputFeatures]
-                return result.Reshape([_outputFeatures]);
+                return Engine.Reshape(result, [_outputFeatures]);
             }
             else
             {
@@ -349,7 +349,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 for (int d = 0; d < _originalInputShape.Length - 1; d++)
                     newShape[d] = _originalInputShape[d];
                 newShape[_originalInputShape.Length - 1] = _outputFeatures;
-                return result.Reshape(newShape);
+                return Engine.Reshape(result, newShape);
             }
         }
 
@@ -371,7 +371,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 // Mean aggregation: (A @ X) / degree (batched matmul then divide)
                 var sumAgg = Engine.BatchMatMul(adjForBatch, input);
                 int features = input.Shape[2];
-                var degreesExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
+                var degreesExpanded = Engine.Reshape(safeDegrees, new[] { batchSize, numNodes, 1 });
                 // Broadcast degrees to match feature dimension: [batch, nodes, 1] -> [batch, nodes, features]
                 var degreesBroadcast = Engine.TensorTile(degreesExpanded, [1, 1, features]);
                 return Engine.TensorDivide(sumAgg, degreesBroadcast);
@@ -392,11 +392,11 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private Tensor<T> BatchedMatMul3Dx2D(Tensor<T> input3D, Tensor<T> weights2D, int batch, int rows, int cols, int outputCols)
     {
         // Flatten batch dimension: [batch, rows, cols] -> [batch * rows, cols]
-        var flattened = input3D.Reshape([batch * rows, cols]);
+        var flattened = Engine.Reshape(input3D, new[] { batch * rows, cols });
         // Standard 2D matmul: [batch * rows, cols] @ [cols, output_cols] -> [batch * rows, output_cols]
         var result = Engine.TensorMatMul(flattened, weights2D);
         // Unflatten: [batch * rows, output_cols] -> [batch, rows, output_cols]
-        return result.Reshape([batch, rows, outputCols]);
+        return Engine.Reshape(result, new[] { batch, rows, outputCols });
     }
 
     /// <summary>
@@ -408,13 +408,13 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int features = input.Shape[2];
 
         // Expand input for broadcasting: [batch, 1, nodes, features]
-        var expanded = input.Reshape([batchSize, 1, numNodes, features]);
+        var expanded = Engine.Reshape(input, new[] { batchSize, 1, numNodes, features });
 
         // Tile to [batch, nodes, nodes, features]
         var tiled = Engine.TensorTile(expanded, [1, numNodes, 1, 1]);
 
         // Create mask from adjacency: [batch, nodes, nodes, 1]
-        var adjExpanded = adjForBatch.Reshape([batchSize, numNodes, numNodes, 1]);
+        var adjExpanded = Engine.Reshape(adjForBatch, new[] { batchSize, numNodes, numNodes, 1 });
 
         // Mask non-neighbors with -inf
         var negInf = new Tensor<T>(tiled.Shape.ToArray());
@@ -444,7 +444,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private Tensor<T> BroadcastBias(Tensor<T> bias, int batchSize, int numNodes)
     {
         int features = bias.Length;
-        var biasReshaped = bias.Reshape([1, 1, features]);
+        var biasReshaped = Engine.Reshape(bias, new[] { 1, 1, features });
         return Engine.TensorTile(biasReshaped, [batchSize, numNodes, 1]);
     }
 

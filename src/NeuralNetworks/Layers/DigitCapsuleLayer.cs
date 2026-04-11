@@ -375,7 +375,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
         {
             // 1D: [I*D_in] -> [1, I, D_in]
             batchSize = 1;
-            processInput = input.Reshape([1, _inputCapsules, _inputCapsuleDimension]);
+            processInput = Engine.Reshape(input, [1, _inputCapsules, _inputCapsuleDimension]);
         }
         else if (rank == 2)
         {
@@ -384,13 +384,13 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
             {
                 // [I, D_in] -> [1, I, D_in]
                 batchSize = 1;
-                processInput = input.Reshape([1, _inputCapsules, _inputCapsuleDimension]);
+                processInput = Engine.Reshape(input, [1, _inputCapsules, _inputCapsuleDimension]);
             }
             else
             {
                 // [B, I*D_in] -> [B, I, D_in]
                 batchSize = input.Shape[0];
-                processInput = input.Reshape([batchSize, _inputCapsules, _inputCapsuleDimension]);
+                processInput = Engine.Reshape(input, [batchSize, _inputCapsules, _inputCapsuleDimension]);
             }
         }
         else if (rank == 3)
@@ -412,7 +412,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
             if (totalElements == _inputCapsules * _inputCapsuleDimension)
             {
                 batchSize = 1;
-                processInput = input.Reshape([1, _inputCapsules, _inputCapsuleDimension]);
+                processInput = Engine.Reshape(input, [1, _inputCapsules, _inputCapsuleDimension]);
             }
             else
             {
@@ -421,7 +421,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
                 int restElements = totalElements / batchSize;
                 if (restElements == _inputCapsules * _inputCapsuleDimension)
                 {
-                    processInput = input.Reshape([batchSize, _inputCapsules, _inputCapsuleDimension]);
+                    processInput = Engine.Reshape(input, [batchSize, _inputCapsules, _inputCapsuleDimension]);
                 }
                 else
                 {
@@ -436,8 +436,8 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
         // Compute predictions u_hat_ij = W_ij * u_i
         // prediction[b,i,c,l] = sum_d(weights[i,c,d,l] * input[b,i,d])
         // Engine-accelerated: broadcast multiply + reduce sum over the input-capsule-dim axis
-        var inputExpanded = processInput.Reshape([batchSize, _inputCapsules, 1, _inputCapsuleDimension, 1]);
-        var weightsExpanded = _weights.Reshape([1, _inputCapsules, _numClasses, _inputCapsuleDimension, _outputCapsuleDimension]);
+        var inputExpanded = Engine.Reshape(processInput, [batchSize, _inputCapsules, 1, _inputCapsuleDimension, 1]);
+        var weightsExpanded = Engine.Reshape(_weights, [1, _inputCapsules, _numClasses, _inputCapsuleDimension, _outputCapsuleDimension]);
         var product = Engine.TensorBroadcastMultiply(inputExpanded, weightsExpanded);
         var predictions = Engine.ReduceSum(product, new[] { 3 }, keepDims: false); // [B, I, C, D_out]
 
@@ -452,22 +452,22 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
             var routingWeights = softmaxActivation.Activate(couplings); // [B,I,C]
 
             // weightedSum = sum_i routing * predictions
-            var routingExpanded = routingWeights.Reshape([batchSize, _inputCapsules, _numClasses, 1]);
+            var routingExpanded = Engine.Reshape(routingWeights, [batchSize, _inputCapsules, _numClasses, 1]);
             var weightedPred = Engine.TensorBroadcastMultiply(predictions, routingExpanded);
             var weightedSum = Engine.ReduceSum(weightedPred, new[] { 1 }, keepDims: false); // [B, C, outDim]
 
             // activation - SquashActivation expects 2D [numCapsules, capsuleDim]
             // weightedSum is [B, C, outDim], reshape to [B*C, outDim] for activation
-            var flatWeightedSum = weightedSum.Reshape([batchSize * _numClasses, _outputCapsuleDimension]);
+            var flatWeightedSum = Engine.Reshape(weightedSum, [batchSize * _numClasses, _outputCapsuleDimension]);
             _lastPreSquash = flatWeightedSum;
             var flatActivated = ApplyActivation(flatWeightedSum);
-            var activated = flatActivated.Reshape([batchSize, _numClasses, _outputCapsuleDimension]);
+            var activated = Engine.Reshape(flatActivated, [batchSize, _numClasses, _outputCapsuleDimension]);
             output = activated;
 
             if (iteration < _routingIterations - 1)
             {
                 // couplings += predictions · output
-                var outputExpanded = output.Reshape([batchSize, 1, _numClasses, _outputCapsuleDimension]);
+                var outputExpanded = Engine.Reshape(output, [batchSize, 1, _numClasses, _outputCapsuleDimension]);
                 var dot = Engine.ReduceSum(Engine.TensorBroadcastMultiply(predictions, outputExpanded), new[] { 3 }, keepDims: false); // [B,I,C]
                 couplings = Engine.TensorAdd(couplings, dot);
             }
@@ -479,13 +479,13 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
         // DigitCapsuleLayer outputs [batch, numClasses * outputCapsuleDimension] for compatibility
         // with downstream layers (like ReconstructionLayer) that expect flattened capsule features
         // The output is flattened from [batch, numClasses, outputCapsuleDimension] to [batch, numClasses * outputCapsuleDimension]
-        var flattenedOutput = output.Reshape([batchSize, _numClasses * _outputCapsuleDimension]);
+        var flattenedOutput = Engine.Reshape(output, [batchSize, _numClasses * _outputCapsuleDimension]);
 
         // For single-sample with low-rank input, return appropriate shape
         if (batchSize == 1 && _originalInputShape != null && _originalInputShape.Length < 3)
         {
             // Single sample with low-rank input: return 1D [numClasses * outputCapsuleDimension]
-            return flattenedOutput.Reshape([_numClasses * _outputCapsuleDimension]);
+            return Engine.Reshape(flattenedOutput, [_numClasses * _outputCapsuleDimension]);
         }
 
         // Standard 2D output [batch, numClasses * outputCapsuleDimension]

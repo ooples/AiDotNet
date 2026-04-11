@@ -408,8 +408,8 @@ public partial class RBMLayer<T> : LayerBase<T>
             flatBatch *= input.Shape[d];
 
         var visible2D = rank == 1
-            ? input.Reshape([1, _visibleUnits])
-            : input.Reshape([flatBatch, _visibleUnits]);
+            ? Engine.Reshape(input, [1, _visibleUnits])
+            : Engine.Reshape(input, [flatBatch, _visibleUnits]);
 
         _lastVisibleInput = visible2D;
 
@@ -419,14 +419,14 @@ public partial class RBMLayer<T> : LayerBase<T>
         _lastHiddenOutput = hiddenProbs;
 
         if (rank == 1)
-            return hiddenProbs.Reshape([_hiddenUnits]);
+            return Engine.Reshape(hiddenProbs, [_hiddenUnits]);
 
         var outputShape = new int[rank];
         for (int d = 0; d < rank - 1; d++)
             outputShape[d] = input.Shape[d];
         outputShape[rank - 1] = _hiddenUnits;
 
-        return hiddenProbs.Reshape(outputShape);
+        return Engine.Reshape(hiddenProbs, outputShape);
     }
 
     /// <summary>

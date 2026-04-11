@@ -231,13 +231,13 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         {
             // 1D [features] -> [1, 1, features]
             batchSize = 1;
-            processInput = input.Reshape([1, 1, input.Shape[0]]);
+            processInput = Engine.Reshape(input, [1, 1, input.Shape[0]]);
         }
         else if (rank == 2)
         {
             // 2D [nodes, features] -> [1, nodes, features]
             batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
+            processInput = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1]]);
         }
         else if (rank == 3)
         {
@@ -255,7 +255,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
             batchSize = flatBatch;
             int numNodes = input.Shape[rank - 2];
             int features = input.Shape[rank - 1];
-            processInput = input.Reshape([flatBatch, numNodes, features]);
+            processInput = Engine.Reshape(input, [flatBatch, numNodes, features]);
         }
 
         _lastInput = processInput;
@@ -329,12 +329,12 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
             if (_originalInputShape.Length == 2)
             {
                 // 2D input [nodes, features] -> 2D output [nodes, outputFeatures]
-                return result.Reshape([processNumNodes, _outputFeatures]);
+                return Engine.Reshape(result, [processNumNodes, _outputFeatures]);
             }
             else if (_originalInputShape.Length == 1)
             {
                 // 1D input -> 1D output
-                return result.Reshape([_outputFeatures]);
+                return Engine.Reshape(result, [_outputFeatures]);
             }
             else
             {
@@ -344,7 +344,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
                     outShape[d] = _originalInputShape[d];
                 outShape[_originalInputShape.Length - 2] = processNumNodes;
                 outShape[_originalInputShape.Length - 1] = _outputFeatures;
-                return result.Reshape(outShape);
+                return Engine.Reshape(result, outShape);
             }
         }
 

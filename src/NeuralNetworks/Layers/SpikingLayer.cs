@@ -784,7 +784,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
         {
             // 2D: process each batch item (for now flatten to process first item)
             // SpikingLayer processes one sample at a time
-            inputFlat = input.Reshape([input.Shape[0] * input.Shape[1]]);
+            inputFlat = Engine.Reshape(input, [input.Shape[0] * input.Shape[1]]);
             // Take only inputSize elements if tensor is larger
             if (inputFlat.Length > inputSize)
             {
@@ -797,7 +797,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
             int totalElements = 1;
             for (int d = 0; d < rank; d++)
                 totalElements *= input.Shape[d];
-            inputFlat = input.Reshape([totalElements]);
+            inputFlat = Engine.Reshape(input, [totalElements]);
             // Take only inputSize elements if tensor is larger
             if (inputFlat.Length > inputSize)
             {

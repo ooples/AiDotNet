@@ -642,36 +642,39 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         {
             if (channelFirst)
             {
-                var inputNCHW = input.Reshape([flatBatch, channelCount, _inputHeight, _inputWidth]);
-                inputNHWC = inputNCHW.Transpose([0, 2, 3, 1]);
+                var inputNCHW = Engine.Reshape(input, [flatBatch, channelCount, _inputHeight, _inputWidth]);
+                // Via Engine so the gradient tape records the permute — direct
+                // .Transpose bypasses the tape and breaks backward through the
+                // spatial transformer's localization head.
+                inputNHWC = Engine.TensorPermute(inputNCHW, new[] { 0, 2, 3, 1 });
             }
             else
             {
-                inputNHWC = input.Reshape([flatBatch, _inputHeight, _inputWidth, channelCount]);
+                inputNHWC = Engine.Reshape(input, [flatBatch, _inputHeight, _inputWidth, channelCount]);
             }
         }
         else
         {
-            inputNHWC = input.Reshape([flatBatch, _inputHeight, _inputWidth, 1]);
+            inputNHWC = Engine.Reshape(input, [flatBatch, _inputHeight, _inputWidth, 1]);
         }
 
         _lastInput = inputNHWC;
 
         var channelSum = Engine.ReduceSum(inputNHWC, new[] { 3 }, keepDims: false);
         var channelMean = Engine.TensorDivideScalar(channelSum, NumOps.FromDouble(channelCount));
-        var flattenedInput = channelMean.Reshape([flatBatch, _inputHeight * _inputWidth]);
+        var flattenedInput = Engine.Reshape(channelMean, [flatBatch, _inputHeight * _inputWidth]);
         _lastFlattenedInput = flattenedInput;
 
         // First layer: localization1 = flattenedInput @ _localizationWeights1 + _localizationBias1
         var localization1 = Engine.TensorMatMul(flattenedInput, _localizationWeights1);
-        var bias1Expanded = _localizationBias1.Reshape([1, _localizationBias1.Shape[0]]);
+        var bias1Expanded = Engine.Reshape(_localizationBias1, [1, _localizationBias1.Shape[0]]);
         localization1 = Engine.TensorBroadcastAdd(localization1, bias1Expanded);
         localization1 = ApplyActivation(localization1);
         _lastLocalization1 = localization1;
 
         // Second layer: transformationParams = localization1 @ _localizationWeights2 + _localizationBias2
         var transformationParams = Engine.TensorMatMul(localization1, _localizationWeights2);
-        var bias2Expanded = _localizationBias2.Reshape([1, _localizationBias2.Shape[0]]);
+        var bias2Expanded = Engine.Reshape(_localizationBias2, [1, _localizationBias2.Shape[0]]);
         transformationParams = Engine.TensorBroadcastAdd(transformationParams, bias2Expanded);
 
         _lastTransformationMatrix = ConvertToTransformationMatrix(transformationParams);
@@ -685,7 +688,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         if (_inputHadChannel)
         {
             Tensor<T> outputForReshape = _inputChannelFirst
-                ? output.Transpose([0, 3, 1, 2])
+                ? Engine.TensorPermute(output, new[] { 0, 3, 1, 2 })
                 : output;
 
             var outShape = new int[batchDims + 3];
@@ -704,13 +707,13 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 outShape[batchDims + 2] = channelCount;
             }
 
-            return outputForReshape.Reshape(outShape);
+            return Engine.Reshape(outputForReshape, outShape);
         }
 
-        var outputNoChannel = output.Reshape([flatBatch, _outputHeight, _outputWidth]);
+        var outputNoChannel = Engine.Reshape(output, [flatBatch, _outputHeight, _outputWidth]);
         if (batchDims == 0)
         {
-            return outputNoChannel.Reshape([_outputHeight, _outputWidth]);
+            return Engine.Reshape(outputNoChannel, [_outputHeight, _outputWidth]);
         }
 
         var outputShape = new int[batchDims + 2];
@@ -719,7 +722,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         outputShape[batchDims] = _outputHeight;
         outputShape[batchDims + 1] = _outputWidth;
 
-        return outputNoChannel.Reshape(outputShape);
+        return Engine.Reshape(outputNoChannel, outputShape);
     }
 
 

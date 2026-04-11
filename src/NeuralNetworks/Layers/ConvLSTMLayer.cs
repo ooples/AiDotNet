@@ -573,6 +573,7 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
         int width;
         int channels;
 
+        // Shape ops via Engine so the gradient tape records them.
         if (rank == 4)
         {
             // 4D: [timeSteps, height, width, channels] -> add batch dim
@@ -581,7 +582,7 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
             height = input.Shape[1];
             width = input.Shape[2];
             channels = input.Shape[3];
-            input5D = input.Reshape([1, timeSteps, height, width, channels]);
+            input5D = Engine.Reshape(input, new[] { 1, timeSteps, height, width, channels });
         }
         else if (rank == 5)
         {
@@ -604,7 +605,7 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
             height = input.Shape[rank - 3];
             width = input.Shape[rank - 2];
             channels = input.Shape[rank - 1];
-            input5D = input.Reshape([flatBatch, timeSteps, height, width, channels]);
+            input5D = Engine.Reshape(input, new[] { flatBatch, timeSteps, height, width, channels });
         }
         else
         {
@@ -627,10 +628,10 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
             output.SetSlice(1, t, _lastHiddenState);
         }
 
-        // Restore original batch dimensions for any-rank support
+        // Restore original batch dimensions for any-rank support (via Engine
+        // so the reshape stays on the gradient tape).
         if (_originalInputShape != null && _originalInputShape.Length > 5)
         {
-            // Output shape: [...leadingDims, timeSteps, height, width, filters]
             int[] newShape = new int[_originalInputShape.Length];
             for (int d = 0; d < _originalInputShape.Length - 4; d++)
                 newShape[d] = _originalInputShape[d];
@@ -638,12 +639,12 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
             newShape[_originalInputShape.Length - 3] = height;
             newShape[_originalInputShape.Length - 2] = width;
             newShape[_originalInputShape.Length - 1] = _filters;
-            output = output.Reshape(newShape);
+            output = Engine.Reshape(output, newShape);
         }
         else if (_originalInputShape != null && _originalInputShape.Length == 4)
         {
             // 4D input -> 4D output (remove batch dim)
-            output = output.Reshape([timeSteps, height, width, _filters]);
+            output = Engine.Reshape(output, new[] { timeSteps, height, width, _filters });
         }
 
         return output;

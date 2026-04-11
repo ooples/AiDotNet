@@ -328,14 +328,14 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             // [inputFeatures] -> [1, 1, inputFeatures]
             batchSize = 1;
             numNodes = 1;
-            processInput = input.Reshape([1, 1, input.Shape[0]]);
+            processInput = Engine.Reshape(input, [1, 1, input.Shape[0]]);
         }
         else if (rank == 2)
         {
             // [numNodes, inputFeatures] -> [1, numNodes, inputFeatures]
             batchSize = 1;
             numNodes = input.Shape[0];
-            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
+            processInput = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1]]);
         }
         else
         {
@@ -345,7 +345,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
             numNodes = input.Shape[rank - 2];
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+            processInput = Engine.Reshape(input, [flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
         _lastInput = processInput;
@@ -389,7 +389,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                     out var batchAttnCoeffs);
 
                 // Add bias using broadcasting and set in output
-                var biasBroadcast = _bias.Reshape([1, _outputFeatures]);
+                var biasBroadcast = Engine.Reshape(_bias, [1, _outputFeatures]);
                 var biasedOutput = Engine.TensorBroadcastAdd(batchOutput, biasBroadcast);
                 output.SetSlice(b, biasedOutput);
             }
@@ -405,11 +405,11 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             // Reshape output to match original input rank
             if (rank == 1)
             {
-                _lastOutput = activatedOutput.Reshape([_outputFeatures]);
+                _lastOutput = Engine.Reshape(activatedOutput, [_outputFeatures]);
             }
             else if (rank == 2)
             {
-                _lastOutput = activatedOutput.Reshape([numNodes, _outputFeatures]);
+                _lastOutput = Engine.Reshape(activatedOutput, [numNodes, _outputFeatures]);
             }
             else
             {
@@ -423,7 +423,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                     outputShape[d] = originalShape[d];
                 outputShape[rank - 2] = numNodes;
                 outputShape[rank - 1] = _outputFeatures;
-                _lastOutput = activatedOutput.Reshape(outputShape);
+                _lastOutput = Engine.Reshape(activatedOutput, outputShape);
             }
 
             return _lastOutput;
@@ -470,11 +470,11 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                 var transformedBatch = Get2DSliceFrom4D(_lastTransformed, b, h);
 
                 // Compute self attention scores: transformedBatch @ attnA -> [numNodes]
-                var selfScores = Engine.TensorMatMul(transformedBatch, attnA.Reshape([_outputFeatures, 1]))
+                var selfScores = Engine.TensorMatMul(transformedBatch, Engine.Reshape(attnA, [_outputFeatures, 1]))
                     .Reshape([numNodes]);
 
                 // Compute neighbor attention scores: transformedBatch @ attnB -> [numNodes]
-                var neighborScores = Engine.TensorMatMul(transformedBatch, attnB.Reshape([_outputFeatures, 1]))
+                var neighborScores = Engine.TensorMatMul(transformedBatch, Engine.Reshape(attnB, [_outputFeatures, 1]))
                     .Reshape([numNodes]);
 
                 // Compute pairwise attention: selfScores[i] + neighborScores[j] with adjacency masking
@@ -514,7 +514,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         var avgOverHeads = Engine.TensorDivideScalar(sumOverHeads, numHeadsT);
 
         // Add bias: reshape to [1, 1, outputFeatures] and let Engine broadcast to [batchSize, numNodes, outputFeatures]
-        var biasExpanded = _bias.Reshape([1, 1, _outputFeatures]);
+        var biasExpanded = Engine.Reshape(_bias, [1, 1, _outputFeatures]);
         output = Engine.TensorBroadcastAdd(avgOverHeads, biasExpanded);
 
         activatedOutput = ApplyActivation(output);
@@ -523,12 +523,12 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         if (rank == 1)
         {
             // Original was [inputFeatures], output should be [outputFeatures]
-            _lastOutput = activatedOutput.Reshape([_outputFeatures]);
+            _lastOutput = Engine.Reshape(activatedOutput, [_outputFeatures]);
         }
         else if (rank == 2)
         {
             // Original was [numNodes, inputFeatures], output should be [numNodes, outputFeatures]
-            _lastOutput = activatedOutput.Reshape([numNodes, _outputFeatures]);
+            _lastOutput = Engine.Reshape(activatedOutput, [numNodes, _outputFeatures]);
         }
         else
         {
@@ -543,7 +543,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                 outputShape[d] = originalShape[d];
             outputShape[rank - 2] = numNodes;
             outputShape[rank - 1] = _outputFeatures;
-            _lastOutput = activatedOutput.Reshape(outputShape);
+            _lastOutput = Engine.Reshape(activatedOutput, outputShape);
         }
 
         return _lastOutput;

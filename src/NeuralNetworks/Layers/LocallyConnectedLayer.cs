@@ -550,7 +550,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
                 shape4D[i] = 1;
             for (int i = 0; i < rank; i++)
                 shape4D[offset + i] = input.Shape[i];
-            processInput = input.Reshape(shape4D);
+            processInput = Engine.Reshape(input, shape4D);
         }
         else if (rank == 4)
         {
@@ -567,18 +567,20 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
             int height = input.Shape[rank - 3];
             int width = input.Shape[rank - 2];
             int channels = input.Shape[rank - 1];
-            processInput = input.Reshape([flatBatch, height, width, channels]);
+            processInput = Engine.Reshape(input, [flatBatch, height, width, channels]);
         }
 
         _lastInput = processInput;
 
         // === GPU-Accelerated LocallyConnectedConv2D ===
-        // The layer uses NHWC format but Engine expects NCHW, so we transpose
-        // Input NHWC [batch, height, width, channels] -> NCHW [batch, channels, height, width]
-        var inputNCHW = processInput.Transpose([0, 3, 1, 2]).Contiguous();
+        // The layer uses NHWC format but Engine expects NCHW, so we transpose.
+        // Every shape op via Engine so the gradient tape records the transformation —
+        // direct Tensor<T>.Transpose bypasses the tape and disconnects _weights / _biases
+        // from the backward graph.
+        var inputNCHW = Engine.TensorPermute(processInput, new[] { 0, 3, 1, 2 });
 
         // Weights need to be permuted from [oh, ow, oc, kh, kw, ic] to [oh, ow, oc, ic, kh, kw]
-        var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]).Contiguous();
+        var weightsPermuted = Engine.TensorPermute(_weights, new[] { 0, 1, 2, 5, 3, 4 });
 
         // Pass bias as 1D tensor [outChannels] to ensure consistent behavior across
         // CPU fallback, GPU, and JIT paths. The engine handles per-channel bias internally.
@@ -586,7 +588,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
         var outputNCHW = Engine.LocallyConnectedConv2D(inputNCHW, weightsPermuted, _biases, strideArr);
 
         // Transpose output back from NCHW [batch, channels, height, width] to NHWC [batch, height, width, channels]
-        var preActivation = outputNCHW.Transpose([0, 2, 3, 1]).Contiguous();
+        var preActivation = Engine.TensorPermute(outputNCHW, new[] { 0, 2, 3, 1 });
 
         // Apply activation function
         var result = ApplyActivation(preActivation);
@@ -615,7 +617,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
                 if (_originalInputShape.Length >= 3) outShape[_originalInputShape.Length - 3] = outHeight;
                 if (_originalInputShape.Length >= 2) outShape[_originalInputShape.Length - 2] = outWidth;
                 outShape[_originalInputShape.Length - 1] = outChannels;
-                return result.Reshape(outShape);
+                return Engine.Reshape(result, outShape);
             }
             else
             {
@@ -626,7 +628,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
                 outShape[_originalInputShape.Length - 3] = outHeight;
                 outShape[_originalInputShape.Length - 2] = outWidth;
                 outShape[_originalInputShape.Length - 1] = outChannels;
-                return result.Reshape(outShape);
+                return Engine.Reshape(result, outShape);
             }
         }
 
