@@ -933,7 +933,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
     {
         // Calculate input current using Engine operations
         // Reshape input for matrix multiply
-        var inputReshaped = input.Reshape([input.Length, 1]);
+        var inputReshaped = Engine.Reshape(input, new[] { input.Length, 1 });
 
         // weights: [inputSize, outputSize], input: [inputSize, 1] -> result: [outputSize, 1]
         // Need to transpose weights for proper matrix multiplication: [outputSize, inputSize] @ [inputSize, 1] = [outputSize, 1]
@@ -941,11 +941,11 @@ public partial class SpikingLayer<T> : LayerBase<T>
         var product = Engine.TensorMatMul(weightsT, inputReshaped);
 
         // Add bias
-        var biasReshaped = _bias.Reshape([_bias.Shape[0], 1]);
+        var biasReshaped = Engine.Reshape(_bias, new[] { _bias.Shape[0], 1 });
         var withBias = Engine.TensorAdd(product, biasReshaped);
 
         // Flatten to 1D tensor for neuron update
-        var current = withBias.Reshape([_bias.Shape[0]]);
+        var current = Engine.Reshape(withBias, new[] { _bias.Shape[0] });
 
         // Update neuron states based on the neuron model
         return _neuronType switch

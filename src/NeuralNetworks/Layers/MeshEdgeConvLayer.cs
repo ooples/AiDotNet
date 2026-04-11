@@ -426,7 +426,7 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
     private Tensor<T> AddBiases(Tensor<T> convOutput)
     {
         int numEdges = convOutput.Shape[0];
-        var biasExpanded = _biases.Reshape(1, OutputChannels);
+        var biasExpanded = Engine.Reshape(_biases, new[] { 1, OutputChannels });
         return Engine.TensorBroadcastAdd(convOutput, biasExpanded);
     }
 

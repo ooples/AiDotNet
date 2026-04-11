@@ -817,7 +817,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     /// <returns>Output with biases added.</returns>
     private Tensor<T> AddBiases(Tensor<T> output, int numVertices)
     {
-        var biasExpanded = _biases.Reshape(1, OutputChannels);
+        var biasExpanded = Engine.Reshape(_biases, new[] { 1, OutputChannels });
         return Engine.TensorBroadcastAdd(output, biasExpanded);
     }
 

@@ -663,7 +663,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         int height = convOutput.Shape[3];
         int width = convOutput.Shape[4];
 
-        var biasExpanded = _biases.Reshape(1, channels, 1, 1, 1);
+        var biasExpanded = Engine.Reshape(_biases, new[] { 1, channels, 1, 1, 1 });
         return Engine.TensorBroadcastAdd(convOutput, biasExpanded);
     }
 

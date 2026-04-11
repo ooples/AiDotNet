@@ -459,14 +459,15 @@ internal partial class MambaBlock<T> : LayerBase<T>
     private Tensor<T> DepthwiseConv1DForward(Tensor<T> input, int batchSize, int seqLen)
     {
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
-        var bias2D = _convBias.Reshape(1, _innerDimension);
+        var bias2D = Engine.Reshape(_convBias, new[] { 1, _innerDimension });
 
         // Pre-compute weight slices for each kernel position: [innerDim] -> [1, innerDim]
         var weightSlices = new Tensor<T>[_convKernelSize];
         for (int k = 0; k < _convKernelSize; k++)
         {
-            weightSlices[k] = _convWeights.GetSliceAlongDimension(k, 1)
-                .Reshape(1, _innerDimension);
+            weightSlices[k] = Engine.Reshape(
+                _convWeights.GetSliceAlongDimension(k, 1),
+                new[] { 1, _innerDimension });
         }
 
         for (int t = 0; t < seqLen; t++)
