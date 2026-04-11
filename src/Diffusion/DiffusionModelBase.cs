@@ -90,6 +90,15 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </summary>
     protected T LearningRate;
 
+    /// <summary>
+    /// Cached result of the reflection walk that discovers trainable parameter tensors.
+    /// The walk was called per Train step, consuming a non-trivial amount of time on
+    /// large models. Tensor references are stable (DenseLayer.SetParameters modifies in
+    /// place) so caching is safe. Subclasses that swap layer references at runtime can
+    /// invalidate via InvalidateTrainableParametersCache.
+    /// </summary>
+    private Tensor<T>[]? _cachedTrainableParameters;
+
     /// <inheritdoc />
     public INoiseScheduler<T> Scheduler => _scheduler;
 
@@ -635,16 +644,22 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // - Exact gradients (vs SPSA's noisy gradient estimates)
         try
         {
-            // Collect trainable parameter tensors from the noise predictor
+            // Forward pass FIRST: many noise predictors use lazy layer initialization
+            // (e.g., DiTNoisePredictor.EnsureLayersInitialized) so the first call to
+            // PredictNoise is what actually creates the DenseLayers. Collecting
+            // trainable parameters before the forward pass would walk an empty layer
+            // list and silently fall through to SPSA — this was the primary cause
+            // of slow diffusion training.
+            using var tape = new GradientTape<T>();
+
+            // Forward pass: predict noise (all Engine ops are tape-tracked)
+            var predicted = PredictNoise(noisySampleTensor, timestep);
+
+            // Now the layers exist — walk them and cache for subsequent Train calls.
             var paramTensors = CollectTrainableParameters();
 
             if (paramTensors.Length > 0)
             {
-                using var tape = new GradientTape<T>();
-
-                // Forward pass: predict noise (all Engine ops are tape-tracked)
-                var predicted = PredictNoise(noisySampleTensor, timestep);
-
                 // Compute MSE loss as a tape-tracked scalar
                 var noiseTensor = new Tensor<T>(predicted._shape, noiseVector);
                 var diff = Engine.TensorSubtract(predicted, noiseTensor);
@@ -672,9 +687,15 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                     return flatGradients;
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Fall through to SPSA if tape-based training fails
+            // Fall through to SPSA if tape-based training fails. Swallowing the
+            // exception silently hid a real bug (CollectTrainableParameters not
+            // walking nested predictors) for many releases — record the failure
+            // reason via Trace so diagnostics can catch future regressions.
+            System.Diagnostics.Trace.TraceWarning(
+                "DiffusionModelBase.ComputeGradients tape path failed; falling back to SPSA. {0}: {1}",
+                ex.GetType().Name, ex.Message);
         }
 
         // Fallback: SPSA (Simultaneous Perturbation Stochastic Approximation).
@@ -744,38 +765,77 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </summary>
     protected virtual Tensor<T>[] CollectTrainableParameters()
     {
-        // Default: try to collect from ITrainableLayer implementations
+        // Cached reflection walk: the walker traverses the full object graph to
+        // find every ITrainableLayer's parameter tensors. Layer structure and
+        // tensor references are stable after construction (DenseLayer.SetParameters
+        // modifies in place), so we only need to walk once per model instance.
+        if (_cachedTrainableParameters is not null)
+            return _cachedTrainableParameters;
+
         var allParams = new List<Tensor<T>>();
-        CollectLayerParameters(this, allParams, new HashSet<object>());
+        CollectLayerParameters(this, allParams, new HashSet<object>(ReferenceEqualityComparer.Instance));
+
+        // Only cache non-empty results. An empty result usually means lazy
+        // initialization hasn't run yet — don't pin that empty list.
+        if (allParams.Count > 0)
+            _cachedTrainableParameters = allParams.ToArray();
+
         return allParams.ToArray();
     }
 
-    private void CollectLayerParameters(object obj, List<Tensor<T>> allParams, HashSet<object> visited)
+    /// <summary>
+    /// Invalidates the cached trainable-parameter walk. Call this from subclasses
+    /// that swap layer references at runtime so the next training step re-discovers
+    /// the updated structure.
+    /// </summary>
+    protected void InvalidateTrainableParametersCache()
     {
-        if (obj == null || !visited.Add(obj)) return;
+        _cachedTrainableParameters = null;
+    }
+
+    private void CollectLayerParameters(object? obj, List<Tensor<T>> allParams, HashSet<object> visited)
+    {
+        if (obj is null || !visited.Add(obj)) return;
 
         if (obj is Interfaces.ITrainableLayer<T> trainable)
         {
             var parameters = trainable.GetTrainableParameters();
-            if (parameters != null)
+            if (parameters is not null)
             {
                 foreach (var p in parameters)
-                    if (p != null && p.Length > 0) allParams.Add(p);
+                    if (p is not null && p.Length > 0) allParams.Add(p);
             }
         }
 
-        // Recurse into fields that might be layers or layer containers
-        foreach (var field in obj.GetType().GetFields(
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public))
+        // Recurse into every reference-type instance field so nested composites
+        // (e.g., DiffusionModel -> UNetNoisePredictor -> List<Layer>) are fully
+        // walked even when the intermediate types don't implement ITrainableLayer.
+        // The visited set handles cycles.
+        var type = obj.GetType();
+        if (type.IsPrimitive || type == typeof(string) || type.IsEnum) return;
+
+        foreach (var field in type.GetFields(
+            System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.NonPublic |
+            System.Reflection.BindingFlags.Public))
         {
+            // Skip compiler-generated backing fields for non-ref properties and
+            // fields whose declared type can't hold a trainable layer.
+            if (field.FieldType.IsPrimitive || field.FieldType.IsEnum ||
+                field.FieldType == typeof(string) || field.FieldType == typeof(Tensor<T>))
+                continue;
+
             var val = field.GetValue(obj);
-            if (val is Interfaces.ITrainableLayer<T>)
-                CollectLayerParameters(val, allParams, visited);
-            else if (val is System.Collections.IEnumerable enumerable && val is not string && val is not Tensor<T>)
+            if (val is null) continue;
+
+            if (val is System.Collections.IEnumerable enumerable && val is not string)
             {
                 foreach (var item in enumerable)
-                    if (item is Interfaces.ITrainableLayer<T>)
-                        CollectLayerParameters(item, allParams, visited);
+                    CollectLayerParameters(item, allParams, visited);
+            }
+            else
+            {
+                CollectLayerParameters(val, allParams, visited);
             }
         }
     }
