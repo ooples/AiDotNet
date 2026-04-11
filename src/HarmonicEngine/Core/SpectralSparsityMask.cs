@@ -101,6 +101,7 @@ public class SpectralSparsityMask<T>
     public int SelectK(Vector<Complex<T>> spectrum)
     {
         int n = spectrum.Length;
+        if (n == 0) return 0;
 
         // Compute sorted magnitudes (descending)
         var magnitudes = new double[n];

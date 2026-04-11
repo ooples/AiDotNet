@@ -56,10 +56,13 @@ public class AnalyticSignalTests
 
         var amplitude = analytic.InstantaneousAmplitude(signal);
 
-        // Should be approximately constant at 'amp' (away from edges)
+        // Should be approximately constant at 'amp' (away from edges).
+        // Within 1% tolerance — precision=0 was too loose (~0.5 absolute tolerance).
         for (int i = 5; i < n - 5; i++)
         {
-            Assert.Equal(amp, amplitude[i], 0); // Within 1.0 tolerance
+            double relativeError = Math.Abs(amplitude[i] - amp) / amp;
+            Assert.True(relativeError < 0.01,
+                $"At index {i}, amplitude={amplitude[i]:F4} expected near {amp}, relative error={relativeError:P2}");
         }
     }
 

@@ -10,18 +10,18 @@ namespace AiDotNet.HarmonicEngine.Transforms;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> Imagine you see a stock chart pattern — say a "head and shoulders" formation.
-/// The same pattern might appear at different price scales: once in a $10 range and again in a $100 range.
-/// To a human, it's obviously the same pattern, just bigger. But to a computer comparing raw numbers,
-/// they look completely different.
+/// <b>For Beginners:</b> Imagine you see a pattern in a signal that repeats at different rates.
+/// For example, a chirp that takes 10 samples to complete vs. the same chirp stretched to 20 samples.
+/// The Mellin transform produces the same magnitude spectrum for both versions — it is invariant
+/// to <b>temporal scaling</b> (dilation of the time axis), not to amplitude scaling.
 ///
-/// The Mellin transform solves this by converting the signal to a representation where scaling
-/// doesn't matter. A pattern scaled by 2x or 0.5x produces the same Mellin transform output.
+/// Mathematically: M{f(ax)}(s) = a^(-s) · M{f(x)}(s), so the magnitude |M{f(ax)}| = |a|^(-Re(s)) · |M{f(x)}|,
+/// which means the shape of the magnitude spectrum is preserved across time-scaled versions of the same pattern.
 ///
 /// How it works:
 /// 1. Resample the signal from linear time to logarithmic time (log-resampling)
 /// 2. Apply a standard FFT to the log-resampled signal
-/// 3. The resulting spectrum is scale-invariant — scaling in the original domain
+/// 3. The resulting spectrum is scale-invariant — time-axis scaling in the original domain
 ///    becomes a mere phase shift in the Mellin domain
 /// </para>
 /// </remarks>

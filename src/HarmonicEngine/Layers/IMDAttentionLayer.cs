@@ -89,14 +89,13 @@ public class IMDAttentionLayer<T> : LayerBase<T>
         // Step 3: Extract attention weights from IMD products
         _lastAttentionWeights = _extractor.ExtractAttentionWeights(squared);
 
-        // Step 4: Compute weighted sum via Engine.DotProduct per output row
-        // output[i] = DotProduct(attention_row_i, features) — vectorized inner product
+        // Step 4: Compute weighted sum output = attention_weights * features (matrix-vector).
+        // Use Matrix.Multiply(Vector) for a single vectorized mat-vec instead of per-row allocations.
+        var outputVec = _lastAttentionWeights.Multiply(features);
         var output = new Tensor<T>([_numCarriers]);
         for (int i = 0; i < _numCarriers; i++)
         {
-            var attnRow = new Vector<T>(_numCarriers);
-            for (int j = 0; j < _numCarriers; j++) attnRow[j] = _lastAttentionWeights[i, j];
-            output[i] = Engine.DotProduct(attnRow, features);
+            output[i] = outputVec[i];
         }
 
         return output;

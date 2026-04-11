@@ -59,8 +59,9 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     private readonly List<IMDAttentionLayer<T>> _attentionLayers = [];
     private readonly SpectralSparsityMask<T> _sparsityMask;
 
-    // Output projection (simple linear layer for mapping spectral features to output)
-    private Vector<T> _outputWeights;
+    // Output projection (simple linear layer for mapping spectral features to output).
+    // Stored as a Matrix [OutputSize x CarrierCount] for efficient vectorized mat-vec.
+    private Matrix<T> _outputWeights;
     private T _outputBias;
 
     // Cached features from last forward pass (needed for gradient-based weight update in Train)
@@ -105,7 +106,7 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         BuildPipeline();
 
         // Initialize output projection
-        _outputWeights = new Vector<T>(options.OutputSize * options.CarrierCount);
+        _outputWeights = new Matrix<T>(options.OutputSize, options.CarrierCount);
         _outputBias = NumOps.Zero;
         InitializeOutputWeights();
     }
@@ -140,19 +141,18 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         // Stage 4: Spectral sparsity — keep only top-K strongest components
         current = ApplySparsity(current);
 
-        // Stage 5: Output projection via Engine.DotProduct per output dimension
+        // Stage 5: Output projection via a single vectorized matrix-vector multiply.
+        // Build features vector once at full CarrierCount size (zero-padded if needed),
+        // then do one mat-vec instead of per-row allocations.
+        _lastFeatures = new Vector<T>(_options.CarrierCount);
         int carrierCount = Math.Min(current.Length, _options.CarrierCount);
-        _lastFeatures = new Vector<T>(carrierCount);
         for (int i = 0; i < carrierCount; i++) _lastFeatures[i] = current[i];
 
+        var outputVec = _outputWeights.Multiply(_lastFeatures);
         var output = new Tensor<T>([_options.OutputSize]);
         for (int o = 0; o < _options.OutputSize; o++)
         {
-            var weightRow = new Vector<T>(carrierCount);
-            int offset = o * _options.CarrierCount;
-            for (int i = 0; i < carrierCount; i++) weightRow[i] = _outputWeights[offset + i];
-
-            output[o] = NumOps.Add(Engine.DotProduct(weightRow, _lastFeatures), _outputBias);
+            output[o] = NumOps.Add(outputVec[o], _outputBias);
         }
 
         return output;
@@ -181,7 +181,7 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         double featurePower = 0;
         if (_lastFeatures is not null)
         {
-            for (int j = 0; j < carrierCount; j++)
+            for (int j = 0; j < _lastFeatures.Length; j++)
             {
                 double fj = NumOps.ToDouble(_lastFeatures[j]);
                 featurePower += fj * fj;
@@ -197,12 +197,10 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             // Update output weights: w_oj -= (lr/||f||²) * error * feature_j
             if (_lastFeatures is not null)
             {
-                int offset = o * _options.CarrierCount;
-                for (int j = 0; j < carrierCount; j++)
+                for (int j = 0; j < _options.CarrierCount; j++)
                 {
                     T grad = NumOps.Multiply(scaledError, _lastFeatures[j]);
-                    _outputWeights[offset + j] = NumOps.Subtract(
-                        _outputWeights[offset + j], grad);
+                    _outputWeights[o, j] = NumOps.Subtract(_outputWeights[o, j], grad);
                 }
             }
 
@@ -224,26 +222,39 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        int totalParams = _outputWeights.Length + 1; // weights + bias
+        int rows = _outputWeights.Rows;
+        int cols = _outputWeights.Columns;
+        int totalParams = rows * cols + 1; // weights + bias
         var parameters = new Vector<T>(totalParams);
-        for (int i = 0; i < _outputWeights.Length; i++)
+        int idx = 0;
+        for (int r = 0; r < rows; r++)
         {
-            parameters[i] = _outputWeights[i];
+            for (int c = 0; c < cols; c++)
+            {
+                parameters[idx++] = _outputWeights[r, c];
+            }
         }
-        parameters[_outputWeights.Length] = _outputBias;
+        parameters[idx] = _outputBias;
         return parameters;
     }
 
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        for (int i = 0; i < _outputWeights.Length && i < parameters.Length; i++)
+        int rows = _outputWeights.Rows;
+        int cols = _outputWeights.Columns;
+        int weightCount = rows * cols;
+        int idx = 0;
+        for (int r = 0; r < rows && idx < parameters.Length; r++)
         {
-            _outputWeights[i] = parameters[i];
+            for (int c = 0; c < cols && idx < parameters.Length; c++)
+            {
+                _outputWeights[r, c] = parameters[idx++];
+            }
         }
-        if (parameters.Length > _outputWeights.Length)
+        if (parameters.Length > weightCount)
         {
-            _outputBias = parameters[_outputWeights.Length];
+            _outputBias = parameters[weightCount];
         }
     }
 
@@ -309,10 +320,20 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             spectrum[i] = new Complex<T>(current[i], NumOps.Zero);
         }
 
-        // Determine K
-        int k = _options.UseMDLAutoK
-            ? _sparsityMask.SelectK(spectrum)
-            : Math.Min(_options.SparsityK, n);
+        // Determine K. SparsityK=0 with UseMDLAutoK=false means "no sparsity" (keep all).
+        int k;
+        if (_options.UseMDLAutoK)
+        {
+            k = _sparsityMask.SelectK(spectrum);
+        }
+        else if (_options.SparsityK <= 0)
+        {
+            return current; // No sparsity requested
+        }
+        else
+        {
+            k = Math.Min(_options.SparsityK, n);
+        }
 
         if (k >= n) return current; // No sparsity needed
 
@@ -364,9 +385,12 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
-        for (int i = 0; i < _outputWeights.Length; i++)
+        for (int r = 0; r < _outputWeights.Rows; r++)
         {
-            _outputWeights[i] = NumOps.FromDouble((rng.NextDouble() * 2.0 - 1.0) * scale);
+            for (int c = 0; c < _outputWeights.Columns; c++)
+            {
+                _outputWeights[r, c] = NumOps.FromDouble((rng.NextDouble() * 2.0 - 1.0) * scale);
+            }
         }
     }
 }
