@@ -4,6 +4,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -45,6 +46,7 @@ public abstract class DiffusionModelTestBase
     public async Task Training_ShouldReducePredictionError()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
@@ -79,6 +81,7 @@ public abstract class DiffusionModelTestBase
     public async Task DifferentInputs_ShouldProduceDifferentOutputs()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input1 = CreateConstantTensor(InputShape, 0.1);
@@ -110,6 +113,7 @@ public abstract class DiffusionModelTestBase
     public async Task ScaledInput_ShouldChangeOutput()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
 
@@ -145,6 +149,7 @@ public abstract class DiffusionModelTestBase
     public async Task OutputShape_ShouldMatchInputShape()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
@@ -161,6 +166,7 @@ public abstract class DiffusionModelTestBase
     public async Task ForwardPass_ShouldProduceFiniteOutput()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
@@ -178,6 +184,7 @@ public abstract class DiffusionModelTestBase
     public async Task ForwardPass_ShouldBeFinite_AfterTraining()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
@@ -204,6 +211,7 @@ public abstract class DiffusionModelTestBase
     public async Task NoiseSchedule_ShouldBeMonotonic()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var baseInput = CreateRandomTensor(InputShape, rng);
@@ -249,6 +257,7 @@ public abstract class DiffusionModelTestBase
     public async Task OutputRange_ShouldBeValid()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
@@ -271,6 +280,7 @@ public abstract class DiffusionModelTestBase
     public async Task Predict_ShouldBeDeterministic()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
@@ -286,6 +296,7 @@ public abstract class DiffusionModelTestBase
     public async Task Clone_ShouldProduceIdenticalOutput()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
@@ -303,6 +314,7 @@ public abstract class DiffusionModelTestBase
     public async Task Metadata_ShouldExist()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
@@ -315,6 +327,7 @@ public abstract class DiffusionModelTestBase
     public async Task Parameters_ShouldBeNonEmpty()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var model = CreateModel();
         Assert.True(model.GetParameters().Length > 0,
             "Diffusion model should have learnable parameters.");
@@ -324,6 +337,7 @@ public abstract class DiffusionModelTestBase
     public async Task Scheduler_ShouldBeNonNull()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var model = CreateModel();
         Assert.NotNull(model.Scheduler);
     }

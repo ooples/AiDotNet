@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -26,6 +27,7 @@ public abstract class MultiLabelClassifierTestBase
     public async Task Predictions_ShouldBeFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
 
@@ -54,6 +56,7 @@ public abstract class MultiLabelClassifierTestBase
     public async Task Predict_ShouldBeDeterministic()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
 
@@ -82,6 +85,7 @@ public abstract class MultiLabelClassifierTestBase
     public async Task OutputDimension_ShouldMatchLabels()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
 

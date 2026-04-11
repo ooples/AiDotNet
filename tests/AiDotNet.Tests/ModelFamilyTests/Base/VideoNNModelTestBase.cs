@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -23,6 +24,7 @@ public abstract class VideoNNModelTestBase : NeuralNetworkModelTestBase
     public async Task TemporalDim_Preserved()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -45,6 +47,7 @@ public abstract class VideoNNModelTestBase : NeuralNetworkModelTestBase
     public async Task SingleFrame_ShouldNotCrash()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
 
         // Create minimal input (use InputShape but reduce if possible)
@@ -72,6 +75,7 @@ public abstract class VideoNNModelTestBase : NeuralNetworkModelTestBase
     public async Task ConsecutiveFrames_SmoothOutput()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
 

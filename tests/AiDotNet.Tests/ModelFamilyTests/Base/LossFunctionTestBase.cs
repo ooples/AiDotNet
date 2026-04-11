@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -86,6 +87,7 @@ public abstract class LossFunctionTestBase
     public async Task CalculateLoss_ShouldBeFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var loss = CreateLoss();
         var predicted = new Vector<double>(TestPredicted);
         var actual = new Vector<double>(TestActual);
@@ -104,6 +106,7 @@ public abstract class LossFunctionTestBase
     public async Task CalculateLoss_ShouldBeNonNegative()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         if (!IsNonNegative) return;
 
         var loss = CreateLoss();
@@ -122,6 +125,7 @@ public abstract class LossFunctionTestBase
     public async Task CalculateLoss_IdenticalInputs_ShouldBeZero()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         if (!ZeroLossForIdentical) return;
 
         var loss = CreateLoss();
@@ -140,6 +144,7 @@ public abstract class LossFunctionTestBase
     public async Task CalculateLoss_LargerError_ShouldProduceLargerLoss()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         // Skip for losses that can go negative (MBE, Wasserstein) — larger error
         // doesn't necessarily mean larger loss value when loss can be negative
         if (!IsNonNegative) return;
@@ -164,6 +169,7 @@ public abstract class LossFunctionTestBase
     public async Task CalculateDerivative_ShouldBeFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var loss = CreateLoss();
         var predicted = new Vector<double>(TestPredicted);
         var actual = new Vector<double>(TestActual);
@@ -188,6 +194,7 @@ public abstract class LossFunctionTestBase
     public async Task CalculateDerivative_IdenticalInputs_ShouldBeZero()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         if (!ZeroDerivativeForIdentical) return;
 
         var loss = CreateLoss();
@@ -212,6 +219,7 @@ public abstract class LossFunctionTestBase
     public async Task CalculateDerivative_ShouldMatchNumericalGradient()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var loss = CreateLoss();
         var predicted = new Vector<double>(TestPredicted);
         var actual = new Vector<double>(TestActual);
@@ -251,6 +259,7 @@ public abstract class LossFunctionTestBase
     public async Task CalculateDerivative_SignShouldMatchErrorDirection()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         if (!HasStandardGradientSign) return;
 
         var loss = CreateLoss();
@@ -273,6 +282,7 @@ public abstract class LossFunctionTestBase
     public async Task CalculateLoss_ShouldBeSymmetricInErrorMagnitude()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         // Only test symmetry for standard regression-style losses.
         // Classification losses (Focal, CE) and signed-label losses (Hinge) are
         // intentionally asymmetric by design.

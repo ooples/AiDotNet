@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -32,6 +33,7 @@ public abstract class ReinforcementLearningTestBase
     public async Task ActionSelection_ShouldBeFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var state = CreateRandomState(rng);
@@ -54,6 +56,7 @@ public abstract class ReinforcementLearningTestBase
     public async Task Policy_ShouldBeDeterministic()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var state = CreateRandomState(rng);
@@ -70,6 +73,7 @@ public abstract class ReinforcementLearningTestBase
     public async Task DifferentStates_DifferentActions()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var model = CreateModel();
 
         var state1 = new Vector<double>(StateDim);
@@ -101,6 +105,7 @@ public abstract class ReinforcementLearningTestBase
     public async Task Training_ShouldChangeParameters()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
 
@@ -131,6 +136,7 @@ public abstract class ReinforcementLearningTestBase
     public async Task Clone_ShouldProduceSamePolicy()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var state = CreateRandomState(rng);
@@ -146,6 +152,7 @@ public abstract class ReinforcementLearningTestBase
     public async Task Metadata_ShouldExistAfterTraining()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var state = CreateRandomState(rng);
@@ -158,6 +165,7 @@ public abstract class ReinforcementLearningTestBase
     public async Task Parameters_ShouldBeNonEmpty()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var model = CreateModel();
         Assert.True(((IParameterizable<double, Vector<double>, Vector<double>>)model).GetParameters().Length > 0, "RL agent should have parameters.");
     }

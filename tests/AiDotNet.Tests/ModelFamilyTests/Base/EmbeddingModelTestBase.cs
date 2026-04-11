@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -22,6 +23,7 @@ public abstract class EmbeddingModelTestBase : NeuralNetworkModelTestBase
     public async Task SimilarInputs_ProduceSimilarEmbeddings()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
 
@@ -63,6 +65,7 @@ public abstract class EmbeddingModelTestBase : NeuralNetworkModelTestBase
     public async Task Embeddings_ShouldBeFiniteAndBounded()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -90,6 +93,7 @@ public abstract class EmbeddingModelTestBase : NeuralNetworkModelTestBase
     public async Task OutputDimensionality_MatchesEmbeddingDim()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

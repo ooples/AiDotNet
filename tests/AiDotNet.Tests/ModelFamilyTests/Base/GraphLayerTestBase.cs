@@ -3,6 +3,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -51,6 +52,7 @@ public abstract class GraphLayerTestBase
     public async Task Forward_ShouldProduceFiniteOutput()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var layer = CreateAndSetup();
         var input = CreateRandomTensor(InputShape);
 
@@ -72,6 +74,7 @@ public abstract class GraphLayerTestBase
     public async Task Forward_ShouldBeDeterministic()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var layer = CreateAndSetup();
         layer.SetTrainingMode(false);
         var input = CreateRandomTensor(InputShape);
@@ -93,6 +96,7 @@ public abstract class GraphLayerTestBase
     public async Task Forward_DifferentInputs_ShouldProduceDifferentOutputs()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var layer = CreateAndSetup();
         layer.SetTrainingMode(false);
 
@@ -130,6 +134,7 @@ public abstract class GraphLayerTestBase
     public async Task Parameters_CountShouldMatchVector()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var layer = CreateAndSetup();
         int count = layer.ParameterCount;
         var parameters = layer.GetParameters();
@@ -149,6 +154,7 @@ public abstract class GraphLayerTestBase
     public async Task ResetState_ShouldNotBreakForward()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var layer = CreateAndSetup();
         var input = CreateRandomTensor(InputShape);
 

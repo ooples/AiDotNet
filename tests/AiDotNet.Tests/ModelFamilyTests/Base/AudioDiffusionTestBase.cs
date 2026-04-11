@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -15,6 +16,7 @@ public abstract class AudioDiffusionTestBase : LatentDiffusionTestBase
     public async Task AudioLength_ShouldBeReasonable()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
@@ -28,6 +30,7 @@ public abstract class AudioDiffusionTestBase : LatentDiffusionTestBase
     public async Task SpectralEnergy_ShouldBeFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);

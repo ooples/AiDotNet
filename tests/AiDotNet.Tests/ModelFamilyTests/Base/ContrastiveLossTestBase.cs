@@ -2,6 +2,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -25,6 +26,7 @@ public abstract class ContrastiveLossTestBase
     public async Task Calculate_ShouldBeFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var loss = CreateLoss();
         int batchSize = 3;
         var targetLogits = new Vector<double>(batchSize);
@@ -54,6 +56,7 @@ public abstract class ContrastiveLossTestBase
     public async Task Calculate_ShouldBeNonNegative()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var loss = CreateLoss();
         int batchSize = 3;
         var targetLogits = new Vector<double>(batchSize);
@@ -80,6 +83,7 @@ public abstract class ContrastiveLossTestBase
     public async Task Calculate_HigherTargetLogits_ShouldReduceLoss()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var loss = CreateLoss();
         int batchSize = 2;
         var noiseLogits = new Matrix<double>(batchSize, NumNoiseSamples);
@@ -105,6 +109,7 @@ public abstract class ContrastiveLossTestBase
     public async Task CalculateDerivative_ShouldBeFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var loss = CreateLoss();
         int batchSize = 3;
         var targetLogits = new Vector<double>(batchSize);
@@ -139,6 +144,7 @@ public abstract class ContrastiveLossTestBase
     public async Task Calculate_MismatchedDimensions_ShouldThrow()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var loss = CreateLoss();
         var targetLogits = new Vector<double>(3);
         var noiseLogits = new Matrix<double>(2, NumNoiseSamples); // wrong rows

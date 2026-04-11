@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -22,6 +23,7 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
     public async Task SelfLoops_ShouldNotCauseNumericalIssues()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
 
         // Create a diagonal-heavy input (simulating self-loops in adjacency)
@@ -62,6 +64,7 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
     public async Task ZeroInput_ShouldNotCrash()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
 
         var input = new Tensor<double>(InputShape);
@@ -89,6 +92,7 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
     public async Task DifferentStructures_ProduceDifferentOutputs()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
 
         // Input 1: identity-like structure (strong self-connections)

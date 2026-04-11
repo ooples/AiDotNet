@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -28,6 +29,7 @@ public abstract class RegressionModelTestBase
     public async Task TranslationEquivariance_ShiftingTargets_ShiftsPredictions()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
         var model1 = CreateModel();
@@ -69,6 +71,7 @@ public abstract class RegressionModelTestBase
     public async Task ScalingEquivariance_ScalingTargets_ScalesPredictions()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
         var model1 = CreateModel();
@@ -114,6 +117,7 @@ public abstract class RegressionModelTestBase
     public async Task TrainingError_ShouldNotExceedTestError_OnAverage()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng, noise: 0.5);
@@ -144,6 +148,7 @@ public abstract class RegressionModelTestBase
     public async Task MoreData_ShouldNotDegrade_R2()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var model1 = CreateModel();
         var (trainX1, trainY1) = ModelTestHelpers.GenerateLinearData(30, Features, rng1, noise: 0.1);
@@ -183,6 +188,7 @@ public abstract class RegressionModelTestBase
     public async Task IrrelevantFeature_ShouldNotImprove_Predictions()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         if (Features < 2)
         {
             // Univariate models (e.g., SimpleRegression) can't compare N vs N+1 features
@@ -243,6 +249,7 @@ public abstract class RegressionModelTestBase
     public async Task MonotonicResponse_IncreasingFeature_IncreasesPrediction()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         int nFeatures = Math.Max(Features, 1);
@@ -285,6 +292,7 @@ public abstract class RegressionModelTestBase
     public async Task ResidualMean_ShouldBeNearZero()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(200, Features, rng, noise: 0.5);
@@ -323,6 +331,7 @@ public abstract class RegressionModelTestBase
     public async Task CoefficientSigns_ShouldMatchDataGeneratingProcess()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         int nFeatures = Math.Max(Features, 1);
@@ -373,6 +382,7 @@ public abstract class RegressionModelTestBase
     public async Task FeaturePermutation_ShouldGiveConsistentPredictions()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         if (Features < 2)
         {
             // Feature permutation requires at least 2 features to swap.
@@ -432,6 +442,7 @@ public abstract class RegressionModelTestBase
     public async Task R2_ShouldBePositive_OnLinearData()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng, noise: 0.1);
@@ -458,6 +469,7 @@ public abstract class RegressionModelTestBase
     public async Task Predictions_ShouldBeFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
@@ -485,6 +497,7 @@ public abstract class RegressionModelTestBase
     public async Task Predict_ShouldBeDeterministic()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
@@ -507,6 +520,7 @@ public abstract class RegressionModelTestBase
     public async Task OutputDimension_ShouldMatchInputRows()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
@@ -530,6 +544,7 @@ public abstract class RegressionModelTestBase
     public async Task Clone_ShouldProduceIdenticalPredictions()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
@@ -553,6 +568,7 @@ public abstract class RegressionModelTestBase
     public async Task Metadata_ShouldExistAfterTraining()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
@@ -569,6 +585,7 @@ public abstract class RegressionModelTestBase
     public async Task Parameters_ShouldBeNonEmpty_AfterTraining()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
@@ -591,6 +608,7 @@ public abstract class RegressionModelTestBase
     public async Task ActiveFeatureIndices_ShouldBeValid()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
@@ -621,6 +639,7 @@ public abstract class RegressionModelTestBase
     public async Task InterceptRecovery_ConstantTarget_ShouldPredictConstant()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         int n = TrainSamples;
@@ -659,6 +678,7 @@ public abstract class RegressionModelTestBase
     public async Task CollinearFeatures_ShouldNotCrash()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         int n = TrainSamples;
@@ -694,6 +714,7 @@ public abstract class RegressionModelTestBase
     public async Task SingleFeature_ShouldWork()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         int n = TrainSamples;
@@ -725,6 +746,7 @@ public abstract class RegressionModelTestBase
     public async Task Builder_ShouldProduceResult()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
         var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);
@@ -743,6 +765,7 @@ public abstract class RegressionModelTestBase
     public async Task Builder_R2ShouldBePositive()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
         var (testX, testY) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng);

@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -41,6 +42,7 @@ public abstract class ClassificationModelTestBase
     public async Task Predictions_ShouldBeValidClassLabels()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
@@ -72,6 +74,7 @@ public abstract class ClassificationModelTestBase
     public async Task Accuracy_ShouldBeatChance_OnSeparableData()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
@@ -96,6 +99,7 @@ public abstract class ClassificationModelTestBase
     public async Task Accuracy_ShouldBeHigh_OnPerfectlySeparableData()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
@@ -119,6 +123,7 @@ public abstract class ClassificationModelTestBase
     public async Task TrainingAccuracy_ShouldBeAtLeastAsGood_AsTestAccuracy()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
@@ -145,6 +150,7 @@ public abstract class ClassificationModelTestBase
     public async Task MoreData_ShouldNotDegrade_Accuracy()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var model1 = CreateModel();
         var (trainX1, trainY1) = GenerateData(30, Features, NumClasses, rng1);
@@ -178,6 +184,7 @@ public abstract class ClassificationModelTestBase
     public async Task IrrelevantFeature_ShouldNotImprove_Accuracy()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
         var model1 = CreateModel();
@@ -218,6 +225,7 @@ public abstract class ClassificationModelTestBase
     public async Task AllClasses_ShouldBePredicted_OnBalancedData()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
@@ -245,6 +253,7 @@ public abstract class ClassificationModelTestBase
     public async Task ConfusionMatrix_ShouldBeDiagonalDominant()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
@@ -288,6 +297,7 @@ public abstract class ClassificationModelTestBase
     public async Task Predict_ShouldBeDeterministic()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
@@ -305,6 +315,7 @@ public abstract class ClassificationModelTestBase
     public async Task OutputDimension_ShouldMatchInputRows()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
@@ -318,6 +329,7 @@ public abstract class ClassificationModelTestBase
     public async Task Clone_ShouldProduceIdenticalPredictions()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
@@ -336,6 +348,7 @@ public abstract class ClassificationModelTestBase
     public async Task Metadata_ShouldExistAfterTraining()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
@@ -348,6 +361,7 @@ public abstract class ClassificationModelTestBase
     public async Task Parameters_ShouldBeNonEmpty_AfterTraining()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         if (!HasFlatParameters) return; // Meta/ensemble/tree models delegate to sub-models
 
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -374,6 +388,7 @@ public abstract class ClassificationModelTestBase
     public async Task BinaryThreshold_Sensitivity()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         if (NumClasses != 2) return;
 
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -407,6 +422,7 @@ public abstract class ClassificationModelTestBase
     public async Task ClassPrior_Sensitivity()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         if (NumClasses != 2) return;
 
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
@@ -462,6 +478,7 @@ public abstract class ClassificationModelTestBase
     public async Task Builder_ShouldProduceResult()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);
@@ -480,6 +497,7 @@ public abstract class ClassificationModelTestBase
     public async Task Builder_AccuracyShouldBeatChance()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, testY) = GenerateData(TestSamples, Features, NumClasses, rng);

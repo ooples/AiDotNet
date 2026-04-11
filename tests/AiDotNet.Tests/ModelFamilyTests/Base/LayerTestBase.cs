@@ -301,6 +301,7 @@ public abstract class LayerTestBase
     public async Task Forward_ShouldProduceFiniteOutput()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var layer = CreateLayer();
         var input = CreateRandomTensor(InputShape);
 
@@ -326,6 +327,7 @@ public abstract class LayerTestBase
     public async Task Forward_ShouldBeDeterministic()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var layer = CreateLayer();
         layer.SetTrainingMode(false); // Disable dropout/stochastic behavior
         var input = CreateRandomTensor(InputShape);
@@ -351,6 +353,7 @@ public abstract class LayerTestBase
     public async Task Forward_DifferentInputs_ShouldProduceDifferentOutputs()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         if (!ExpectsDifferentOutputForConstantInputs) return;
 
         var layer = CreateLayer();
@@ -388,6 +391,7 @@ public abstract class LayerTestBase
     public async Task Forward_OutputShape_ShouldMatchGetOutputShape()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var layer = CreateLayer();
         var input = CreateRandomTensor(InputShape);
 
@@ -421,6 +425,7 @@ public abstract class LayerTestBase
     public async Task Parameters_CountShouldMatchVector()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var layer = CreateLayer();
 
         int count = layer.ParameterCount;
@@ -445,6 +450,7 @@ public abstract class LayerTestBase
     public async Task Parameters_SetGet_Roundtrip()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var layer = CreateLayer();
         if (layer.ParameterCount == 0) return; // Skip for non-trainable layers
 
@@ -476,6 +482,7 @@ public abstract class LayerTestBase
     public async Task Serialize_Deserialize_ShouldPreserveBehavior()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var layer = CreateLayer();
         layer.SetTrainingMode(false);
         var input = CreateRandomTensor(InputShape);
@@ -519,6 +526,7 @@ public abstract class LayerTestBase
     public async Task ResetState_ShouldNotBreakForward()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var layer = CreateLayer();
         var input = CreateRandomTensor(InputShape);
 

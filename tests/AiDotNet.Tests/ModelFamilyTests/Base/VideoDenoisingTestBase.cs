@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -15,6 +16,7 @@ public abstract class VideoDenoisingTestBase : VideoNNModelTestBase
     public async Task CleanInput_ShouldBePreserved()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var cleanInput = CreateRandomTensor(InputShape, rng);
@@ -40,6 +42,7 @@ public abstract class VideoDenoisingTestBase : VideoNNModelTestBase
     public async Task DenoisedOutput_ShouldBeBounded()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

@@ -3,6 +3,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -47,6 +48,7 @@ public abstract class ActiveLearningTestBase
     public async Task SelectSamples_ReturnsRequestedCount()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var selected = strategy.SelectSamples(CreateMockModel(), CreateUnlabeledPool(), BatchSize);
         Assert.Equal(BatchSize, selected.Length);
@@ -57,6 +59,7 @@ public abstract class ActiveLearningTestBase
     public async Task SelectSamples_IndicesAreUnique()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var selected = strategy.SelectSamples(CreateMockModel(), CreateUnlabeledPool(), BatchSize);
         Assert.Equal(selected.Length, new HashSet<int>(selected).Count);
@@ -67,6 +70,7 @@ public abstract class ActiveLearningTestBase
     public async Task SelectSamples_IndicesInRange()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var pool = CreateUnlabeledPool();
         int actualPoolSize = pool.Shape[0];
@@ -88,6 +92,7 @@ public abstract class ActiveLearningTestBase
     public async Task SelectSamples_SelectedHaveHigherThanAverageScores()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var model = CreateMockModel();
         var pool = CreateUnlabeledPool();
@@ -118,6 +123,7 @@ public abstract class ActiveLearningTestBase
     public async Task ComputeScores_AreNonNegative()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var scores = strategy.ComputeInformativenessScores(CreateMockModel(), CreateUnlabeledPool());
 
@@ -134,6 +140,7 @@ public abstract class ActiveLearningTestBase
     public async Task ComputeScores_AreFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var scores = strategy.ComputeInformativenessScores(CreateMockModel(), CreateUnlabeledPool());
 
@@ -150,6 +157,7 @@ public abstract class ActiveLearningTestBase
     public async Task ComputeScores_CountMatchesPoolSize()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var scores = strategy.ComputeInformativenessScores(CreateMockModel(), CreateUnlabeledPool());
         Assert.Equal(PoolSize, scores.Length);
@@ -165,6 +173,7 @@ public abstract class ActiveLearningTestBase
     public async Task SelectSamples_AreSpreadAcrossInputSpace()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var pool = CreateUnlabeledPool();
         var selected = strategy.SelectSamples(CreateMockModel(), pool, BatchSize);
@@ -199,6 +208,7 @@ public abstract class ActiveLearningTestBase
     public async Task SelectSamples_TopKContainsTopOne()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var model = CreateMockModel();
         var pool = CreateUnlabeledPool();
@@ -222,6 +232,7 @@ public abstract class ActiveLearningTestBase
     public async Task SelectSamples_RequestMoreThanPool_HandlesGracefully()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         int[] selected;
         try
@@ -242,6 +253,7 @@ public abstract class ActiveLearningTestBase
     public async Task SelectSamples_BatchSizeOne_ReturnsSingle()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var selected = strategy.SelectSamples(CreateMockModel(), CreateUnlabeledPool(), 1);
         Assert.Single(selected);
@@ -253,6 +265,7 @@ public abstract class ActiveLearningTestBase
     public async Task SelectSamples_DoesNotMutatePool()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var pool = CreateUnlabeledPool();
 

@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -16,6 +17,7 @@ public abstract class RiskModelTestBase : FinancialModelTestBase
     public async Task RiskEstimate_ShouldBeFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -32,6 +34,7 @@ public abstract class RiskModelTestBase : FinancialModelTestBase
     public async Task DifferentConditions_DifferentRisk()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
         var calm = CreateConstantTensor(InputShape, 0.1);
         var volatile_ = CreateConstantTensor(InputShape, 0.9);

@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -23,6 +24,7 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
     public async Task DenoisingProgress_Monotonic()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var target = CreateRandomTensor(InputShape, rng);
@@ -70,6 +72,7 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
     public async Task LatentSpace_IsContinuous()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
 
@@ -111,6 +114,7 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
     public async Task OutputBounded_AfterDenoising()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);

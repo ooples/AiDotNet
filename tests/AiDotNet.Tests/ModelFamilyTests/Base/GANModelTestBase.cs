@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -21,6 +22,7 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
     public async Task GeneratorOutput_ShouldHaveCorrectShape()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -45,6 +47,7 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
     public async Task DifferentLatentInputs_ProduceDifferentOutputs()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
 
         var input1 = CreateRandomTensor(InputShape, ModelTestHelpers.CreateSeededRandom(1));
@@ -78,6 +81,7 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
     public async Task ParameterCount_ShouldBeSubstantial()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
         var parameters = network.GetParameters();
         Assert.True(parameters.Length > 100,
@@ -93,6 +97,7 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
     public async Task OutputValues_ShouldBeInReasonableRange()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

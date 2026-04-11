@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -22,6 +23,7 @@ public abstract class ProbabilisticClassifierTestBase : ClassificationModelTestB
     public async Task Probabilities_SumToOne()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
@@ -54,6 +56,7 @@ public abstract class ProbabilisticClassifierTestBase : ClassificationModelTestB
     public async Task HighConfidence_OnSeparableData()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
 
@@ -97,6 +100,7 @@ public abstract class ProbabilisticClassifierTestBase : ClassificationModelTestB
     public async Task Predictions_AreValidClassIndices()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);

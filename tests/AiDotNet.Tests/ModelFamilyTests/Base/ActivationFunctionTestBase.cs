@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -151,6 +152,7 @@ public abstract class ActivationFunctionTestBase
     public async Task Activate_ZeroInput()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         if (!ZeroMapsToZero) return;
 
         var fn = CreateActivation();
@@ -167,6 +169,7 @@ public abstract class ActivationFunctionTestBase
     public async Task Activate_ShouldBeMonotonic()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         if (!IsMonotonic) return;
 
         var fn = CreateTestActivation();
@@ -188,6 +191,7 @@ public abstract class ActivationFunctionTestBase
     public async Task Activate_ShouldRespectBounds()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         if (!IsBounded) return;
 
         var fn = CreateTestActivation();
@@ -227,6 +231,7 @@ public abstract class ActivationFunctionTestBase
     public async Task TensorActivate_ShouldMatchScalarActivate()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var fn = CreateTestActivation();
         var input = new Tensor<double>([5]);
         var rng = new Random(42);
@@ -252,6 +257,7 @@ public abstract class ActivationFunctionTestBase
     public async Task Derivative_ShouldBeNonNegativeForMonotonicActivation()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         if (!IsMonotonic) return;
 
         var fn = CreateActivation();

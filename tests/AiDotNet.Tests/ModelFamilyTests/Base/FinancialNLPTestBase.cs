@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -16,6 +17,7 @@ public abstract class FinancialNLPTestBase : FinancialModelTestBase
     public async Task DifferentText_DifferentSentiment()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
         var positive = CreateConstantTensor(InputShape, 0.9);
         var negative = CreateConstantTensor(InputShape, 0.1);
@@ -41,6 +43,7 @@ public abstract class FinancialNLPTestBase : FinancialModelTestBase
     public async Task SentimentScores_ShouldBeBounded()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

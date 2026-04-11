@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -23,6 +24,7 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
     public async Task DifferentText_DifferentAudio()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
 
         var text1 = CreateConstantTensor(InputShape, 0.2);
@@ -54,6 +56,7 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
     public async Task Output_ShouldBeNonEmpty()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -73,6 +76,7 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
     public async Task OutputValues_ShouldBeBounded()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -99,6 +103,7 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
     public async Task SpeakerConsistency()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

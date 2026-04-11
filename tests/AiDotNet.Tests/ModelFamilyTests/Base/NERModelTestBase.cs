@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -23,6 +24,7 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     public async Task OutputLength_RelatedToInput()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -45,6 +47,7 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     public async Task LabelValues_ShouldBeNonNegative()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -68,6 +71,7 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     public async Task EmptyInput_ShouldNotCrash()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
         var emptyInput = CreateConstantTensor(InputShape, 0.0);
 
@@ -91,6 +95,7 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     public async Task DifferentInputs_DifferentLabels()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
 
         var input1 = CreateConstantTensor(InputShape, 0.1);

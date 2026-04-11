@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -21,6 +22,7 @@ public abstract class CodeModelTestBase : NeuralNetworkModelTestBase
     public async Task CodeOutput_ShouldBeFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -45,6 +47,7 @@ public abstract class CodeModelTestBase : NeuralNetworkModelTestBase
     public async Task DifferentCode_DifferentOutputs()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
 
         var code1 = CreateConstantTensor(InputShape, 0.1);
@@ -76,6 +79,7 @@ public abstract class CodeModelTestBase : NeuralNetworkModelTestBase
     public async Task EmptyInput_ShouldNotCrash()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
         var emptyInput = CreateConstantTensor(InputShape, 0.0);
 

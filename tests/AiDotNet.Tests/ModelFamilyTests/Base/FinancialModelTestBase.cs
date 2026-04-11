@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -23,6 +24,7 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
     public async Task FinancialPredictions_ShouldBeFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -47,6 +49,7 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
     public async Task DifferentMarketData_DifferentPredictions()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
 
         var bullish = CreateConstantTensor(InputShape, 0.8);  // simulating upward data
@@ -80,6 +83,7 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
     public async Task Output_ShouldBeBounded()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -102,6 +106,7 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
     public async Task ZeroInput_ShouldNotCrash()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
         var zeroInput = CreateConstantTensor(InputShape, 0.0);
 

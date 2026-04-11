@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -70,6 +71,7 @@ public abstract class DistillationStrategyTestBase
     public async Task ComputeLoss_IsNonNegative()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         ValidateDimensions();
         if (!IsNonNegative) return;
         var strategy = CreateStrategy();
@@ -86,6 +88,7 @@ public abstract class DistillationStrategyTestBase
     public async Task ComputeLoss_IsFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         double loss = strategy.ComputeLoss(CreateStudentOutput(), CreateTeacherOutput());
         Assert.False(double.IsNaN(loss), "Loss is NaN.");
@@ -100,6 +103,7 @@ public abstract class DistillationStrategyTestBase
     public async Task ComputeLoss_IdenticalInputs_ProducesMinimalLoss()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         if (!ZeroLossForIdentical) return;
         var strategy = CreateStrategy();
         var output = CreateTeacherOutput();
@@ -116,6 +120,7 @@ public abstract class DistillationStrategyTestBase
     public async Task ComputeLoss_LargerDivergence_ProducesLargerLoss()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var teacher = CreateTeacherOutput();
 
@@ -146,6 +151,7 @@ public abstract class DistillationStrategyTestBase
     public async Task ComputeGradient_HasCorrectShape()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var gradient = strategy.ComputeGradient(CreateStudentOutput(), CreateTeacherOutput());
         Assert.Equal(BatchSize, gradient.Rows);
@@ -160,6 +166,7 @@ public abstract class DistillationStrategyTestBase
     public async Task ComputeGradient_IsFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var gradient = strategy.ComputeGradient(CreateStudentOutput(), CreateTeacherOutput());
 
@@ -180,6 +187,7 @@ public abstract class DistillationStrategyTestBase
     public async Task ComputeGradient_MatchesNumericalGradient()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
 
         // For gradient checking, set temperature to a value where finite-difference
@@ -236,6 +244,7 @@ public abstract class DistillationStrategyTestBase
     public async Task ComputeGradient_IdenticalInputs_IsNearZero()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         if (!ZeroLossForIdentical) return;
         var strategy = CreateStrategy();
         var output = CreateTeacherOutput();
@@ -259,6 +268,7 @@ public abstract class DistillationStrategyTestBase
     public async Task ComputeGradient_DescentDirectionReducesLoss()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var student = CreateStudentOutput();
         var teacher = CreateTeacherOutput();
@@ -295,6 +305,7 @@ public abstract class DistillationStrategyTestBase
     public async Task Temperature_IsPositive()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         Assert.True(strategy.Temperature > 0,
             $"Temperature must be positive but got {strategy.Temperature}.");
@@ -308,6 +319,7 @@ public abstract class DistillationStrategyTestBase
     public async Task Alpha_IsInValidRange()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         Assert.True(strategy.Alpha >= 0 && strategy.Alpha <= 1,
             $"Alpha must be in [0, 1] but got {strategy.Alpha}.");
@@ -321,6 +333,7 @@ public abstract class DistillationStrategyTestBase
     public async Task HigherTemperature_ProducesSmallerGradients()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy1 = CreateStrategy();
         var strategy2 = CreateStrategy();
 

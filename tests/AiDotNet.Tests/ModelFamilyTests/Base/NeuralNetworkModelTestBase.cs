@@ -3,6 +3,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -52,6 +53,7 @@ public abstract class NeuralNetworkModelTestBase
     public async Task Training_ShouldReduceLoss()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -87,6 +89,7 @@ public abstract class NeuralNetworkModelTestBase
     public async Task Training_ShouldChangeParameters()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -126,6 +129,7 @@ public abstract class NeuralNetworkModelTestBase
     public async Task DifferentInputs_ShouldProduceDifferentOutputs()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
 
@@ -159,6 +163,7 @@ public abstract class NeuralNetworkModelTestBase
     public async Task ForwardPass_ShouldProduceFiniteOutput()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -182,6 +187,7 @@ public abstract class NeuralNetworkModelTestBase
     public async Task ForwardPass_ShouldBeFinite_AfterTraining()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -209,6 +215,7 @@ public abstract class NeuralNetworkModelTestBase
     public async Task ScaledInput_ShouldChangeOutput()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
 
@@ -242,6 +249,7 @@ public abstract class NeuralNetworkModelTestBase
     public async Task Predict_ShouldBeDeterministic()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -259,6 +267,7 @@ public abstract class NeuralNetworkModelTestBase
     public async Task Parameters_ShouldBeNonEmpty()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
         var parameters = network.GetParameters();
         Assert.True(parameters.Length > 0, "Neural network should have learnable parameters.");
@@ -268,6 +277,7 @@ public abstract class NeuralNetworkModelTestBase
     public async Task Clone_ShouldProduceIdenticalOutput()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -286,6 +296,7 @@ public abstract class NeuralNetworkModelTestBase
     public async Task Metadata_ShouldExist()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -298,6 +309,7 @@ public abstract class NeuralNetworkModelTestBase
     public async Task Architecture_ShouldBeNonNull()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
         Assert.NotNull(network.GetArchitecture());
     }
@@ -306,6 +318,7 @@ public abstract class NeuralNetworkModelTestBase
     public async Task NamedLayerActivations_ShouldBeNonEmpty()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -325,6 +338,7 @@ public abstract class NeuralNetworkModelTestBase
     public async Task MoreData_ShouldNotDegrade()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
         var network1 = CreateNetwork();
@@ -363,6 +377,7 @@ public abstract class NeuralNetworkModelTestBase
     public async Task TrainingError_ShouldNotExceedTestError()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -395,6 +410,7 @@ public abstract class NeuralNetworkModelTestBase
     public async Task GradientFlow_ShouldBeNonZeroAndFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -432,6 +448,7 @@ public abstract class NeuralNetworkModelTestBase
     public async Task BatchConsistency_SingleMatchesBatch()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -459,6 +476,7 @@ public abstract class NeuralNetworkModelTestBase
     public async Task OutputDimension_ShouldMatchExpectedShape()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

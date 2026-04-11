@@ -4,6 +4,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -37,6 +38,7 @@ public abstract class ContinualLearningTestBase
     public async Task ComputeLoss_IsNonNegative()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var network = CreateMockNetwork();
         var taskData = CreateTestTaskData();
@@ -59,6 +61,7 @@ public abstract class ContinualLearningTestBase
     public async Task ComputeLoss_IsFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var network = CreateMockNetwork();
         var taskData = CreateTestTaskData();
@@ -82,6 +85,7 @@ public abstract class ContinualLearningTestBase
     public async Task ComputeLoss_IncreasesWithParameterDeviation()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var network = CreateMockNetwork();
         var taskData = CreateTestTaskData();
@@ -120,6 +124,7 @@ public abstract class ContinualLearningTestBase
     public async Task ComputeLoss_ScalesWithLambda()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy1 = CreateStrategy();
         var strategy2 = CreateStrategy();
         var network1 = CreateMockNetwork();
@@ -165,6 +170,7 @@ public abstract class ContinualLearningTestBase
     public async Task ModifyGradients_PreservesLength()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var network = CreateMockNetwork();
         var taskData = CreateTestTaskData();
@@ -189,6 +195,7 @@ public abstract class ContinualLearningTestBase
     public async Task ModifyGradients_AreFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var network = CreateMockNetwork();
         var taskData = CreateTestTaskData();
@@ -218,6 +225,7 @@ public abstract class ContinualLearningTestBase
     public async Task ModifyGradients_DoesNotIncreaseNorm()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var network = CreateMockNetwork();
         var taskData = CreateTestTaskData();
@@ -258,6 +266,7 @@ public abstract class ContinualLearningTestBase
     public async Task ComputeLoss_IncreasesWithMoreTasks()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
 
         // Only applies to strategies that accumulate regularization (EWC, MAS).
@@ -304,6 +313,7 @@ public abstract class ContinualLearningTestBase
     public async Task Lambda_IsNonNegative()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         Assert.True(strategy.Lambda >= 0,
             $"Lambda should be non-negative but got {strategy.Lambda}.");
@@ -317,6 +327,7 @@ public abstract class ContinualLearningTestBase
     public async Task Reset_DoesNotThrow()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
         var network = CreateMockNetwork();
         var taskData = CreateTestTaskData();

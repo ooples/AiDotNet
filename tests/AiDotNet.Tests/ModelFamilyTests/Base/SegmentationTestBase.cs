@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -22,6 +23,7 @@ public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
     public async Task OutputSpatialDims_MatchInput()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -53,6 +55,7 @@ public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
     public async Task MaskValues_AreNonNegative()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -78,6 +81,7 @@ public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
     public async Task UniformInput_UniformMask()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
         var uniformInput = CreateConstantTensor(InputShape, 0.5);
 
@@ -104,6 +108,7 @@ public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
     public async Task OutputSum_IsFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

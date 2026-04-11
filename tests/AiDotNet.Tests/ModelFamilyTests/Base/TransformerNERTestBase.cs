@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -16,6 +17,7 @@ public abstract class TransformerNERTestBase : NERModelTestBase
     public async Task ContextualSensitivity_DifferentContext_DifferentLabels()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
         var input1 = CreateConstantTensor(InputShape, 0.3);
         var input2 = CreateConstantTensor(InputShape, 0.7);
@@ -41,6 +43,7 @@ public abstract class TransformerNERTestBase : NERModelTestBase
     public async Task Output_ShouldBeFiniteSequence()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

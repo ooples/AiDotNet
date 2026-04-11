@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -38,6 +39,7 @@ public abstract class CausalModelTestBase
     public async Task TreatmentEffect_ShouldBeFinite()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateCausalData(rng, 3.0);
@@ -55,6 +57,7 @@ public abstract class CausalModelTestBase
     public async Task Predict_ShouldBeDeterministic()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateCausalData(rng, 3.0);
@@ -69,6 +72,7 @@ public abstract class CausalModelTestBase
     public async Task Clone_ShouldProduceSameEstimates()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateCausalData(rng, 3.0);
@@ -84,6 +88,7 @@ public abstract class CausalModelTestBase
     public async Task OutputDimension_ShouldMatchInputRows()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateCausalData(rng, 3.0);
@@ -95,6 +100,7 @@ public abstract class CausalModelTestBase
     public async Task Metadata_ShouldExistAfterTraining()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateCausalData(rng, 3.0);
@@ -106,6 +112,7 @@ public abstract class CausalModelTestBase
     public async Task Parameters_ShouldBeNonEmpty()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateCausalData(rng, 3.0);

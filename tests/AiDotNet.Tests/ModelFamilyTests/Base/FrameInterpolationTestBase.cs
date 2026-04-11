@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -15,6 +16,7 @@ public abstract class FrameInterpolationTestBase : VideoNNModelTestBase
     public async Task InterpolatedFrame_ShouldBeBetweenInputs()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
 
         var frame1 = CreateConstantTensor(InputShape, 0.2);
@@ -36,6 +38,7 @@ public abstract class FrameInterpolationTestBase : VideoNNModelTestBase
     public async Task Interpolation_OutputNonEmpty()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -16,6 +17,7 @@ public abstract class ForecastingModelTestBase : FinancialModelTestBase
     public async Task ForecastHorizon_ShouldProduceOutput()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -27,6 +29,7 @@ public abstract class ForecastingModelTestBase : FinancialModelTestBase
     public async Task DifferentHistories_DifferentForecasts()
     {
         await Task.Yield();
+        using var _arena = TensorArena.Create();
         var network = CreateNetwork();
         var history1 = CreateConstantTensor(InputShape, 0.1);
         var history2 = CreateConstantTensor(InputShape, 0.9);
