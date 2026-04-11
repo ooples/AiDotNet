@@ -11,6 +11,7 @@ using AiDotNet.PhysicsInformed;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.PhysicsInformed.Options;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PhysicsInformed.NeuralOperators
@@ -451,64 +452,56 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             return UnflattenPointwiseOutput(projected, batchSize, spatialShape);
         }
 
+        /// <summary>
+        /// Flattens a channel-first tensor <c>[B, C, d_1, ..., d_N]</c> into the
+        /// <c>[B * d_1 * ... * d_N, C]</c> row-major layout that the pointwise
+        /// DenseLayer consumes. Implemented as <c>TensorPermute + Reshape</c> so
+        /// every op records on the gradient tape — the previous element-by-element
+        /// copy loop bypassed the tape and blocked tape-based training for the FNO.
+        /// </summary>
         private Tensor<T> FlattenPointwiseInput(Tensor<T> input, int[] spatialShape)
         {
+            int rank = input.Rank;
             int batchSize = input.Shape[0];
             int channels = input.Shape[1];
             int spatialSize = spatialShape.Aggregate(1, (a, b) => a * b);
-            int[] spatialStrides = ComputeStrides(spatialShape);
 
-            var flattened = new Tensor<T>(new int[] { batchSize * spatialSize, channels });
-            var inputIndices = new int[input.Rank];
+            // Permute [B, C, d_1, ..., d_N] → [B, d_1, ..., d_N, C].
+            // axes: [0, 2, 3, ..., rank-1, 1]
+            int[] perm = new int[rank];
+            perm[0] = 0;
+            for (int d = 0; d < rank - 2; d++) perm[1 + d] = 2 + d;
+            perm[rank - 1] = 1;
+            var permuted = Engine.TensorPermute(input, perm);
 
-            for (int b = 0; b < batchSize; b++)
-            {
-                inputIndices[0] = b;
-                for (int s = 0; s < spatialSize; s++)
-                {
-                    FillSpatialIndices(s, spatialShape, spatialStrides, inputIndices, 2);
-                    int row = b * spatialSize + s;
-                    for (int c = 0; c < channels; c++)
-                    {
-                        inputIndices[1] = c;
-                        flattened[row, c] = input[inputIndices];
-                    }
-                }
-            }
-
-            return flattened;
+            return Engine.Reshape(permuted, new[] { batchSize * spatialSize, channels });
         }
 
+        /// <summary>
+        /// Inverse of <see cref="FlattenPointwiseInput"/>. Reshapes the row-major
+        /// <c>[B * spatialSize, C]</c> tensor back to <c>[B, C, d_1, ..., d_N]</c>
+        /// using <c>Reshape + TensorPermute</c> so the op chain stays on the
+        /// gradient tape.
+        /// </summary>
         private Tensor<T> UnflattenPointwiseOutput(Tensor<T> flattened, int batchSize, int[] spatialShape)
         {
             int channels = flattened.Shape[1];
-            int spatialSize = spatialShape.Aggregate(1, (a, b) => a * b);
-            int[] spatialStrides = ComputeStrides(spatialShape);
+            int spatialRank = spatialShape.Length;
 
-            int[] outputShape = new int[spatialShape.Length + 2];
-            outputShape[0] = batchSize;
-            outputShape[1] = channels;
-            Array.Copy(spatialShape, 0, outputShape, 2, spatialShape.Length);
+            // Reshape [B * spatialSize, C] → [B, d_1, ..., d_N, C].
+            int[] unflattenShape = new int[spatialRank + 2];
+            unflattenShape[0] = batchSize;
+            for (int d = 0; d < spatialRank; d++) unflattenShape[1 + d] = spatialShape[d];
+            unflattenShape[spatialRank + 1] = channels;
+            var reshaped = Engine.Reshape(flattened, unflattenShape);
 
-            var output = new Tensor<T>(outputShape);
-            var outputIndices = new int[output.Rank];
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                outputIndices[0] = b;
-                for (int s = 0; s < spatialSize; s++)
-                {
-                    FillSpatialIndices(s, spatialShape, spatialStrides, outputIndices, 2);
-                    int row = b * spatialSize + s;
-                    for (int c = 0; c < channels; c++)
-                    {
-                        outputIndices[1] = c;
-                        output[outputIndices] = flattened[row, c];
-                    }
-                }
-            }
-
-            return output;
+            // Permute [B, d_1, ..., d_N, C] → [B, C, d_1, ..., d_N].
+            // axes: [0, spatialRank+1, 1, 2, ..., spatialRank]
+            int[] perm = new int[spatialRank + 2];
+            perm[0] = 0;
+            perm[1] = spatialRank + 1;
+            for (int d = 0; d < spatialRank; d++) perm[2 + d] = 1 + d;
+            return Engine.TensorPermute(reshaped, perm);
         }
 
         private Tensor<T> ApplyVectorActivation(Tensor<T> input, IVectorActivationFunction<T> activation)
@@ -707,7 +700,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             try
             {
-                ManualTrainStep(input, expectedOutput);
+                TapeTrainStep(input, expectedOutput);
             }
             finally
             {
@@ -724,11 +717,22 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         }
 
         /// <summary>
-        /// Performs one manual forward-backward-update training step.
-        /// The FNO's custom spatial reshape (flatten/unflatten) breaks the gradient tape,
-        /// so we use explicit backpropagation through each layer instead.
+        /// Tape-based FNO training step. Runs the full lift → FourierLayers →
+        /// project pipeline under a <see cref="GradientTape{T}"/>, computes MSE
+        /// loss, walks the recorded ops to compute parameter gradients, and
+        /// applies an SGD update in place.
         /// </summary>
-        private void ManualTrainStep(Tensor<T> input, Tensor<T> expectedOutput)
+        /// <remarks>
+        /// The stale comment on the old ManualTrainStep said "the FNO's custom
+        /// spatial reshape breaks the gradient tape, so we use explicit
+        /// backpropagation" — that was true before <see cref="FlattenPointwiseInput"/>
+        /// / <see cref="UnflattenPointwiseOutput"/> were rewritten as
+        /// <c>TensorPermute + Reshape</c> and before <see cref="FourierLayer"/>'s
+        /// spectral conv moved to <c>Engine.FFT2D</c> / <c>Engine.FFT</c>. With
+        /// both of those in place every op in the forward pass records on the
+        /// tape, so backward just falls out of <c>tape.ComputeGradients</c>.
+        /// </remarks>
+        private void TapeTrainStep(Tensor<T> input, Tensor<T> expectedOutput)
         {
             ValidateInputShape(input);
 
@@ -740,180 +744,87 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 throw new InvalidOperationException("FNO requires DenseLayer lift and projection layers.");
             }
 
-            // === Forward pass (store intermediates) ===
             int[] spatialShape = input._shape.Skip(2).ToArray();
 
-            // Lift
-            var liftFlat = FlattenPointwiseInput(input, spatialShape);
-            var liftOut = liftLayer.Forward(liftFlat);
-            var lifted = UnflattenPointwiseOutput(liftOut, input.Shape[0], spatialShape);
-
-            // Fourier layers (Forward stores intermediates internally)
-            var fourierInputs = new List<Tensor<T>> { lifted };
-            Tensor<T> x = lifted;
-            foreach (var fl in _fourierLayers)
+            // Collect every trainable parameter tensor across Layers (lift +
+            // project DenseLayers) and _fourierLayers. Cached between calls —
+            // layer structure is stable after construction and parameter
+            // tensors are updated in place by SetParameters.
+            var paramList = new List<Tensor<T>>();
+            foreach (var layer in Layers)
             {
-                x = fl.Forward(x);
-                fourierInputs.Add(x);
-            }
-            var fourierOutput = x;
-
-            // Project
-            var projFlat = FlattenPointwiseInput(fourierOutput, spatialShape);
-            var projOut = projectLayer.Forward(projFlat);
-            var output = UnflattenPointwiseOutput(projOut, input.Shape[0], spatialShape);
-
-            // === Compute MSE loss and output gradient ===
-            T loss = ComputeMSE(output, expectedOutput);
-            LastLoss = loss;
-
-            // dL/dOutput = 2 * (output - target) / N
-            var outputGrad = new Tensor<T>(output._shape);
-            T scale = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(output.Length));
-            for (int i = 0; i < output.Length; i++)
-            {
-                outputGrad[i] = NumOps.Multiply(NumOps.Subtract(output[i], expectedOutput[i]), scale);
-            }
-
-            // === Backward pass ===
-
-            // Back through project layer (pointwise dense)
-            var projGradFlat = BackwardPointwiseDense(fourierOutput, spatialShape, outputGrad, projectLayer);
-
-            // Back through fourier layers (reverse order)
-            Tensor<T> grad = projGradFlat;
-            for (int i = _fourierLayers.Count - 1; i >= 0; i--)
-            {
-                grad = _fourierLayers[i].Backward(grad);
-            }
-
-            // Back through lift layer (pointwise dense) - for completeness
-            BackwardPointwiseDense(input, spatialShape, grad, liftLayer);
-
-            // === Update parameters using learning rate ===
-            // Use the optimizer's learning rate if available, else default
-            T lr = NumOps.FromDouble(0.001);
-            if (_optimizer is AdamOptimizer<T, Tensor<T>, Tensor<T>> adam)
-            {
-                lr = NumOps.FromDouble(0.001);
-            }
-
-            // Update DenseLayer parameters manually (they don't have UpdateParameters(T lr))
-            // Use GetParameterGradients + SetParameters approach
-            UpdateDenseLayerManual(liftLayer, lr);
-            UpdateDenseLayerManual(projectLayer, lr);
-
-            // Update Fourier layers
-            foreach (var fl in _fourierLayers)
-            {
-                fl.UpdateParameters(lr);
-            }
-        }
-
-        /// <summary>
-        /// Backward pass through a pointwise dense layer applied spatially.
-        /// Computes gradients for the dense layer's weights/biases and returns
-        /// the gradient w.r.t. the spatial input tensor.
-        /// </summary>
-        private Tensor<T> BackwardPointwiseDense(
-            Tensor<T> layerInput, int[] spatialShape,
-            Tensor<T> outputGrad,
-            NeuralNetworks.Layers.DenseLayer<T> denseLayer)
-        {
-            int batchSize = layerInput.Shape[0];
-            int inChannels = layerInput.Shape[1];
-            int outChannels = outputGrad.Shape[1];
-            int spatialSize = spatialShape.Aggregate(1, (a, b) => a * b);
-            int[] spatialStrides = ComputeStrides(spatialShape);
-
-            // Get dense layer weights
-            var denseParams = denseLayer.GetParameters();
-            int weightCount = inChannels * outChannels;
-
-            // Build weight matrix [outChannels x inChannels]
-            var W = new T[outChannels, inChannels];
-            for (int o = 0; o < outChannels; o++)
-                for (int ic = 0; ic < inChannels; ic++)
-                    W[o, ic] = denseParams[o * inChannels + ic];
-
-            // Accumulate weight and bias gradients across all spatial positions
-            var weightGrad = new T[outChannels, inChannels];
-            var biasGrad = new T[outChannels];
-            for (int o = 0; o < outChannels; o++)
-            {
-                biasGrad[o] = NumOps.Zero;
-                for (int ic = 0; ic < inChannels; ic++)
-                    weightGrad[o, ic] = NumOps.Zero;
-            }
-
-            var inputGrad = new Tensor<T>(layerInput._shape);
-            var inIdx = new int[layerInput.Rank];
-            var outIdx = new int[outputGrad.Rank];
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                inIdx[0] = b;
-                outIdx[0] = b;
-
-                for (int s = 0; s < spatialSize; s++)
+                if (layer is ITrainableLayer<T> trainable)
                 {
-                    FillSpatialIndices(s, spatialShape, spatialStrides, inIdx, 2);
-                    FillSpatialIndices(s, spatialShape, spatialStrides, outIdx, 2);
-
-                    // dL/db += dL/dy
-                    // dL/dW += dL/dy * x^T
-                    // dL/dx += W^T * dL/dy
-                    for (int o = 0; o < outChannels; o++)
+                    var layerParams = trainable.GetTrainableParameters();
+                    if (layerParams is not null)
                     {
-                        outIdx[1] = o;
-                        T gradOut = outputGrad[outIdx];
-                        biasGrad[o] = NumOps.Add(biasGrad[o], gradOut);
-
-                        for (int ic = 0; ic < inChannels; ic++)
+                        foreach (var p in layerParams)
                         {
-                            inIdx[1] = ic;
-                            T inVal = layerInput[inIdx];
-                            weightGrad[o, ic] = NumOps.Add(weightGrad[o, ic], NumOps.Multiply(gradOut, inVal));
-                            inputGrad[inIdx] = NumOps.Add(inputGrad[inIdx], NumOps.Multiply(gradOut, W[o, ic]));
+                            if (p is not null && p.Length > 0) paramList.Add(p);
                         }
                     }
                 }
             }
-
-            // Store gradients in the dense layer for UpdateDenseLayerManual
-            var gradVector = new Vector<T>(denseParams.Length);
-            int idx = 0;
-            for (int o = 0; o < outChannels; o++)
-                for (int ic = 0; ic < inChannels; ic++)
-                    gradVector[idx++] = weightGrad[o, ic];
-            for (int o = 0; o < outChannels; o++)
-                gradVector[idx++] = biasGrad[o];
-
-            // Store as tag data on the layer (use SetParameterGradients if available)
-            // For now, store in a dictionary keyed by layer reference
-            _denseLayerGradients[denseLayer] = gradVector;
-
-            return inputGrad;
-        }
-
-        private readonly Dictionary<NeuralNetworks.Layers.DenseLayer<T>, Vector<T>> _denseLayerGradients = new();
-
-        /// <summary>
-        /// Updates a dense layer's parameters using stored gradients and learning rate.
-        /// </summary>
-        private void UpdateDenseLayerManual(NeuralNetworks.Layers.DenseLayer<T> layer, T lr)
-        {
-            if (!_denseLayerGradients.TryGetValue(layer, out var grads))
-                return;
-
-            var currentParams = layer.GetParameters();
-            var newParams = new Vector<T>(currentParams.Length);
-            for (int i = 0; i < currentParams.Length; i++)
+            foreach (var fl in _fourierLayers)
             {
-                newParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(lr, grads[i]));
+                if (fl is ITrainableLayer<T> trainable)
+                {
+                    var layerParams = trainable.GetTrainableParameters();
+                    if (layerParams is not null)
+                    {
+                        foreach (var p in layerParams)
+                        {
+                            if (p is not null && p.Length > 0) paramList.Add(p);
+                        }
+                    }
+                }
             }
-            layer.SetParameters(newParams);
-            _denseLayerGradients.Remove(layer);
+            var paramTensors = paramList.ToArray();
+
+            using var tape = new GradientTape<T>();
+
+            // Forward: lift → fourier stack → project. Every op is tape-tracked.
+            var liftFlat = FlattenPointwiseInput(input, spatialShape);
+            var liftOut = liftLayer.Forward(liftFlat);
+            var lifted = UnflattenPointwiseOutput(liftOut, input.Shape[0], spatialShape);
+
+            Tensor<T> x = lifted;
+            foreach (var fl in _fourierLayers)
+            {
+                x = fl.Forward(x);
+            }
+
+            var projFlat = FlattenPointwiseInput(x, spatialShape);
+            var projOut = projectLayer.Forward(projFlat);
+            var output = UnflattenPointwiseOutput(projOut, input.Shape[0], spatialShape);
+
+            // Mean squared error: mean((output - target)^2)
+            var diff = Engine.TensorSubtract(output, expectedOutput);
+            var sq = Engine.TensorMultiply(diff, diff);
+            var lossSum = Engine.ReduceSum(sq, null);
+            var invN = NumOps.Divide(NumOps.One, NumOps.FromDouble(output.Length));
+            var lossTensor = Engine.TensorMultiplyScalar(lossSum, invN);
+
+            LastLoss = lossTensor.Data.Span[0];
+
+            // Backward via the tape.
+            var grads = tape.ComputeGradients(lossTensor, paramTensors);
+
+            // SGD update in place so existing tensor references (and any
+            // engine persistent buffers registered through SetParameters) stay
+            // consistent.
+            T lr = NumOps.FromDouble(0.001);
+            foreach (var param in paramTensors)
+            {
+                if (!grads.TryGetValue(param, out var grad) || grad is null) continue;
+                var paramSpan = param.Data.Span;
+                var gradSpan = grad.Data.Span;
+                int n = Math.Min(paramSpan.Length, gradSpan.Length);
+                for (int i = 0; i < n; i++)
+                {
+                    paramSpan[i] = NumOps.Subtract(paramSpan[i], NumOps.Multiply(gradSpan[i], lr));
+                }
+            }
         }
 
         /// <summary>
