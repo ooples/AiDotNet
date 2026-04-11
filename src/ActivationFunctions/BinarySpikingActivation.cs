@@ -238,15 +238,20 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        Tensor<T> output = new Tensor<T>(input._shape);
-
-        // Apply the activation to each element in the tensor
-        for (int i = 0; i < input.Length; i++)
-        {
-            output.SetFlatIndex(i, Activate(input.GetFlatIndexValue(i)));
-        }
-
-        return output;
+        // Binary spiking is non-differentiable by design (Heaviside step), so
+        // surrogate-gradient learning approximates the forward with a steep
+        // sigmoid. This is the standard approach in SNN literature (Neftci et
+        // al., "Surrogate Gradient Learning in SNNs", 2019) and lets every op
+        // land on the gradient tape.
+        //
+        // f(x) ≈ sigmoid(slope * (x - threshold))
+        //
+        // Larger `derivativeSlope` sharpens the approximation toward the true
+        // Heaviside and narrows the non-zero gradient window, matching the
+        // intent of the scalar Derivative(T) rectangle.
+        var shifted = Engine.TensorSubtractScalar(input, _threshold);
+        var scaled = Engine.TensorMultiplyScalar(shifted, _derivativeSlope);
+        return Engine.Sigmoid(scaled);
     }
 
     /// <summary>

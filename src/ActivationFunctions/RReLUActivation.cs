@@ -109,6 +109,35 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies RReLU to a tensor via engine primitives so the gradient tape records
+    /// every step. Decomposes <c>RReLU(x) = ReLU(x) - α · ReLU(-x)</c> which matches
+    /// x for x≥0 and α·x for x&lt;0. In training mode, α is freshly sampled from
+    /// <c>U(lower, upper)</c>; in inference mode, α is the midpoint of the bounds
+    /// per the PyTorch reference implementation.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        T alpha;
+        if (_isTraining)
+        {
+            double lo = Convert.ToDouble(_lowerBound);
+            double hi = Convert.ToDouble(_upperBound);
+            alpha = NumOps.FromDouble((_random.NextDouble() * (hi - lo)) + lo);
+            _alpha = alpha;
+        }
+        else
+        {
+            alpha = NumOps.Divide(NumOps.Add(_lowerBound, _upperBound), NumOps.FromDouble(2.0));
+        }
+
+        var positivePart = Engine.ReLU(input);
+        var negated = Engine.TensorNegate(input);
+        var negativePart = Engine.ReLU(negated);
+        var scaledNegative = Engine.TensorMultiplyScalar(negativePart, alpha);
+        return Engine.TensorSubtract(positivePart, scaledNegative);
+    }
+
+    /// <summary>
     /// Calculates the derivative of the RReLU function for a single input value.
     /// </summary>
     /// <param name="input">The input value to calculate the derivative for.</param>

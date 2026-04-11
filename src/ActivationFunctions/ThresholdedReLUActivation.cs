@@ -93,6 +93,19 @@ public class ThresholdedReLUActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies ThresholdedReLU to a tensor via engine primitives so the gradient tape
+    /// records every step. Decomposes <c>x * 1[x &gt; θ]</c> using TensorGreaterThan for
+    /// the indicator mask and TensorMultiply for gating, matching ReLU's standard
+    /// subgradient treatment (indicator is detached from the backward graph).
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        var shifted = Engine.TensorSubtractScalar(input, _theta);
+        var mask = Engine.TensorGreaterThan(shifted, NumOps.Zero);
+        return Engine.TensorMultiply(input, mask);
+    }
+
+    /// <summary>
     /// Calculates the derivative of the Thresholded ReLU function for a given input.
     /// </summary>
     /// <param name="input">The input value.</param>

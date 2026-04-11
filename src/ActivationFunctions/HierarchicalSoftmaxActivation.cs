@@ -139,6 +139,83 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies HierarchicalSoftmax to a tensor via engine primitives so the gradient
+    /// tape records every step. Computes per-depth sigmoid scores via matmul, then
+    /// builds class path probabilities using a constant "path mask" that selects
+    /// <c>sig</c> or <c>1 - sig</c> at each depth, combined via log-sum-exp instead
+    /// of a product reduction.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank == 0)
+            throw new ArgumentException("HierarchicalSoftmax requires at least a 1D tensor.", nameof(input));
+
+        int inputDim = input.Shape[rank - 1];
+        if (inputDim != _weightInputDim)
+        {
+            _weightInputDim = inputDim;
+            _nodeWeights = new Matrix<T>(_treeDepth, inputDim);
+            InitializeWeights();
+        }
+
+        // Flatten leading dims into a single batch dim so we can matmul.
+        int batchSize = 1;
+        for (int d = 0; d < rank - 1; d++)
+            batchSize *= input.Shape[d];
+
+        var input2D = rank == 1
+            ? Engine.Reshape(input, new[] { 1, inputDim })
+            : Engine.Reshape(input, new[] { batchSize, inputDim });
+
+        // Weights as [treeDepth, inputDim] → transpose to [inputDim, treeDepth].
+        var weightsTensor = Tensor<T>.FromRowMatrix(_nodeWeights);
+        var weightsT = Engine.TensorPermute(weightsTensor, new[] { 1, 0 });
+
+        // scores = input @ W^T → [batch, treeDepth]
+        var scores = Engine.TensorMatMul(input2D, weightsT);
+        var sigs = Engine.Sigmoid(scores);
+
+        // Build the constant path mask [1, numClasses, treeDepth]:
+        // mask[c, d] = 1 if class c goes right at depth d, else 0.
+        var mask = new Tensor<T>(new[] { 1, _numClasses, _treeDepth });
+        var maskSpan = mask.Data.Span;
+        for (int c = 0; c < _numClasses; c++)
+        {
+            for (int d = 0; d < _treeDepth; d++)
+            {
+                bool goRight = (c & (1 << (_treeDepth - d - 1))) != 0;
+                maskSpan[c * _treeDepth + d] = goRight ? NumOps.One : NumOps.Zero;
+            }
+        }
+
+        // Expand sigs to [batch, 1, treeDepth] and broadcast-combine with mask.
+        var sigs3D = Engine.Reshape(sigs, new[] { batchSize, 1, _treeDepth });
+        var oneMinusSigs3D = Engine.TensorSubtractScalar(
+            Engine.TensorNegate(sigs3D), NumOps.Negate(NumOps.One));
+        // perPath[b, c, d] = mask[c, d] * sigs[b, d] + (1 - mask[c, d]) * (1 - sigs[b, d])
+        var maskedSigs = Engine.TensorBroadcastMultiply(sigs3D, mask);
+        var oneMinusMask = Engine.TensorSubtractScalar(
+            Engine.TensorNegate(mask), NumOps.Negate(NumOps.One));
+        var maskedOneMinusSigs = Engine.TensorBroadcastMultiply(oneMinusSigs3D, oneMinusMask);
+        var perPath = Engine.TensorAdd(maskedSigs, maskedOneMinusSigs);
+
+        // Reduce path product via log-sum-exp on the depth axis.
+        var logPerPath = Engine.TensorLog(perPath);
+        var sumLog = Engine.ReduceSum(logPerPath, new[] { 2 }, keepDims: false);
+        var output2D = Engine.TensorExp(sumLog);
+
+        // Restore original batch shape with numClasses as the trailing axis.
+        int[] outShape = new int[rank];
+        for (int d = 0; d < rank - 1; d++)
+            outShape[d] = input.Shape[d];
+        outShape[rank - 1] = _numClasses;
+        if (rank == 1)
+            outShape = new[] { _numClasses };
+        return Engine.Reshape(output2D, outShape);
+    }
+
+    /// <summary>
     /// Calculates the derivative (gradient) of the Hierarchical Softmax function.
     /// </summary>
     /// <param name="input">The input vector at which to calculate the derivative.</param>

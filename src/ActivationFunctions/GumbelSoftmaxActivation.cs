@@ -112,6 +112,34 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies Gumbel-Softmax to a tensor via engine primitives so the gradient tape
+    /// records every step. Decomposes <c>softmax((x + g) / τ)</c> where g is a fresh
+    /// sample from Gumbel(0, 1) packaged as a constant tensor so gradients flow through
+    /// the add but not into the noise. Softmax is applied along the last axis.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        int lastAxis = input.Shape.Length - 1;
+
+        // Sample Gumbel noise g = -log(-log(u)) with u ~ U(0, 1).
+        var noise = new Tensor<T>(input._shape);
+        var noiseSpan = noise.Data.Span;
+        for (int i = 0; i < noiseSpan.Length; i++)
+        {
+            T u = NumOps.FromDouble(_random.NextDouble());
+            noiseSpan[i] = NumOps.Multiply(
+                NumOps.Negate(
+                    NumericalStabilityHelper.SafeLog(
+                        NumOps.Negate(NumericalStabilityHelper.SafeLog(u)))),
+                NumOps.One);
+        }
+
+        var withNoise = Engine.TensorAdd(input, noise);
+        var scaled = Engine.TensorMultiplyScalar(withNoise, NumOps.Divide(NumOps.One, _temperature));
+        return Engine.Softmax(scaled, axis: lastAxis);
+    }
+
+    /// <summary>
     /// Calculates the derivative (Jacobian matrix) of the Gumbel-Softmax function for a vector of input values.
     /// </summary>
     /// <param name="input">The vector of input logits.</param>

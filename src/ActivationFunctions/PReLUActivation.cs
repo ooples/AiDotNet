@@ -88,6 +88,22 @@ public class PReLUActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies PReLU to a tensor via engine primitives so the gradient tape records
+    /// every step. Decomposes <c>PReLU(x) = ReLU(x) - α · ReLU(-x)</c>, which matches
+    /// x for x≥0 and α·x for x&lt;0. The α parameter flows through as a scalar multiply
+    /// so gradients propagate correctly back to the input; α itself is stored as a
+    /// scalar field and updated externally via <see cref="UpdateAlpha"/>.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        var positivePart = Engine.ReLU(input);
+        var negated = Engine.TensorNegate(input);
+        var negativePart = Engine.ReLU(negated);
+        var scaledNegative = Engine.TensorMultiplyScalar(negativePart, _alpha);
+        return Engine.TensorSubtract(positivePart, scaledNegative);
+    }
+
+    /// <summary>
     /// Calculates the derivative (gradient) of the PReLU function for a single input value.
     /// </summary>
     /// <param name="input">The input value at which to calculate the derivative.</param>
