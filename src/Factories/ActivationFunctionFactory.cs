@@ -59,6 +59,9 @@ public static class ActivationFunctionFactory<T>
             ActivationFunction.Swish => new SwishActivation<T>(),
             ActivationFunction.GELU => new GELUActivation<T>(),
             ActivationFunction.LiSHT => new LiSHTActivation<T>(),
+            ActivationFunction.ModReLU => new HarmonicEngine.Activations.ModReLUActivation<T>(),
+            ActivationFunction.SpectralGating => new HarmonicEngine.Activations.SpectralGatingActivation<T>(),
+            ActivationFunction.InstantaneousFreq => new HarmonicEngine.Activations.InstantaneousFreqActivation<T>(),
             _ => throw new ArgumentException($"Unsupported activation function value: {activationFunction}.", nameof(activationFunction))
         };
     }
@@ -100,6 +103,9 @@ public static class ActivationFunctionFactory<T>
             ActivationFunction.Swish => new SwishActivation<T>(),
             ActivationFunction.GELU => new GELUActivation<T>(),
             ActivationFunction.LiSHT => new LiSHTActivation<T>(),
+            ActivationFunction.ModReLU => new HarmonicEngine.Activations.ModReLUActivation<T>(),
+            ActivationFunction.SpectralGating => new HarmonicEngine.Activations.SpectralGatingActivation<T>(),
+            ActivationFunction.InstantaneousFreq => new HarmonicEngine.Activations.InstantaneousFreqActivation<T>(),
             _ => throw new ArgumentException($"Unsupported vector activation function value: {activationFunction}.", nameof(activationFunction))
         };
     }

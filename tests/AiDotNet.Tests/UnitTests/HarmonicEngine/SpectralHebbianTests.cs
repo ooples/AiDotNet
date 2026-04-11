@@ -91,9 +91,16 @@ public class SpectralHebbianTests
         // Compute final error
         double finalError = rule.ConvergenceError(filter, optimalFilter);
 
-        // Error should decrease
+        // Error should decrease significantly — not just one step, but converge close to optimal
         Assert.True(finalError < initialError,
             $"Hebbian update should reduce convergence error. Initial: {initialError}, Final: {finalError}");
+
+        // After 50 iterations, filter should have converged close to the Wiener optimal
+        // (within 10% of initial error, i.e., >90% reduction)
+        double reductionRatio = finalError / initialError;
+        Assert.True(reductionRatio < 0.1,
+            $"After 50 iterations, error should be reduced by >90%. " +
+            $"Initial: {initialError:F6}, Final: {finalError:F6}, Reduction: {(1 - reductionRatio) * 100:F1}%");
     }
 
     [Fact]

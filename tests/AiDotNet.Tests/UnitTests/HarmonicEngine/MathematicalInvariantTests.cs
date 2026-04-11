@@ -72,6 +72,10 @@ public class MathematicalInvariantTests
         double sumMag = spectrum[sumBin].Magnitude;
         double diffMag = spectrum[diffBin].Magnitude;
 
+        // Both should have non-zero energy (IMD products must exist)
+        Assert.True(sumMag > 1e-6, $"Sum-frequency IMD at bin {sumBin} should have non-zero energy, got {sumMag}");
+        Assert.True(diffMag > 1e-6, $"Diff-frequency IMD at bin {diffBin} should have non-zero energy, got {diffMag}");
+
         // Both should be proportional to a1*a2 = 6.0
         // The exact amplitude depends on FFT normalization, but they should be EQUAL to each other
         Assert.Equal(sumMag, diffMag, 4);
@@ -200,9 +204,26 @@ public class MathematicalInvariantTests
         spectrum[31] = new Complex<double>(2, -2);
 
         var sparse = mask.Apply(spectrum, k);
-        var doubleSparse = mask.Apply(sparse, k);
+
+        // Verify the top-K bins were kept: bins 3, 7, 15 have the largest magnitudes
+        // |spectrum[3]| = sqrt(104) ≈ 10.2, |spectrum[7]| = sqrt(65) ≈ 8.06, |spectrum[15]| = sqrt(45) ≈ 6.7
+        var topIndices = mask.GetTopKIndices(spectrum, k);
+        Assert.Contains(3, topIndices);
+        Assert.Contains(7, topIndices);
+        Assert.Contains(15, topIndices);
+
+        // Verify that non-top-K bins are zeroed out
+        int nonZeroCount = 0;
+        for (int i = 0; i < n; i++)
+        {
+            if (sparse[i].Magnitude > 1e-10)
+                nonZeroCount++;
+        }
+        Assert.True(nonZeroCount <= k,
+            $"After top-{k} sparsity, should have at most {k} non-zero bins, got {nonZeroCount}");
 
         // Idempotency: applying top-K twice gives the same result
+        var doubleSparse = mask.Apply(sparse, k);
         for (int i = 0; i < n; i++)
         {
             Assert.Equal(sparse[i].Real, doubleSparse[i].Real, 10);
@@ -313,18 +334,20 @@ public class MathematicalInvariantTests
         var encoded = bus.Encode(original);
         var recovered = bus.Decode(encoded);
 
+        // Encode-Decode should recover amplitudes proportionally
+        // (exact values depend on FFT normalization, but ratios should match)
         for (int i = 0; i < n; i++)
         {
-            // Magnitudes should be proportional to originals
             Assert.True(recovered[i] > 0,
                 $"Recovered amplitude[{i}] = {recovered[i]} should be positive");
         }
 
-        // Verify ordering is preserved (larger input -> larger decoded)
-        for (int i = 0; i < n - 1; i++)
+        // Verify ratios match: recovered[i]/recovered[0] should equal original[i]/original[0]
+        for (int i = 1; i < n; i++)
         {
-            Assert.True(recovered[i] < recovered[i + 1],
-                $"Ordering not preserved: recovered[{i}]={recovered[i]:F4} should be < recovered[{i + 1}]={recovered[i + 1]:F4}");
+            double expectedRatio = original[i] / original[0];
+            double actualRatio = recovered[i] / recovered[0];
+            Assert.Equal(expectedRatio, actualRatio, 3);
         }
     }
 

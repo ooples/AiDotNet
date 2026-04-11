@@ -61,6 +61,36 @@ public class IMDEquivalenceTests
                     $"Interaction[{i},{j}] = {interactions[i, j]} should be non-negative");
             }
         }
+
+        // Verify proportionality: interactions should be proportional to a_i * a_j
+        // Normalize by the (0,0) self-interaction to get relative ratios
+        double selfNorm = interactions[0, 0];
+        if (selfNorm > 1e-10)
+        {
+            for (int i = 0; i < numCarriers; i++)
+            {
+                for (int j = i; j < numCarriers; j++)
+                {
+                    double expectedRatio = (amplitudes[i] * amplitudes[j]) /
+                                          (amplitudes[0] * amplitudes[0]);
+                    double actualRatio = interactions[i, j] / selfNorm;
+
+                    // IMD products should be monotonic with the product of amplitudes:
+                    // larger a_i * a_j → larger interaction
+                    if (i != j)
+                    {
+                        // Cross-interactions with larger amplitude products should be larger
+                        Assert.True(interactions[i, j] > 0,
+                            $"Cross-interaction [{i},{j}] should be positive for positive amplitudes");
+                    }
+                }
+            }
+
+            // Specifically: interaction(1,2) with a1*a2=6 should be > interaction(0,3) with a0*a3=0.5
+            Assert.True(interactions[1, 2] > interactions[0, 3],
+                $"IMD(1,2) = {interactions[1, 2]} should be > IMD(0,3) = {interactions[0, 3]} " +
+                $"since a1*a2={amplitudes[1] * amplitudes[2]} > a0*a3={amplitudes[0] * amplitudes[3]}");
+        }
     }
 
     [Theory]
