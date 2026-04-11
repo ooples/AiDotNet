@@ -552,7 +552,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             // Fallback to manual computation for custom activations
             // 2. Compute Attention Scores: Q @ K.T (per-batch, Engine.BatchMatMul has issues)
-            var KT = K.Transpose(new[] { 0, 2, 1 });
+            var KT = Engine.TensorPermute(K, new[] { 0, 2, 1 });
             var attentionScores = TensorAllocator.Rent<T>([batchSize, seqLen, seqLen]);
             for (int b = 0; b < batchSize; b++)
             {
@@ -906,7 +906,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var V = Engine.Reshape(vProjected, [batchSize, seqLen, _attentionSize]);
 
         // 2. Compute Attention Scores: Q @ K.T
-        var KT = K.Transpose(new[] { 0, 2, 1 });
+        var KT = Engine.TensorPermute(K, new[] { 0, 2, 1 });
         var attentionScores = Engine.BatchMatMul(Q, KT);
 
         // 3. Scale
@@ -1001,7 +1001,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var V = Engine.Reshape(vProjected, [batchSize, seqLenKV, _attentionSize]);
 
         // Compute Scores: Q @ K.T
-        var KT = K.Transpose(new[] { 0, 2, 1 });
+        var KT = Engine.TensorPermute(K, new[] { 0, 2, 1 });
         var attentionScores = Engine.BatchMatMul(Q, KT);
 
         // Scale

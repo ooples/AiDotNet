@@ -498,13 +498,16 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         int sequenceLength;
         int embeddingDimension;
 
+        // Every shape op must go through Engine so the gradient tape records the
+        // transformation. Direct Tensor<T>.Reshape / .Transpose calls bypass the
+        // tape and silently disconnect the attention block from backward flow.
         if (rank == 2)
         {
             // 2D: [seqLen, embedDim] -> add batch dim
             batchSize = 1;
             sequenceLength = input.Shape[0];
             embeddingDimension = input.Shape[1];
-            input3D = input.Reshape([1, sequenceLength, embeddingDimension]);
+            input3D = Engine.Reshape(input, new[] { 1, sequenceLength, embeddingDimension });
         }
         else if (rank == 3)
         {
@@ -523,7 +526,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
             batchSize = flatBatch;
             sequenceLength = input.Shape[rank - 2];
             embeddingDimension = input.Shape[rank - 1];
-            input3D = input.Reshape([flatBatch, sequenceLength, embeddingDimension]);
+            input3D = Engine.Reshape(input, new[] { flatBatch, sequenceLength, embeddingDimension });
         }
         else
         {
@@ -534,7 +537,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
 
         // 1. Project Input to Q, K, V
         // Reshape input to 2D [Batch*Seq, EmbedDim] for efficient MatrixMultiply
-        var input2D = input3D.Reshape(batchSize * sequenceLength, _embeddingDimension);
+        var input2D = Engine.Reshape(input3D, new[] { batchSize * sequenceLength, _embeddingDimension });
 
         // Compute Projections: [B*S, E] @ [E, E] -> [B*S, E]
         // Using Engine.TensorMatMul for GPU acceleration
@@ -543,15 +546,15 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         var V_flat = Engine.TensorMatMul(input2D, _valueWeights);
 
         // Reshape to [Batch, Seq, HeadCount, HeadDim]
-        var queries = Q_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension);
-        var keys = K_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension);
-        var values = V_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension);
+        var queries = Engine.Reshape(Q_flat, new[] { batchSize, sequenceLength, _headCount, _headDimension });
+        var keys = Engine.Reshape(K_flat, new[] { batchSize, sequenceLength, _headCount, _headDimension });
+        var values = Engine.Reshape(V_flat, new[] { batchSize, sequenceLength, _headCount, _headDimension });
 
         // Transpose for multi-head attention: [Batch, HeadCount, Seq, HeadDim]
         // This aligns dimensions for batched matrix multiplication
-        var Q = queries.Transpose(new[] { 0, 2, 1, 3 });
-        var K = keys.Transpose(new[] { 0, 2, 1, 3 });
-        var V = values.Transpose(new[] { 0, 2, 1, 3 });
+        var Q = Engine.TensorPermute(queries, new[] { 0, 2, 1, 3 });
+        var K = Engine.TensorPermute(keys, new[] { 0, 2, 1, 3 });
+        var V = Engine.TensorPermute(values, new[] { 0, 2, 1, 3 });
 
         // 2. Compute Scaled Dot-Product Attention
         // ScaledDotProductAttention computes: softmax(Q @ K^T / scale) @ V
@@ -567,11 +570,14 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         _lastAttentionScores = attentionWeights4D;
 
         // 3. Reshape and Project Output
-        var outputTransposed = output4D.Transpose(new[] { 0, 2, 1, 3 });
-        var outputFlat = outputTransposed.Reshape(batchSize, sequenceLength, embeddingDimension);
+        var outputTransposed = Engine.TensorPermute(output4D, new[] { 0, 2, 1, 3 });
+        var outputFlat = Engine.Reshape(outputTransposed, new[] { batchSize, sequenceLength, embeddingDimension });
 
-        // 7. Add Bias with engine broadcast for GPU acceleration
-        var biasBroadcast = _outputBias.Reshape(1, 1, embeddingDimension);
+        // 7. Add Bias with engine broadcast for GPU acceleration.
+        // Reshape fresh each call (never cache) so the tape has a live GradFn
+        // chain from _outputBias on every training step — caching a reshape
+        // primed during inference breaks the bias gradient.
+        var biasBroadcast = Engine.Reshape(_outputBias, new[] { 1, 1, embeddingDimension });
         var outputBiased = Engine.TensorBroadcastAdd(outputFlat, biasBroadcast);
 
         var output = ApplyActivation(outputBiased);
@@ -584,12 +590,12 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
                 newShape[d] = _originalInputShape[d];
             newShape[_originalInputShape.Length - 2] = sequenceLength;
             newShape[_originalInputShape.Length - 1] = embeddingDimension;
-            output = output.Reshape(newShape);
+            output = Engine.Reshape(output, newShape);
         }
         else if (_originalInputShape != null && _originalInputShape.Length == 2)
         {
             // 2D input -> 2D output (remove batch dim)
-            output = output.Reshape([sequenceLength, embeddingDimension]);
+            output = Engine.Reshape(output, new[] { sequenceLength, embeddingDimension });
         }
 
         // Only store for backward pass during training - skip during inference

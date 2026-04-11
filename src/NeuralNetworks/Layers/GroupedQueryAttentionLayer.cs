@@ -250,27 +250,31 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
             batchSize *= input.Shape[d];
         if (rank < 3) batchSize = 1;
 
+        // Every shape op via Engine so the gradient tape records the transformation.
         var input3D = rank == 2
-            ? input.Reshape(1, seqLen, embDim)
-            : input.Reshape(batchSize, seqLen, embDim);
+            ? Engine.Reshape(input, new[] { 1, seqLen, embDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, embDim });
 
         _lastInput = input3D;
 
         // Project Q, K, V
-        var input2D = input3D.Reshape(batchSize * seqLen, embDim);
+        var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, embDim });
         var Q_flat = Engine.TensorMatMul(input2D, _queryWeights);
         var K_flat = Engine.TensorMatMul(input2D, _keyWeights);
         var V_flat = Engine.TensorMatMul(input2D, _valueWeights);
 
         // Reshape Q: [batch, seq, numHeads, headDim] -> [batch, numHeads, seq, headDim]
-        var queries = Q_flat.Reshape(batchSize, seqLen, _numHeads, _headDimension)
-            .Transpose(new[] { 0, 2, 1, 3 });
+        var queries = Engine.TensorPermute(
+            Engine.Reshape(Q_flat, new[] { batchSize, seqLen, _numHeads, _headDimension }),
+            new[] { 0, 2, 1, 3 });
 
         // Reshape K/V: [batch, seq, numKVHeads, headDim] -> [batch, numKVHeads, seq, headDim]
-        var keys = K_flat.Reshape(batchSize, seqLen, _numKVHeads, _headDimension)
-            .Transpose(new[] { 0, 2, 1, 3 });
-        var values = V_flat.Reshape(batchSize, seqLen, _numKVHeads, _headDimension)
-            .Transpose(new[] { 0, 2, 1, 3 });
+        var keys = Engine.TensorPermute(
+            Engine.Reshape(K_flat, new[] { batchSize, seqLen, _numKVHeads, _headDimension }),
+            new[] { 0, 2, 1, 3 });
+        var values = Engine.TensorPermute(
+            Engine.Reshape(V_flat, new[] { batchSize, seqLen, _numKVHeads, _headDimension }),
+            new[] { 0, 2, 1, 3 });
 
         // Apply RoPE to Q and K (before KV head expansion)
         if (_ropeLayer != null)
@@ -297,33 +301,39 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         _lastAttentionWeights = attentionWeights;
 
         // Reshape back: [batch, numHeads, seq, headDim] -> [batch, seq, embDim]
-        var contextTransposed = context.Transpose(new[] { 0, 2, 1, 3 })
-            .Reshape(batchSize * seqLen, _numHeads * _headDimension);
+        var contextPermuted = Engine.TensorPermute(context, new[] { 0, 2, 1, 3 });
+        var contextTransposed = Engine.Reshape(
+            contextPermuted,
+            new[] { batchSize * seqLen, _numHeads * _headDimension });
 
         // Cache pre-projection context for output weights gradient
-        _lastAttentionContext = contextTransposed.Reshape(batchSize, seqLen, _numHeads * _headDimension);
+        _lastAttentionContext = Engine.Reshape(
+            contextTransposed,
+            new[] { batchSize, seqLen, _numHeads * _headDimension });
 
         // Output projection
         var output = Engine.TensorMatMul(contextTransposed, _outputWeights);
-        var output3D = output.Reshape(batchSize, seqLen, _embeddingDimension);
+        var output3D = Engine.Reshape(output, new[] { batchSize, seqLen, _embeddingDimension });
 
-        // Add bias
-        var biasBroadcast = _outputBias.Reshape(1, 1, _embeddingDimension);
+        // Add bias — reshape bias fresh each call so the tape has a live GradFn
+        // chain from _outputBias on every training step (a cached reshape primed
+        // during inference would dead-end backward at the cached handle).
+        var biasBroadcast = Engine.Reshape(_outputBias, new[] { 1, 1, _embeddingDimension });
         var outputWithBias = Engine.TensorBroadcastAdd(output3D, biasBroadcast);
         var result = ApplyActivation(outputWithBias);
 
         _lastOutput = result;
 
-        // Reshape back to original rank
+        // Reshape back to original rank — via Engine for tape recording.
         if (rank == 2)
-            return result.Reshape(seqLen, _embeddingDimension);
+            return Engine.Reshape(result, new[] { seqLen, _embeddingDimension });
 
         var outputShape = new int[rank];
         for (int i = 0; i < rank - 2; i++)
             outputShape[i] = input.Shape[i];
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _embeddingDimension;
-        return result.Reshape(outputShape);
+        return Engine.Reshape(result, outputShape);
     }
 
     /// <summary>

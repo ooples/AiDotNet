@@ -269,13 +269,17 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
             // 3D [C, H, W] -> [1, C, H, W]
             // 2D [H, W] -> [1, 1, H, W]
             // 1D [W] -> [1, 1, 1, W]
+            // Every shape op via Engine so the gradient tape records it — direct
+            // Tensor<T>.Reshape / .Transpose bypass the tape and disconnect the
+            // patch-embedding weights from the backward graph on every DiT /
+            // ViT / MMDiT forward pass.
             var shape4D = new int[4];
             int offset = 4 - rank;
             for (int i = 0; i < offset; i++)
                 shape4D[i] = 1;
             for (int i = 0; i < rank; i++)
                 shape4D[offset + i] = input.Shape[i];
-            processInput = input.Reshape(shape4D);
+            processInput = Engine.Reshape(input, shape4D);
             batchSize = shape4D[0];
         }
         else if (rank == 4)
@@ -295,59 +299,55 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
             int channels = input.Shape[rank - 3];
             int height = input.Shape[rank - 2];
             int width = input.Shape[rank - 1];
-            processInput = input.Reshape([flatBatch, channels, height, width]);
+            processInput = Engine.Reshape(input, new[] { flatBatch, channels, height, width });
         }
 
         _lastInput = processInput;
         int patchDim = _channels * _patchSize * _patchSize;
 
-        // Efficient Patchify using Reshape and Transpose
+        // Efficient Patchify using Reshape and Transpose (all via Engine).
         // Input: [B, C, H, W]
         // 1. Reshape to split H and W into patches: [B, C, Nh, P, Nw, P]
-        var reshaped = processInput.Reshape(batchSize, _channels, _numPatchesHeight, _patchSize, _numPatchesWidth, _patchSize);
+        var reshaped = Engine.Reshape(processInput,
+            new[] { batchSize, _channels, _numPatchesHeight, _patchSize, _numPatchesWidth, _patchSize });
 
         // 2. Transpose to group patch dimensions: [B, Nh, Nw, C, P, P]
-        var transposed = reshaped.Transpose(new[] { 0, 2, 4, 1, 3, 5 });
+        var transposed = Engine.TensorPermute(reshaped, new[] { 0, 2, 4, 1, 3, 5 });
 
         // 3. Flatten patches: [B, Nh*Nw, C*P*P] = [B, N, patchDim]
-        var patches = transposed.Reshape(batchSize, _numPatches, patchDim);
+        var patches = Engine.Reshape(transposed, new[] { batchSize, _numPatches, patchDim });
 
         // Projection: patches @ weights + bias
         // Reshape to 2D for TensorMatMul: [B*N, patchDim] @ [patchDim, embedDim] -> [B*N, embedDim]
-        var patchesFlat = patches.Reshape(batchSize * _numPatches, patchDim);
+        var patchesFlat = Engine.Reshape(patches, new[] { batchSize * _numPatches, patchDim });
         var projectedFlat = Engine.TensorMatMul(patchesFlat, _projectionWeights);
         // Reshape back to 3D: [B, N, embedDim]
-        var projected = projectedFlat.Reshape(batchSize, _numPatches, _embeddingDim);
+        var projected = Engine.Reshape(projectedFlat, new[] { batchSize, _numPatches, _embeddingDim });
 
-        // Add bias (broadcast)
-        var biasBroadcast = _projectionBias.Reshape(1, 1, _embeddingDim);
+        // Add bias (broadcast) — reshape bias fresh each call to keep the tape
+        // GradFn chain alive (a cached reshape primed during inference would
+        // disconnect _projectionBias from the backward walk).
+        var biasBroadcast = Engine.Reshape(_projectionBias, new[] { 1, 1, _embeddingDim });
         var preActivation = Engine.TensorBroadcastAdd(projected, biasBroadcast);
 
         _lastPreActivation = preActivation;
         var output = ApplyActivation(preActivation);
 
-        // Restore output shape to match original input rank
-        // Output goes from 3D [B, N, embedDim] to appropriate rank
+        // Restore output shape to match original input rank (via Engine).
         if (_originalInputShape != null && _originalInputShape.Length != 4)
         {
             if (_originalInputShape.Length < 4)
             {
-                // Lower-rank input: remove batch dimension if it was added
-                // 3D input [C, H, W] -> 2D output [N, embedDim]
-                // 2D input [H, W] -> 2D output [N, embedDim]
-                // 1D input [W] -> 2D output [N, embedDim]
-                return output.Reshape([_numPatches, _embeddingDim]);
+                return Engine.Reshape(output, new[] { _numPatches, _embeddingDim });
             }
             else
             {
-                // Higher-rank input: restore leading dimensions
-                // e.g., 5D input [B1, B2, C, H, W] -> 4D output [B1, B2, N, embedDim]
                 var outShape = new int[_originalInputShape.Length - 1];
                 for (int d = 0; d < _originalInputShape.Length - 3; d++)
                     outShape[d] = _originalInputShape[d];
                 outShape[_originalInputShape.Length - 3] = _numPatches;
                 outShape[_originalInputShape.Length - 2] = _embeddingDim;
-                return output.Reshape(outShape);
+                return Engine.Reshape(output, outShape);
             }
         }
 

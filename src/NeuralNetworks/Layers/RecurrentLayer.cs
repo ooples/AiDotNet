@@ -322,13 +322,14 @@ public partial class RecurrentLayer<T> : LayerBase<T>
         int sequenceLength;
         int batchSize;
 
+        // Shape ops via Engine so the gradient tape records them.
         if (rank == 1)
         {
             // 1D: [inputSize] -> treat as single timestep, single batch
             sequenceLength = 1;
             batchSize = 1;
             int inputSize = input.Shape[0];
-            input3D = input.Reshape([1, 1, inputSize]);
+            input3D = Engine.Reshape(input, new[] { 1, 1, inputSize });
         }
         else if (rank == 2)
         {
@@ -336,7 +337,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>
             sequenceLength = input.Shape[0];
             batchSize = 1;
             int inputSize = input.Shape[1];
-            input3D = input.Reshape([sequenceLength, 1, inputSize]);
+            input3D = Engine.Reshape(input, new[] { sequenceLength, 1, inputSize });
         }
         else if (rank == 3)
         {
@@ -354,7 +355,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
             int inputSize = input.Shape[rank - 1];
-            input3D = input.Reshape([sequenceLength, flatBatch, inputSize]);
+            input3D = Engine.Reshape(input, new[] { sequenceLength, flatBatch, inputSize });
         }
 
         // Cache input only if training
@@ -380,12 +381,13 @@ public partial class RecurrentLayer<T> : LayerBase<T>
         var hiddenState = new Tensor<T>([sequenceLength + 1, batchSize, hiddenSize]);
         hiddenState.Fill(NumOps.Zero);
 
-        // Process sequence using tensor operations
+        // Process sequence using tensor operations. All projections via
+        // Engine.* so the gradient tape records the forward chain.
         // _inputWeights shape: [hiddenSize, inputSize]
         // _hiddenWeights shape: [hiddenSize, hiddenSize]
         // _biases shape: [hiddenSize]
-        var inputWeightsT = _inputWeights.Transpose([1, 0]); // [inputSize, hiddenSize]
-        var hiddenWeightsT = _hiddenWeights.Transpose([1, 0]); // [hiddenSize, hiddenSize]
+        var inputWeightsT = Engine.TensorPermute(_inputWeights, new[] { 1, 0 }); // [inputSize, hiddenSize]
+        var hiddenWeightsT = Engine.TensorPermute(_hiddenWeights, new[] { 1, 0 }); // [hiddenSize, hiddenSize]
 
         for (int t = 0; t < sequenceLength; t++)
         {
@@ -396,8 +398,9 @@ public partial class RecurrentLayer<T> : LayerBase<T>
             var prevHidden = Engine.TensorSliceAxis(hiddenState, 0, t); // [batchSize, hiddenSize]
 
             // Compute: h_t = activation(input @ W_input^T + h_{t-1} @ W_hidden^T + biases)
-            var inputContribution = inputAtT.MatrixMultiply(inputWeightsT); // [batchSize, hiddenSize]
-            var hiddenContribution = prevHidden.MatrixMultiply(hiddenWeightsT); // [batchSize, hiddenSize]
+            // Tape-tracked matmul (was .MatrixMultiply which bypasses the tape).
+            var inputContribution = Engine.TensorMatMul(inputAtT, inputWeightsT); // [batchSize, hiddenSize]
+            var hiddenContribution = Engine.TensorMatMul(prevHidden, hiddenWeightsT); // [batchSize, hiddenSize]
 
             // Sum contributions and add biases using Engine operations
             var preActivation = Engine.TensorAdd(inputContribution, hiddenContribution);
@@ -414,7 +417,8 @@ public partial class RecurrentLayer<T> : LayerBase<T>
         _lastHiddenState = hiddenState;
         _lastOutput = output;
 
-        // Restore original batch dimensions for any-rank support
+        // Restore original batch dimensions for any-rank support — via Engine
+        // for tape recording.
         if (_originalInputShape != null && _originalInputShape.Length > 3)
         {
             // Output shape: [sequenceLength, ...middleDims, hiddenSize]
@@ -423,17 +427,17 @@ public partial class RecurrentLayer<T> : LayerBase<T>
             for (int d = 1; d < _originalInputShape.Length - 1; d++)
                 newShape[d] = _originalInputShape[d];
             newShape[_originalInputShape.Length - 1] = hiddenSize;
-            output = output.Reshape(newShape);
+            output = Engine.Reshape(output, newShape);
         }
         else if (_originalInputShape != null && _originalInputShape.Length == 2)
         {
             // 2D input -> 2D output (remove batch dim)
-            output = output.Reshape([sequenceLength, hiddenSize]);
+            output = Engine.Reshape(output, new[] { sequenceLength, hiddenSize });
         }
         else if (_originalInputShape != null && _originalInputShape.Length == 1)
         {
             // 1D input -> 1D output (just the hidden size)
-            output = output.Reshape([hiddenSize]);
+            output = Engine.Reshape(output, new[] { hiddenSize });
         }
 
         return output;
