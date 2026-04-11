@@ -450,7 +450,7 @@ public partial class LonghornLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ApplyGroupNorm(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input._shape);
         T epsilon = NumOps.FromDouble(1e-5);
 
         for (int bi = 0; bi < batchSize; bi++)
@@ -506,7 +506,7 @@ public partial class LonghornLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> GroupNormBackward(Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
-        var dInput = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var dInput = TensorAllocator.Rent<T>(input._shape);
         T epsilon = NumOps.FromDouble(1e-5);
         T headDimT = NumOps.FromDouble(_headDimension);
         var gammaGrad = _groupNormGammaGradient
@@ -602,7 +602,7 @@ public partial class LonghornLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {
-        var ones = new Tensor<T>(template.Shape.ToArray());
+        var ones = new Tensor<T>(template._shape);
         ones.Fill(NumOps.One);
         return ones;
     }

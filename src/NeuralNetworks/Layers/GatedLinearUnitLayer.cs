@@ -472,10 +472,10 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (outputDimension + inputDimension)));
 
         _linearWeights = Engine.TensorMultiplyScalar(
-            new Tensor<T>(_linearWeights.Shape.ToArray(), Vector<T>.CreateRandom(_linearWeights.Length, -0.5, 0.5)),
+            new Tensor<T>(_linearWeights._shape, Vector<T>.CreateRandom(_linearWeights.Length, -0.5, 0.5)),
             scale);
         _gateWeights = Engine.TensorMultiplyScalar(
-            new Tensor<T>(_gateWeights.Shape.ToArray(), Vector<T>.CreateRandom(_gateWeights.Length, -0.5, 0.5)),
+            new Tensor<T>(_gateWeights._shape, Vector<T>.CreateRandom(_gateWeights.Length, -0.5, 0.5)),
             scale);
 
         _linearBias.Fill(NumOps.Zero);
@@ -728,13 +728,13 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
         }
 
         int index = 0;
-        _linearWeights = new Tensor<T>(_linearWeights.Shape.ToArray(), parameters.Slice(index, linearWeightsSize));
+        _linearWeights = new Tensor<T>(_linearWeights._shape, parameters.Slice(index, linearWeightsSize));
         index += linearWeightsSize;
-        _gateWeights = new Tensor<T>(_gateWeights.Shape.ToArray(), parameters.Slice(index, gateWeightsSize));
+        _gateWeights = new Tensor<T>(_gateWeights._shape, parameters.Slice(index, gateWeightsSize));
         index += gateWeightsSize;
-        _linearBias = new Tensor<T>(_linearBias.Shape.ToArray(), parameters.Slice(index, _linearBias.Length));
+        _linearBias = new Tensor<T>(_linearBias._shape, parameters.Slice(index, _linearBias.Length));
         index += _linearBias.Length;
-        _gateBias = new Tensor<T>(_gateBias.Shape.ToArray(), parameters.Slice(index, _gateBias.Length));
+        _gateBias = new Tensor<T>(_gateBias._shape, parameters.Slice(index, _gateBias.Length));
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_linearWeights);

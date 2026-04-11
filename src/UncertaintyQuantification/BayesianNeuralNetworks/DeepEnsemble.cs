@@ -112,7 +112,7 @@ public class DeepEnsemble<T> : IUncertaintyEstimator<T>
     public Tensor<T> EstimateAleatoricUncertainty(Tensor<T> input)
     {
         var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input._shape);
-        var aleatoric = new Tensor<T>(totalUncertainty.Shape.ToArray());
+        var aleatoric = new Tensor<T>(totalUncertainty._shape);
         for (int i = 0; i < aleatoric.Length; i++)
         {
             aleatoric[i] = _numOps.Zero;
@@ -187,7 +187,7 @@ public class DeepEnsemble<T> : IUncertaintyEstimator<T>
     /// </summary>
     private Tensor<T> ComputeVariance(List<Tensor<T>> predictions, Tensor<T> mean)
     {
-        var variance = new Tensor<T>(mean.Shape.ToArray());
+        var variance = new Tensor<T>(mean._shape);
 
         foreach (var pred in predictions)
         {

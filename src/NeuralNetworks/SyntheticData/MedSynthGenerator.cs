@@ -647,7 +647,7 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     private static Tensor<T> ApplyReLU(Tensor<T> input)
     {
         var ops = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         for (int i = 0; i < input.Length; i++)
         {
             double v = ops.ToDouble(input[i]);
@@ -659,7 +659,7 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     private static Tensor<T> ApplyReLUDerivative(Tensor<T> grad, Tensor<T> preActivation)
     {
         var ops = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(grad.Shape.ToArray());
+        var result = new Tensor<T>(grad._shape);
         int len = Math.Min(grad.Length, preActivation.Length);
         for (int i = 0; i < len; i++)
         {
@@ -672,7 +672,7 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     private static Tensor<T> ApplyLeakyReLU(Tensor<T> input, double alpha)
     {
         var ops = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         for (int i = 0; i < input.Length; i++)
         {
             double v = ops.ToDouble(input[i]);
@@ -684,7 +684,7 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     private static Tensor<T> ApplyLeakyReLUDerivative(Tensor<T> grad, Tensor<T> preActivation, double alpha)
     {
         var ops = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(grad.Shape.ToArray());
+        var result = new Tensor<T>(grad._shape);
         int len = Math.Min(grad.Length, preActivation.Length);
         for (int i = 0; i < len; i++)
         {
@@ -738,7 +738,7 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         if (_transformer is null) return constrained;
 
         var output = VectorToTensor(constrained);
-        var result = new Tensor<T>(output.Shape.ToArray());
+        var result = new Tensor<T>(output._shape);
         int idx = 0;
 
         for (int col = 0; col < _columns.Count && idx < output.Length; col++)
@@ -786,7 +786,7 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
     private static Tensor<T> CloneTensor(Tensor<T> source)
     {
-        var clone = new Tensor<T>(source.Shape.ToArray());
+        var clone = new Tensor<T>(source._shape);
         for (int i = 0; i < source.Length; i++)
         {
             clone[i] = source[i];

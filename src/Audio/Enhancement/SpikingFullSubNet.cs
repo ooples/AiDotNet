@@ -303,7 +303,7 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     private Tensor<T> ApplyMask(Tensor<T> stft, Tensor<T> mask)
     {
-        var result = new Tensor<T>(stft.Shape.ToArray());
+        var result = new Tensor<T>(stft._shape);
         for (int i = 0; i < Math.Min(stft.Length, mask.Length); i++)
             result[i] = NumOps.Multiply(stft[i], mask[i]);
         return result;

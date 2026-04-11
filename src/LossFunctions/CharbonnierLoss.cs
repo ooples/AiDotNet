@@ -173,7 +173,7 @@ public class CharbonnierLoss<T> : LossFunctionBase<T>
         // Charbonnier = mean(sqrt((pred - target)² + ε²))
         var diff = Engine.TensorSubtract(predicted, target);
         var squared = Engine.TensorMultiply(diff, diff);
-        var epsSq = new Tensor<T>(squared.Shape.ToArray());
+        var epsSq = new Tensor<T>(squared._shape);
         epsSq.Fill(_epsilonSquared);
         var sum = Engine.TensorAdd(squared, epsSq);
         var result = Engine.TensorSqrt(sum);

@@ -405,7 +405,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         var mismatchAndActive = Engine.TensorMultiply(notEqual, anyActive);
         var mismatchSum = Engine.ReduceSum(mismatchAndActive, axes, keepDims: true);
 
-        var scores = new Tensor<T>(totalActiveSum.Shape.ToArray());
+        var scores = new Tensor<T>(totalActiveSum._shape);
         for (int i = 0; i < totalActiveSum.Length; i++)
         {
             double totalCount = NumOps.ToDouble(totalActiveSum.GetFlat(i));

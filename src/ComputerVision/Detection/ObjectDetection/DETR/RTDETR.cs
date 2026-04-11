@@ -472,7 +472,7 @@ internal class RTDETREncoderLayer<T>
         int seqLen = x.Shape[1];
         int ffnDim = _ffn1.OutputSize;
 
-        var result = new Tensor<T>(x.Shape.ToArray());
+        var result = new Tensor<T>(x._shape);
 
         for (int b = 0; b < batch; b++)
         {

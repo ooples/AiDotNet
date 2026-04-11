@@ -189,7 +189,7 @@ public class BALD<T> : IActiveLearningStrategy<T>
     private Tensor<T> AddDropoutNoise(Tensor<T> predictions, double dropoutRate, int seed)
     {
         var random = RandomHelper.CreateSeededRandom(seed);
-        var noisyPredictions = new Tensor<T>(predictions.Shape.ToArray());
+        var noisyPredictions = new Tensor<T>(predictions._shape);
 
         for (int i = 0; i < predictions.Length; i++)
         {

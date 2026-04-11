@@ -402,10 +402,10 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
         // Create random tensor using Engine operations
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape.ToArray());
+        var randomTensor = Tensor<T>.CreateRandom(tensor._shape);
 
         // Shift to [-0.5, 0.5] range: randomTensor - 0.5
-        var halfTensor = new Tensor<T>(tensor.Shape.ToArray());
+        var halfTensor = new Tensor<T>(tensor._shape);
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
 
@@ -496,7 +496,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         if (edgeFeatures.Shape.Length != 3)
         {
             throw new ArgumentException(
-                $"Edge features must be a 3D tensor [batch, numEdgeSlots, edgeFeatureDim], but got shape [{string.Join(", ", edgeFeatures.Shape.ToArray())}].");
+                $"Edge features must be a 3D tensor [batch, numEdgeSlots, edgeFeatureDim], but got shape [{string.Join(", ", edgeFeatures._shape)}].");
         }
         _edgeFeatures = edgeFeatures;
     }
@@ -928,7 +928,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
                 array[i] = parameters[index++];
             }
 
-            var newTensor = new Tensor<T>(tensor.Shape.ToArray());
+            var newTensor = new Tensor<T>(tensor._shape);
             for (int i = 0; i < array.Length; i++)
             {
                 newTensor[i] = array[i];

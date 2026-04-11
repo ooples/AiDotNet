@@ -1049,7 +1049,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplySeriesStationarization(Tensor<T> input, bool normalize)
     {
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         var eps = NumOps.FromDouble(1e-5);
 
         if (normalize)
@@ -1124,7 +1124,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ShiftAndAppend(Tensor<T> input, Tensor<T> prediction)
     {
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         int seqLen = _sequenceLength;
         int predLen = Math.Min(_predictionHorizon, seqLen);
 

@@ -774,7 +774,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
         }
 
         // Use Tensor.FromVector for production-grade parameter setting
-        _convWeights = Tensor<T>.FromVector(parameters.Slice(0, weightSize), _convWeights.Shape.ToArray());
+        _convWeights = Tensor<T>.FromVector(parameters.Slice(0, weightSize), _convWeights._shape);
         _convBias = Tensor<T>.FromVector(parameters.Slice(weightSize, biasSize), [biasSize]);
     }
 

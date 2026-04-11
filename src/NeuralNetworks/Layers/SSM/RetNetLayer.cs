@@ -464,7 +464,7 @@ public partial class RetNetLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> GroupNormForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input._shape);
         T eps = NumOps.FromDouble(1e-6);
 
         // Store mean and variance for backward pass: [batchSize, seqLen, numHeads]
@@ -532,7 +532,7 @@ public partial class RetNetLayer<T> : LayerBase<T>
         Tensor<T> dNormed, Tensor<T> retentionInput,
         int batchSize, int seqLen)
     {
-        var dInput = TensorAllocator.Rent<T>(retentionInput.Shape.ToArray());
+        var dInput = TensorAllocator.Rent<T>(retentionInput._shape);
         T eps = NumOps.FromDouble(1e-6);
 
         for (int bi = 0; bi < batchSize; bi++)

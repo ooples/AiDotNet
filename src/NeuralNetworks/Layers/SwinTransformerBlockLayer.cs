@@ -323,7 +323,7 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
         int w = x.Shape[2];
         int c = x.Shape[3];
 
-        var shifted = new Tensor<T>(x.Shape.ToArray());
+        var shifted = new Tensor<T>(x._shape);
 
         for (int b = 0; b < batch; b++)
         {

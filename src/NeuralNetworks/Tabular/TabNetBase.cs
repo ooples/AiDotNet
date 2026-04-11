@@ -492,7 +492,7 @@ public abstract class TabNetBase<T>
     /// </summary>
     protected Tensor<T> ApplyReLU(Tensor<T> input)
     {
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         for (int i = 0; i < input.Length; i++)
         {
             result[i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? input[i] : NumOps.Zero;
@@ -505,7 +505,7 @@ public abstract class TabNetBase<T>
     /// </summary>
     protected Tensor<T> ApplyReLUDerivative(Tensor<T> gradient, Tensor<T> original)
     {
-        var result = new Tensor<T>(gradient.Shape.ToArray());
+        var result = new Tensor<T>(gradient._shape);
         for (int i = 0; i < gradient.Length; i++)
         {
             result[i] = NumOps.GreaterThan(original[i], NumOps.Zero) ? gradient[i] : NumOps.Zero;
@@ -518,7 +518,7 @@ public abstract class TabNetBase<T>
     /// </summary>
     protected Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape.ToArray());
+        var result = new Tensor<T>(a._shape);
         for (int i = 0; i < a.Length; i++)
         {
             result[i] = NumOps.Add(a[i], b[i]);

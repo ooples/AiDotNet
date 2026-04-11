@@ -679,9 +679,9 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");
 
         int index = 0;
-        _weights = new Tensor<T>(_weights.Shape.ToArray(), parameters.Slice(index, _weights.Length));
+        _weights = new Tensor<T>(_weights._shape, parameters.Slice(index, _weights.Length));
         index += _weights.Length;
-        _biases = new Tensor<T>(_biases.Shape.ToArray(), parameters.Slice(index, _biases.Length));
+        _biases = new Tensor<T>(_biases._shape, parameters.Slice(index, _biases.Length));
     }
 
     /// <summary>
@@ -788,7 +788,7 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
         {
             weightArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _weights = new Tensor<T>(weightArray, _weights.Shape.ToArray());
+        _weights = new Tensor<T>(weightArray, _weights._shape);
 
         _biases = new Tensor<T>([OutputChannels]);
         var biasArray = new T[OutputChannels];
@@ -796,7 +796,7 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
         {
             biasArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _biases = new Tensor<T>(biasArray, _biases.Shape.ToArray());
+        _biases = new Tensor<T>(biasArray, _biases._shape);
     }
 
     #endregion

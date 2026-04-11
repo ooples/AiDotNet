@@ -154,7 +154,7 @@ internal class GatedResidualNetwork<T>
 
         if (bias != null)
         {
-            result = Engine.TensorAdd(result, bias.Reshape(result.Shape.ToArray()));
+            result = Engine.TensorAdd(result, bias.Reshape(result._shape));
         }
 
         return result;
@@ -162,7 +162,7 @@ internal class GatedResidualNetwork<T>
 
     private static Tensor<T> ApplyELU(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape.ToArray());
+        var result = new Tensor<T>(x._shape);
         var xSpan = x.Data.Span;
         var rSpan = result.AsWritableSpan();
         for (int i = 0; i < xSpan.Length; i++)
@@ -175,7 +175,7 @@ internal class GatedResidualNetwork<T>
 
     private static Tensor<T> ApplySigmoid(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape.ToArray());
+        var result = new Tensor<T>(x._shape);
         var xSpan = x.Data.Span;
         var rSpan = result.AsWritableSpan();
         for (int i = 0; i < xSpan.Length; i++)
@@ -205,7 +205,7 @@ internal class GatedResidualNetwork<T>
         double variance = sumSq / len - mean * mean;
         double invStd = 1.0 / Math.Sqrt(variance + 1e-5);
 
-        var result = new Tensor<T>(x.Shape.ToArray());
+        var result = new Tensor<T>(x._shape);
         var rSpan = result.AsWritableSpan();
         for (int i = 0; i < len; i++)
         {

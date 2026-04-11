@@ -204,10 +204,10 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
         // Create random tensor using Engine operations
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape.ToArray());
+        var randomTensor = Tensor<T>.CreateRandom(tensor._shape);
 
         // Shift to [-0.5, 0.5] range: randomTensor - 0.5
-        var halfTensor = new Tensor<T>(tensor.Shape.ToArray());
+        var halfTensor = new Tensor<T>(tensor._shape);
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
 
@@ -711,7 +711,7 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
             adj3D = adjacency;
         }
 
-        var normalized = new Tensor<T>(adj3D.Shape.ToArray());
+        var normalized = new Tensor<T>(adj3D._shape);
         for (int b = 0; b < batchSize; b++)
         {
             for (int i = 0; i < numNodes; i++)
@@ -807,7 +807,7 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
     /// </summary>
     private Tensor<T> ApplyReLU(Tensor<T> input)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input._shape);
         for (int i = 0; i < input.Length; i++)
         {
             T val = input.GetFlat(i);
@@ -967,12 +967,12 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
 
         // Set edge network weights 1
         var w1Params = parameters.SubVector(index, w1Size);
-        _edgeNetworkWeights1 = Tensor<T>.FromVector(w1Params).Reshape(_edgeNetworkWeights1.Shape.ToArray());
+        _edgeNetworkWeights1 = Tensor<T>.FromVector(w1Params).Reshape(_edgeNetworkWeights1._shape);
         index += w1Size;
 
         // Set edge network weights 2
         var w2Params = parameters.SubVector(index, w2Size);
-        _edgeNetworkWeights2 = Tensor<T>.FromVector(w2Params).Reshape(_edgeNetworkWeights2.Shape.ToArray());
+        _edgeNetworkWeights2 = Tensor<T>.FromVector(w2Params).Reshape(_edgeNetworkWeights2._shape);
         index += w2Size;
 
         // Set edge network bias 1
@@ -987,7 +987,7 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
 
         // Set self weights
         var selfParams = parameters.SubVector(index, selfSize);
-        _selfWeights = Tensor<T>.FromVector(selfParams).Reshape(_selfWeights.Shape.ToArray());
+        _selfWeights = Tensor<T>.FromVector(selfParams).Reshape(_selfWeights._shape);
         index += selfSize;
 
         // Set bias

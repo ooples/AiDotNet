@@ -251,7 +251,7 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         // Blend original and enhanced based on strength.
         // For super-resolution, enhanced may be longer than original (upsampled).
         // Blend only the overlapping region; keep enhanced-only samples intact.
-        var result = new Tensor<T>(enhanced.Shape.ToArray());
+        var result = new Tensor<T>(enhanced._shape);
         int blendLen = Math.Min(original.Length, enhanced.Length);
         for (int i = 0; i < blendLen; i++)
         {

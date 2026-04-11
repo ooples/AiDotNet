@@ -307,8 +307,8 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     /// </summary>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape.ToArray());
-        var halfTensor = new Tensor<T>(tensor.Shape.ToArray());
+        var randomTensor = Tensor<T>.CreateRandom(tensor._shape);
+        var halfTensor = new Tensor<T>(tensor._shape);
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
@@ -903,7 +903,7 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
             adj3D = adjacency;
         }
 
-        var normalized = new Tensor<T>(adj3D.Shape.ToArray());
+        var normalized = new Tensor<T>(adj3D._shape);
 
         for (int b = 0; b < batchSize; b++)
         {

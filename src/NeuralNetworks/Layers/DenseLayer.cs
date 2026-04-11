@@ -1134,13 +1134,13 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Initialize velocity tensors if needed (lazily)
             if (_weightsVelocity == null)
             {
-                _weightsVelocity = new Tensor<T>(_weights.Shape.ToArray());
+                _weightsVelocity = new Tensor<T>(_weights._shape);
                 _weightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_weightsVelocity, PersistentTensorRole.OptimizerState);
             }
             if (_biasesVelocity == null)
             {
-                _biasesVelocity = new Tensor<T>(_biases.Shape.ToArray());
+                _biasesVelocity = new Tensor<T>(_biases._shape);
                 _biasesVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_biasesVelocity, PersistentTensorRole.OptimizerState);
             }

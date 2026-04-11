@@ -136,7 +136,7 @@ public class SecureGradientExchange<T> : FederatedLearningComponentBase<T>
         nonceTensor[0] = NumOps.FromDouble(nonceValue);
 
         // Use keystream to mask values (simulated encryption)
-        var encrypted = new Tensor<T>(gradients.Shape.ToArray());
+        var encrypted = new Tensor<T>(gradients._shape);
         var keyRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom((int)(nonceValue % int.MaxValue));
 
         for (int i = 0; i < totalElements; i++)
@@ -163,7 +163,7 @@ public class SecureGradientExchange<T> : FederatedLearningComponentBase<T>
         double nonceValue = NumOps.ToDouble(nonceTensor[0]);
         var keyRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom((int)(nonceValue % int.MaxValue));
 
-        var decrypted = new Tensor<T>(encrypted.Shape.ToArray());
+        var decrypted = new Tensor<T>(encrypted._shape);
         for (int i = 0; i < totalElements; i++)
         {
             double val = NumOps.ToDouble(encrypted[i]);
@@ -185,8 +185,8 @@ public class SecureGradientExchange<T> : FederatedLearningComponentBase<T>
             totalElements *= gradients.Shape[d];
         }
 
-        var mask = new Tensor<T>(gradients.Shape.ToArray());
-        var masked = new Tensor<T>(gradients.Shape.ToArray());
+        var mask = new Tensor<T>(gradients._shape);
+        var masked = new Tensor<T>(gradients._shape);
 
         for (int i = 0; i < totalElements; i++)
         {
@@ -210,7 +210,7 @@ public class SecureGradientExchange<T> : FederatedLearningComponentBase<T>
             totalElements *= masked.Shape[d];
         }
 
-        var unmasked = new Tensor<T>(masked.Shape.ToArray());
+        var unmasked = new Tensor<T>(masked._shape);
         for (int i = 0; i < totalElements; i++)
         {
             double val = NumOps.ToDouble(masked[i]);

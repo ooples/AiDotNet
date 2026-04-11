@@ -587,7 +587,7 @@ internal partial class MambaBlock<T> : LayerBase<T>
     /// </summary>
     private static Tensor<T> SliceTensor(Tensor<T> input, int axis, int start, int length)
     {
-        var shape = (int[])input.Shape.ToArray().Clone();
+        var shape = (int[])input._shape.Clone();
         shape[axis] = length;
         var output = new Tensor<T>(shape);
 

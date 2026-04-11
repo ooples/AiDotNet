@@ -821,7 +821,7 @@ public partial class MegalodonLayer<T> : LayerBase<T>
             throw new InvalidOperationException("CEMAKernelForward must be called first.");
 
         // TimestepNorm backward: y = gamma * x + beta → dx = gamma * dy
-        var dPreNorm = TensorAllocator.Rent<T>(dOutput.Shape.ToArray());
+        var dPreNorm = TensorAllocator.Rent<T>(dOutput._shape);
         for (int b = 0; b < batchSize; b++)
             for (int t = 0; t < seqLen; t++)
                 for (int d = 0; d < _emaDimension; d++)
@@ -993,7 +993,7 @@ public partial class MegalodonLayer<T> : LayerBase<T>
 
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {
-        var result = TensorAllocator.Rent<T>(template.Shape.ToArray());
+        var result = TensorAllocator.Rent<T>(template._shape);
         for (int i = 0; i < result.Length; i++) result[i] = NumOps.One;
         return result;
     }

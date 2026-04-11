@@ -1117,7 +1117,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             residual = postConv.Forward(residual);
         }
 
-        var refined = new Tensor<T>(melSpectrogram.Shape.ToArray());
+        var refined = new Tensor<T>(melSpectrogram._shape);
         for (int i = 0; i < melSpectrogram.Length; i++)
         {
             refined[i] = NumOps.Add(melSpectrogram[i], residual[i]);

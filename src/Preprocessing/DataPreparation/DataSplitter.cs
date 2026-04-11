@@ -144,27 +144,27 @@ public static class DataSplitter
         }
 
         // Create output tensors
-        int[] xTrainShape = (int[])X.Shape.ToArray();
+        int[] xTrainShape = (int[])X._shape;
         xTrainShape[0] = trainSize;
         var XTrain = new Tensor<T>(xTrainShape);
 
-        int[] xValShape = (int[])X.Shape.ToArray();
+        int[] xValShape = (int[])X._shape;
         xValShape[0] = validationSize;
         var XVal = new Tensor<T>(xValShape);
 
-        int[] xTestShape = (int[])X.Shape.ToArray();
+        int[] xTestShape = (int[])X._shape;
         xTestShape[0] = testSize;
         var XTest = new Tensor<T>(xTestShape);
 
-        int[] yTrainShape = (int[])y.Shape.ToArray();
+        int[] yTrainShape = (int[])y._shape;
         yTrainShape[0] = trainSize;
         var yTrain = new Tensor<T>(yTrainShape);
 
-        int[] yValShape = (int[])y.Shape.ToArray();
+        int[] yValShape = (int[])y._shape;
         yValShape[0] = validationSize;
         var yVal = new Tensor<T>(yValShape);
 
-        int[] yTestShape = (int[])y.Shape.ToArray();
+        int[] yTestShape = (int[])y._shape;
         yTestShape[0] = testSize;
         var yTest = new Tensor<T>(yTestShape);
 

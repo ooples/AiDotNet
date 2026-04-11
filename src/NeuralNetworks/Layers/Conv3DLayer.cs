@@ -438,10 +438,10 @@ public partial class Conv3DLayer<T> : LayerBase<T>
             NumOps.FromDouble(fanIn)));
 
         // Initialize kernels in [-scale, scale] range
-        _kernels = Engine.TensorRandomUniformRange<T>(_kernels.Shape.ToArray(), NumOps.Negate(scale), scale);
+        _kernels = Engine.TensorRandomUniformRange<T>(_kernels._shape, NumOps.Negate(scale), scale);
 
         // Initialize biases to zero
-        _biases = new Tensor<T>(_biases.Shape.ToArray());
+        _biases = new Tensor<T>(_biases._shape);
         Engine.TensorFill(_biases, NumOps.Zero);
     }
 
@@ -739,9 +739,9 @@ public partial class Conv3DLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");
 
         int index = 0;
-        _kernels = new Tensor<T>(_kernels.Shape.ToArray(), parameters.Slice(index, _kernels.Length));
+        _kernels = new Tensor<T>(_kernels._shape, parameters.Slice(index, _kernels.Length));
         index += _kernels.Length;
-        _biases = new Tensor<T>(_biases.Shape.ToArray(), parameters.Slice(index, _biases.Length));
+        _biases = new Tensor<T>(_biases._shape, parameters.Slice(index, _biases.Length));
 
         // Invalidate GPU cache after parameter update
         Engine.InvalidatePersistentTensor(_kernels);
@@ -901,7 +901,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         {
             kernelArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _kernels = new Tensor<T>(kernelArray, _kernels.Shape.ToArray());
+        _kernels = new Tensor<T>(kernelArray, _kernels._shape);
 
         _biases = new Tensor<T>([OutputChannels]);
         var biasArray = new T[_biases.Length];
@@ -909,7 +909,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         {
             biasArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _biases = new Tensor<T>(biasArray, _biases.Shape.ToArray());
+        _biases = new Tensor<T>(biasArray, _biases._shape);
     }
 
     #endregion

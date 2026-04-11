@@ -1430,10 +1430,10 @@ public partial class SpikingLayer<T> : LayerBase<T>
         _spikes = Engine.TensorWhere(belowReset, spikesZeroTensor, newSpikes);
 
         // Update state variables (reshape back if needed)
-        _membranePotential = vNew.Reshape(_membranePotential.Shape.ToArray());
-        _nGate = nNew.Reshape(_nGate.Shape.ToArray());
-        _mGate = mNew.Reshape(_mGate.Shape.ToArray());
-        _hGate = hNew.Reshape(_hGate.Shape.ToArray());
+        _membranePotential = vNew.Reshape(_membranePotential._shape);
+        _nGate = nNew.Reshape(_nGate._shape);
+        _mGate = mNew.Reshape(_mGate._shape);
+        _hGate = hNew.Reshape(_hGate._shape);
 
         return _spikes;
     }

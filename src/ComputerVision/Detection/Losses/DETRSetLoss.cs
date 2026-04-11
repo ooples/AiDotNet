@@ -159,11 +159,11 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
     public Tensor<T> CalculateDerivative(Tensor<T> predicted, Tensor<T> targets)
     {
         // Numerical gradient for now - analytical gradients are complex for Hungarian matching
-        var gradient = new Tensor<T>(predicted.Shape.ToArray());
+        var gradient = new Tensor<T>(predicted._shape);
         double eps = 1e-5;
 
         // Create a copy for perturbation to avoid mutating the original input
-        var perturbedPredicted = new Tensor<T>(predicted.Shape.ToArray());
+        var perturbedPredicted = new Tensor<T>(predicted._shape);
         for (int j = 0; j < predicted.Length; j++)
         {
             perturbedPredicted[j] = predicted[j];

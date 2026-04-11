@@ -315,10 +315,10 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
         // Create random tensor using Engine operations
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape.ToArray());
+        var randomTensor = Tensor<T>.CreateRandom(tensor._shape);
 
         // Shift to [-0.5, 0.5] range: randomTensor - 0.5
-        var halfTensor = new Tensor<T>(tensor.Shape.ToArray());
+        var halfTensor = new Tensor<T>(tensor._shape);
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
 
@@ -946,7 +946,7 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// </summary>
     private Tensor<T> ApplyGatesToFeatures(Tensor<T> combined, Tensor<T> gates, int batchSize, int numNodes, int outputFeatures)
     {
-        var gated = new Tensor<T>(combined.Shape.ToArray());
+        var gated = new Tensor<T>(combined._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -983,7 +983,7 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         _gateBiasGradient = new Tensor<T>([3]);
         _gateBiasGradient.Fill(NumOps.Zero);
 
-        var combinedGradient = new Tensor<T>(_lastCombined.Shape.ToArray());
+        var combinedGradient = new Tensor<T>(_lastCombined._shape);
         var gatesGradient = TensorAllocator.Rent<T>([batchSize, numNodes, 3]);
 
         // Gradient through element-wise multiplication: gated = combined * gates
@@ -1198,19 +1198,19 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
 
         // Set weight matrices
         var incomingWeightsParams = parameters.SubVector(index, _incomingWeights.Length);
-        _incomingWeights = Tensor<T>.FromVector(incomingWeightsParams).Reshape(_incomingWeights.Shape.ToArray());
+        _incomingWeights = Tensor<T>.FromVector(incomingWeightsParams).Reshape(_incomingWeights._shape);
         index += _incomingWeights.Length;
 
         var outgoingWeightsParams = parameters.SubVector(index, _outgoingWeights.Length);
-        _outgoingWeights = Tensor<T>.FromVector(outgoingWeightsParams).Reshape(_outgoingWeights.Shape.ToArray());
+        _outgoingWeights = Tensor<T>.FromVector(outgoingWeightsParams).Reshape(_outgoingWeights._shape);
         index += _outgoingWeights.Length;
 
         var selfWeightsParams = parameters.SubVector(index, _selfWeights.Length);
-        _selfWeights = Tensor<T>.FromVector(selfWeightsParams).Reshape(_selfWeights.Shape.ToArray());
+        _selfWeights = Tensor<T>.FromVector(selfWeightsParams).Reshape(_selfWeights._shape);
         index += _selfWeights.Length;
 
         var combinationWeightsParams = parameters.SubVector(index, _combinationWeights.Length);
-        _combinationWeights = Tensor<T>.FromVector(combinationWeightsParams).Reshape(_combinationWeights.Shape.ToArray());
+        _combinationWeights = Tensor<T>.FromVector(combinationWeightsParams).Reshape(_combinationWeights._shape);
         index += _combinationWeights.Length;
 
         // Set bias vectors
@@ -1234,7 +1234,7 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         if (_useGating && _gateWeights != null && _gateBias != null)
         {
             var gateWeightsParams = parameters.SubVector(index, _gateWeights.Length);
-            _gateWeights = Tensor<T>.FromVector(gateWeightsParams).Reshape(_gateWeights.Shape.ToArray());
+            _gateWeights = Tensor<T>.FromVector(gateWeightsParams).Reshape(_gateWeights._shape);
             index += _gateWeights.Length;
 
             var gateBiasParams = parameters.SubVector(index, _gateBias.Length);

@@ -209,7 +209,7 @@ public class iBOT<T> : TeacherStudentSSL<T>
     /// </summary>
     private Tensor<T> ComputeMaskedPatchGradient(Tensor<T> studentOut, Tensor<T> teacherOut, Tensor<T> mask)
     {
-        var grad = new Tensor<T>(studentOut.Shape.ToArray());
+        var grad = new Tensor<T>(studentOut._shape);
         var batchSize = studentOut.Shape[0];
         var numPatches = mask.Shape[1];
 
@@ -294,7 +294,7 @@ public class iBOT<T> : TeacherStudentSSL<T>
     /// </summary>
     private Tensor<T> CombineLossGradients(Tensor<T> gradCls, Tensor<T> gradMim, double clsWeight, double mimWeight)
     {
-        var result = new Tensor<T>(gradCls.Shape.ToArray());
+        var result = new Tensor<T>(gradCls._shape);
         var cw = NumOps.FromDouble(clsWeight);
         var mw = NumOps.FromDouble(mimWeight);
 

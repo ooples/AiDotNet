@@ -882,7 +882,7 @@ public class TFT<T> : ForecastingModelBase<T>
         if (input.Length != processed.Length)
         {
             int minLen = Math.Min(input.Length, processed.Length);
-            var result = new Tensor<T>(input.Shape.ToArray());
+            var result = new Tensor<T>(input._shape);
             for (int i = 0; i < minLen; i++)
                 result[i] = NumOps.Add(input[i], processed[i]);
             for (int i = minLen; i < input.Length; i++)
@@ -893,7 +893,7 @@ public class TFT<T> : ForecastingModelBase<T>
         // Adaptive sigmoid gating: gate decides how much processed vs input to use
         var gate = Engine.Sigmoid(processed);
         var gatedProcessed = Engine.TensorMultiply(gate, processed);
-        var ones = new Tensor<T>(gate.Shape.ToArray());
+        var ones = new Tensor<T>(gate._shape);
         for (int i = 0; i < ones.Length; i++)
             ones[i] = NumOps.One;
         var inverseGate = Engine.TensorSubtract(ones, gate);

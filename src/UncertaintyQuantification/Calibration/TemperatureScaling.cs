@@ -78,7 +78,7 @@ public class TemperatureScaling<T>
     /// </remarks>
     public Tensor<T> ScaleLogits(Tensor<T> logits)
     {
-        var scaled = new Tensor<T>(logits.Shape.ToArray());
+        var scaled = new Tensor<T>(logits._shape);
         for (int i = 0; i < logits.Length; i++)
         {
             scaled[i] = _numOps.Divide(logits[i], _temperature);

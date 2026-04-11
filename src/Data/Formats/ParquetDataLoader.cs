@@ -403,7 +403,7 @@ public class ParquetDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
 
     private static Tensor<T> ExtractTensorBatch(Tensor<T> source, int[] indices)
     {
-        var newShape = (int[])source.Shape.ToArray();
+        var newShape = (int[])source._shape;
         newShape[0] = indices.Length;
         var result = new Tensor<T>(newShape);
 

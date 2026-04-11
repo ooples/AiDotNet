@@ -202,7 +202,7 @@ public class LotteryTicketPruningStrategy<T> : IPruningStrategy<T>
         {
             scores[i] = _numOps.Abs(flatWeights[i]);
         }
-        return Tensor<T>.FromVector(new Vector<T>(scores), (int[])weights.Shape.ToArray());
+        return Tensor<T>.FromVector(new Vector<T>(scores), (int[])weights._shape);
     }
 
     /// <summary>

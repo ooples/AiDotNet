@@ -284,7 +284,7 @@ public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             throw new ArgumentException("Feature maps must have the same shape for addition");
         }
 
-        var output = new Tensor<T>(a.Shape.ToArray());
+        var output = new Tensor<T>(a._shape);
         for (int i = 0; i < a.Length; i++)
         {
             output[i] = NumOps.Add(a[i], b[i]);

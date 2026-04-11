@@ -1036,7 +1036,7 @@ public class TSMixer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ShiftAndAppend(Tensor<T> input, Tensor<T> prediction)
     {
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         int seqLen = _sequenceLength;
         int predLen = Math.Min(_predictionHorizon, seqLen);
 

@@ -288,7 +288,7 @@ public static class TensorOperations<T>
             // d(a*b)/da = b, so gradient * b flows to 'a'
             if (a.RequiresGradient)
             {
-                var gradA = gradient.Shape.ToArray().SequenceEqual(b.Value.Shape.ToArray())
+                var gradA = gradient._shape.SequenceEqual(b.Value._shape)
                     ? engine.TensorMultiply(gradient, b.Value)
                     : BroadcastMultiply(gradient, b.Value, numOps);
 
@@ -307,7 +307,7 @@ public static class TensorOperations<T>
             // d(a*b)/db = a, so gradient * a flows to 'b'
             if (b.RequiresGradient)
             {
-                var gradB = gradient.Shape.ToArray().SequenceEqual(a.Value.Shape.ToArray())
+                var gradB = gradient._shape.SequenceEqual(a.Value._shape)
                     ? engine.TensorMultiply(gradient, a.Value)
                     : BroadcastMultiply(gradient, a.Value, numOps);
 
@@ -377,7 +377,7 @@ public static class TensorOperations<T>
             }
         }
 
-        var result = new Tensor<T>(a.Value.Shape.ToArray());
+        var result = new Tensor<T>(a.Value._shape);
         for (int i = 0; i < a.Value.Length; i++)
         {
             result[i] = numOps.Divide(a.Value[i], b.Value[i]);
@@ -387,7 +387,7 @@ public static class TensorOperations<T>
             // ∂(a/b)/∂a = 1/b
             if (a.RequiresGradient)
             {
-                var gradA = new Tensor<T>(gradient.Shape.ToArray());
+                var gradA = new Tensor<T>(gradient._shape);
                 for (int i = 0; i < gradient.Length; i++)
                 {
                     gradA[i] = numOps.Divide(gradient[i], b.Value[i]);
@@ -399,7 +399,7 @@ public static class TensorOperations<T>
             if (b.RequiresGradient)
             {
                 var bSquared = b.Value.ElementwiseMultiply(b.Value);
-                var gradB = new Tensor<T>(gradient.Shape.ToArray());
+                var gradB = new Tensor<T>(gradient._shape);
                 for (int i = 0; i < gradient.Length; i++)
                 {
                     var numerator = numOps.Multiply(gradient[i], a.Value[i]);
@@ -570,7 +570,7 @@ public static class TensorOperations<T>
             if (a.RequiresGradient)
             {
                 // ∂(log(a))/∂a = 1/a
-                var gradA = new Tensor<T>(gradient.Shape.ToArray());
+                var gradA = new Tensor<T>(gradient._shape);
                 for (int i = 0; i < gradient.Length; i++)
                 {
                     gradA[i] = numOps.Divide(gradient[i], a.Value[i]);
@@ -633,7 +633,7 @@ public static class TensorOperations<T>
                 // ∂(√a)/∂a = 1/(2√a) = 1/(2*result)
                 // Note: At x=0, derivative is technically infinite, but we use 0 to avoid numerical issues
                 var two = numOps.FromDouble(2.0);
-                var gradA = new Tensor<T>(gradient.Shape.ToArray());
+                var gradA = new Tensor<T>(gradient._shape);
                 for (int i = 0; i < gradient.Length; i++)
                 {
                     // Handle edge case where result is zero (derivative would be infinite)
@@ -7214,7 +7214,7 @@ public static class TensorOperations<T>
             if (input.RequiresGradient)
             {
                 // Compute derivative at each point: grad_in = grad_out * f'(input)
-                var gradA = new Tensor<T>(gradient.Shape.ToArray());
+                var gradA = new Tensor<T>(gradient._shape);
                 var numOps = MathHelper.GetNumericOperations<T>();
                 for (int i = 0; i < gradient.Length; i++)
                 {
@@ -7525,7 +7525,7 @@ public static class TensorOperations<T>
         var candidateHidden = Tanh(candidateInput); // n_t = tanh(...)
 
         // New hidden state: h_t = (1 - z_t) * h_{t-1} + z_t * n_t
-        var onesTensor = new Tensor<T>(updateGate.Value.Shape.ToArray());
+        var onesTensor = new Tensor<T>(updateGate.Value._shape);
         for (int i = 0; i < onesTensor.Length; i++)
             onesTensor[i] = numOps.FromDouble(1.0);
         var onesNode = Constant(onesTensor, "ones");
@@ -7569,7 +7569,7 @@ public static class TensorOperations<T>
             {
                 // ∂(a²)/∂a = 2a
                 var two = numOps.FromDouble(2.0);
-                var gradA = new Tensor<T>(gradient.Shape.ToArray());
+                var gradA = new Tensor<T>(gradient._shape);
                 for (int i = 0; i < gradient.Length; i++)
                 {
                     var twoTimesA = numOps.Multiply(two, a.Value[i]);
@@ -10905,7 +10905,7 @@ public static class TensorOperations<T>
                 if (featureIndex < inputGrad.Length)
                     inputGrad[featureIndex] = gradSum;
 
-                var gradInput = new Tensor<T>(input.Value.Shape.ToArray(), new Vector<T>(inputGrad));
+                var gradInput = new Tensor<T>(input.Value._shape, new Vector<T>(inputGrad));
                 if (input.Gradient == null)
                     input.Gradient = gradInput;
                 else
@@ -11228,7 +11228,7 @@ public static class TensorOperations<T>
             outputData[i] = numOps.Multiply(unshifted, actualScale);
         }
 
-        var result = new Tensor<T>(input.Value.Shape.ToArray(), new Vector<T>(outputData));
+        var result = new Tensor<T>(input.Value._shape, new Vector<T>(outputData));
 
         void BackwardFunction(Tensor<T> gradient)
         {
@@ -11365,7 +11365,7 @@ public static class TensorOperations<T>
         {
             int batchSize = a.Shape[0];
             int features = a.Shape[1];
-            var result = new Tensor<T>(a.Shape.ToArray());
+            var result = new Tensor<T>(a._shape);
 
             for (int batch = 0; batch < batchSize; batch++)
             {
@@ -11383,7 +11383,7 @@ public static class TensorOperations<T>
         {
             int batchSize = b.Shape[0];
             int features = b.Shape[1];
-            var result = new Tensor<T>(b.Shape.ToArray());
+            var result = new Tensor<T>(b._shape);
 
             for (int batch = 0; batch < batchSize; batch++)
             {

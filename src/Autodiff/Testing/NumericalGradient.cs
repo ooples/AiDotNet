@@ -81,7 +81,7 @@ public static class NumericalGradient<T>
         Func<Tensor<T>, T> scalarFunction,
         double epsilon = Defaults.Epsilon)
     {
-        var gradient = new Tensor<T>(input.Shape.ToArray());
+        var gradient = new Tensor<T>(input._shape);
         var h = NumOps.FromDouble(epsilon);
         var twoH = NumOps.FromDouble(2 * epsilon);
 
@@ -268,8 +268,8 @@ public static class NumericalGradient<T>
         double relativeTolerance = Defaults.RelativeTolerance,
         double absoluteTolerance = Defaults.AbsoluteTolerance)
     {
-        var expectedShape = expected.Shape.ToArray();
-        var actualShape = actual.Shape.ToArray();
+        var expectedShape = expected._shape;
+        var actualShape = actual._shape;
         if (!expectedShape.SequenceEqual(actualShape))
         {
             return new ComparisonResult

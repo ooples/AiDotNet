@@ -609,7 +609,7 @@ public class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabular
 
     private Tensor<T> ComputeCrossEntropyGrad(Tensor<T> logits, int targetToken)
     {
-        var grad = new Tensor<T>(logits.Shape.ToArray());
+        var grad = new Tensor<T>(logits._shape);
         double maxVal = double.MinValue;
         for (int i = 0; i < logits.Length; i++)
         {
@@ -787,7 +787,7 @@ public class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabular
     /// </summary>
     private Tensor<T> SafeGradient(Tensor<T> grad, double maxNorm)
     {
-        var result = new Tensor<T>(grad.Shape.ToArray());
+        var result = new Tensor<T>(grad._shape);
         double normSq = 0;
 
         for (int i = 0; i < grad.Length; i++)

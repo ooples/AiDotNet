@@ -140,7 +140,7 @@ public class LabelDifferentialPrivacy<T> : FederatedLearningComponentBase<T>, IL
         }
 
         double scale = maxNorm / norm;
-        var clipped = new Tensor<T>(gradients.Shape.ToArray());
+        var clipped = new Tensor<T>(gradients._shape);
         for (int i = 0; i < totalElements; i++)
         {
             double val = NumOps.ToDouble(gradients[i]);
@@ -161,7 +161,7 @@ public class LabelDifferentialPrivacy<T> : FederatedLearningComponentBase<T>, IL
             totalElements *= tensor.Shape[d];
         }
 
-        var noisy = new Tensor<T>(tensor.Shape.ToArray());
+        var noisy = new Tensor<T>(tensor._shape);
         for (int i = 0; i < totalElements; i++)
         {
             double val = NumOps.ToDouble(tensor[i]);

@@ -417,10 +417,10 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var adjExpanded = Engine.Reshape(adjForBatch, new[] { batchSize, numNodes, numNodes, 1 });
 
         // Mask non-neighbors with -inf
-        var negInf = new Tensor<T>(tiled.Shape.ToArray());
+        var negInf = new Tensor<T>(tiled._shape);
         negInf.Fill(NumOps.MinValue);
 
-        var zeroTensor = new Tensor<T>(adjExpanded.Shape.ToArray());
+        var zeroTensor = new Tensor<T>(adjExpanded._shape);
         zeroTensor.Fill(NumOps.Zero);
         var mask = Engine.TensorGreaterThan(adjExpanded, zeroTensor);
 
@@ -429,7 +429,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var masked = Engine.TensorWhere(maskBroadcast, tiled, negInf);
 
         // Store input shape for backward pass
-        _lastMaxInputShape = masked.Shape.ToArray();
+        _lastMaxInputShape = masked._shape;
 
         // Reduce max over neighbors axis (axis 2) and store indices for backward
         var result = Engine.ReduceMax(masked, [2], keepDims: false, out int[] maxIndices);
@@ -460,7 +460,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var normSquared = Engine.ReduceSum(squared, [2], keepDims: true);
 
         // Add epsilon for numerical stability
-        var epsilon = new Tensor<T>(normSquared.Shape.ToArray());
+        var epsilon = new Tensor<T>(normSquared._shape);
         epsilon.Fill(NumOps.FromDouble(1e-12));
         normSquared = Engine.TensorAdd(normSquared, epsilon);
 
@@ -488,7 +488,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Compute squared values and norms
         var squared = Engine.TensorMultiply(preNorm, preNorm);
         var normSquared = Engine.ReduceSum(squared, [2], keepDims: true);
-        var epsilon = new Tensor<T>(normSquared.Shape.ToArray());
+        var epsilon = new Tensor<T>(normSquared._shape);
         epsilon.Fill(NumOps.FromDouble(1e-12));
         normSquared = Engine.TensorAdd(normSquared, epsilon);
         var norm = Engine.TensorSqrt(normSquared);
@@ -656,11 +656,11 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int index = 0;
 
         _selfWeights = Tensor<T>.FromVector(parameters.SubVector(index, selfCount))
-            .Reshape(_selfWeights.Shape.ToArray());
+            .Reshape(_selfWeights._shape);
         index += selfCount;
 
         _neighborWeights = Tensor<T>.FromVector(parameters.SubVector(index, neighborCount))
-            .Reshape(_neighborWeights.Shape.ToArray());
+            .Reshape(_neighborWeights._shape);
         index += neighborCount;
 
         _bias = Tensor<T>.FromVector(parameters.SubVector(index, biasCount));

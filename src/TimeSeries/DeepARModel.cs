@@ -316,7 +316,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         gradients["scale_bias"] = scaleBiasGrad;
 
         // Backprop through LSTM layers
-        var dHidden = new Tensor<T>(hidden.Shape.ToArray());
+        var dHidden = new Tensor<T>(hidden._shape);
         for (int j = 0; j < hidden.Length; j++)
         {
             dHidden[j] = NumOps.Add(
@@ -811,8 +811,8 @@ internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         var gradients = new Dictionary<string, Tensor<T>>();
 
         // Weight gradients
-        var dWeights = new Tensor<T>(_weights.Shape.ToArray());
-        var dBias = new Tensor<T>(_bias.Shape.ToArray());
+        var dWeights = new Tensor<T>(_weights._shape);
+        var dBias = new Tensor<T>(_bias._shape);
         var dInput = new Tensor<T>([_inputSize]);
 
         // Backprop through output: h = o * tanh(c)

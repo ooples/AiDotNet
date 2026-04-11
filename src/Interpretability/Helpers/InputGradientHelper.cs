@@ -199,7 +199,7 @@ public class InputGradientHelper<T>
             int total = input.Length;
             var flatInput = input.ToVector();
             var grad = ComputeNumericalGradient(flatInput, outputIndex);
-            var gradTensor = new Tensor<T>(input.Shape.ToArray());
+            var gradTensor = new Tensor<T>(input._shape);
             for (int i = 0; i < total; i++)
             {
                 gradTensor[i] = grad[i];
@@ -243,14 +243,14 @@ public class InputGradientHelper<T>
 
         // Create a selector that extracts the target output index
         // Loss = output[outputIndex] (we want gradient of this single output w.r.t. input)
-        var oneHot = new Tensor<T>(output.Shape.ToArray());
+        var oneHot = new Tensor<T>(output._shape);
         oneHot[outputIndex] = NumOps.One;
         var selected = eng.TensorMultiply(output, oneHot);
         var allAxes = Enumerable.Range(0, selected.Shape.Length).ToArray();
         var loss = eng.ReduceSum(selected, allAxes, keepDims: false);
 
         var grads = tape.ComputeGradients(loss, [inputTensor]);
-        var gradTensor = grads.TryGetValue(inputTensor, out var g) ? g : new Tensor<T>(inputTensor.Shape.ToArray());
+        var gradTensor = grads.TryGetValue(inputTensor, out var g) ? g : new Tensor<T>(inputTensor._shape);
 
         // Extract gradient vector from tensor
         var gradient = new Vector<T>(input.Length);
@@ -333,15 +333,15 @@ public class InputGradientHelper<T>
         if (_tensorPredictFunction == null)
             throw new InvalidOperationException("Tensor predict function not configured.");
 
-        var gradient = new Tensor<T>(input.Shape.ToArray());
+        var gradient = new Tensor<T>(input._shape);
         var inputArray = input.ToArray();
         int total = input.Length;
 
         for (int i = 0; i < total; i++)
         {
             // Create perturbed inputs
-            var inputPlus = new Tensor<T>(input.Shape.ToArray());
-            var inputMinus = new Tensor<T>(input.Shape.ToArray());
+            var inputPlus = new Tensor<T>(input._shape);
+            var inputMinus = new Tensor<T>(input._shape);
 
             for (int j = 0; j < total; j++)
             {

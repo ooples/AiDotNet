@@ -524,7 +524,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         var scaledTensor = Engine.TensorMultiplyScalar(centeredTensor, scale);
 
         // Copy back to original tensor (preserving shape)
-        var reshapedResult = scaledTensor.Reshape(tensor.Shape.ToArray());
+        var reshapedResult = scaledTensor.Reshape(tensor._shape);
         Array.Copy(reshapedResult.ToArray(), tensor.ToArray(), totalElements);
     }
 

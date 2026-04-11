@@ -409,7 +409,7 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o)
     {
-        var r = new Tensor<T>(o.Shape.ToArray());
+        var r = new Tensor<T>(o._shape);
         for (int i = 0; i < o.Length; i++)
             r[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(o[i]))));
         return r;

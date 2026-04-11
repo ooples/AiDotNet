@@ -182,7 +182,7 @@ public class VerticalFederatedUnlearner<T> : FederatedLearningComponentBase<T>
                 totalElements *= param.Shape[d];
             }
 
-            var noised = new Tensor<T>(param.Shape.ToArray());
+            var noised = new Tensor<T>(param._shape);
             for (int i = 0; i < totalElements; i++)
             {
                 double val = NumOps.ToDouble(param[i]);

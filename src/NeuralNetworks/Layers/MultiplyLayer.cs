@@ -412,7 +412,7 @@ public class MultiplyLayer<T> : LayerBase<T>
                 }
             }
 
-            inputGradients[i] = GpuTensorHelper.UploadToGpu<T>(backend, gradBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
+            inputGradients[i] = GpuTensorHelper.UploadToGpu<T>(backend, gradBuffer, outputGradient._shape, GpuTensorRole.Gradient, ownsBuffer: true);
         }
 
         // Dispose uploaded input buffers

@@ -263,7 +263,7 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
     private Tensor<T> ApplyRMSNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input._shape);
         T eps = NumOps.FromDouble(1e-6);
         var gamma2D = gamma.Reshape(1, _modelDimension);
         var beta2D = beta.Reshape(1, _modelDimension);
@@ -277,7 +277,7 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
             var meanSquared = Engine.ReduceSum(squared, new int[] { 1 });  // [batch]
             T divisor = NumOps.FromDouble(_modelDimension);
 
-            var normed = new Tensor<T>(slice.Shape.ToArray());
+            var normed = new Tensor<T>(slice._shape);
             for (int b = 0; b < batchSize; b++)
             {
                 T rms = NumOps.Sqrt(NumOps.Add(NumOps.Divide(meanSquared[new[] { b }], divisor), eps));
@@ -299,7 +299,7 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
     private Tensor<T> BackwardRMSNorm(Tensor<T> dOutput, Tensor<T> input, Tensor<T> gamma,
         int batchSize, int seqLen, out Tensor<T> dGamma, out Tensor<T> dBeta)
     {
-        var dInput = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var dInput = TensorAllocator.Rent<T>(input._shape);
         dGamma = new Tensor<T>(new[] { _modelDimension });
         dBeta = new Tensor<T>(new[] { _modelDimension });
         T eps = NumOps.FromDouble(1e-6);

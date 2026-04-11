@@ -466,10 +466,10 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
         // Create random tensor using Engine operations
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape.ToArray());
+        var randomTensor = Tensor<T>.CreateRandom(tensor._shape);
 
         // Shift to [-0.5, 0.5] range: randomTensor - 0.5
-        var halfTensor = new Tensor<T>(tensor.Shape.ToArray());
+        var halfTensor = new Tensor<T>(tensor._shape);
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
 
@@ -1086,13 +1086,13 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
             if (_weightsVelocity == null)
             {
-                _weightsVelocity = new Tensor<T>(_weights.Shape.ToArray());
+                _weightsVelocity = new Tensor<T>(_weights._shape);
                 _weightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_weightsVelocity, PersistentTensorRole.OptimizerState);
             }
             if (_biasVelocity == null)
             {
-                _biasVelocity = new Tensor<T>(_bias.Shape.ToArray());
+                _biasVelocity = new Tensor<T>(_bias._shape);
                 _biasVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_biasVelocity, PersistentTensorRole.OptimizerState);
             }
@@ -1188,7 +1188,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
         // Set weights using Tensor.FromVector
         var weightsParams = parameters.SubVector(index, weightsSize);
-        _weights = Tensor<T>.FromVector(weightsParams).Reshape(_weights.Shape.ToArray());
+        _weights = Tensor<T>.FromVector(weightsParams).Reshape(_weights._shape);
         index += weightsSize;
 
         // Set bias using Tensor.FromVector

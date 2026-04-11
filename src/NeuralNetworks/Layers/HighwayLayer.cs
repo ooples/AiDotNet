@@ -871,16 +871,16 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int index = 0;
 
-        _transformWeights = new Tensor<T>(_transformWeights.Shape.ToArray(), parameters.Slice(index, transformWeightsSize));
+        _transformWeights = new Tensor<T>(_transformWeights._shape, parameters.Slice(index, transformWeightsSize));
         index += transformWeightsSize;
 
-        _transformBias = new Tensor<T>(_transformBias.Shape.ToArray(), parameters.Slice(index, _transformBias.Length));
+        _transformBias = new Tensor<T>(_transformBias._shape, parameters.Slice(index, _transformBias.Length));
         index += _transformBias.Length;
 
-        _gateWeights = new Tensor<T>(_gateWeights.Shape.ToArray(), parameters.Slice(index, gateWeightsSize));
+        _gateWeights = new Tensor<T>(_gateWeights._shape, parameters.Slice(index, gateWeightsSize));
         index += gateWeightsSize;
 
-        _gateBias = new Tensor<T>(_gateBias.Shape.ToArray(), parameters.Slice(index, _gateBias.Length));
+        _gateBias = new Tensor<T>(_gateBias._shape, parameters.Slice(index, _gateBias.Length));
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_transformWeights);

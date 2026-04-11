@@ -500,7 +500,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
 
         // Assign the scaled tensor to weights (preserving shape)
         // Note: Array.Copy to _weights.ToArray() creates a temporary copy, not updating _weights
-        _weights = scaledTensor.Reshape(_weights.Shape.ToArray());
+        _weights = scaledTensor.Reshape(_weights._shape);
 
         // Initialize biases to zero
         _biases.Fill(NumOps.Zero);
@@ -768,7 +768,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
         };
 
         // Reshape back to 4D
-        return flatResult.Reshape(gradOutput.Shape.ToArray());
+        return flatResult.Reshape(gradOutput._shape);
     }
 
     /// <summary>
@@ -905,8 +905,8 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
         var biasesVector = parameters.Slice(weightsLength, _biases.Length);
 
         // Convert vectors to tensors and assign
-        _weights = Tensor<T>.FromVector(weightsVector, _weights.Shape.ToArray());
-        _biases = Tensor<T>.FromVector(biasesVector, _biases.Shape.ToArray());
+        _weights = Tensor<T>.FromVector(weightsVector, _weights._shape);
+        _biases = Tensor<T>.FromVector(biasesVector, _biases._shape);
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_weights);

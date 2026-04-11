@@ -118,7 +118,7 @@ public class ContrastivePretraining<T>
                 $"Input has {numFeatures} features but expected {_numFeatures}.");
         }
 
-        var corrupted = new Tensor<T>(input.Shape.ToArray());
+        var corrupted = new Tensor<T>(input._shape);
         var corruptedIndices = new List<int>();
 
         // Copy original values

@@ -632,7 +632,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input._shape);
         for (int i = 0; i < input.Length; i++)
         {
             output.Data.Span[i] = _activation.Activate(input.Data.Span[i]);
@@ -645,7 +645,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> BackwardActivation(Tensor<T> activationOutput, Tensor<T> gradient)
     {
-        var output = TensorAllocator.Rent<T>(gradient.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(gradient._shape);
         for (int i = 0; i < gradient.Length; i++)
         {
             output.Data.Span[i] = NumOps.Multiply(
@@ -826,7 +826,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>
         var scaleValue = numOps.FromDouble(scale);
 
         // Create a constant tensor filled with the scale value matching the input shape
-        var scaleTensor = new Tensor<T>(node.Value.Shape.ToArray());
+        var scaleTensor = new Tensor<T>(node.Value._shape);
         for (int i = 0; i < scaleTensor.Length; i++)
         {
             scaleTensor.Data.Span[i] = scaleValue;

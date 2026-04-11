@@ -993,7 +993,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
         var randomTensor = Tensor<T>.CreateRandom(weight.Shape[0], weight.Shape[1]);
 
         // Shift to [-0.5, 0.5] range: random - 0.5
-        var halfTensor = new Tensor<T>(weight.Shape.ToArray());
+        var halfTensor = new Tensor<T>(weight._shape);
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
 
@@ -1994,7 +1994,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
 
                 if (!_velocities.TryGetValue(paramName, out var velocity))
                 {
-                    velocity = new Tensor<T>(param.Shape.ToArray());
+                    velocity = new Tensor<T>(param._shape);
                     velocity.Fill(NumOps.Zero);
                     var gpu1 = gpuEngine ?? throw new InvalidOperationException("GPU engine is not available.");
                     gpu1.RegisterPersistentTensor(velocity, PersistentTensorRole.OptimizerState);

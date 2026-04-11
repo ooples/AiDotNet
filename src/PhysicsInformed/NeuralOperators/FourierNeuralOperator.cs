@@ -520,7 +520,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             int spatialSize = spatialShape.Aggregate(1, (a, b) => a * b);
             int[] spatialStrides = ComputeStrides(spatialShape);
 
-            var output = new Tensor<T>(input.Shape.ToArray());
+            var output = new Tensor<T>(input._shape);
             var inputIndices = new int[input.Rank];
             var outputIndices = new int[input.Rank];
             var channelVector = new Vector<T>(channels);
@@ -768,7 +768,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             LastLoss = loss;
 
             // dL/dOutput = 2 * (output - target) / N
-            var outputGrad = new Tensor<T>(output.Shape.ToArray());
+            var outputGrad = new Tensor<T>(output._shape);
             T scale = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(output.Length));
             for (int i = 0; i < output.Length; i++)
             {
@@ -846,7 +846,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                     weightGrad[o, ic] = NumOps.Zero;
             }
 
-            var inputGrad = new Tensor<T>(layerInput.Shape.ToArray());
+            var inputGrad = new Tensor<T>(layerInput._shape);
             var inIdx = new int[layerInput.Rank];
             var outIdx = new int[outputGrad.Rank];
 
@@ -1142,7 +1142,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             // Compute activation gradient: dL/d(preact) = dL/d(output) * activation'(preact)
             var activationDeriv = _activation.Derivative(_lastPreActivation);
-            var activationGradient = new Tensor<T>(outputGradient.Shape.ToArray());
+            var activationGradient = new Tensor<T>(outputGradient._shape);
             for (int i = 0; i < outputGradient.Length; i++)
             {
                 activationGradient[i] = _numOps.Multiply(outputGradient[i], activationDeriv[i]);
@@ -1153,7 +1153,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             var inputGradSpectral = ComputeSpectralGradients(_lastInput, activationGradient);
 
             // Sum input gradients from both paths
-            var inputGrad = new Tensor<T>(_lastInput.Shape.ToArray());
+            var inputGrad = new Tensor<T>(_lastInput._shape);
             for (int i = 0; i < inputGrad.Length; i++)
             {
                 inputGrad[i] = _numOps.Add(inputGradPointwise[i], inputGradSpectral[i]);
@@ -1174,7 +1174,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             _pointwiseWeightsGradient.Fill(_numOps.Zero);
             _pointwiseBiasGradient = new Vector<T>(_width);
             _pointwiseBiasGradient.Fill(_numOps.Zero);
-            var inputGradient = new Tensor<T>(input.Shape.ToArray());
+            var inputGradient = new Tensor<T>(input._shape);
             inputGradient.Fill(_numOps.Zero);
 
             var inputIndices = new int[input.Rank];
@@ -1218,7 +1218,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         {
             var inputSpectrum = ForwardFFT(input);
             var gradSpectrum = ForwardFFT(activationGradient);
-            var inputGradSpectrum = new Tensor<Complex<T>>(inputSpectrum.Shape.ToArray());
+            var inputGradSpectrum = new Tensor<Complex<T>>(inputSpectrum._shape);
             _spectralWeightsGradient = new Tensor<Complex<T>>(_spectralWeights._shape);
 
             for (int i = 0; i < inputGradSpectrum.Length; i++)
@@ -1299,7 +1299,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
 
             var inputGradComplex = InverseFFT(inputGradSpectrum);
-            var inputGradient = new Tensor<T>(input.Shape.ToArray());
+            var inputGradient = new Tensor<T>(input._shape);
             for (int i = 0; i < inputGradient.Length; i++)
             {
                 inputGradient[i] = inputGradComplex[i].Real;
@@ -1488,7 +1488,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         private Tensor<T> ApplySpectralConvolution(Tensor<T> input)
         {
             var spectrum = ForwardFFT(input);
-            var outputSpectrum = new Tensor<Complex<T>>(spectrum.Shape.ToArray());
+            var outputSpectrum = new Tensor<Complex<T>>(spectrum._shape);
 
             for (int i = 0; i < outputSpectrum.Length; i++)
             {
@@ -1546,7 +1546,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
 
             var spatialComplex = InverseFFT(outputSpectrum);
-            var output = new Tensor<T>(input.Shape.ToArray());
+            var output = new Tensor<T>(input._shape);
             for (int i = 0; i < output.Length; i++)
             {
                 output[i] = spatialComplex[i].Real;
@@ -1563,7 +1563,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             int spatialSize = spatialShape.Aggregate(1, (a, b) => a * b);
             int[] spatialStrides = ComputeStrides(spatialShape);
 
-            var output = new Tensor<T>(input.Shape.ToArray());
+            var output = new Tensor<T>(input._shape);
             var inputIndices = new int[input.Rank];
             var outputIndices = new int[input.Rank];
 
@@ -1602,7 +1602,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
         private Tensor<Complex<T>> ForwardFFT(Tensor<T> input)
         {
-            var complex = new Tensor<Complex<T>>(input.Shape.ToArray());
+            var complex = new Tensor<Complex<T>>(input._shape);
             for (int i = 0; i < input.Length; i++)
             {
                 complex[i] = new Complex<T>(input[i], _numOps.Zero);

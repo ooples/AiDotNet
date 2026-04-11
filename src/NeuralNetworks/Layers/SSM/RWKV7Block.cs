@@ -706,7 +706,7 @@ public partial class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ApplyGroupNorm(Tensor<T> input, int batchSize)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input._shape);
         T eps = NumOps.FromDouble(1e-6);
 
         for (int bi = 0; bi < batchSize; bi++)
@@ -809,7 +809,7 @@ public partial class RWKV7Block<T> : LayerBase<T>
             }
 
             // dR = dGated * wkv_num * sigmoid'(r)
-            var ones = Tensor<T>.CreateDefault(sigR.Shape.ToArray(), NumOps.One);
+            var ones = Tensor<T>.CreateDefault(sigR._shape, NumOps.One);
             var sigDeriv = Engine.TensorMultiply(sigR, Engine.TensorSubtract(ones, sigR));
             var dR = Engine.TensorMultiply(Engine.TensorMultiply(dGated, wkvNum), sigDeriv);
 
@@ -959,7 +959,7 @@ public partial class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> GroupNormBackward(Tensor<T> dOutput, Tensor<T> input, int batchSize)
     {
-        var dInput = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var dInput = TensorAllocator.Rent<T>(input._shape);
         T eps = NumOps.FromDouble(1e-6);
 
         for (int bi = 0; bi < batchSize; bi++)
@@ -1229,7 +1229,7 @@ public partial class RWKV7Block<T> : LayerBase<T>
             var dRGate = Engine.TensorMultiply(vProj_t, dOut_t);
 
             // sigmoid derivative: sigmoid(x) * (1 - sigmoid(x)) = rGate * (1 - rGate)
-            var sigmoidDeriv = new Tensor<T>(rGate_t.Shape.ToArray());
+            var sigmoidDeriv = new Tensor<T>(rGate_t._shape);
             for (int bi = 0; bi < batchSize; bi++)
                 for (int d = 0; d < _modelDimension; d++)
                 {

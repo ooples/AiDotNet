@@ -417,8 +417,8 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <param name="scale">The scale factor for the random values.</param>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape.ToArray());
-        var halfTensor = new Tensor<T>(tensor.Shape.ToArray());
+        var randomTensor = Tensor<T>.CreateRandom(tensor._shape);
+        var halfTensor = new Tensor<T>(tensor._shape);
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
@@ -1165,7 +1165,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// </remarks>
     private Tensor<T> ApplyFFNActivation(Tensor<T> input)
     {
-        var result = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var result = TensorAllocator.Rent<T>(input._shape);
         for (int i = 0; i < input.Length; i++)
         {
             result[i] = _ffnActivation.Activate(input.GetFlat(i));
@@ -1213,7 +1213,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// </remarks>
     private Tensor<T> BackwardFFNActivation(Tensor<T> input, Tensor<T> grad)
     {
-        var result = new Tensor<T>(grad.Shape.ToArray());
+        var result = new Tensor<T>(grad._shape);
         for (int i = 0; i < input.Length; i++)
         {
             T x = input.GetFlat(i);
@@ -1619,19 +1619,19 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         int index = 0;
 
         var queryParams = parameters.SubVector(index, querySize);
-        _queryWeights = Tensor<T>.FromVector(queryParams).Reshape(_queryWeights.Shape.ToArray());
+        _queryWeights = Tensor<T>.FromVector(queryParams).Reshape(_queryWeights._shape);
         index += querySize;
 
         var keyParams = parameters.SubVector(index, keySize);
-        _keyWeights = Tensor<T>.FromVector(keyParams).Reshape(_keyWeights.Shape.ToArray());
+        _keyWeights = Tensor<T>.FromVector(keyParams).Reshape(_keyWeights._shape);
         index += keySize;
 
         var valueParams = parameters.SubVector(index, valueSize);
-        _valueWeights = Tensor<T>.FromVector(valueParams).Reshape(_valueWeights.Shape.ToArray());
+        _valueWeights = Tensor<T>.FromVector(valueParams).Reshape(_valueWeights._shape);
         index += valueSize;
 
         var outputWeightsParams = parameters.SubVector(index, outputWeightsSize);
-        _outputWeights = Tensor<T>.FromVector(outputWeightsParams).Reshape(_outputWeights.Shape.ToArray());
+        _outputWeights = Tensor<T>.FromVector(outputWeightsParams).Reshape(_outputWeights._shape);
         index += outputWeightsSize;
 
         var outputBiasParams = parameters.SubVector(index, outputBiasSize);
@@ -1639,11 +1639,11 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         index += outputBiasSize;
 
         var ffn1Params = parameters.SubVector(index, ffn1Size);
-        _ffnWeights1 = Tensor<T>.FromVector(ffn1Params).Reshape(_ffnWeights1.Shape.ToArray());
+        _ffnWeights1 = Tensor<T>.FromVector(ffn1Params).Reshape(_ffnWeights1._shape);
         index += ffn1Size;
 
         var ffn2Params = parameters.SubVector(index, ffn2Size);
-        _ffnWeights2 = Tensor<T>.FromVector(ffn2Params).Reshape(_ffnWeights2.Shape.ToArray());
+        _ffnWeights2 = Tensor<T>.FromVector(ffn2Params).Reshape(_ffnWeights2._shape);
         index += ffn2Size;
 
         var ffnBias1Params = parameters.SubVector(index, ffnBias1Size);
@@ -1680,7 +1680,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         {
             var bias = _structuralBias ?? throw new InvalidOperationException("Structural bias is null during serialization.");
             writer.Write(bias.Shape.Length);
-            foreach (var dim in bias.Shape.ToArray()) writer.Write(dim);
+            foreach (var dim in bias._shape) writer.Write(dim);
             for (int i = 0; i < bias.Length; i++)
                 writer.Write(NumOps.ToDouble(bias[i]));
         }

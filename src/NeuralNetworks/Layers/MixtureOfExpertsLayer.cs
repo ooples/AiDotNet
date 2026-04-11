@@ -1361,7 +1361,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         // (which would use hard - soft.detach() + soft), but standard sparse gating per Shazeer et al.
         // NOTE: The O(batchSize×k) scalar loop is intentional — TensorScatter is non-differentiable
         // in the Tensors OpRegistry, so we must use this approach for gradient flow.
-        var mask = new Tensor<T>(weights.Shape.ToArray());
+        var mask = new Tensor<T>(weights._shape);
         mask.Fill(NumOps.Zero);
         for (int b = 0; b < batchSize; b++)
         {
@@ -1634,7 +1634,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         {
             if (outputGradient.Length == _lastPreActivation.Length)
             {
-                return outputGradient.Reshape(_lastPreActivation.Shape.ToArray());
+                return outputGradient.Reshape(_lastPreActivation._shape);
             }
 
             throw new ArgumentException("Output gradient shape does not match layer output.");
@@ -2021,7 +2021,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         int batchSize = aData.Shape[0];
         int features = aData.Shape[1];
 
-        var result = TensorAllocator.Rent<T>(aData.Shape.ToArray());
+        var result = TensorAllocator.Rent<T>(aData._shape);
         for (int i = 0; i < batchSize; i++)
         {
             T divisor = bData[i, 0];

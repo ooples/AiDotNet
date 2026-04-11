@@ -257,10 +257,10 @@ public class TripletLoss<T> : LossFunctionBase<T>
     {
         // Triplet: mean(max(0, d_pos - d_neg + margin))
         // predicted contains distance differences, target unused
-        var marginTensor = new Tensor<T>(predicted.Shape.ToArray());
+        var marginTensor = new Tensor<T>(predicted._shape);
         marginTensor.Fill(_margin);
         var shifted = Engine.TensorAdd(predicted, marginTensor);
-        var zeros = new Tensor<T>(shifted.Shape.ToArray());
+        var zeros = new Tensor<T>(shifted._shape);
         var clamped = Engine.TensorMax(shifted, zeros);
         var allAxes = Enumerable.Range(0, clamped.Shape.Length).ToArray();
         return Engine.ReduceMean(clamped, allAxes, keepDims: false);

@@ -75,7 +75,7 @@ public class Sparsemax<T>
         int dimSize = input.Shape[axis];
 
         // Create output tensor with same shape
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
 
         // Process each slice along the axis
         ProcessAlongAxis(input, output, axis, dimSize);

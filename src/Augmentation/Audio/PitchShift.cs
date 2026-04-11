@@ -118,7 +118,7 @@ public class PitchShift<T> : AudioAugmenterBase<T>
         double[] output = ResampleLinear(stretched, samples);
 
         // Convert back to tensor
-        var result = new Tensor<T>(waveform.Shape.ToArray());
+        var result = new Tensor<T>(waveform._shape);
         for (int i = 0; i < samples; i++)
         {
             result[i] = NumOps.FromDouble(output[i]);

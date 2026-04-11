@@ -412,7 +412,7 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
 
         // Convert to binary predictions (1 if max > 0, else 0)
         // Create a zero tensor for comparison
-        var zeroTensor = new Tensor<T>(columnMax.Shape.ToArray());
+        var zeroTensor = new Tensor<T>(columnMax._shape);
         zeroTensor.Fill(NumOps.Zero);
         var predictions = Engine.TensorGreaterThan(columnMax, zeroTensor);
 

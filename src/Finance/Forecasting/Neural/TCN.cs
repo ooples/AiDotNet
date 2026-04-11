@@ -832,7 +832,7 @@ public class TCN<T> : ForecastingModelBase<T>
         if (a.Length != b.Length)
         {
             int minLen = Math.Min(a.Length, b.Length);
-            var result = new Tensor<T>(a.Shape.ToArray());
+            var result = new Tensor<T>(a._shape);
             for (int i = 0; i < minLen; i++)
                 result[i] = NumOps.Add(a[i], b[i]);
             for (int i = minLen; i < a.Length; i++)

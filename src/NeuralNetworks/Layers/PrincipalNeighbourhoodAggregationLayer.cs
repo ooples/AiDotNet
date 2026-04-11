@@ -804,11 +804,11 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         var adjExpanded = adjacencyMatrix.Reshape([batchSize, numNodes, numNodes, 1]);
 
         // Mask non-neighbors with -inf
-        var negInf = new Tensor<T>(tiled.Shape.ToArray());
+        var negInf = new Tensor<T>(tiled._shape);
         negInf.Fill(NumOps.MinValue);
 
         // Where adj > 0, use tiled values; else use -inf
-        var zeroTensor = new Tensor<T>(adjExpanded.Shape.ToArray());
+        var zeroTensor = new Tensor<T>(adjExpanded._shape);
         zeroTensor.Fill(NumOps.Zero);
         var mask = Engine.TensorGreaterThan(adjExpanded, zeroTensor);
 
@@ -839,10 +839,10 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         var adjExpanded = adjacencyMatrix.Reshape([batchSize, numNodes, numNodes, 1]);
 
         // Mask non-neighbors with +inf
-        var posInf = new Tensor<T>(tiled.Shape.ToArray());
+        var posInf = new Tensor<T>(tiled._shape);
         posInf.Fill(NumOps.MaxValue);
 
-        var zeroTensor = new Tensor<T>(adjExpanded.Shape.ToArray());
+        var zeroTensor = new Tensor<T>(adjExpanded._shape);
         zeroTensor.Fill(NumOps.Zero);
         var mask = Engine.TensorGreaterThan(adjExpanded, zeroTensor);
 
@@ -879,7 +879,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         var variance = Engine.TensorSubtract(meanSquared, meanSq);
 
         // Add epsilon for numerical stability
-        var epsilon = new Tensor<T>(variance.Shape.ToArray());
+        var epsilon = new Tensor<T>(variance._shape);
         epsilon.Fill(NumOps.FromDouble(1e-8));
         variance = Engine.TensorAdd(variance, epsilon);
 
@@ -1059,10 +1059,10 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
 
         // ReLU derivative
         var mlpHiddenPreRelu = _lastMlpHiddenPreRelu ?? throw new InvalidOperationException("_lastMlpHiddenPreRelu has not been initialized.");
-        var zeroTensor = new Tensor<T>(mlpHiddenPreRelu.Shape.ToArray());
+        var zeroTensor = new Tensor<T>(mlpHiddenPreRelu._shape);
         zeroTensor.Fill(NumOps.Zero);
         var reluMask = Engine.TensorGreaterThan(mlpHiddenPreRelu, zeroTensor);
-        var oneTensor = new Tensor<T>(mlpHiddenPreRelu.Shape.ToArray());
+        var oneTensor = new Tensor<T>(mlpHiddenPreRelu._shape);
         oneTensor.Fill(NumOps.One);
         var reluDeriv = Engine.TensorWhere(reluMask, oneTensor, zeroTensor);
         var mlpHiddenGrad = Engine.TensorMultiply(mlpHiddenGradPre, reluDeriv);
@@ -1209,28 +1209,28 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         int index = 0;
 
         _preTransformWeights = Tensor<T>.FromVector(parameters.SubVector(index, preTransformWeightCount))
-            .Reshape(_preTransformWeights.Shape.ToArray());
+            .Reshape(_preTransformWeights._shape);
         index += preTransformWeightCount;
 
         _preTransformBias = Tensor<T>.FromVector(parameters.SubVector(index, preTransformBiasCount));
         index += preTransformBiasCount;
 
         _postAggregationWeights1 = Tensor<T>.FromVector(parameters.SubVector(index, post1WeightCount))
-            .Reshape(_postAggregationWeights1.Shape.ToArray());
+            .Reshape(_postAggregationWeights1._shape);
         index += post1WeightCount;
 
         _postAggregationBias1 = Tensor<T>.FromVector(parameters.SubVector(index, post1BiasCount));
         index += post1BiasCount;
 
         _postAggregationWeights2 = Tensor<T>.FromVector(parameters.SubVector(index, post2WeightCount))
-            .Reshape(_postAggregationWeights2.Shape.ToArray());
+            .Reshape(_postAggregationWeights2._shape);
         index += post2WeightCount;
 
         _postAggregationBias2 = Tensor<T>.FromVector(parameters.SubVector(index, post2BiasCount));
         index += post2BiasCount;
 
         _selfWeights = Tensor<T>.FromVector(parameters.SubVector(index, selfWeightCount))
-            .Reshape(_selfWeights.Shape.ToArray());
+            .Reshape(_selfWeights._shape);
         index += selfWeightCount;
 
         _bias = Tensor<T>.FromVector(parameters.SubVector(index, biasCount));

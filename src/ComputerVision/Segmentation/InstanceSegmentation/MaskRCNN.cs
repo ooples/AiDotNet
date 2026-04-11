@@ -362,7 +362,7 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
 
     private Tensor<T> ApplyReLU(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
 
         for (int i = 0; i < input.Length; i++)
         {

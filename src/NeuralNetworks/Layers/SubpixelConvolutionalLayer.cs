@@ -536,7 +536,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
 
         // Vectorized random init in [-0.5, 0.5], scaled by Xavier factor
         var randVec = Vector<T>.CreateRandom(_kernels.Length, -0.5, 0.5);
-        var randTensor = new Tensor<T>(_kernels.Shape.ToArray(), randVec);
+        var randTensor = new Tensor<T>(_kernels._shape, randVec);
         _kernels = Engine.TensorMultiplyScalar(randTensor, scale);
 
         _biases.Fill(NumOps.Zero);
@@ -787,7 +787,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
         else
         {
             var scalarAct = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
-            var result = TensorAllocator.Rent<T>(outputGradient.Shape.ToArray());
+            var result = TensorAllocator.Rent<T>(outputGradient._shape);
             for (int i = 0; i < outputGradient.Length; i++)
             {
                 result[i] = NumOps.Multiply(scalarAct.Derivative(lastOutput[i]), outputGradient[i]);
@@ -893,7 +893,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
 
         // Initialize momentum if not already done
         int numOutChannels = _outputDepth * _upscaleFactor * _upscaleFactor;
-        _kernelMomentum ??= new Tensor<T>(_kernels.Shape.ToArray());
+        _kernelMomentum ??= new Tensor<T>(_kernels._shape);
         _biasMomentum ??= new Tensor<T>([numOutChannels]);
 
         T oneMinusMomentum = NumOps.Subtract(NumOps.One, _momentumFactor);

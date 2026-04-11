@@ -715,7 +715,7 @@ public partial class RBMLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> SampleBinaryStatesTensor(Tensor<T> probabilities)
     {
-        var randomTensor = Tensor<T>.CreateRandom(probabilities.Shape.ToArray());
+        var randomTensor = Tensor<T>.CreateRandom(probabilities._shape);
         return Engine.TensorGreaterThan(probabilities, randomTensor);
     }
 

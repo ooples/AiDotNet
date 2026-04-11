@@ -484,7 +484,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<Complex<T>> ConvertToComplexTensor(Tensor<T> realTensor)
     {
-        var complexTensor = new Tensor<Complex<T>>(realTensor.Shape.ToArray());
+        var complexTensor = new Tensor<Complex<T>>(realTensor._shape);
         for (int i = 0; i < realTensor.Length; i++)
         {
             complexTensor[i] = new Complex<T>(realTensor[i], NumOps.Zero);
@@ -531,7 +531,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<T> ExtractRealPart(Tensor<Complex<T>> complexTensor)
     {
-        var realTensor = new Tensor<T>(complexTensor.Shape.ToArray());
+        var realTensor = new Tensor<T>(complexTensor._shape);
         for (int i = 0; i < complexTensor.Length; i++)
         {
             realTensor[i] = complexTensor[i].Real;

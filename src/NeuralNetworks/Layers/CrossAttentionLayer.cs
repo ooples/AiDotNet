@@ -234,9 +234,9 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     private Tensor<T> ForwardCrossAttention(Tensor<T> query, Tensor<T> context)
     {
         // Store original shape for any-rank tensor support
-        _originalQueryShape = query.Shape.ToArray();
-        var queryShape = query.Shape.ToArray();
-        var contextShape = context.Shape.ToArray();
+        _originalQueryShape = query._shape;
+        var queryShape = query._shape;
+        var contextShape = context._shape;
         int queryRank = queryShape.Length;
 
         // Handle any-rank query input
@@ -420,7 +420,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     {
         // [B, C, H, W] -> [B, L, C] where L = H*W
         // Use IEngine for GPU-accelerated permute and reshape
-        var shape = input.Shape.ToArray();
+        var shape = input._shape;
         int batch = shape[0];
         int channels = shape[1];
         int height = shape[2];
@@ -463,7 +463,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
         // weights: [inputDim, outputDim]
         // output: [B, seqLen, outputDim]
         // Use IEngine for GPU-accelerated batched matrix multiplication
-        var inputShape = input.Shape.ToArray();
+        var inputShape = input._shape;
         int batch = inputShape[0];
         int seqLen = inputShape[1];
         int inputDim = inputShape[2];
@@ -762,7 +762,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
 
     private static Tensor<T> ReshapeNCHWToNLCGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> input)
     {
-        int[] shape = input.Shape.ToArray();
+        int[] shape = input._shape;
         int batch = shape[0];
         int channels = shape[1];
         int height = shape[2];

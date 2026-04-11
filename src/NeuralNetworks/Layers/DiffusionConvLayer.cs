@@ -1621,9 +1621,9 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
 
         int idx = 0;
-        _weights = new Tensor<T>(_weights.Shape.ToArray(), parameters.Slice(idx, _weights.Length));
+        _weights = new Tensor<T>(_weights._shape, parameters.Slice(idx, _weights.Length));
         idx += _weights.Length;
-        _biases = new Tensor<T>(_biases.Shape.ToArray(), parameters.Slice(idx, _biases.Length));
+        _biases = new Tensor<T>(_biases._shape, parameters.Slice(idx, _biases.Length));
         idx += _biases.Length;
 
         for (int i = 0; i < DiffusionTimes.Length; i++)
@@ -1830,7 +1830,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
         {
             weightArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _weights = new Tensor<T>(weightArray, _weights.Shape.ToArray());
+        _weights = new Tensor<T>(weightArray, _weights._shape);
 
         _biases = new Tensor<T>([OutputChannels]);
         var biasArray = new T[_biases.Length];
@@ -1838,7 +1838,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
         {
             biasArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _biases = new Tensor<T>(biasArray, _biases.Shape.ToArray());
+        _biases = new Tensor<T>(biasArray, _biases._shape);
 
         DiffusionTimes = new T[NumTimeScales];
         for (int i = 0; i < NumTimeScales; i++)

@@ -333,7 +333,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Clamp values to avoid log(0)
         T epsilon = NumOps.FromDouble(1e-10);
-        var epsilonTensor = new Tensor<T>(_lastCouplingCoefficients.Shape.ToArray());
+        var epsilonTensor = new Tensor<T>(_lastCouplingCoefficients._shape);
         epsilonTensor.Fill(epsilon);
 
         // p_clamped = max(p, epsilon) - element-wise
@@ -811,7 +811,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentException($"Expected {matrixSize + biasSize} parameters, but got {parameters.Length}");
 
         // Set parameters without hot-path conversions
-        _transformationMatrix = new Tensor<T>(_transformationMatrix.Shape.ToArray(), parameters.Slice(0, matrixSize));
+        _transformationMatrix = new Tensor<T>(_transformationMatrix._shape, parameters.Slice(0, matrixSize));
         _bias = new Tensor<T>([biasSize], parameters.Slice(matrixSize, biasSize));
     }
 

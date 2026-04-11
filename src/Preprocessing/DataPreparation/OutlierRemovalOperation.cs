@@ -209,11 +209,11 @@ public class OutlierRemovalOperation<T> : IRowOperation<T>
         }
 
         // Create new tensors with only inliers
-        int[] newXShape = (int[])X.Shape.ToArray();
+        int[] newXShape = (int[])X._shape;
         newXShape[0] = inlierCount;
         var newX = new Tensor<T>(newXShape);
 
-        int[] newYShape = (int[])y.Shape.ToArray();
+        int[] newYShape = (int[])y._shape;
         newYShape[0] = inlierCount;
         var newY = new Tensor<T>(newYShape);
 

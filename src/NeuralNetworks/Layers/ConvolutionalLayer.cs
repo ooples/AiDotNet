@@ -828,7 +828,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // For uniform distribution: Var(W) = bound^2/3, so bound = sqrt(3 * 2/fanIn) = sqrt(6/fanIn)
         int fanIn = InputDepth * KernelSize * KernelSize;
         double bound = Math.Sqrt(6.0 / fanIn);
-        var kernelShape = _kernels.Shape.ToArray();
+        var kernelShape = _kernels._shape;
         var initData = Engine.TensorRandomUniformRange<T>(kernelShape, NumOps.FromDouble(-bound), NumOps.FromDouble(bound));
         // Copy into existing tensor to avoid orphaning pre-allocated buffer
         initData.Data.Span.CopyTo(_kernels.Data.Span);
@@ -1144,7 +1144,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         };
 
         // Reshape back to 4D
-        return flatResult.Reshape(gradOutput.Shape.ToArray());
+        return flatResult.Reshape(gradOutput._shape);
     }
 
     /// <summary>
@@ -1209,13 +1209,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             // Initialize velocity tensors if needed (for SGD momentum, even if 0 here)
             if (_kernelsVelocity == null)
             {
-                _kernelsVelocity = new Tensor<T>(_kernels.Shape.ToArray());
+                _kernelsVelocity = new Tensor<T>(_kernels._shape);
                 _kernelsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_kernelsVelocity, PersistentTensorRole.OptimizerState);
             }
             if (_biasesVelocity == null)
             {
-                _biasesVelocity = new Tensor<T>(_biases.Shape.ToArray());
+                _biasesVelocity = new Tensor<T>(_biases._shape);
                 _biasesVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_biasesVelocity, PersistentTensorRole.OptimizerState);
             }

@@ -409,7 +409,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
             backend.Copy2DStrided(srcView.Buffer, outputBuffer, 1, sliceSize, totalSize, dstOffset);
         }
 
-        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, input._shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -441,7 +441,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
             forward.Dispose();
             backward.Dispose();
 
-            return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, forward.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+            return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, forward._shape, GpuTensorRole.Activation, ownsBuffer: true);
         }
         else
         {
@@ -524,7 +524,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// </remarks>
     private static Tensor<T> ReverseSequence(Tensor<T> input)
     {
-        var reversed = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var reversed = TensorAllocator.Rent<T>(input._shape);
         int timeSteps = input.Shape[1];
 
         for (int i = 0; i < timeSteps; i++)

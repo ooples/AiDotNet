@@ -582,7 +582,7 @@ public partial class DeltaProductLayer<T> : LayerBase<T>
 
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {
-        var ones = new Tensor<T>(template.Shape.ToArray());
+        var ones = new Tensor<T>(template._shape);
         ones.Fill(NumOps.One);
         return ones;
     }

@@ -867,7 +867,7 @@ public class TimesNet<T> : ForecastingModelBase<T>
         if (input.Length != processed.Length)
         {
             int minLen = Math.Min(input.Length, processed.Length);
-            var result = new Tensor<T>(input.Shape.ToArray());
+            var result = new Tensor<T>(input._shape);
             for (int i = 0; i < minLen; i++)
                 result[i] = NumOps.Add(input[i], processed[i]);
             for (int i = minLen; i < input.Length; i++)

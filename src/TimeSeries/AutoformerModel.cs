@@ -682,7 +682,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
 
     private ComputationNode<T> ComputeMovingAverageNode(ComputationNode<T> input, int kernelSize)
     {
-        var shape = input.Value.Shape.ToArray();
+        var shape = input.Value._shape;
         int seqLen = shape[0];
         int embDim = shape.Length > 1 ? shape[1] : 1;
 

@@ -180,7 +180,7 @@ public class EntmoidActivation<T> : ActivationFunctionBase<T>
     /// <returns>Derivative tensor.</returns>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        var derivative = new Tensor<T>(input.Shape.ToArray());
+        var derivative = new Tensor<T>(input._shape);
 
         for (int i = 0; i < input.Length; i++)
         {

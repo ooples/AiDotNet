@@ -249,7 +249,7 @@ public class ArithmeticSecretSharing<T> : FederatedLearningComponentBase<T>, ISe
         var plainDiff = Reconstruct(diff);
 
         int totalElements = ComputeTotalElements(plainDiff);
-        var compResult = new Tensor<T>(plainDiff.Shape.ToArray());
+        var compResult = new Tensor<T>(plainDiff._shape);
         for (int i = 0; i < totalElements; i++)
         {
             double d = NumOps.ToDouble(plainDiff[i]);

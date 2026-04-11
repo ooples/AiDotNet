@@ -562,7 +562,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 
     private Tensor<T> ApplySigmoid(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape.ToArray());
+        var result = new Tensor<T>(x._shape);
         var xSpan = x.Data.Span;
         var rSpan = result.AsWritableSpan();
         for (int i = 0; i < xSpan.Length; i++)
@@ -576,7 +576,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 
     private Tensor<T> ApplyTanh(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape.ToArray());
+        var result = new Tensor<T>(x._shape);
         var xSpan = x.Data.Span;
         var rSpan = result.AsWritableSpan();
         for (int i = 0; i < xSpan.Length; i++)
@@ -662,7 +662,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
-        var shapeArr = tensor.Shape.ToArray();
+        var shapeArr = tensor._shape;
         writer.Write(shapeArr.Length);
         foreach (var dim in shapeArr)
             writer.Write(dim);

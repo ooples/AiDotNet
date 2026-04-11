@@ -207,20 +207,20 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int idx = 0;
 
         // Create new mutable tensors to avoid immutable Engine tensor issue
-        _Wq = new Tensor<T>(_Wq.Shape.ToArray());
+        _Wq = new Tensor<T>(_Wq._shape);
         var wqSpan = _Wq.Data.Span;
         for (int i = 0; i < wqLen; i++) wqSpan[i] = parameters[idx++];
 
-        _Wk = new Tensor<T>(_Wk.Shape.ToArray());
+        _Wk = new Tensor<T>(_Wk._shape);
         var wkSpan = _Wk.Data.Span;
         for (int i = 0; i < wkLen; i++) wkSpan[i] = parameters[idx++];
 
-        _Wv = new Tensor<T>(_Wv.Shape.ToArray());
+        _Wv = new Tensor<T>(_Wv._shape);
         var wvSpan = _Wv.Data.Span;
         for (int i = 0; i < wvLen; i++) wvSpan[i] = parameters[idx++];
 
         int woLen = _Wo.Length;
-        _Wo = new Tensor<T>(_Wo.Shape.ToArray());
+        _Wo = new Tensor<T>(_Wo._shape);
         var woSpan = _Wo.Data.Span;
         for (int i = 0; i < woLen; i++) woSpan[i] = parameters[idx++];
 
@@ -1102,17 +1102,17 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Update Wq - slice and copy
         var wqParams = parameters.Slice(startIndex, _Wq.Length);
-        _Wq = Tensor<T>.FromVector(wqParams).Reshape(_Wq.Shape.ToArray());
+        _Wq = Tensor<T>.FromVector(wqParams).Reshape(_Wq._shape);
         startIndex += _Wq.Length;
 
         // Update Wk - slice and copy
         var wkParams = parameters.Slice(startIndex, _Wk.Length);
-        _Wk = Tensor<T>.FromVector(wkParams).Reshape(_Wk.Shape.ToArray());
+        _Wk = Tensor<T>.FromVector(wkParams).Reshape(_Wk._shape);
         startIndex += _Wk.Length;
 
         // Update Wv - slice and copy
         var wvParams = parameters.Slice(startIndex, _Wv.Length);
-        _Wv = Tensor<T>.FromVector(wvParams).Reshape(_Wv.Shape.ToArray());
+        _Wv = Tensor<T>.FromVector(wvParams).Reshape(_Wv._shape);
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_Wq);

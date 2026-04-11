@@ -230,8 +230,8 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
 
         // Initialize attention weights
         T attentionScale = NumOps.Sqrt(NumOps.FromDouble(1.0 / _outputFeatures));
-        var randomAttn = Tensor<T>.CreateRandom(_attentionWeights.Shape.ToArray());
-        var halfTensor = new Tensor<T>(_attentionWeights.Shape.ToArray());
+        var randomAttn = Tensor<T>.CreateRandom(_attentionWeights._shape);
+        var halfTensor = new Tensor<T>(_attentionWeights._shape);
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shiftedAttn = Engine.TensorSubtract(randomAttn, halfTensor);
         var scaledAttn = Engine.TensorMultiplyScalar(shiftedAttn, attentionScale);
@@ -1037,11 +1037,11 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
 
         int index = 0;
 
-        _weights = Tensor<T>.FromVector(parameters.SubVector(index, weightsCount)).Reshape(_weights.Shape.ToArray());
+        _weights = Tensor<T>.FromVector(parameters.SubVector(index, weightsCount)).Reshape(_weights._shape);
         index += weightsCount;
 
         _attentionWeights = Tensor<T>.FromVector(parameters.SubVector(index, attnCount))
-            .Reshape(_attentionWeights.Shape.ToArray());
+            .Reshape(_attentionWeights._shape);
         index += attnCount;
 
         _bias = Tensor<T>.FromVector(parameters.SubVector(index, biasCount));

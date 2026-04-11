@@ -159,7 +159,7 @@ public class GradientPruningStrategy<T> : IPruningStrategy<T>
             scores[i] = _numOps.Abs(product);
         }
 
-        return Tensor<T>.FromVector(new Vector<T>(scores), (int[])weights.Shape.ToArray());
+        return Tensor<T>.FromVector(new Vector<T>(scores), (int[])weights._shape);
     }
 
     /// <summary>
@@ -396,7 +396,7 @@ public class GradientPruningStrategy<T> : IPruningStrategy<T>
 
         // For simplicity, treat tensors as flattened 1D for COO format
         // or as 2D (first dimension × product of remaining dimensions)
-        var dims = (int[])weights.Shape.ToArray();
+        var dims = (int[])weights._shape;
         int rows = dims.Length > 0 ? dims[0] : 1;
         int cols = dims.Length > 1 ? dims.Skip(1).Aggregate(1, (a, b) => a * b) : flatWeights.Length / rows;
 

@@ -441,7 +441,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor.Shape.ToArray())
+        foreach (var dim in tensor._shape)
         {
             writer.Write(dim);
         }

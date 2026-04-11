@@ -736,7 +736,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
         }
 
         // Write parameters directly into a new mutable tensor
-        _weights = new Tensor<T>(_weights.Shape.ToArray());
+        _weights = new Tensor<T>(_weights._shape);
         for (int i = 0; i < parameters.Length; i++)
             _weights[i] = parameters[i];
     }

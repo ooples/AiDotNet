@@ -869,7 +869,7 @@ public partial class Mamba2Block<T> : LayerBase<T>
 
     private static Tensor<T> SliceTensor(Tensor<T> input, int axis, int start, int length)
     {
-        var shape = (int[])input.Shape.ToArray().Clone();
+        var shape = (int[])input._shape.Clone();
         shape[axis] = length;
         var output = new Tensor<T>(shape);
         var indices = new int[input.Shape.Length];

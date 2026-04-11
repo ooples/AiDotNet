@@ -438,7 +438,7 @@ internal class SPPFBlock<T>
 
     private Tensor<T> ApplySiLU(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape.ToArray());
+        var result = new Tensor<T>(x._shape);
         for (int i = 0; i < x.Length; i++)
         {
             double val = _numOps.ToDouble(x[i]);

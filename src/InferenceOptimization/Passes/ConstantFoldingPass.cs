@@ -377,7 +377,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
                 }
 
                 // Elementwise power using scalar operations
-                var result = new Tensor<T>(baseValue.Shape.ToArray());
+                var result = new Tensor<T>(baseValue._shape);
                 for (int i = 0; i < baseValue.Length; i++)
                 {
                     var b = numOps.ToDouble(baseValue[i]);

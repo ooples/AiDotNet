@@ -229,7 +229,7 @@ internal partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> RotateTensor(Tensor<T> input, int startPosition)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input._shape);
         int rank = input.Shape.Length;
         int seqLen = input.Shape[rank - 2];
         int headDim = input.Shape[rank - 1];
@@ -282,7 +282,7 @@ internal partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> InverseRotateTensor(Tensor<T> input, int startPosition)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input._shape);
         int rank = input.Shape.Length;
         int seqLen = input.Shape[rank - 2];
         int headDim = input.Shape[rank - 1];

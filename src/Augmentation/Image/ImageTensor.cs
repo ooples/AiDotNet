@@ -267,7 +267,7 @@ public class ImageTensor<T>
     public ImageTensor<T> Clone()
     {
         // Create a copy of the tensor data
-        var clonedData = new Tensor<T>((int[])_data.Shape.ToArray());
+        var clonedData = new Tensor<T>((int[])_data._shape);
         for (int i = 0; i < _data.Length; i++)
         {
             clonedData[i] = _data[i];
@@ -419,7 +419,7 @@ public class ImageTensor<T>
     /// <returns>The dimensions array.</returns>
     public int[] GetDimensions()
     {
-        return (int[])_data.Shape.ToArray();
+        return (int[])_data._shape;
     }
 
     /// <summary>

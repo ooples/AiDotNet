@@ -522,7 +522,7 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     /// </summary>
     private Tensor<T> Reparameterize(Tensor<T> mean, Tensor<T> logVar)
     {
-        var z = new Tensor<T>(mean.Shape.ToArray());
+        var z = new Tensor<T>(mean._shape);
         _lastEpsilon = new Tensor<T>(mean._shape);
 
         for (int i = 0; i < mean.Length; i++)
@@ -603,7 +603,7 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     /// </remarks>
     private Tensor<T> ComputeOutputGradient(Tensor<T> input, Tensor<T> activated)
     {
-        var grad = new Tensor<T>(activated.Shape.ToArray());
+        var grad = new Tensor<T>(activated._shape);
 
         if (_transformer is null) return grad;
 
@@ -686,7 +686,7 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     {
         if (_transformer is null) return output;
 
-        var result = new Tensor<T>(output.Shape.ToArray());
+        var result = new Tensor<T>(output._shape);
         int idx = 0;
 
         for (int col = 0; col < _columns.Count && idx < output.Length; col++)
@@ -738,7 +738,7 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     /// </summary>
     private Tensor<T> SafeGradient(Tensor<T> grad, double maxNorm)
     {
-        var result = new Tensor<T>(grad.Shape.ToArray());
+        var result = new Tensor<T>(grad._shape);
         double sumSq = 0;
 
         for (int i = 0; i < grad.Length; i++)

@@ -121,7 +121,7 @@ internal static class DETRHelpers
                 nameof(b));
         }
 
-        var result = new Tensor<T>(a.Shape.ToArray());
+        var result = new Tensor<T>(a._shape);
         for (int i = 0; i < a.Length; i++)
         {
             result[i] = numOps.Add(a[i], b[i]);

@@ -561,7 +561,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
         var rand = Vector<T>.CreateRandom(tensor.Length, -0.5, 0.5);
-        var randTensor = new Tensor<T>(tensor.Shape.ToArray(), rand);
+        var randTensor = new Tensor<T>(tensor._shape, rand);
         var scaled = Engine.TensorMultiplyScalar(randTensor, scale);
         for (int i = 0; i < tensor.Length; i++)
         {
@@ -711,9 +711,9 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
 
         // Initialize velocity tensors if they don't exist
         if (_depthwiseKernelsVelocity == null)
-            _depthwiseKernelsVelocity = new Tensor<T>(_depthwiseKernels.Shape.ToArray());
+            _depthwiseKernelsVelocity = new Tensor<T>(_depthwiseKernels._shape);
         if (_pointwiseKernelsVelocity == null)
-            _pointwiseKernelsVelocity = new Tensor<T>(_pointwiseKernels.Shape.ToArray());
+            _pointwiseKernelsVelocity = new Tensor<T>(_pointwiseKernels._shape);
         if (_biasesVelocity == null)
             _biasesVelocity = new Tensor<T>([_outputDepth]);
 

@@ -373,7 +373,7 @@ public class TransitionLayer<T> : LayerBase<T>
                 ? grad.Data.Span[i]
                 : NumOps.Zero;
         }
-        return new Tensor<T>(grad.Shape.ToArray(), new Vector<T>(result));
+        return new Tensor<T>(grad._shape, new Vector<T>(result));
     }
 
     /// <summary>

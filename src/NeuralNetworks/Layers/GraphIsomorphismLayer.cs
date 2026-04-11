@@ -384,10 +384,10 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
 
         // Gradient through ReLU: fully vectorized element-wise operations
         var lastMlpHiddenPreRelu = _lastMlpHiddenPreRelu ?? throw new InvalidOperationException("_lastMlpHiddenPreRelu has not been initialized.");
-        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape.ToArray());
+        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu._shape);
         Engine.TensorFill(zeroTensor, NumOps.Zero);
         var reluMask = Engine.TensorGreaterThan(lastMlpHiddenPreRelu, zeroTensor);
-        var oneTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape.ToArray());
+        var oneTensor = new Tensor<T>(lastMlpHiddenPreRelu._shape);
         Engine.TensorFill(oneTensor, NumOps.One);
         var reluDeriv = Engine.TensorWhere(reluMask, oneTensor, zeroTensor);
         var hiddenGrad = Engine.TensorMultiply(hiddenGradPre, reluDeriv);
@@ -523,7 +523,7 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
 
         // Set MLP weights 1
         _mlpWeights1 = Tensor<T>.FromVector(parameters.SubVector(index, weights1Count))
-            .Reshape(_mlpWeights1.Shape.ToArray());
+            .Reshape(_mlpWeights1._shape);
         index += weights1Count;
 
         // Set MLP bias 1
@@ -532,7 +532,7 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
 
         // Set MLP weights 2
         _mlpWeights2 = Tensor<T>.FromVector(parameters.SubVector(index, weights2Count))
-            .Reshape(_mlpWeights2.Shape.ToArray());
+            .Reshape(_mlpWeights2._shape);
         index += weights2Count;
 
         // Set MLP bias 2

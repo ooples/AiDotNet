@@ -109,7 +109,7 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
                     var (mean, logVar, hidden) = _encoder.EncodeWithCache(input);
 
                     // Reparameterization trick: z = mean + std * epsilon
-                    var z = new Tensor<T>(mean.Shape.ToArray());
+                    var z = new Tensor<T>(mean._shape);
                     var random = RandomHelper.CreateSeededRandom(42 + epoch * 10000 + i);
                     for (int j = 0; j < mean.Length; j++)
                     {

@@ -603,7 +603,7 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
         // Apply softmax for scene classification (single-label)
-        var result = new Tensor<T>(modelOutput.Shape.ToArray());
+        var result = new Tensor<T>(modelOutput._shape);
 
         // Find max for numerical stability
         double maxVal = double.MinValue;

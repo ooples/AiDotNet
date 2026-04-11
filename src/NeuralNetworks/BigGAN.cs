@@ -380,7 +380,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             return latentCodes;
         }
 
-        var truncated = new Tensor<T>(latentCodes.Shape.ToArray());
+        var truncated = new Tensor<T>(latentCodes._shape);
         var threshold = NumOps.FromDouble(TruncationThreshold);
 
         for (int i = 0; i < latentCodes.Length; i++)

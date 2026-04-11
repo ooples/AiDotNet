@@ -922,7 +922,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         // Calculate gradients for binary cross-entropy: (prediction - target)
         int batchSize = predictions.Shape[0];
-        var gradients = new Tensor<T>(predictions.Shape.ToArray());
+        var gradients = new Tensor<T>(predictions._shape);
 
         for (int i = 0; i < batchSize; i++)
         {
@@ -1876,7 +1876,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     private Tensor<T> ComputeNumericalGradient(Tensor<T> input)
     {
-        var gradients = new Tensor<T>(input.Shape.ToArray());
+        var gradients = new Tensor<T>(input._shape);
         T epsilon = NumOps.FromDouble(1e-4); // Small perturbation for numerical gradient
 
         // Store original discriminator training mode
@@ -1884,7 +1884,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         Discriminator.SetTrainingMode(false); // Use inference mode for gradient computation
 
         // Work on a copy to avoid modifying the input tensor
-        var inputCopy = new Tensor<T>(input.Shape.ToArray());
+        var inputCopy = new Tensor<T>(input._shape);
         for (int idx = 0; idx < input.Length; idx++)
         {
             inputCopy[idx] = input[idx];

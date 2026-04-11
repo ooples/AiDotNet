@@ -537,8 +537,8 @@ public partial class ReadoutLayer<T> : LayerBase<T>
 
     public override void ClearGradients()
     {
-        _weightGradients = new Tensor<T>(_weights.Shape.ToArray());
-        _biasGradients = new Tensor<T>(_bias.Shape.ToArray());
+        _weightGradients = new Tensor<T>(_weights._shape);
+        _biasGradients = new Tensor<T>(_bias._shape);
     }
 
     public override void SetParameters(Vector<T> parameters)

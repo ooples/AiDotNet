@@ -139,11 +139,11 @@ public class AutodiffGradientHelper<T>
 
         if (outputNode.Value is null)
         {
-            return new Tensor<T>(input.Shape.ToArray());
+            return new Tensor<T>(input._shape);
         }
 
         // Create one-hot selector for the target output index and compute scalar loss
-        var oneHot = new Tensor<T>(outputNode.Value.Shape.ToArray());
+        var oneHot = new Tensor<T>(outputNode.Value._shape);
         if (outputIndex < oneHot.Length)
         {
             oneHot[outputIndex] = NumOps.One;
@@ -153,7 +153,7 @@ public class AutodiffGradientHelper<T>
         var loss = eng.ReduceSum(selected, allAxes, keepDims: false);
 
         var grads = tape.ComputeGradients(loss, [input]);
-        return grads.TryGetValue(input, out var g) ? g : new Tensor<T>(input.Shape.ToArray());
+        return grads.TryGetValue(input, out var g) ? g : new Tensor<T>(input._shape);
     }
 
     /// <summary>
