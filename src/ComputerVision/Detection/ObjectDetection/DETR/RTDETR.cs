@@ -585,7 +585,7 @@ internal class CrossScaleModule<T>
         }
 
         // Fuse and add back to each level
-        var result = new Tensor<T>(x.Shape.ToArray());
+        var result = new Tensor<T>(x._shape);
         for (int i = 0; i < x.Length; i++)
         {
             result[i] = x[i];

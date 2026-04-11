@@ -387,7 +387,7 @@ internal class DINOEncoder<T>
 
     public Tensor<T> Forward(Tensor<T> x, Tensor<T> posEncoding, int[][] spatialShapes, int[] levelStarts)
     {
-        var output = new Tensor<T>(x.Shape.ToArray());
+        var output = new Tensor<T>(x._shape);
         for (int i = 0; i < x.Length; i++)
         {
             output[i] = _numOps.Add(x[i], posEncoding[i]);
