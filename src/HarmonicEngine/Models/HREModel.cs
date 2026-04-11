@@ -44,6 +44,11 @@ namespace AiDotNet.HarmonicEngine.Models;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper(
+    "The Harmonic Resonance Engine: A Spectral Architecture for Neural Computation via Intermodulation",
+    "https://github.com/ooples/AiDotNet/blob/master/src/HarmonicEngine/Paper/theorems.tex",
+    Year = 2026,
+    Authors = "AiDotNet Contributors")]
 public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
     private readonly HREModelOptions _options;
@@ -167,26 +172,41 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         var prediction = Forward(input);
 
         // Gradient descent on output projection: dL/dw_oj = error_o * feature_j
+        // Normalize by ||features||² for stability (NLMS-style update) — prevents
+        // divergence when MellinFourier or other layers produce large-magnitude features.
         var lr = NumOps.FromDouble(_options.HebbianLearningRate);
         int carrierCount = _lastFeatures is not null ? _lastFeatures.Length : _options.CarrierCount;
+
+        // Compute ||features||² for normalization
+        double featurePower = 0;
+        if (_lastFeatures is not null)
+        {
+            for (int j = 0; j < carrierCount; j++)
+            {
+                double fj = NumOps.ToDouble(_lastFeatures[j]);
+                featurePower += fj * fj;
+            }
+        }
+        var normFactor = NumOps.FromDouble(1.0 / (featurePower + 1e-8));
 
         for (int o = 0; o < _options.OutputSize; o++)
         {
             T error = NumOps.Subtract(prediction[o], expectedOutput[o]);
+            T scaledError = NumOps.Multiply(NumOps.Multiply(lr, error), normFactor);
 
-            // Update output weights: w_oj -= lr * error * feature_j
+            // Update output weights: w_oj -= (lr/||f||²) * error * feature_j
             if (_lastFeatures is not null)
             {
                 int offset = o * _options.CarrierCount;
                 for (int j = 0; j < carrierCount; j++)
                 {
-                    T grad = NumOps.Multiply(error, _lastFeatures[j]);
+                    T grad = NumOps.Multiply(scaledError, _lastFeatures[j]);
                     _outputWeights[offset + j] = NumOps.Subtract(
-                        _outputWeights[offset + j], NumOps.Multiply(lr, grad));
+                        _outputWeights[offset + j], grad);
                 }
             }
 
-            // Update bias: b -= lr * error
+            // Update bias: b -= lr * error (unnormalized — bias is scalar)
             _outputBias = NumOps.Subtract(_outputBias, NumOps.Multiply(lr, error));
         }
     }

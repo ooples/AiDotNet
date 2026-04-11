@@ -133,8 +133,8 @@ public class SyntheticTimeSeriesBenchmarkTests
         // Forward pass (initializes internal state)
         hebbianLayer.Forward(inputTensor);
 
-        // Hebbian update with target
-        hebbianLayer.HebbianUpdate(target);
+        // Hebbian update with input and target
+        hebbianLayer.HebbianUpdate(input, target);
 
         // Now apply the learned filter and compute MSE
         hebbianLayer.SetTrainingMode(false);

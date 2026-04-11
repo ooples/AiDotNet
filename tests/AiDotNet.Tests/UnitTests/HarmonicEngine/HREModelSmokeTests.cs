@@ -221,12 +221,14 @@ public class HREModelSmokeTests
         layer.SetTrainingMode(true);
         layer.Forward(input);
 
+        var inputSignal = new Vector<double>(signalLength);
         var target = new Vector<double>(signalLength);
         for (int i = 0; i < signalLength; i++)
         {
+            inputSignal[i] = input[i];
             target[i] = 2.0 * Math.Sin(2 * Math.PI * 5 * i / signalLength);
         }
-        layer.HebbianUpdate(target);
+        layer.HebbianUpdate(inputSignal, target);
 
         // Get output before serialization
         layer.SetTrainingMode(false);

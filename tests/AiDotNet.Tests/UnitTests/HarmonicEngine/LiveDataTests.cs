@@ -226,50 +226,61 @@ public class LiveDataTests
     public void CrossSpectral_RealisticCorrelatedSeries_DetectsCoherence()
     {
         // Two correlated time series (like correlated stocks) should show high coherence
-        // at shared frequency components
-        int n = 128;
+        // at shared frequency components. Use long series for Welch's method.
+        int n = 2048;
+        int segmentLength = 256;
         var rng = new Random(42);
 
-        // Shared component: 10-day cycle
+        // Shared component: period-16 oscillation
         var shared = new double[n];
         for (int t = 0; t < n; t++)
         {
-            shared[t] = 3.0 * Math.Sin(2 * Math.PI * t / 10);
+            shared[t] = 3.0 * Math.Sin(2 * Math.PI * t / 16);
         }
 
-        // Series A: shared + independent noise
+        // Series A: shared + independent period-11 component + noise
         var seriesA = new Vector<double>(n);
         for (int t = 0; t < n; t++)
         {
-            seriesA[t] = shared[t] + 0.5 * Math.Sin(2 * Math.PI * t / 7) // independent component
-                        + 0.3 * (rng.NextDouble() - 0.5); // noise
+            seriesA[t] = shared[t] + 0.5 * Math.Sin(2 * Math.PI * t / 11)
+                        + 0.3 * (rng.NextDouble() - 0.5);
         }
 
-        // Series B: shared + different independent noise
+        // Series B: shared + different independent period-23 component + noise
         var seriesB = new Vector<double>(n);
         for (int t = 0; t < n; t++)
         {
-            seriesB[t] = shared[t] + 0.5 * Math.Cos(2 * Math.PI * t / 15) // different independent component
-                        + 0.3 * (rng.NextDouble() - 0.5); // noise
+            seriesB[t] = shared[t] + 0.5 * Math.Cos(2 * Math.PI * t / 23)
+                        + 0.3 * (rng.NextDouble() - 0.5);
         }
 
         var csd = new CrossSpectralDensity<double>();
-        var coherence = csd.Coherence(seriesA, seriesB);
+        var coherence = csd.Coherence(seriesA, seriesB, segmentLength);
 
-        // Coherence at the shared frequency (bin = n/10 = 12.8 -> bin 13)
-        int sharedBin = (int)Math.Round((double)n / 10);
+        // The shared component has period 16, so its bin in a 256-sample segment is 16
+        int sharedBin = segmentLength / 16;
         double sharedCoherence = coherence[sharedBin];
 
-        // Coherence at an independent frequency (bin = n/7 ~ 18)
-        int indepBin = (int)Math.Round((double)n / 7);
-        double indepCoherence = coherence[indepBin];
+        // Find max coherence across the segment (should be at or near sharedBin)
+        double maxCoherence = 0;
+        int maxBin = 0;
+        for (int k = 1; k < segmentLength / 2; k++)
+        {
+            if (coherence[k] > maxCoherence)
+            {
+                maxCoherence = coherence[k];
+                maxBin = k;
+            }
+        }
 
         _output.WriteLine($"Coherence at shared frequency (bin {sharedBin}): {sharedCoherence:F4}");
-        _output.WriteLine($"Coherence at independent frequency (bin {indepBin}): {indepCoherence:F4}");
+        _output.WriteLine($"Max coherence at bin {maxBin}: {maxCoherence:F4}");
 
-        // Shared frequency should have higher coherence
-        Assert.True(sharedCoherence > 0.1,
-            $"Shared frequency coherence ({sharedCoherence:F4}) should be non-trivial");
+        // Shared frequency should have high coherence (well above random baseline)
+        Assert.True(sharedCoherence > 0.5,
+            $"Shared frequency coherence ({sharedCoherence:F4}) should be > 0.5");
+        Assert.True(maxCoherence > 0.7,
+            $"Max coherence ({maxCoherence:F4}) should be > 0.7 for linearly-shared component");
     }
 
     [Fact]
