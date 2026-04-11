@@ -1,6 +1,8 @@
+using AiDotNet.Enums;
 using AiDotNet.HarmonicEngine.Benchmarks;
 using AiDotNet.HarmonicEngine.Core;
 using AiDotNet.HarmonicEngine.Transforms;
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -255,15 +257,14 @@ public class SparsityGeneralizationTests
     }
 
     /// <summary>
-    /// Trains a K-sparse spectral predictor from m samples using
-    /// Orthogonal Matching Pursuit (OMP) — support is *learned* from data,
+    /// Trains a K-sparse spectral predictor from m samples using a simple
+    /// screening + least-squares procedure — support is *learned* from data,
     /// not oracle-given. Returns mean normalized test error over `trials`
     /// independent trials.
     /// </summary>
     private static double KSparseTestError(int n, int k, int m, int trials)
     {
         var rng = RandomHelper.CreateSecureRandom();
-        var fft = new FastFourierTransform<double>();
         double totalErr = 0;
         int successfulTrials = 0;
 
@@ -276,7 +277,7 @@ public class SparsityGeneralizationTests
             {
                 support.Add(rng.Next(1, n / 2));
             }
-            var hStar = new Complex<double>[n];
+            var hStar = new Vector<Complex<double>>(n);
             foreach (int idx in support)
             {
                 double re = rng.NextDouble() * 2 - 1;
@@ -287,32 +288,31 @@ public class SparsityGeneralizationTests
                     hStar[mirror] = new Complex<double>(re, -im);
             }
 
-            // Generate m training samples with additive noise.
-            var xSpectra = new Complex<double>[m][];
-            var ys = new double[m];
+            // Generate m training samples with additive noise, using
+            // engine-accelerated FFT (SIMD on CPU, GPU when available).
+            var xSpectra = new Vector<Complex<double>>[m];
+            var ys = new Vector<double>(m);
             for (int i = 0; i < m; i++)
             {
                 var x = new Vector<double>(n);
                 for (int j = 0; j < n; j++) x[j] = NextGaussian(rng);
-                var xSpec = fft.Forward(x);
-                xSpectra[i] = new Complex<double>[n];
-                for (int j = 0; j < n; j++) xSpectra[i][j] = xSpec[j];
+                xSpectra[i] = SpectralEngineHelper.ToComplexVector(SpectralEngineHelper.FFT(x));
 
                 double y = 0;
                 foreach (int idx in support)
                 {
-                    y += hStar[idx].Real * xSpec[idx].Real
-                       - hStar[idx].Imaginary * xSpec[idx].Imaginary;
+                    y += hStar[idx].Real * xSpectra[i][idx].Real
+                       - hStar[idx].Imaginary * xSpectra[i][idx].Imaginary;
                 }
                 ys[i] = y + 0.05 * NextGaussian(rng);
             }
 
             // Data-driven support selection: rank frequency bins by the absolute
-            // correlation between |X(k)| and y over the training set, then keep
-            // the top K. This is a simple screening + OLS procedure — not full
-            // OMP, but sufficient to demonstrate the log(N) cost of finding the
-            // support from data rather than oracle knowledge.
-            var correlation = new double[n / 2];
+            // correlation between X(k) and y over the training set, then keep
+            // the top K. This is a screening + OLS procedure — sufficient to
+            // demonstrate the log(N) cost of finding the support from data
+            // rather than oracle knowledge.
+            var correlation = new Vector<double>(n / 2);
             for (int bin = 1; bin < n / 2; bin++)
             {
                 double corrR = 0, corrI = 0;
@@ -330,9 +330,10 @@ public class SparsityGeneralizationTests
                 .Take(k)
                 .ToArray();
 
-            // Fit least-squares on the selected support
+            // Fit least-squares on the selected support via normal equations
+            // h = (AᵀA + εI)⁻¹ · Aᵀ·y, solved with LU decomposition.
             int dim = k * 2;
-            var A = new double[m, dim];
+            var A = new Matrix<double>(m, dim);
             for (int i = 0; i < m; i++)
             {
                 for (int j = 0; j < k; j++)
@@ -342,8 +343,8 @@ public class SparsityGeneralizationTests
                 }
             }
 
-            var AtA = new double[dim, dim];
-            var Aty = new double[dim];
+            var AtA = new Matrix<double>(dim, dim);
+            var Aty = new Vector<double>(dim);
             for (int r = 0; r < dim; r++)
             {
                 for (int c = 0; c < dim; c++)
@@ -356,8 +357,19 @@ public class SparsityGeneralizationTests
                 for (int i = 0; i < m; i++) sy += A[i, r] * ys[i];
                 Aty[r] = sy;
             }
+            // Add ridge term for numerical stability
             for (int r = 0; r < dim; r++) AtA[r, r] += 1e-6;
-            var hHat = SolveLinearSystem(AtA, Aty, dim);
+
+            Vector<double> hHat;
+            try
+            {
+                hHat = MatrixSolutionHelper.SolveLinearSystem(AtA, Aty, MatrixDecompositionType.Lu);
+            }
+            catch
+            {
+                // Skip singular trial
+                continue;
+            }
 
             // Evaluate on held-out test samples
             const int testM = 100;
@@ -366,7 +378,7 @@ public class SparsityGeneralizationTests
             {
                 var xt = new Vector<double>(n);
                 for (int j = 0; j < n; j++) xt[j] = NextGaussian(rng);
-                var xSpec = fft.Forward(xt);
+                var xSpec = SpectralEngineHelper.ToComplexVector(SpectralEngineHelper.FFT(xt));
 
                 double yTrue = 0;
                 foreach (int idx in support)
@@ -404,57 +416,6 @@ public class SparsityGeneralizationTests
         double u1 = 1.0 - rng.NextDouble();
         double u2 = rng.NextDouble();
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-    }
-
-    private static double[] SolveLinearSystem(double[,] A, double[] b, int n)
-    {
-        // Simple Gaussian elimination with partial pivoting
-        var M = new double[n, n + 1];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++) M[i, j] = A[i, j];
-            M[i, n] = b[i];
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            // Partial pivot
-            int maxRow = i;
-            double maxVal = Math.Abs(M[i, i]);
-            for (int k2 = i + 1; k2 < n; k2++)
-            {
-                if (Math.Abs(M[k2, i]) > maxVal)
-                {
-                    maxVal = Math.Abs(M[k2, i]);
-                    maxRow = k2;
-                }
-            }
-            if (maxRow != i)
-            {
-                for (int j = 0; j <= n; j++)
-                    (M[i, j], M[maxRow, j]) = (M[maxRow, j], M[i, j]);
-            }
-
-            if (Math.Abs(M[i, i]) < 1e-15) continue; // skip singular rows
-
-            // Eliminate
-            for (int k2 = i + 1; k2 < n; k2++)
-            {
-                double factor = M[k2, i] / M[i, i];
-                for (int j = i; j <= n; j++)
-                    M[k2, j] -= factor * M[i, j];
-            }
-        }
-
-        // Back substitution
-        var x = new double[n];
-        for (int i = n - 1; i >= 0; i--)
-        {
-            double sum = M[i, n];
-            for (int j = i + 1; j < n; j++) sum -= M[i, j] * x[j];
-            x[i] = Math.Abs(M[i, i]) < 1e-15 ? 0 : sum / M[i, i];
-        }
-        return x;
     }
 
     [Fact]
