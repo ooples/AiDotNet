@@ -102,6 +102,34 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies TaylorSoftmax to a tensor via engine primitives so the gradient tape
+    /// records every step. Builds the Taylor polynomial
+    /// <c>1 + x + x^2/2! + ... + x^n/n!</c> iteratively using TensorAdd / TensorMultiply /
+    /// TensorMultiplyScalar, then normalizes by the reduced sum along the last axis.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        int lastAxis = input.Shape.Length - 1;
+
+        // Build 1 + x + x^2/2! + ... + x^order/order! iteratively, running a
+        // power tensor x^n and accumulating the factorial-weighted terms.
+        var result = Engine.TensorAddScalar(input, NumOps.One);       // 1 + x
+        Tensor<T> power = input;
+        double factorial = 1.0;
+        for (int n = 2; n <= _order; n++)
+        {
+            power = Engine.TensorMultiply(power, input);              // x^n
+            factorial *= n;
+            var term = Engine.TensorMultiplyScalar(power, NumOps.FromDouble(1.0 / factorial));
+            result = Engine.TensorAdd(result, term);
+        }
+
+        // Normalize along the last axis so outputs sum to 1.
+        var sum = Engine.ReduceSum(result, new[] { lastAxis }, keepDims: true);
+        return Engine.TensorBroadcastDivide(result, sum);
+    }
+
+    /// <summary>
     /// Calculates the Jacobian matrix of partial derivatives for the Taylor Softmax function.
     /// </summary>
     /// <param name="input">The vector of input values.</param>

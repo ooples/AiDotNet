@@ -114,6 +114,35 @@ public class MaxoutActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies Maxout to a tensor via engine primitives so the gradient tape records
+    /// every step. Reshapes the last axis from <c>[..., outputSize * numPieces]</c> to
+    /// <c>[..., outputSize, numPieces]</c>, reduces max along the grouping axis, and
+    /// leaves the reshape/reduction on the tape for gradient propagation.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank == 0)
+            throw new ArgumentException("Maxout requires at least a 1D tensor.", nameof(input));
+
+        int lastDim = input.Shape[rank - 1];
+        if (lastDim % _numPieces != 0)
+            throw new ArgumentException($"Last dimension ({lastDim}) must be divisible by numPieces ({_numPieces}).", nameof(input));
+
+        int outputSize = lastDim / _numPieces;
+
+        // Build reshape target: leading dims unchanged, last dim split into (outputSize, numPieces).
+        int[] splitShape = new int[rank + 1];
+        for (int d = 0; d < rank - 1; d++)
+            splitShape[d] = input.Shape[d];
+        splitShape[rank - 1] = outputSize;
+        splitShape[rank] = _numPieces;
+
+        var split = Engine.Reshape(input, splitShape);
+        return Engine.ReduceMax(split, new[] { rank }, keepDims: false, out _);
+    }
+
+    /// <summary>
     /// Calculates the derivative (Jacobian matrix) of the Maxout function for a vector input.
     /// </summary>
     /// <param name="input">The input vector at which to calculate the derivative.</param>

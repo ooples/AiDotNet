@@ -106,6 +106,20 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies SphericalSoftmax to a tensor via engine primitives so the gradient tape
+    /// records every step. Decomposes as <c>softmax(x / ||x||_2)</c> along the last axis.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        int lastAxis = input.Shape.Length - 1;
+        var squared = Engine.TensorMultiply(input, input);
+        var sumSquared = Engine.ReduceSum(squared, new[] { lastAxis }, keepDims: true);
+        var norm = Engine.TensorSqrt(sumSquared);
+        var normalized = Engine.TensorBroadcastDivide(input, norm);
+        return Engine.Softmax(normalized, axis: lastAxis);
+    }
+
+    /// <summary>
     /// Calculates the Jacobian matrix of the Spherical Softmax function for a given input vector.
     /// </summary>
     /// <param name="input">The input vector.</param>

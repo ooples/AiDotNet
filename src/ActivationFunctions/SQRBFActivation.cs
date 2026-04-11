@@ -104,6 +104,19 @@ public class SQRBFActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies SQRBF to a tensor via engine primitives so the gradient tape records
+    /// every step. Decomposes <c>exp(-ß * x^2)</c> as TensorMultiply for the square,
+    /// TensorMultiplyScalar for the -ß factor, and TensorExp for the exponential.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        var squared = Engine.TensorMultiply(input, input);
+        var negBeta = NumOps.Negate(_beta);
+        var scaled = Engine.TensorMultiplyScalar(squared, negBeta);
+        return Engine.TensorExp(scaled);
+    }
+
+    /// <summary>
     /// Calculates the derivative of the SQRBF function for a given input value.
     /// </summary>
     /// <param name="input">The input value.</param>
