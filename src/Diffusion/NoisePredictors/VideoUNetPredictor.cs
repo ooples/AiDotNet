@@ -659,9 +659,11 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         // [batch, channels, frames, height, width] -> [batch, height, width, frames, channels]
         var permuted = Engine.TensorPermute(video, new[] { 0, 3, 4, 2, 1 });
 
-        // Step 2: Reshape to [batch * height * width, frames, channels] for attention
-        // Each spatial position becomes a batch element, frames become the sequence dimension
-        var reshaped = permuted.Reshape(new[] { batch * spatialSize, frames, channels });
+        // Step 2: Reshape to [batch * height * width, frames, channels] for attention.
+        // Must go through Engine so the gradient tape records the op — direct
+        // Tensor<T>.Reshape bypasses the tape and breaks gradient flow through
+        // the temporal attention path.
+        var reshaped = Engine.Reshape(permuted, new[] { batch * spatialSize, frames, channels });
 
         // Step 3: Apply temporal attention layer
         Tensor<T> attended;
@@ -675,7 +677,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         }
 
         // Step 4: Reshape back to [batch, height, width, frames, channels]
-        var reshapedBack = attended.Reshape(new[] { batch, height, width, frames, channels });
+        var reshapedBack = Engine.Reshape(attended, new[] { batch, height, width, frames, channels });
 
         // Step 5: Permute back from NHWFC to NCFHW
         // [batch, height, width, frames, channels] -> [batch, channels, frames, height, width]

@@ -167,7 +167,11 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
         else if (shape.Length == 3)
         {
             channels = shape[0];
-            input4D = input.Reshape(1, shape[0], shape[1], shape[2]);
+            // Must go through Engine so the gradient tape records the reshape —
+            // direct Tensor<T>.Reshape bypasses the tape and snaps the gradient
+            // chain right at the GroupNorm entry, which was the root cause of
+            // diffusion tape training returning all-zero gradients.
+            input4D = Engine.Reshape(input, new[] { 1, shape[0], shape[1], shape[2] });
             _addedBatchDimension = true;
         }
         else if (shape.Length == 2)
@@ -184,7 +188,13 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
             for (int d = 0; d < shape.Length - 3; d++)
                 flatBatch *= shape[d];
             channels = shape[shape.Length - 3];
-            input4D = input.Reshape(flatBatch, shape[shape.Length - 3], shape[shape.Length - 2], shape[shape.Length - 1]);
+            input4D = Engine.Reshape(input, new[]
+            {
+                flatBatch,
+                shape[shape.Length - 3],
+                shape[shape.Length - 2],
+                shape[shape.Length - 1]
+            });
         }
 
         if (channels != _numChannels)
@@ -203,7 +213,7 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
         _lastMean = mean;
         _lastVariance = variance;
 
-        // Restore original tensor rank
+        // Restore original tensor rank — via Engine so tape records the restore.
         if (_originalInputShape.Length > 4)
         {
             var outputShape = new int[_originalInputShape.Length];
@@ -212,10 +222,10 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 3] = output.Shape[1];
             outputShape[_originalInputShape.Length - 2] = output.Shape[2];
             outputShape[_originalInputShape.Length - 1] = output.Shape[3];
-            return output.Reshape(outputShape);
+            return Engine.Reshape(output, outputShape);
         }
         return _addedBatchDimension
-            ? output.Reshape(output.Shape[1], output.Shape[2], output.Shape[3])
+            ? Engine.Reshape(output, new[] { output.Shape[1], output.Shape[2], output.Shape[3] })
             : output;
     }
 

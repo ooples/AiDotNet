@@ -216,8 +216,12 @@ public class DiffusionAttention<T> : LayerBase<T>
             int width = input.Shape[3];
             sequenceLength = height * width;
 
-            // Reshape [B, C, H, W] -> [B, H*W, C]
-            x = input.Transpose(new[] { 0, 2, 3, 1 }).Reshape(batchSize, sequenceLength, channels);
+            // Reshape [B, C, H, W] -> [B, H*W, C]. Every shape op must go
+            // through Engine so the gradient tape records the transformation —
+            // direct Tensor<T>.Transpose / .Reshape bypass the tape and break
+            // gradient flow through the attention block.
+            var permuted = Engine.TensorPermute(input, new[] { 0, 2, 3, 1 });
+            x = Engine.Reshape(permuted, new[] { batchSize, sequenceLength, channels });
         }
         else
         {
@@ -242,12 +246,13 @@ public class DiffusionAttention<T> : LayerBase<T>
             _usedFlashAttention = false;
         }
 
-        // Reshape back to image format if needed
+        // Reshape back to image format if needed — via Engine for tape recording.
         if (isImageFormat)
         {
             int height = input.Shape[2];
             int width = input.Shape[3];
-            output = output.Reshape(batchSize, height, width, channels).Transpose(new[] { 0, 3, 1, 2 });
+            var reshaped = Engine.Reshape(output, new[] { batchSize, height, width, channels });
+            output = Engine.TensorPermute(reshaped, new[] { 0, 3, 1, 2 });
         }
 
         return output;
@@ -447,7 +452,9 @@ public class DiffusionCrossAttention<T> : LayerBase<T>
             int width = input.Shape[3];
             sequenceLength = height * width;
 
-            x = input.Transpose(new[] { 0, 2, 3, 1 }).Reshape(batchSize, sequenceLength, channels);
+            // Shape ops via Engine so the gradient tape records them.
+            var permuted = Engine.TensorPermute(input, new[] { 0, 2, 3, 1 });
+            x = Engine.Reshape(permuted, new[] { batchSize, sequenceLength, channels });
         }
         else
         {
@@ -473,7 +480,8 @@ public class DiffusionCrossAttention<T> : LayerBase<T>
         {
             int height = input.Shape[2];
             int width = input.Shape[3];
-            output = output.Reshape(batchSize, height, width, channels).Transpose(new[] { 0, 3, 1, 2 });
+            var reshaped = Engine.Reshape(output, new[] { batchSize, height, width, channels });
+            output = Engine.TensorPermute(reshaped, new[] { 0, 3, 1, 2 });
         }
 
         return output;

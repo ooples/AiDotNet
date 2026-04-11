@@ -185,20 +185,25 @@ public class DiffusionResBlock<T> : LayerBase<T>
         h = ApplySiLU(h);
         h = _conv1.Forward(h);
 
-        // Time conditioning: project time embed and add to feature maps
+        // Time conditioning: project time embed and add to feature maps.
+        // Every op must go through Engine so the gradient tape records the
+        // graph — direct Tensor<T>.Reshape / BroadcastAdd calls bypass the
+        // tape and snap the chain between norm1/conv1 and the rest of the
+        // block, which is exactly what caused diffusion tape training to
+        // return all-zero gradients on the UNet backbone.
         if (_timeEmbedDim > 0 && timeEmbed.Length > 0)
         {
             var timeProj = _timeMlp.Forward(timeEmbed);
             // Reshape from [B, outChannels] to [B, outChannels, 1, 1] for broadcasting
             if (timeProj.Shape.Length == 1)
             {
-                timeProj = timeProj.Reshape(1, _outChannels, 1, 1);
+                timeProj = Engine.Reshape(timeProj, new[] { 1, _outChannels, 1, 1 });
             }
             else if (timeProj.Shape.Length == 2)
             {
-                timeProj = timeProj.Reshape(timeProj.Shape[0], _outChannels, 1, 1);
+                timeProj = Engine.Reshape(timeProj, new[] { timeProj.Shape[0], _outChannels, 1, 1 });
             }
-            h = h.BroadcastAdd(timeProj);
+            h = Engine.TensorBroadcastAdd(h, timeProj);
         }
 
         // Skip connection

@@ -338,7 +338,10 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep)
     {
-        // Ensure the sample has proper 4D [B, C, H, W] shape for the UNet
+        // Ensure the sample has proper 4D [B, C, H, W] shape for the UNet.
+        // Every shape op must go through Engine so the gradient tape records it —
+        // direct Tensor<T>.Reshape calls bypass the tape and snap the gradient
+        // chain between the UNet backbone and the diffusion training loss.
         var sample = EnsureLatentShape(noisySample);
 
         var result = NoisePredictor.PredictNoise(sample, timestep, null);
@@ -346,7 +349,7 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         // Reshape output back to match input shape if we reshaped the input
         if (noisySample.Shape.Length < 4 && result.Shape.Length == 4)
         {
-            return result.Reshape(noisySample._shape);
+            return Engine.Reshape(result, noisySample._shape);
         }
 
         return result;
@@ -376,10 +379,10 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         if (spatialSide * spatialSide != spatialElements)
         {
             // Non-square spatial — use 1D spatial
-            return tensor.Reshape(1, c, 1, spatialElements);
+            return Engine.Reshape(tensor, new[] { 1, c, 1, spatialElements });
         }
 
-        return tensor.Reshape(1, c, spatialSide, spatialSide);
+        return Engine.Reshape(tensor, new[] { 1, c, spatialSide, spatialSide });
     }
 
     /// <inheritdoc />

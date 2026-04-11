@@ -932,9 +932,24 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             result = Engine.FusedConv2D(_lastInput, _kernels, _biasReshaped4D,
                 Stride, Stride, Padding, Padding, 1, 1, fusedActivation);
         }
+        else if (IsTrainingMode)
+        {
+            // Tape-tracked path: zero-alloc Into/InPlace variants bypass the gradient
+            // tape, so during training we must use the non-in-place Engine ops
+            // (Conv2D + TensorBroadcastAdd) so the backward pass can follow the
+            // gradient chain back to the kernel and bias tensors. This was the root
+            // cause of diffusion tape training producing all-zero gradients — every
+            // ResBlock's internal Conv layers used IdentityActivation, taking the
+            // fallback path whose in-place ops snapped the tape chain at every
+            // convolution.
+            var conv = Engine.Conv2D(_lastInput, _kernels, Stride, Padding, dilation: 1);
+            _biasReshaped4D ??= Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
+            result = Engine.TensorBroadcastAdd(conv, _biasReshaped4D);
+        }
         else
         {
-            // Fallback: separate Conv2DInto + in-place bias + activation
+            // Inference fast path: separate Conv2DInto + in-place bias + activation.
+            // Safe because no tape is active during inference (NoGradScope).
             Engine.Conv2DInto(_preAllocatedOutput, _lastInput, _kernels, Stride, Padding, dilation: 1);
             var output = _preAllocatedOutput;
 
