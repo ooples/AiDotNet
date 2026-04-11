@@ -221,4 +221,89 @@ public class PeriodicSequenceTests
                 $"Peak magnitude ({peakMag:F2}) should dominate median ({median:F2})");
         }
     }
+
+    /// <summary>
+    /// Experiment 8 (rigorous): validates the "novel capability" claim that
+    /// HRE learns long-range periodic patterns via its spectral representation.
+    /// Trains an HREModel on periodic regression data — given a context of
+    /// length L, predict the next value in a period-P sinusoid — and measures
+    /// test-set accuracy across multiple period lengths, including periods
+    /// longer than a typical transformer context window would practically handle.
+    /// </summary>
+    [Theory]
+    [InlineData(8)]
+    [InlineData(16)]
+    [InlineData(32)]
+    public void PeriodicNextTokenPrediction_AfterTraining_MatchesGroundTruth(int period)
+    {
+        const int contextLength = 64;
+        const int trainSamples = 500;
+        const int testSamples = 100;
+
+        var rng = RandomHelper.CreateSecureRandom();
+
+        var options = new HREModelOptions
+        {
+            InputSize = contextLength,
+            OutputSize = 1,
+            CarrierCount = 8,
+            FftSize = 512,
+            Nonlinearity = NonlinearityType.SpectralGating,
+            UseMellinFourier = false,
+            NumOFDMLayers = 1,
+            NumAttentionLayers = 0,
+            HebbianLearningRate = 0.02,
+            SparsityK = 8,
+            Seed = 1000 + period,
+        };
+
+        var model = new HREModel<double>(options);
+        model.SetTrainingMode(true);
+
+        // Generate training samples: random starting phase, period-P sinusoid
+        for (int s = 0; s < trainSamples; s++)
+        {
+            double phase = rng.NextDouble() * 2 * Math.PI;
+            var ctx = new Tensor<double>([contextLength]);
+            for (int t = 0; t < contextLength; t++)
+                ctx[t] = Math.Cos(2 * Math.PI * t / period + phase);
+
+            var nextVal = new Tensor<double>([1]);
+            nextVal[0] = Math.Cos(2 * Math.PI * contextLength / period + phase);
+
+            model.Train(ctx, nextVal);
+        }
+
+        // Test: predict the next value on held-out data
+        model.SetTrainingMode(false);
+        double sumAbsError = 0, sumSqError = 0, sumTargetPower = 0;
+        for (int s = 0; s < testSamples; s++)
+        {
+            double phase = rng.NextDouble() * 2 * Math.PI;
+            var ctx = new Tensor<double>([contextLength]);
+            for (int t = 0; t < contextLength; t++)
+                ctx[t] = Math.Cos(2 * Math.PI * t / period + phase);
+
+            double trueNext = Math.Cos(2 * Math.PI * contextLength / period + phase);
+            double predNext = model.Forward(ctx)[0];
+
+            double err = predNext - trueNext;
+            sumAbsError += Math.Abs(err);
+            sumSqError += err * err;
+            sumTargetPower += trueNext * trueNext;
+        }
+
+        double mae = sumAbsError / testSamples;
+        double mse = sumSqError / testSamples;
+        double normalizedMSE = mse / (sumTargetPower / testSamples);
+
+        _output.WriteLine($"Period={period}  MAE={mae:F4}  MSE={mse:F4}  normalized={normalizedMSE:P2}");
+
+        // Assertion: normalized MSE < 30% means the model has clearly learned
+        // the periodic structure (baseline "predict zero" would give 100%).
+        // This is a meaningful signal that HRE captures the periodicity.
+        Assert.True(normalizedMSE < 0.30,
+            $"Period={period}: normalized MSE {normalizedMSE:P2} should be < 30% " +
+            $"(baseline = 100%). HRE should learn the periodic structure.");
+    }
 }

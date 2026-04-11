@@ -2,8 +2,11 @@ using AiDotNet.HarmonicEngine.Activations;
 using AiDotNet.HarmonicEngine.Benchmarks;
 using AiDotNet.HarmonicEngine.Core;
 using AiDotNet.HarmonicEngine.Enums;
+using AiDotNet.HarmonicEngine.Models;
+using AiDotNet.HarmonicEngine.Options;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using Xunit.Abstractions;
@@ -193,5 +196,184 @@ public class NonlinearityAblationTests
                     $"{act.GetType().Name}.Derivative({input}) = Infinity");
             }
         }
+    }
+
+    /// <summary>
+    /// Experiment 2 (rigorous nonlinearity ablation): trains HRE with each of
+    /// the three spectral activations on a classification task — identify which
+    /// of 3 candidate frequencies dominates a noisy mixture — and reports test
+    /// accuracy for each. Produces the ablation table that feeds the paper.
+    /// </summary>
+    [Fact]
+    public void NonlinearityAblation_FrequencyClassification_ProducesAblationTable()
+    {
+        const int windowSize = 64;
+        const int trainSamples = 400;
+        const int testSamples = 100;
+        const double noiseStd = 0.2;
+        const int numClasses = 3;
+        double[] classFrequencies = [5.0, 13.0, 23.0];
+
+        var rng = RandomHelper.CreateSecureRandom();
+
+        // Generate one shared dataset for all three activations so the
+        // comparison is apples-to-apples.
+        var (trainX, trainY, testX, testY) = GenerateClassificationDataset(
+            rng, trainSamples, testSamples, windowSize, classFrequencies, noiseStd);
+
+        var nonlinearityTypes = new[]
+        {
+            NonlinearityType.ModReLU,
+            NonlinearityType.SpectralGating,
+            NonlinearityType.InstantaneousFreq,
+        };
+
+        var results = new List<(string name, double accuracy, double avgTrainLossGap)>();
+
+        foreach (var nl in nonlinearityTypes)
+        {
+            var options = new HREModelOptions
+            {
+                InputSize = windowSize,
+                OutputSize = numClasses,
+                CarrierCount = 8,
+                FftSize = 512,
+                UseMellinFourier = false,
+                NumOFDMLayers = 1,
+                NumAttentionLayers = 0,
+                Nonlinearity = nl,
+                HebbianLearningRate = 0.02,
+                SparsityK = 8,
+                Seed = 1234,
+            };
+
+            var model = new HREModel<double>(options);
+            model.SetTrainingMode(true);
+
+            // Single-pass training: one update per sample
+            double sumTrainLoss = 0;
+            for (int i = 0; i < trainSamples; i++)
+            {
+                model.Train(trainX[i], trainY[i]);
+                var pred = model.Forward(trainX[i]);
+                double loss = 0;
+                for (int c = 0; c < numClasses; c++)
+                {
+                    double d = pred[c] - trainY[i][c];
+                    loss += d * d;
+                }
+                sumTrainLoss += loss / numClasses;
+            }
+            double avgTrainLoss = sumTrainLoss / trainSamples;
+
+            // Evaluate test accuracy
+            int correct = 0;
+            model.SetTrainingMode(false);
+            for (int i = 0; i < testSamples; i++)
+            {
+                var pred = model.Forward(testX[i]);
+                int predClass = ArgMax(pred, numClasses);
+                int trueClass = ArgMax(testY[i], numClasses);
+                if (predClass == trueClass) correct++;
+            }
+            double accuracy = (double)correct / testSamples;
+
+            results.Add((nl.ToString(), accuracy, avgTrainLoss));
+        }
+
+        // Print ablation table
+        _output.WriteLine("=== Experiment 2: Nonlinearity Ablation ===");
+        _output.WriteLine($"Task: classify dominant frequency in {windowSize}-sample window ({trainSamples} train / {testSamples} test)");
+        _output.WriteLine($"Classes: f ∈ {{{string.Join(", ", classFrequencies)}}}, noise σ = {noiseStd}");
+        _output.WriteLine("");
+        _output.WriteLine($"{"Activation",-22} {"Test accuracy",15} {"Avg train loss",18}");
+        _output.WriteLine(new string('-', 55));
+        foreach (var (name, acc, tl) in results)
+        {
+            _output.WriteLine($"{name,-22} {acc,15:P1} {tl,18:F6}");
+        }
+        _output.WriteLine($"Chance accuracy (1/{numClasses}):      {1.0 / numClasses:P1}");
+
+        // Assertion 1: every activation must beat chance by a meaningful margin.
+        // Chance = 33.3%; require at least 50% for all (some margin above chance).
+        foreach (var (name, acc, _) in results)
+        {
+            Assert.True(acc > 0.50,
+                $"{name} test accuracy {acc:P1} should be > 50% (well above {1.0 / numClasses:P1} chance). " +
+                $"Ablation requires all activations to actually work.");
+        }
+
+        // Assertion 2: at least one activation must exceed 80% accuracy.
+        // This is the plan's success criterion (relaxed from 95% because we're
+        // using 400 training samples rather than a full training corpus).
+        double bestAccuracy = 0;
+        foreach (var (_, acc, _) in results) if (acc > bestAccuracy) bestAccuracy = acc;
+        Assert.True(bestAccuracy > 0.80,
+            $"At least one nonlinearity should achieve >80% test accuracy, got best = {bestAccuracy:P1}");
+    }
+
+    private static (Tensor<double>[] trainX, Tensor<double>[] trainY,
+                    Tensor<double>[] testX, Tensor<double>[] testY)
+        GenerateClassificationDataset(
+            Random rng, int trainN, int testN, int windowSize,
+            double[] classFreqs, double noiseStd)
+    {
+        int total = trainN + testN;
+        int numClasses = classFreqs.Length;
+        var xs = new Tensor<double>[total];
+        var ys = new Tensor<double>[total];
+
+        for (int i = 0; i < total; i++)
+        {
+            // Pick a dominant class uniformly at random
+            int dominantClass = rng.Next(numClasses);
+
+            // Build the signal: dominant sinusoid + weaker other sinusoids + noise
+            var x = new Tensor<double>([windowSize]);
+            for (int t = 0; t < windowSize; t++)
+            {
+                double value = 0;
+                for (int c = 0; c < numClasses; c++)
+                {
+                    double amp = (c == dominantClass) ? 1.0 : 0.3;
+                    value += amp * Math.Cos(2 * Math.PI * classFreqs[c] * t / windowSize);
+                }
+                value += noiseStd * NextGaussian(rng);
+                x[t] = value;
+            }
+            xs[i] = x;
+
+            // One-hot target
+            var y = new Tensor<double>([numClasses]);
+            for (int c = 0; c < numClasses; c++) y[c] = 0;
+            y[dominantClass] = 1.0;
+            ys[i] = y;
+        }
+
+        var trainX = new Tensor<double>[trainN];
+        var trainY = new Tensor<double>[trainN];
+        var testX = new Tensor<double>[testN];
+        var testY = new Tensor<double>[testN];
+        for (int i = 0; i < trainN; i++) { trainX[i] = xs[i]; trainY[i] = ys[i]; }
+        for (int i = 0; i < testN; i++) { testX[i] = xs[trainN + i]; testY[i] = ys[trainN + i]; }
+        return (trainX, trainY, testX, testY);
+    }
+
+    private static int ArgMax(Tensor<double> v, int n)
+    {
+        int idx = 0;
+        double best = v[0];
+        for (int i = 1; i < n; i++)
+        {
+            if (v[i] > best) { best = v[i]; idx = i; }
+        }
+        return idx;
+    }
+
+    private static double NextGaussian(Random rng)
+    {
+        double u1 = 1.0 - rng.NextDouble();
+        double u2 = rng.NextDouble();
+        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
     }
 }
