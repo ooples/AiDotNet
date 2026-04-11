@@ -207,9 +207,6 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// </remarks>
     private List<Tensor<T>>? _lastExpertOutputs;
 
-    // Note: TensorGather index cache removed — using GetSliceAlongDimension instead
-    // (tracked in ooples/AiDotNet.Tensors#109 for proper axis=1 gather support)
-
     /// <summary>
     /// Cached combined output before activation from the most recent forward pass.
     /// </summary>
@@ -1437,19 +1434,6 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         // routingWeights shape: [batchSize, numExperts]
 
         int batchSize = routingWeights.Shape[0];
-        int numExperts = routingWeights.Shape[1];
-
-        // Extract per-expert weights using TensorMatMul with one-hot selector vectors.
-        // This is fully tape-tracked (TensorMatMul has backward support for all ranks).
-        // routingWeights: [batch, numExperts] @ oneHot: [numExperts, 1] = [batch, 1]
-        // Pre-build one-hot selectors (constant, not on tape)
-        var oneHots = new Tensor<T>[expertOutputs.Count];
-        for (int i = 0; i < expertOutputs.Count; i++)
-        {
-            oneHots[i] = new Tensor<T>(new[] { numExperts, 1 });
-            oneHots[i].Fill(NumOps.Zero);
-            oneHots[i][i, 0] = NumOps.One;
-        }
 
         Tensor<T>? combined = null;
 
@@ -1457,8 +1441,10 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         {
             var expertOutput = expertOutputs[i];
 
-            // Tape-tracked matmul: [batch, numExperts] @ [numExperts, 1] = [batch, 1]
-            var weightColumn2D = Engine.TensorMatMul(routingWeights, oneHots[i]);
+            // Tape-tracked axis=1 gather: extract the i-th column of routingWeights.
+            // routingWeights[batch, numExperts] gather idx=[i] on axis=1 -> [batch, 1].
+            var indexTensor = new Tensor<int>(new[] { i }, new[] { 1 });
+            var weightColumn2D = Engine.TensorGather(routingWeights, indexTensor, axis: 1);
 
             // Reshape for broadcasting: [batch, 1] -> [batch, 1, ...] for higher-rank expert outputs
             if (expertOutput.Shape.Length > 2)
