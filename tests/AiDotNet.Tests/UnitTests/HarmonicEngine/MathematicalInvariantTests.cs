@@ -418,8 +418,11 @@ public class MathematicalInvariantTests
         }
         double cosSim = dot / (Math.Sqrt(norm1) * Math.Sqrt(norm2));
 
-        Assert.True(cosSim > 0.9,
-            $"Scale-invariant fingerprints should be highly similar, cosine={cosSim:F6}");
+        // The Mellin magnitude spectrum is mathematically scale-invariant,
+        // so the cosine similarity should be essentially 1.0 for a pure
+        // amplitude scaling. 0.9 was too loose.
+        Assert.True(cosSim > 0.999,
+            $"Scale-invariant fingerprints should be essentially identical, cosine={cosSim:F6}");
         _output.WriteLine($"Scale invariance cosine similarity: {cosSim:F6}");
     }
 

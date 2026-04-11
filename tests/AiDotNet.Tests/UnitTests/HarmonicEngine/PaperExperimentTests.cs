@@ -27,118 +27,11 @@ public class PaperExperimentTests
         _output = output;
     }
 
-    // ================================================================
-    // PAPER EXPERIMENT 1: IMD-Attention Numerical Equivalence
-    // Proves: IMD products at fi+fj are proportional to ai*aj
-    //         (the same computation as Q*K^T attention scores)
-    // ================================================================
-
-    [Fact]
-    public void Experiment1_IMD_Equals_ExplicitPairwiseInteraction()
-    {
-        _output.WriteLine("=== EXPERIMENT 1: IMD-Attention Numerical Equivalence ===");
-        _output.WriteLine($"{"N",-6} {"Max Relative Error",-20} {"Mean Relative Error",-20} {"PASS",-6}");
-        _output.WriteLine(new string('-', 52));
-
-        bool allPassed = true;
-
-        foreach (int numCarriers in new[] { 4, 8 })
-        {
-            int fftSize = numCarriers <= 8 ? 1024 : 4096;
-            var allocator = new CarrierAllocator();
-            int maxAvailable = allocator.MaxCarriers(fftSize);
-            if (numCarriers > maxAvailable) continue;
-
-            var carriers = allocator.AllocateCarriers(numCarriers, fftSize);
-            var bus = new SpectralBus<double>(carriers, fftSize);
-            var extractor = new IMDExtractor<double>(carriers, fftSize);
-
-            // Known amplitudes
-            var amplitudes = new Vector<double>(numCarriers);
-            var rng = new Random(42);
-            for (int i = 0; i < numCarriers; i++)
-                amplitudes[i] = 1.0 + rng.NextDouble() * 2.0;
-
-            // Compute ground truth: explicit outer product ai * aj
-            var groundTruth = new Matrix<double>(numCarriers, numCarriers);
-            for (int i = 0; i < numCarriers; i++)
-                for (int j = 0; j < numCarriers; j++)
-                    groundTruth[i, j] = amplitudes[i] * amplitudes[j];
-
-            // Compute via IMD
-            var encoded = bus.Encode(amplitudes);
-            var squared = new Vector<double>(encoded.Length);
-            for (int t = 0; t < encoded.Length; t++)
-                squared[t] = encoded[t] * encoded[t];
-
-            var imdMatrix = extractor.ExtractPairwise(squared);
-
-            // Normalize both matrices to [0,1] range for comparison
-            double gtMax = 0, imdMax = 0;
-            for (int i = 0; i < numCarriers; i++)
-            {
-                for (int j = 0; j < numCarriers; j++)
-                {
-                    gtMax = Math.Max(gtMax, Math.Abs(groundTruth[i, j]));
-                    imdMax = Math.Max(imdMax, Math.Abs(imdMatrix[i, j]));
-                }
-            }
-
-            double maxRelError = 0, sumRelError = 0;
-            int count = 0;
-            for (int i = 0; i < numCarriers; i++)
-            {
-                for (int j = 0; j < numCarriers; j++)
-                {
-                    double gtNorm = groundTruth[i, j] / gtMax;
-                    double imdNorm = imdMatrix[i, j] / imdMax;
-                    double relError = Math.Abs(gtNorm - imdNorm) / (Math.Abs(gtNorm) + 1e-10);
-                    maxRelError = Math.Max(maxRelError, relError);
-                    sumRelError += relError;
-                    count++;
-                }
-            }
-            double meanRelError = sumRelError / count;
-
-            bool pass = maxRelError < 0.5; // IMD magnitudes correlate with a_i*a_j
-            if (!pass) allPassed = false;
-
-            _output.WriteLine($"{numCarriers,-6} {maxRelError,-20:E4} {meanRelError,-20:E4} {(pass ? "YES" : "NO"),-6}");
-        }
-
-        // The critical test: the RANKING of interactions should match
-        // Even if absolute magnitudes differ due to FFT normalization,
-        // the relative ordering must be the same
-        _output.WriteLine("");
-        _output.WriteLine("Ranking correlation test:");
-
-        int n = 4;
-        int fft = 1024;
-        var alloc = new CarrierAllocator();
-        var cars = alloc.AllocateCarriers(n, fft);
-        var b = new SpectralBus<double>(cars, fft);
-        var ext = new IMDExtractor<double>(cars, fft);
-
-        var amps = new Vector<double>(n);
-        amps[0] = 1.0; amps[1] = 3.0; amps[2] = 2.0; amps[3] = 0.5;
-
-        var enc = b.Encode(amps);
-        var sq = new Vector<double>(enc.Length);
-        for (int t = 0; t < enc.Length; t++) sq[t] = enc[t] * enc[t];
-        var imd = ext.ExtractPairwise(sq);
-
-        // Ground truth ranking: (1,1)=9 > (0,1)=3 > (1,2)=6 > ...
-        // Check: pair with largest amplitudes should have largest IMD product
-        double imd_1_1 = imd[1, 1]; // 3*3 = 9
-        double imd_3_3 = imd[3, 3]; // 0.5*0.5 = 0.25
-        Assert.True(imd_1_1 > imd_3_3,
-            $"Carrier 1 (amp=3) self-interaction ({imd_1_1:F4}) should exceed " +
-            $"carrier 3 (amp=0.5) self-interaction ({imd_3_3:F4})");
-
-        _output.WriteLine($"  amp[1]=3.0 self-IMD: {imd_1_1:F4}");
-        _output.WriteLine($"  amp[3]=0.5 self-IMD: {imd_3_3:F4}");
-        _output.WriteLine($"  Ranking preserved: {imd_1_1 > imd_3_3}");
-    }
+    // NOTE: Experiment 1 (IMD-Attention Numerical Equivalence) is now the
+    // canonical test IMDProducts_ProportionalToAmplitudeProducts_WithinOnePercent
+    // in IMDEquivalenceTests.cs, which validates all 4 carrier counts × 5
+    // amplitude patterns with 1% relative error tolerance. The previous
+    // weaker version in this file has been deleted as redundant.
 
     // ================================================================
     // PAPER EXPERIMENT 2: O(N log N) Complexity Scaling
@@ -214,101 +107,12 @@ public class PaperExperimentTests
         }
     }
 
-    // ================================================================
-    // PAPER EXPERIMENT 3: Hebbian Convergence to Wiener Filter
-    // Proves: Spectral Hebbian rule converges to Wiener optimal
-    // ================================================================
-
-    [Fact]
-    public void Experiment3_HebbianConvergence_ToWienerFilter()
-    {
-        _output.WriteLine("=== EXPERIMENT 3: Hebbian Convergence to Wiener Filter ===");
-
-        int n = 64;
-        var fft = new FastFourierTransform<double>();
-        var wiener = new WienerFilterRule<double>();
-
-        // Create input-target pair with known spectral relationship
-        var input = new Vector<double>(n);
-        var target = new Vector<double>(n);
-        for (int t = 0; t < n; t++)
-        {
-            input[t] = Math.Sin(2 * Math.PI * 3 * t / n) + 0.5 * Math.Cos(2 * Math.PI * 7 * t / n);
-            target[t] = 0.8 * Math.Sin(2 * Math.PI * 3 * t / n) + 1.5 * Math.Cos(2 * Math.PI * 7 * t / n);
-        }
-
-        // Compute Wiener optimal
-        var optimalFilter = wiener.ComputeOptimal(input, target);
-        double optimalMSE = wiener.ComputeMSE(input, target, optimalFilter);
-
-        // Run Hebbian learning and track convergence
-        var rule = new SpectralHebbianRule<double>(learningRate: 0.05, antiHebbianAlpha: 0.005);
-        var filter = new Vector<Complex<double>>(n);
-        for (int k = 0; k < n; k++) filter[k] = new Complex<double>(0, 0);
-
-        var inputSpec = fft.Forward(input);
-        var targetSpec = fft.Forward(target);
-
-        _output.WriteLine($"{"Iteration",-12} {"Filter MSE",-14} {"Wiener MSE",-14} {"Ratio",-10} {"Converging",-12}");
-        _output.WriteLine(new string('-', 62));
-
-        double prevError = double.MaxValue;
-        int convergingCount = 0;
-
-        for (int iter = 1; iter <= 200; iter++)
-        {
-            rule.Update(filter, inputSpec, targetSpec);
-
-            if (iter % 20 == 0 || iter <= 5)
-            {
-                // Apply current filter to compute MSE
-                var complexOps = MathHelper.GetNumericOperations<Complex<double>>();
-                var filteredSpec = new Vector<Complex<double>>(n);
-                for (int k = 0; k < n; k++)
-                    filteredSpec[k] = complexOps.Multiply(filter[k], inputSpec[k]);
-                var filtered = fft.Inverse(filteredSpec);
-
-                double mse = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double diff = filtered[i] - target[i];
-                    mse += diff * diff;
-                }
-                mse /= n;
-
-                double ratio = optimalMSE > 1e-15 ? mse / optimalMSE : double.NaN;
-                bool converging = mse < prevError;
-                if (converging) convergingCount++;
-
-                _output.WriteLine($"{iter,-12} {mse,-14:E4} {optimalMSE,-14:E4} {ratio,-10:F2} {(converging ? "YES" : "no"),-12}");
-                prevError = mse;
-            }
-        }
-
-        // Apply final filter
-        var finalComplexOps = MathHelper.GetNumericOperations<Complex<double>>();
-        var finalSpec = new Vector<Complex<double>>(n);
-        for (int k = 0; k < n; k++)
-            finalSpec[k] = finalComplexOps.Multiply(filter[k], inputSpec[k]);
-        var finalFiltered = fft.Inverse(finalSpec);
-
-        double finalMSE = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double diff = finalFiltered[i] - target[i];
-            finalMSE += diff * diff;
-        }
-        finalMSE /= n;
-
-        _output.WriteLine($"\nFinal Hebbian MSE: {finalMSE:E4}");
-        _output.WriteLine($"Wiener Optimal MSE: {optimalMSE:E4}");
-        _output.WriteLine($"Converging iterations: {convergingCount}/{10}");
-
-        // The Hebbian filter should produce a reasonable MSE
-        // (not necessarily as good as Wiener, but showing convergence direction)
-        Assert.True(convergingCount >= 3,
-            $"Hebbian should show convergence trend: only {convergingCount}/10 checkpoints improved");
-    }
+    // NOTE: Experiment 3 (Hebbian Convergence to Wiener) is now the canonical
+    // test HebbianConvergence_ARProcess_MatchesWienerOptimum in
+    // SpectralHebbianTests.cs, which validates AR(3), AR(5), AR(7) processes
+    // with rigorous assertions: filter L2 relative error < 10%, test MSE gap
+    // < 2% of baseline. The previous weaker version in this file (only
+    // "convergingCount >= 3" — a random walk would pass) has been deleted.
 
     // ================================================================
     // PAPER EXPERIMENT 4: Spectral Sparsity Sample Efficiency
@@ -392,6 +196,10 @@ public class PaperExperimentTests
         _output.WriteLine($"{"Scale Factor",-14} {"Cosine Similarity",-20} {"L2 Distance (norm)",-20}");
         _output.WriteLine(new string('-', 54));
 
+        double worstCosSim = 1.0;
+        double worstL2 = 0.0;
+        double worstScale = 1.0;
+
         foreach (double scale in new[] { 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 100.0 })
         {
             var scaled = new Vector<double>(n);
@@ -420,10 +228,23 @@ public class PaperExperimentTests
             l2 = Math.Sqrt(l2);
 
             _output.WriteLine($"{scale,-14:F1} {cosSim,-20:F8} {l2,-20:F8}");
+
+            if (cosSim < worstCosSim) { worstCosSim = cosSim; worstScale = scale; }
+            if (l2 > worstL2) worstL2 = l2;
         }
 
-        // The identity scale (1.0) should have perfect similarity
-        // Other scales should maintain high similarity
+        // Theorem-level assertions. The Mellin magnitude spectrum is
+        // mathematically invariant to amplitude scaling — if |M{a·f}(s)| = |M{f}(s)|
+        // exactly, then the normalized fingerprint cosine similarity should be 1.0.
+        // In the discrete implementation we allow a tiny floor for numerical noise.
+        Assert.True(worstCosSim > 0.999,
+            $"Mellin fingerprint scale invariance violated: worst cosine similarity " +
+            $"{worstCosSim:F6} at scale factor {worstScale:F1}. Expected > 0.999 for " +
+            $"pure amplitude scaling per Theorem 5.");
+
+        Assert.True(worstL2 < 0.05,
+            $"Mellin fingerprint L2 drift under scaling: worst normalized L2 distance " +
+            $"{worstL2:F6}. Expected < 0.05 for scale-invariant representation.");
     }
 
     // ================================================================
@@ -432,61 +253,93 @@ public class PaperExperimentTests
     // ================================================================
 
     [Fact]
-    public void Experiment6_ForecastingAccuracy_SyntheticPeriodic()
+    public void Experiment6_ForecastingAccuracy_BeatsPersistence()
     {
         _output.WriteLine("=== EXPERIMENT 6: Forecasting Accuracy ===");
 
-        var gen = new SyntheticSignalGenerator<double>(42);
-        int totalLength = 512;
-        int windowSize = 64;
-        int testStart = 400;
+        // Use the Hebbian path (Theorem 3 architecture) which actually trains
+        // a predictive filter. The OFDM/NLMS path doesn't learn forecasting
+        // because its output projection has too little capacity.
+        const int windowSize = 64;
+        const int trainSamples = 400;
+        const int testSamples = 100;
+        const double noiseStd = 0.3;
+        int seriesLen = windowSize + trainSamples + testSamples + 10;
 
-        var signal = gen.GenerateComposite(totalLength,
-            [3, 7, 13], [1.0, 0.5, 0.3], trendSlope: 0.05, noiseLevel: 0.1);
-
-        _output.WriteLine($"{"Nonlinearity",-20} {"MSE",-12} {"MAE",-12} {"Valid Preds",-12}");
-        _output.WriteLine(new string('-', 56));
-
-        foreach (var nonlinearity in new[] { NonlinearityType.SpectralGating, NonlinearityType.ModReLU, NonlinearityType.InstantaneousFreq })
+        // Generate a noisy periodic signal — the Wiener filter has a
+        // theoretical advantage over persistence on signals with noise
+        // (Wiener denoises, persistence can't).
+        var rng = new Random(42);
+        var signal = new Vector<double>(seriesLen);
+        for (int i = 0; i < seriesLen; i++)
         {
-            var options = new HREModelOptions
-            {
-                CarrierCount = 8, FftSize = 256,
-                Nonlinearity = nonlinearity,
-                UseMellinFourier = false, NumOFDMLayers = 1, NumAttentionLayers = 0,
-                Seed = 42
-            };
-
-            var forecaster = new HREForecaster<double>(windowSize, 1, options);
-
-            double totalSqErr = 0, totalAbsErr = 0;
-            int count = 0;
-
-            for (int t = testStart; t < totalLength - 1; t++)
-            {
-                if (t - windowSize < 0) continue;
-                var window = new Vector<double>(windowSize);
-                for (int i = 0; i < windowSize; i++) window[i] = signal[t - windowSize + i];
-
-                var pred = forecaster.Predict(window);
-                double p = pred[0], a = signal[t + 1];
-
-                if (!double.IsNaN(p) && !double.IsInfinity(p))
-                {
-                    totalSqErr += (p - a) * (p - a);
-                    totalAbsErr += Math.Abs(p - a);
-                    count++;
-                }
-            }
-
-            double mse = count > 0 ? totalSqErr / count : double.NaN;
-            double mae = count > 0 ? totalAbsErr / count : double.NaN;
-
-            _output.WriteLine($"{nonlinearity,-20} {mse,-12:F6} {mae,-12:F6} {count,-12}");
-
-            Assert.True(count > 50, $"{nonlinearity}: should produce at least 50 valid predictions, got {count}");
-            Assert.False(double.IsNaN(mse), $"{nonlinearity}: MSE should not be NaN");
+            double clean = Math.Cos(2 * Math.PI * i / 8)
+                         + 0.6 * Math.Sin(2 * Math.PI * i / 16)
+                         + 0.4 * Math.Cos(2 * Math.PI * i / 4);
+            double noise = noiseStd * Math.Sqrt(-2 * Math.Log(1 - rng.NextDouble()))
+                         * Math.Cos(2 * Math.PI * rng.NextDouble());
+            signal[i] = clean + noise;
         }
+
+        var options = new HREModelOptions
+        {
+            InputSize = windowSize,
+            OutputSize = 1,
+            UseSpectralHebbian = true,
+            UseMellinFourier = false,
+            NumOFDMLayers = 0,
+            NumAttentionLayers = 0,
+            HebbianLearningRate = 0.1,
+            AntiHebbianAlpha = 0.5,
+            Seed = 42
+        };
+
+        var model = new HREModel<double>(options);
+        model.SetTrainingMode(true);
+
+        // Train
+        for (int t = 0; t < trainSamples; t++)
+        {
+            var ctx = new Tensor<double>([windowSize]);
+            for (int j = 0; j < windowSize; j++) ctx[j] = signal[t + j];
+            var nextVal = new Tensor<double>([1]);
+            nextVal[0] = signal[t + windowSize];
+            model.Train(ctx, nextVal);
+        }
+
+        // Evaluate
+        model.SetTrainingMode(false);
+        double hreSqErr = 0, persistenceSqErr = 0;
+
+        for (int i = 0; i < testSamples; i++)
+        {
+            int t = trainSamples + i;
+            var ctx = new Tensor<double>([windowSize]);
+            for (int j = 0; j < windowSize; j++) ctx[j] = signal[t + j];
+
+            double trueNext = signal[t + windowSize];
+            double hrePred = model.Forward(ctx)[0];
+            double persistencePred = signal[t + windowSize - 1];
+
+            hreSqErr += (hrePred - trueNext) * (hrePred - trueNext);
+            persistenceSqErr += (persistencePred - trueNext) * (persistencePred - trueNext);
+        }
+
+        double hreMSE = hreSqErr / testSamples;
+        double persistenceMSE = persistenceSqErr / testSamples;
+        double ratio = hreMSE / persistenceMSE;
+
+        _output.WriteLine($"HRE (Hebbian) MSE:  {hreMSE:F6}");
+        _output.WriteLine($"Persistence MSE:    {persistenceMSE:F6}");
+        _output.WriteLine($"HRE / Persistence:  {ratio:F3} (<1.0 = HRE wins)");
+
+        // Assertion: on a noisy periodic signal, HRE's Hebbian-learned Wiener
+        // filter MUST beat persistence. This is the concrete forecasting
+        // claim — if it fails, the paper can't claim HRE is a better forecaster.
+        Assert.True(ratio < 1.0,
+            $"HRE MSE ({hreMSE:F6}) should beat persistence ({persistenceMSE:F6}). " +
+            $"Theorem 3 says Hebbian converges to Wiener, which dominates persistence " +
+            $"on any noisy signal.");
     }
 
     // ================================================================
@@ -586,7 +439,14 @@ public class PaperExperimentTests
         _output.WriteLine($"| Learning Method      | Spectral Hebbian | Backpropagation    |");
         _output.WriteLine($"| Lateral Communication| Yes (spectral)   | No (feed-forward)  |");
 
-        Assert.True(hreParams < denseParams);
-        Assert.True(inferenceMs < 100);
+        // Assert meaningful compression ratio for the paper table
+        double compressionRatio = (double)denseParams / hreParams;
+        Assert.True(compressionRatio >= 10.0,
+            $"HRE should achieve at least 10× parameter compression, got {compressionRatio:F1}×");
+        // Inference under 30ms on CI (an 8-carrier + 1 attention layer model with
+        // unoptimized FFTs). The paper's real perf story is "single-digit ms on
+        // optimized hardware," but CI variance makes tighter thresholds flaky.
+        Assert.True(inferenceMs < 30.0,
+            $"HRE inference should be under 30ms, got {inferenceMs:F3}ms");
     }
 }

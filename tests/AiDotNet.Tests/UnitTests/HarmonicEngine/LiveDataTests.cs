@@ -27,10 +27,13 @@ public class LiveDataTests
     }
 
     [Fact]
-    public void HRE_RealisticBrownianMotion_ProducesFinitePredictions()
+    public void HRE_RealisticBrownianMotion_ForecastsWithinPersistenceBallpark()
     {
-        // Geometric Brownian Motion — standard model for stock prices
-        // dS = mu*S*dt + sigma*S*dW
+        // Geometric Brownian Motion is a hard case for any forecaster because
+        // increments are independent — persistence is near-optimal. We assert
+        // that HRE's trained forecaster stays within 2× persistence MSE
+        // (meaningful "doesn't catastrophically fail" check) and uses the
+        // integrated Hebbian path so it actually trains.
         int n = 512;
         double mu = 0.05;    // 5% annual drift
         double sigma = 0.2;  // 20% annual volatility
@@ -46,52 +49,89 @@ public class LiveDataTests
             prices[t] = prices[t - 1] * Math.Exp((mu - 0.5 * sigma * sigma) * dt + sigma * Math.Sqrt(dt) * z);
         }
 
-        // Use HRE forecaster
+        // Use log returns instead of raw prices — GBM log returns are
+        // i.i.d. Gaussian, which is a fair benchmark for Wiener forecasting.
+        var logReturns = new Vector<double>(n - 1);
+        for (int t = 1; t < n; t++)
+            logReturns[t - 1] = Math.Log(prices[t] / prices[t - 1]);
+
         int windowSize = 64;
+        int trainEnd = logReturns.Length - 100;
+
         var options = new HREModelOptions
         {
-            CarrierCount = 8,
-            FftSize = 256,
-            Nonlinearity = NonlinearityType.SpectralGating,
+            InputSize = windowSize,
+            OutputSize = 1,
+            UseSpectralHebbian = true,
             UseMellinFourier = false,
-            NumOFDMLayers = 1,
-            NumAttentionLayers = 1,
+            NumOFDMLayers = 0,
+            NumAttentionLayers = 0,
+            HebbianLearningRate = 0.1,
+            AntiHebbianAlpha = 0.5,
             Seed = 42
         };
+        var model = new HREModel<double>(options);
+        model.SetTrainingMode(true);
 
-        var forecaster = new HREForecaster<double>(windowSize, 1, options);
-
-        int validPredictions = 0;
-        int nanPredictions = 0;
-
-        for (int t = windowSize; t < n - 1; t += 10)
+        for (int t = 0; t < trainEnd - windowSize; t++)
         {
-            var window = new Vector<double>(windowSize);
-            for (int i = 0; i < windowSize; i++) window[i] = prices[t - windowSize + i];
-
-            var pred = forecaster.Predict(window);
-
-            if (double.IsNaN(pred[0]) || double.IsInfinity(pred[0]))
-                nanPredictions++;
-            else
-                validPredictions++;
+            var ctx = new Tensor<double>([windowSize]);
+            for (int j = 0; j < windowSize; j++) ctx[j] = logReturns[t + j];
+            var target = new Tensor<double>([1]);
+            target[0] = logReturns[t + windowSize];
+            model.Train(ctx, target);
         }
 
-        _output.WriteLine($"Valid predictions: {validPredictions}, NaN predictions: {nanPredictions}");
-        Assert.True(validPredictions > nanPredictions,
-            $"Most predictions should be valid: {validPredictions} valid vs {nanPredictions} NaN");
+        model.SetTrainingMode(false);
+        double hreSqErr = 0, persistenceSqErr = 0, zeroSqErr = 0;
+        int count = 0;
+        for (int t = trainEnd; t < logReturns.Length - 1; t++)
+        {
+            var ctx = new Tensor<double>([windowSize]);
+            for (int j = 0; j < windowSize; j++) ctx[j] = logReturns[t - windowSize + j];
+            double trueNext = logReturns[t];
+            double hrePred = model.Forward(ctx)[0];
+            double persistencePred = logReturns[t - 1];
+
+            hreSqErr += (hrePred - trueNext) * (hrePred - trueNext);
+            persistenceSqErr += (persistencePred - trueNext) * (persistencePred - trueNext);
+            zeroSqErr += trueNext * trueNext;
+            count++;
+        }
+
+        double hreMSE = hreSqErr / count;
+        double persistenceMSE = persistenceSqErr / count;
+        double zeroMSE = zeroSqErr / count;
+
+        _output.WriteLine($"GBM log-return forecasting ({count} predictions):");
+        _output.WriteLine($"  HRE MSE:          {hreMSE:E4}");
+        _output.WriteLine($"  Persistence MSE:  {persistenceMSE:E4}");
+        _output.WriteLine($"  Zero-pred MSE:    {zeroMSE:E4}");
+        _output.WriteLine($"  HRE / Persist:    {hreMSE / persistenceMSE:F2}");
+
+        // GBM log returns are genuinely i.i.d., so the Bayes-optimal predictor
+        // is the mean (which is ~0 here). Neither persistence nor HRE can beat
+        // zero-prediction in expectation. The meaningful assertion is that HRE
+        // beats the naïve persistence baseline — which it should, because
+        // persistence uses an un-correlated previous sample while HRE's Wiener
+        // filter produces an estimate close to the correct zero mean.
+        Assert.True(hreMSE < persistenceMSE,
+            $"HRE MSE ({hreMSE:E4}) should beat persistence MSE ({persistenceMSE:E4}) " +
+            $"on GBM log returns. Got ratio {hreMSE / persistenceMSE:F3}.");
     }
 
     [Fact]
-    public void HRE_MeanRevertingProcess_DetectsPeriodicComponent()
+    public void HRE_MeanRevertingProcess_ForecastsCyclicalComponent()
     {
-        // Ornstein-Uhlenbeck process with known periodic component
-        // This is a realistic model for pairs-trading spread or interest rates
-        int n = 256;
-        double theta = 0.5;  // Mean reversion speed
-        double mu = 100.0;   // Long-term mean
-        double sigma = 2.0;  // Volatility
-        double period = 32;  // Known cyclical component
+        // Ornstein-Uhlenbeck process with a known cyclical component — a
+        // realistic model for pairs-trading spread or interest rates. We train
+        // HRE on the series and verify it learns to exploit the cyclical
+        // structure, beating persistence on next-step prediction.
+        int n = 1024;
+        double theta = 0.8;  // faster mean reversion to track the cyclical component
+        double mu = 100.0;
+        double sigma = 0.2;  // much weaker noise so the cyclical structure dominates
+        int period = 32;
         var rng = new Random(42);
 
         var series = new Vector<double>(n);
@@ -99,91 +139,147 @@ public class LiveDataTests
         for (int t = 1; t < n; t++)
         {
             double z = Math.Sqrt(-2 * Math.Log(1 - rng.NextDouble())) * Math.Cos(2 * Math.PI * rng.NextDouble());
-            double cyclical = 5.0 * Math.Sin(2 * Math.PI * t / period);
+            double cyclical = 20.0 * Math.Sin(2 * Math.PI * t / period); // large cyclical signal
             series[t] = series[t - 1] + theta * (mu + cyclical - series[t - 1]) + sigma * z;
         }
 
-        // Use spectral analysis to detect the periodic component
-        int windowSize = 128;
-        var fft = new FastFourierTransform<double>();
-        var window = new Vector<double>(windowSize);
-        for (int i = 0; i < windowSize; i++) window[i] = series[64 + i];
+        // Detrend by subtracting the mean so the Hebbian filter operates on
+        // a zero-mean signal (matches Wiener filter assumptions)
+        double seriesMean = 0;
+        for (int t = 0; t < n; t++) seriesMean += series[t];
+        seriesMean /= n;
+        for (int t = 0; t < n; t++) series[t] -= seriesMean;
 
-        var spectrum = fft.Forward(window);
+        int windowSize = 64;
+        int trainEnd = n - 100;
 
-        // Find peak frequency (excluding DC)
-        int peakBin = 1;
-        double peakMag = 0;
-        for (int k = 1; k < windowSize / 2; k++)
+        var options = new HREModelOptions
         {
-            double mag = spectrum[k].Magnitude;
-            if (mag > peakMag)
-            {
-                peakMag = mag;
-                peakBin = k;
-            }
+            InputSize = windowSize,
+            OutputSize = 1,
+            UseSpectralHebbian = true,
+            UseMellinFourier = false,
+            NumOFDMLayers = 0,
+            NumAttentionLayers = 0,
+            HebbianLearningRate = 0.1,
+            AntiHebbianAlpha = 0.5,
+            Seed = 42
+        };
+        var model = new HREModel<double>(options);
+        model.SetTrainingMode(true);
+
+        for (int t = 0; t < trainEnd - windowSize; t++)
+        {
+            var ctx = new Tensor<double>([windowSize]);
+            for (int j = 0; j < windowSize; j++) ctx[j] = series[t + j];
+            var target = new Tensor<double>([1]);
+            target[0] = series[t + windowSize];
+            model.Train(ctx, target);
         }
 
-        double detectedPeriod = (double)windowSize / peakBin;
-        _output.WriteLine($"True period: {period}, Detected period: {detectedPeriod:F1} (bin {peakBin})");
+        model.SetTrainingMode(false);
+        double hreSqErr = 0, persistenceSqErr = 0;
+        int count = 0;
+        for (int t = trainEnd; t < n - 1; t++)
+        {
+            var ctx = new Tensor<double>([windowSize]);
+            for (int j = 0; j < windowSize; j++) ctx[j] = series[t - windowSize + j];
+            double trueNext = series[t];
+            double hrePred = model.Forward(ctx)[0];
+            double persistencePred = series[t - 1];
 
-        // The spectral peak should be near the true period
-        Assert.True(Math.Abs(detectedPeriod - period) < period * 0.3,
-            $"Detected period ({detectedPeriod:F1}) should be near true period ({period})");
+            hreSqErr += (hrePred - trueNext) * (hrePred - trueNext);
+            persistenceSqErr += (persistencePred - trueNext) * (persistencePred - trueNext);
+            count++;
+        }
+        double hreMSE = hreSqErr / count;
+        double persistenceMSE = persistenceSqErr / count;
+
+        _output.WriteLine($"OU + period-{period} cyclical ({count} predictions):");
+        _output.WriteLine($"  HRE MSE:          {hreMSE:F4}");
+        _output.WriteLine($"  Persistence MSE:  {persistenceMSE:F4}");
+        _output.WriteLine($"  Ratio:            {hreMSE / persistenceMSE:F3}");
+
+        // With a known cyclical component, Wiener-trained HRE should beat
+        // persistence because it learns to anticipate the cycle.
+        Assert.True(hreMSE < persistenceMSE,
+            $"HRE MSE ({hreMSE:F4}) should beat persistence ({persistenceMSE:F4}) " +
+            $"on a signal with a learnable cyclical component.");
     }
 
     [Fact]
-    public void HRE_RealisticOHLCV_FullPipelineRuns()
+    public void HRE_RealisticOHLCV_FullPipelineBenchmark()
     {
-        // Generate realistic OHLCV data with known regime changes
+        // Generate realistic OHLCV data with known regime changes and
+        // seasonal components. Verify the full HRE benchmark suite produces
+        // meaningful results (finite MSE, bounded latency, and that HRE
+        // produces a valid prediction count for the held-out test set).
         int numBars = 400;
         var marketData = GenerateRealisticOHLCV(numBars);
 
-        // Extract close prices
         var closes = new Vector<double>(numBars);
         for (int i = 0; i < numBars; i++) closes[i] = marketData[i].Close;
 
-        // Run full benchmark suite
         var suite = new HREBenchmarkSuite<double>();
         var results = suite.RunForecasterBenchmark(closes, windowSize: 64, testFraction: 0.2);
 
+        Assert.Equal(3, results.Count); // ModReLU, SpectralGating, InstantaneousFreq
+
+        // Compute persistence baseline for MAE comparison
+        int trainEnd = (int)(numBars * 0.8);
+        double persistenceSumAbs = 0;
+        int persistenceCount = 0;
+        for (int t = trainEnd; t < numBars; t++)
+        {
+            persistenceSumAbs += Math.Abs(closes[t] - closes[t - 1]);
+            persistenceCount++;
+        }
+        double persistenceMAE = persistenceSumAbs / persistenceCount;
+
+        _output.WriteLine($"Persistence baseline MAE: {persistenceMAE:F4}");
+        _output.WriteLine($"{"Config",-22} {"MSE",-12} {"MAE",-12} {"Preds",-8} {"Latency",-10}");
+        _output.WriteLine(new string('-', 64));
+
         foreach (var result in results)
         {
-            _output.WriteLine(result.ToString());
-            Assert.True(result.PredictionCount > 0, $"{result.Name} should produce predictions");
+            _output.WriteLine($"{result.Name,-22} {result.MSE,-12:F4} {result.MAE,-12:F4} {result.PredictionCount,-8} {result.InferenceLatencyMs,-10:F2}");
+
+            Assert.True(result.PredictionCount >= 40,
+                $"{result.Name} should produce at least 40 predictions on a 80/20 split of 400 bars, got {result.PredictionCount}");
             Assert.False(double.IsNaN(result.MSE), $"{result.Name} MSE should not be NaN");
+            Assert.False(double.IsInfinity(result.MSE), $"{result.Name} MSE should not be Infinity");
             Assert.True(result.InferenceLatencyMs < 500, $"{result.Name} latency {result.InferenceLatencyMs:F1}ms should be under 500ms");
         }
     }
 
     [Fact]
-    public void HebbianLearning_AR5Process_ConvergesToWiener()
+    public void HebbianLearning_AR5Process_MatchesWienerFilter()
     {
-        // AR(5) process with known coefficients — tests Theorem 3 with real-ish data
+        // AR(5) process with known coefficients — tests Theorem 3 with realistic data.
+        // Uses the canonical α=0.5, η=0.1 settings where the fixed point is
+        // H_eq = (1/α) · H_wiener, so scaled_hebbian = α · H_eq = H_wiener.
         var gen = new SyntheticSignalGenerator<double>(42);
-        double[] arCoeffs = [0.5, -0.3, 0.2, -0.1, 0.05]; // Stable AR(5)
+        double[] arCoeffs = [0.5, -0.3, 0.2, -0.1, 0.05];
 
-        int n = 256;
-        var signal = gen.GenerateAR(n, arCoeffs, noiseLevel: 0.1);
-
-        // Create input-target pairs: input = x[t-64:t], target = x[t:t+64]
         int segLen = 64;
+        var signal = gen.GenerateAR(segLen + 1, arCoeffs, noiseLevel: 0.1);
+
+        // Input x[t], target x[t+1] — next-step prediction
         var input = new Vector<double>(segLen);
         var target = new Vector<double>(segLen);
         for (int i = 0; i < segLen; i++)
         {
             input[i] = signal[i];
-            target[i] = signal[i + segLen];
+            target[i] = signal[i + 1];
         }
 
-        // Compute Wiener optimal
         var wiener = new WienerFilterRule<double>();
         var optimalFilter = wiener.ComputeOptimal(input, target);
-        double optimalMSE = wiener.ComputeMSE(input, target, optimalFilter);
 
-        // Train Hebbian
+        const double alpha = 0.5;
+        const double eta = 0.1;
+        var rule = new SpectralHebbianRule<double>(learningRate: eta, antiHebbianAlpha: alpha);
         var fft = new FastFourierTransform<double>();
-        var rule = new SpectralHebbianRule<double>(learningRate: 0.05, antiHebbianAlpha: 0.005);
 
         var filter = new Vector<Complex<double>>(segLen);
         for (int k = 0; k < segLen; k++) filter[k] = new Complex<double>(0, 0);
@@ -191,35 +287,40 @@ public class LiveDataTests
         var inputSpec = fft.Forward(input);
         var targetSpec = fft.Forward(target);
 
-        for (int iter = 0; iter < 100; iter++)
+        // 300 iterations at rate (1 - ηα) = 0.95 → ~2e-7 residual
+        for (int iter = 0; iter < 300; iter++)
         {
             rule.Update(filter, inputSpec, targetSpec);
         }
 
-        // Apply Hebbian filter
-        var complexOps = MathHelper.GetNumericOperations<Complex<double>>();
-        var filteredSpec = new Vector<Complex<double>>(segLen);
+        // Apply α scaling to get Wiener-comparable filter
+        var scaledHebbian = new Vector<Complex<double>>(segLen);
         for (int k = 0; k < segLen; k++)
         {
-            filteredSpec[k] = complexOps.Multiply(filter[k], inputSpec[k]);
+            scaledHebbian[k] = new Complex<double>(
+                filter[k].Real * alpha,
+                filter[k].Imaginary * alpha);
         }
-        var filtered = fft.Inverse(filteredSpec);
 
-        double hebbianMSE = 0;
-        for (int i = 0; i < segLen; i++)
+        // Compare filters directly in frequency space (L2 norm)
+        double diffNormSq = 0, wienerNormSq = 0;
+        for (int k = 0; k < segLen; k++)
         {
-            double diff = filtered[i] - target[i];
-            hebbianMSE += diff * diff;
+            double dr = scaledHebbian[k].Real - optimalFilter[k].Real;
+            double di = scaledHebbian[k].Imaginary - optimalFilter[k].Imaginary;
+            diffNormSq += dr * dr + di * di;
+            wienerNormSq += optimalFilter[k].Real * optimalFilter[k].Real
+                          + optimalFilter[k].Imaginary * optimalFilter[k].Imaginary;
         }
-        hebbianMSE /= segLen;
+        double filterRelativeError = Math.Sqrt(diffNormSq / Math.Max(wienerNormSq, 1e-12));
 
-        _output.WriteLine($"Wiener MSE:  {optimalMSE:E4}");
-        _output.WriteLine($"Hebbian MSE: {hebbianMSE:E4}");
-        _output.WriteLine($"Ratio:       {hebbianMSE / (optimalMSE + 1e-15):F2}x");
+        _output.WriteLine($"Filter L2 relative error: {filterRelativeError:P3}");
 
-        // Hebbian should be in the same ballpark as Wiener (within 100x for this setup)
-        Assert.True(hebbianMSE < optimalMSE * 100 + 1.0,
-            $"Hebbian MSE ({hebbianMSE:E4}) should be within 100x of Wiener ({optimalMSE:E4})");
+        // Strict tolerance: after 300 iterations with geometric rate 0.95,
+        // the Hebbian filter should match Wiener within 10% L2 error.
+        Assert.True(filterRelativeError < 0.10,
+            $"Theorem 3: Hebbian filter should match Wiener within 10% L2 relative error, " +
+            $"got {filterRelativeError:P3}.");
     }
 
     [Fact]
@@ -284,44 +385,68 @@ public class LiveDataTests
     }
 
     [Fact]
-    public void HREModel_TrainPredict_FullCycle()
+    public void HREModel_TrainPredict_LearningReducesPredictionError()
     {
-        // End-to-end: Train and Predict using the IFullModel interface
+        // End-to-end: verify that training actually improves prediction
+        // accuracy on a learnable signal. Compare prediction error before
+        // and after training — it must decrease meaningfully.
+        const int windowSize = 64;
+        const int trainSamples = 200;
+
         var options = new HREModelOptions
         {
-            InputSize = 64,
+            InputSize = windowSize,
             OutputSize = 1,
-            CarrierCount = 8,
-            FftSize = 256,
+            UseSpectralHebbian = true,
             UseMellinFourier = false,
-            NumOFDMLayers = 1,
+            NumOFDMLayers = 0,
             NumAttentionLayers = 0,
-            HebbianLearningRate = 0.01,
-            Seed = 42
+            HebbianLearningRate = 0.1,
+            AntiHebbianAlpha = 0.5,
+            Seed = 42,
         };
 
         var model = new HREModel<double>(options);
 
-        // Training data
-        var input = new Tensor<double>([64]);
-        var target = new Tensor<double>([1]);
-        for (int i = 0; i < 64; i++)
+        // Generate a deterministic periodic signal — easy for Hebbian to learn
+        int seriesLen = windowSize + trainSamples + 50;
+        var series = new Vector<double>(seriesLen);
+        for (int i = 0; i < seriesLen; i++)
         {
-            input[i] = Math.Sin(2 * Math.PI * 5 * i / 64);
+            series[i] = Math.Cos(2 * Math.PI * i / 8) + 0.5 * Math.Sin(2 * Math.PI * i / 16);
         }
-        target[0] = 0.5; // Arbitrary target
+
+        // Measure error on a test sample BEFORE training
+        var testCtx = new Tensor<double>([windowSize]);
+        for (int j = 0; j < windowSize; j++) testCtx[j] = series[trainSamples + j];
+        double testTrue = series[trainSamples + windowSize];
+
+        model.SetTrainingMode(false);
+        double preTrainError = Math.Abs(model.Forward(testCtx)[0] - testTrue);
 
         // Train
-        model.Train(input, target);
+        model.SetTrainingMode(true);
+        for (int t = 0; t < trainSamples; t++)
+        {
+            var ctx = new Tensor<double>([windowSize]);
+            for (int j = 0; j < windowSize; j++) ctx[j] = series[t + j];
+            var target = new Tensor<double>([1]);
+            target[0] = series[t + windowSize];
+            model.Train(ctx, target);
+        }
 
-        // Predict
-        var prediction = model.Predict(input);
+        // Measure error AFTER training
+        model.SetTrainingMode(false);
+        double postTrainError = Math.Abs(model.Forward(testCtx)[0] - testTrue);
 
-        Assert.Equal(1, prediction.Length);
-        Assert.False(double.IsNaN(prediction[0]));
-        Assert.False(double.IsInfinity(prediction[0]));
+        _output.WriteLine($"Pre-train test error:  {preTrainError:F6}");
+        _output.WriteLine($"Post-train test error: {postTrainError:F6}");
+        _output.WriteLine($"Improvement ratio:     {postTrainError / Math.Max(preTrainError, 1e-12):F4}");
 
-        _output.WriteLine($"Prediction: {prediction[0]:F6}");
+        // Assertion: post-training error must be at least 50% lower than
+        // pre-training error. This confirms training actually works.
+        Assert.True(postTrainError < preTrainError * 0.5,
+            $"Training should reduce test error by >50%. Pre: {preTrainError:F6}, Post: {postTrainError:F6}.");
     }
 
     [Fact]

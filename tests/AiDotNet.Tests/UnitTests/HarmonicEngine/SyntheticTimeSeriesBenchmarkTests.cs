@@ -25,9 +25,11 @@ public class SyntheticTimeSeriesBenchmarkTests
     }
 
     [Fact]
-    public void HREForecaster_SyntheticSine_ProducesFinitePredictions()
+    public void HREForecaster_SyntheticSine_PredictionBoundedByInput()
     {
-        // Generate synthetic: sum of 3 sinusoids + trend
+        // Untrained forecaster should produce bounded predictions when fed a
+        // unit-amplitude periodic signal. This is a sanity check for the
+        // model's forward pass, not a learning check.
         int totalLength = 256;
         int windowSize = 64;
         var timeSeries = GenerateSyntheticTimeSeries(totalLength);
@@ -45,11 +47,12 @@ public class SyntheticTimeSeriesBenchmarkTests
 
         var forecaster = new HREForecaster<double>(windowSize, 1, options);
 
-        // Predict using a window from the middle of the series
         var window = new Vector<double>(windowSize);
+        double inputMax = 0;
         for (int i = 0; i < windowSize; i++)
         {
             window[i] = timeSeries[100 + i];
+            if (Math.Abs(window[i]) > inputMax) inputMax = Math.Abs(window[i]);
         }
 
         var prediction = forecaster.Predict(window);
@@ -58,11 +61,17 @@ public class SyntheticTimeSeriesBenchmarkTests
         Assert.False(double.IsNaN(prediction[0]), "Prediction should not be NaN");
         Assert.False(double.IsInfinity(prediction[0]), "Prediction should not be Infinity");
 
-        _output.WriteLine($"Predicted: {prediction[0]:F4}, Actual: {timeSeries[164]:F4}");
+        // Prediction magnitude should be at most 20× the input max for an
+        // untrained model with random output projection — a model that
+        // outputs 10^6 on a bounded input is broken.
+        Assert.True(Math.Abs(prediction[0]) < 20.0 * inputMax,
+            $"Prediction ({prediction[0]:F4}) should be bounded by ~20× input max ({inputMax:F4}).");
+
+        _output.WriteLine($"Predicted: {prediction[0]:F4}, Actual: {timeSeries[164]:F4}, InputMax: {inputMax:F4}");
     }
 
     [Fact]
-    public void HREForecaster_AutoregressiveMultiStep_ProducesFiniteSequence()
+    public void HREForecaster_AutoregressiveMultiStep_StaysBounded()
     {
         int totalLength = 256;
         int windowSize = 64;
@@ -91,10 +100,20 @@ public class SyntheticTimeSeriesBenchmarkTests
         var predictions = forecaster.PredictAutoregressive(initialWindow, predictSteps);
 
         Assert.Equal(predictSteps, predictions.Length);
+
+        // Measure how bounded the autoregressive predictions stay
+        // compared to the input signal magnitude. A stable forecaster
+        // should not blow up under autoregressive feedback.
+        double inputMax = 0;
+        for (int i = 0; i < windowSize; i++)
+            if (Math.Abs(initialWindow[i]) > inputMax) inputMax = Math.Abs(initialWindow[i]);
+
+        double predMax = 0;
         for (int i = 0; i < predictSteps; i++)
         {
             Assert.False(double.IsNaN(predictions[i]), $"Prediction[{i}] should not be NaN");
             Assert.False(double.IsInfinity(predictions[i]), $"Prediction[{i}] should not be Infinity");
+            if (Math.Abs(predictions[i]) > predMax) predMax = Math.Abs(predictions[i]);
         }
 
         _output.WriteLine("Autoregressive predictions (first 8):");
@@ -102,6 +121,12 @@ public class SyntheticTimeSeriesBenchmarkTests
         {
             _output.WriteLine($"  Step {i}: predicted={predictions[i]:F4}, actual={timeSeries[164 + i]:F4}");
         }
+        _output.WriteLine($"Input max: {inputMax:F4}, Pred max: {predMax:F4}");
+
+        // Stability check: autoregressive predictions should not grow
+        // unboundedly relative to the input scale.
+        Assert.True(predMax < 50.0 * inputMax,
+            $"Autoregressive forecast exploded: pred max {predMax:F4} vs input max {inputMax:F4}.");
     }
 
     [Fact]

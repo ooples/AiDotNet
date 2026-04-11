@@ -50,34 +50,78 @@ public class InvarianceTests
             dotProduct += (fp1[i] / norm1) * (fp2[i] / norm2);
         }
 
-        // Scale-invariant fingerprints should have high cosine similarity
-        Assert.True(dotProduct > 0.9,
-            $"Cosine similarity between original and 2x scaled fingerprints is {dotProduct}, expected > 0.9");
+        // Scale-invariant fingerprints should have very high cosine similarity
+        // (near 1.0 for pure amplitude scaling). 0.9 was too loose — the
+        // transform is mathematically scale-invariant modulo numerical noise.
+        Assert.True(dotProduct > 0.999,
+            $"Cosine similarity between original and 2x scaled fingerprints is {dotProduct:F6}, expected > 0.999");
     }
 
     [Fact]
-    public void ScaleShiftInvariantFingerprint_OutputsAreNonZero()
+    public void ScaleShiftInvariantFingerprint_ScaledAndShifted_AreSimilar()
     {
+        // The Mellin-Fourier (scale + shift) fingerprint should be invariant
+        // to both amplitude scaling AND time shifts. Verify by generating a
+        // base signal, a scaled version, and a shifted version — all three
+        // should have similar fingerprints.
         var mellin = new MellinTransform<double>();
         int n = 64;
 
-        var signal = new Vector<double>(n);
+        var baseSignal = new Vector<double>(n);
+        for (int i = 0; i < n; i++)
+            baseSignal[i] = Math.Cos(2 * Math.PI * 5 * i / n);
+
+        // Scaled version: 3×
+        var scaled = new Vector<double>(n);
+        for (int i = 0; i < n; i++) scaled[i] = 3.0 * baseSignal[i];
+
+        // Circularly shifted version
+        int shift = 10;
+        var shifted = new Vector<double>(n);
+        for (int i = 0; i < n; i++) shifted[i] = baseSignal[(i + shift) % n];
+
+        var fpBase = mellin.ScaleShiftInvariantFingerprint(baseSignal);
+        var fpScaled = mellin.ScaleShiftInvariantFingerprint(scaled);
+        var fpShifted = mellin.ScaleShiftInvariantFingerprint(shifted);
+
+        Assert.Equal(n, fpBase.Length);
+
+        // Each fingerprint should have non-zero energy
+        double baseEnergy = 0, scaledEnergy = 0, shiftedEnergy = 0;
         for (int i = 0; i < n; i++)
         {
-            signal[i] = Math.Cos(2 * Math.PI * 5 * i / n);
+            baseEnergy += fpBase[i] * fpBase[i];
+            scaledEnergy += fpScaled[i] * fpScaled[i];
+            shiftedEnergy += fpShifted[i] * fpShifted[i];
         }
+        Assert.True(baseEnergy > 0, "Base fingerprint should have non-zero energy");
+        Assert.True(scaledEnergy > 0, "Scaled fingerprint should have non-zero energy");
+        Assert.True(shiftedEnergy > 0, "Shifted fingerprint should have non-zero energy");
 
-        var fingerprint = mellin.ScaleShiftInvariantFingerprint(signal);
-
-        Assert.Equal(n, fingerprint.Length);
-
-        // At least some components should be non-zero
-        double totalEnergy = 0;
-        for (int i = 0; i < n; i++)
+        // Cosine similarity between base and each transformed version
+        static double CosineSim(Vector<double> a, Vector<double> b, int n)
         {
-            totalEnergy += fingerprint[i] * fingerprint[i];
+            double dot = 0, na = 0, nb = 0;
+            for (int i = 0; i < n; i++)
+            {
+                dot += a[i] * b[i];
+                na += a[i] * a[i];
+                nb += b[i] * b[i];
+            }
+            return dot / (Math.Sqrt(na) * Math.Sqrt(nb) + 1e-15);
         }
-        Assert.True(totalEnergy > 0, "Fingerprint should have non-zero energy");
+
+        double simScaled = CosineSim(fpBase, fpScaled, n);
+        double simShifted = CosineSim(fpBase, fpShifted, n);
+
+        // Scaling should be handled perfectly by the Mellin part
+        Assert.True(simScaled > 0.999,
+            $"Scaled fingerprint cosine similarity {simScaled:F6} should be > 0.999");
+
+        // Shifts are handled by the outer FFT magnitude. This is less tight
+        // than pure scaling because of discrete-time boundary effects.
+        Assert.True(simShifted > 0.9,
+            $"Shifted fingerprint cosine similarity {simShifted:F6} should be > 0.9");
     }
 
     [Fact]

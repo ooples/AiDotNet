@@ -18,7 +18,7 @@ public class HREModelSmokeTests
     [InlineData(NonlinearityType.ModReLU)]
     [InlineData(NonlinearityType.SpectralGating)]
     [InlineData(NonlinearityType.InstantaneousFreq)]
-    public void HREModel_ForwardPass_ProducesValidOutput(NonlinearityType nonlinearity)
+    public void HREModel_ForwardPass_ProducesNonTrivialOutput(NonlinearityType nonlinearity)
     {
         // Arrange
         var options = new HREModelOptions
@@ -28,7 +28,7 @@ public class HREModelSmokeTests
             CarrierCount = 8,
             FftSize = 256,
             Nonlinearity = nonlinearity,
-            UseMellinFourier = false, // Skip for speed
+            UseMellinFourier = false,
             NumOFDMLayers = 1,
             NumAttentionLayers = 1,
             Seed = 42
@@ -44,15 +44,68 @@ public class HREModelSmokeTests
         // Act
         var output = model.Forward(input);
 
-        // Assert
+        // Assert: valid + non-trivial magnitude + different input produces different output
         Assert.Equal(1, output.Length);
         Assert.False(double.IsNaN(output[0]), "Output should not be NaN");
         Assert.False(double.IsInfinity(output[0]), "Output should not be Infinity");
+        Assert.True(Math.Abs(output[0]) > 1e-8,
+            $"Output magnitude {Math.Abs(output[0]):E4} should be non-trivial — a model that " +
+            $"always outputs 0 would pass a pure !IsNaN check.");
+
+        // A different input shape should produce a different output —
+        // confirms the model is actually using its input.
+        var input2 = new Tensor<double>([64]);
+        for (int i = 0; i < 64; i++)
+        {
+            input2[i] = Math.Cos(2 * Math.PI * 7 * i / 64);
+        }
+        var output2 = model.Forward(input2);
+        Assert.True(Math.Abs(output[0] - output2[0]) > 1e-8,
+            $"Different inputs should produce different outputs, got {output[0]:F6} vs {output2[0]:F6}.");
     }
 
     [Fact]
-    public void HREModel_WithMellinFourier_ProducesValidOutput()
+    public void HREModel_WithMellinFourier_FingerprintIsScaleInvariant()
     {
+        // With UseMellinFourier=true, the first stage of the model is a
+        // scale-invariant fingerprint. We validate this by running two
+        // signals that differ only by amplitude scaling through the
+        // MellinFourier layer directly and comparing the fingerprints.
+        // (The full HREModel's random output projection breaks the
+        // invariance at the output level, so we test the layer directly.)
+        int windowSize = 64;
+        var mellin = new AiDotNet.HarmonicEngine.Transforms.MellinTransform<double>();
+
+        var signal = new Vector<double>(windowSize);
+        for (int i = 0; i < windowSize; i++)
+        {
+            signal[i] = Math.Cos(2 * Math.PI * 5 * i / windowSize)
+                      + 0.3 * Math.Sin(2 * Math.PI * 11 * i / windowSize);
+        }
+
+        // Scale by 3×
+        var scaled = new Vector<double>(windowSize);
+        for (int i = 0; i < windowSize; i++) scaled[i] = 3.0 * signal[i];
+
+        var fp1 = mellin.ScaleInvariantFingerprint(signal);
+        var fp2 = mellin.ScaleInvariantFingerprint(scaled);
+
+        // Cosine similarity should be ~1.0 for pure amplitude scaling
+        double dot = 0, norm1 = 0, norm2 = 0;
+        for (int i = 0; i < windowSize; i++)
+        {
+            dot += fp1[i] * fp2[i];
+            norm1 += fp1[i] * fp1[i];
+            norm2 += fp2[i] * fp2[i];
+        }
+        double cosSim = dot / (Math.Sqrt(norm1) * Math.Sqrt(norm2) + 1e-15);
+
+        Assert.True(cosSim > 0.999,
+            $"Mellin fingerprint should be scale-invariant under 3× amplitude scaling. " +
+            $"Got cosine similarity {cosSim:F6}, expected > 0.999.");
+
+        // Also verify the full HREModel with MellinFourier runs cleanly and
+        // produces the expected output shape (this is the "smoke test" part)
         var options = new HREModelOptions
         {
             InputSize = 64,
@@ -67,11 +120,7 @@ public class HREModelSmokeTests
 
         var model = new HREModel<double>(options);
         var input = new Tensor<double>([64]);
-        for (int i = 0; i < 64; i++)
-        {
-            input[i] = Math.Cos(2 * Math.PI * 5 * i / 64);
-        }
-
+        for (int i = 0; i < 64; i++) input[i] = signal[i];
         var output = model.Forward(input);
 
         Assert.Equal(2, output.Length);
@@ -83,7 +132,7 @@ public class HREModelSmokeTests
     }
 
     [Fact]
-    public void HREForecaster_PredictSyntheticSine_ProducesValidOutput()
+    public void HREForecaster_PredictSyntheticSine_ProducesBoundedPrediction()
     {
         var options = new HREModelOptions
         {
@@ -98,6 +147,9 @@ public class HREModelSmokeTests
         var forecaster = new HREForecaster<double>(
             windowSize: 64, predictionHorizon: 1, options: options);
 
+        // Sine wave values are in [-1, 1]. An untrained model shouldn't
+        // produce NaN, Infinity, OR wildly out-of-range values — if the
+        // prediction is 10⁶ for a unit-amplitude sine input, something's wrong.
         var window = new Vector<double>(64);
         for (int i = 0; i < 64; i++)
         {
@@ -108,6 +160,10 @@ public class HREModelSmokeTests
 
         Assert.Equal(1, prediction.Length);
         Assert.False(double.IsNaN(prediction[0]), "Prediction should not be NaN");
+        Assert.False(double.IsInfinity(prediction[0]), "Prediction should not be Infinity");
+        Assert.True(Math.Abs(prediction[0]) < 100.0,
+            $"Prediction magnitude {Math.Abs(prediction[0]):F4} should be bounded — " +
+            $"a unit-amplitude sine input should not produce predictions >100.");
     }
 
     [Fact]
@@ -131,7 +187,7 @@ public class HREModelSmokeTests
     }
 
     [Fact]
-    public void HREModel_ParameterCount_IsReasonable()
+    public void HREModel_ParameterCount_AtLeast20xCompressionVsDense()
     {
         var options = new HREModelOptions
         {
@@ -147,11 +203,17 @@ public class HREModelSmokeTests
 
         var model = new HREModel<double>(options);
 
-        // HRE should have very few parameters compared to equivalent dense network
-        // Dense network: 64 * 16 + 16 * 16 + 16 * 1 = 1296
-        // HRE: mostly from output projection = 16 * 1 + 1 = 17
-        Assert.True(model.ParameterCount < 100,
-            $"HRE should have very few parameters, got {model.ParameterCount}");
+        // Equivalent dense MLP: 64 inputs → 16 hidden → 16 hidden → 1 output
+        // with biases: 64×16+16 + 16×16+16 + 16×1+1 = 1040+272+17 = 1329
+        int denseParams = 64 * 16 + 16 + 16 * 16 + 16 + 16 * 1 + 1;
+        int hreParams = model.ParameterCount;
+        double compressionRatio = (double)denseParams / hreParams;
+
+        // Assert at least 20× compression — this is the real claim of HRE's
+        // parameter efficiency, not an arbitrary `< 100` threshold.
+        Assert.True(compressionRatio >= 20.0,
+            $"HRE compression ratio should be >= 20×, got {compressionRatio:F1}× " +
+            $"(HRE params: {hreParams}, dense equivalent: {denseParams}).");
     }
 
     [Fact]
@@ -206,21 +268,22 @@ public class HREModelSmokeTests
     }
 
     [Fact]
-    public void SpectralHebbianLayer_SerializationRoundTrip_PreservesFilter()
+    public void SpectralHebbianLayer_SerializationRoundTrip_PreservesTrainedFilter()
     {
         int signalLength = 64;
         var layer = new AiDotNet.HarmonicEngine.Layers.SpectralHebbianLayer<double>(
-            signalLength, learningRate: 0.01, antiHebbianAlpha: 0.1);
+            signalLength, learningRate: 0.1, antiHebbianAlpha: 0.5);
 
-        // Modify the filter by running a Hebbian update
+        // Capture the untrained initial output (identity filter baseline)
         var input = new Tensor<double>([signalLength]);
         for (int i = 0; i < signalLength; i++)
         {
             input[i] = Math.Sin(2 * Math.PI * 5 * i / signalLength);
         }
-        layer.SetTrainingMode(true);
-        layer.Forward(input);
+        var untrainedOutput = layer.Forward(input);
 
+        // Train the filter so it actually gets modified
+        layer.SetTrainingMode(true);
         var inputSignal = new Vector<double>(signalLength);
         var target = new Vector<double>(signalLength);
         for (int i = 0; i < signalLength; i++)
@@ -228,11 +291,21 @@ public class HREModelSmokeTests
             inputSignal[i] = input[i];
             target[i] = 2.0 * Math.Sin(2 * Math.PI * 5 * i / signalLength);
         }
-        layer.HebbianUpdate(inputSignal, target);
+        for (int iter = 0; iter < 100; iter++)
+        {
+            layer.HebbianUpdate(inputSignal, target);
+        }
 
-        // Get output before serialization
+        // Get output after training — must differ from untrained
         layer.SetTrainingMode(false);
-        var outputBefore = layer.Forward(input);
+        var trainedOutput = layer.Forward(input);
+
+        double trainingDelta = 0;
+        for (int i = 0; i < signalLength; i++)
+            trainingDelta += Math.Abs(trainedOutput[i] - untrainedOutput[i]);
+        Assert.True(trainingDelta > 1e-6,
+            $"Training should modify the filter (delta={trainingDelta:E4}) — if the filter " +
+            $"is unchanged, the round-trip test is meaningless.");
 
         // Serialize
         using var ms = new MemoryStream();
@@ -244,20 +317,19 @@ public class HREModelSmokeTests
         // Deserialize into a new layer
         ms.Position = 0;
         var layer2 = new AiDotNet.HarmonicEngine.Layers.SpectralHebbianLayer<double>(
-            signalLength, learningRate: 0.01, antiHebbianAlpha: 0.1);
+            signalLength, learningRate: 0.1, antiHebbianAlpha: 0.5);
         using (var reader = new BinaryReader(ms))
         {
             layer2.Deserialize(reader);
         }
 
-        // Get output after deserialization
+        // Restored output must match trained output exactly (round-trip preserves filter)
         layer2.SetTrainingMode(false);
-        var outputAfter = layer2.Forward(input);
+        var restoredOutput = layer2.Forward(input);
 
-        // Outputs should match
         for (int i = 0; i < signalLength; i++)
         {
-            Assert.Equal(outputBefore[i], outputAfter[i], 6);
+            Assert.Equal(trainedOutput[i], restoredOutput[i], 6);
         }
     }
 
