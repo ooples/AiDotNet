@@ -652,7 +652,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         var sumPooled = nodeFeatures.SumOverAxis(1);
 
         // Concatenate the pooling results
-        var concatenated = Tensor<T>.Concatenate([meanPooled, maxPooled, sumPooled], axis: 1);
+        var concatenated = Engine.TensorConcatenate(new[] { meanPooled, maxPooled, sumPooled }, axis: 1);
 
         // Apply a small neural network to learn the best combination
         var denseLayer = new DenseLayer<T>(concatenated.Shape[1], concatenated.Shape[1] / 2,

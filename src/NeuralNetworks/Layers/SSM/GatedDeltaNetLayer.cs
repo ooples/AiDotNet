@@ -457,13 +457,14 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>
     private Tensor<T> DepthwiseConv1DForward(Tensor<T> input, int batchSize, int seqLen)
     {
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var bias2D = _convBias.Reshape(1, _modelDimension);
+        var bias2D = Engine.Reshape(_convBias, new[] { 1, _modelDimension });
 
         var weightSlices = new Tensor<T>[_convKernelSize];
         for (int ki = 0; ki < _convKernelSize; ki++)
         {
-            weightSlices[ki] = _convWeights.GetSliceAlongDimension(ki, 1)
-                .Reshape(1, _modelDimension);
+            weightSlices[ki] = Engine.Reshape(
+                _convWeights.GetSliceAlongDimension(ki, 1),
+                new[] { 1, _modelDimension });
         }
 
         for (int t = 0; t < seqLen; t++)

@@ -119,7 +119,7 @@ public class LinearProjector<T> : IProjectorHead<T>
         var output = Engine.TensorMatMul(input, _weight);
         if (_useBias && _bias is not null)
         {
-            var bias2D = _bias.Reshape(1, _outputDim);
+            var bias2D = Engine.Reshape(_bias, new[] { 1, _outputDim });
             output = Engine.TensorBroadcastAdd(output, bias2D);
         }
         return output;

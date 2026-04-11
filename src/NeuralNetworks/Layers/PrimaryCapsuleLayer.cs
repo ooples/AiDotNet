@@ -557,7 +557,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
 
             // Reshape weights to Conv2D kernel format [outChannels, inChannels, kH, kW]
             int outputChannels = _capsuleChannels * _capsuleDimension;
-            var kernelNCHW = _convWeights.Reshape([outputChannels, _inputChannels, _kernelSize, _kernelSize]);
+            var kernelNCHW = Engine.Reshape(_convWeights, new[] { outputChannels, _inputChannels, _kernelSize, _kernelSize });
 
             // GPU Convolution + Bias (FusedActivationType.None since we apply Squash separately)
             convOutput = gpuEngine.FusedConv2DGpu<T>(

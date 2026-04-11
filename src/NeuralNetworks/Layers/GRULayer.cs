@@ -903,7 +903,7 @@ public partial class GRULayer<T> : LayerBase<T>
         {
             // Each hidden state is [batchSize, hiddenSize]
             // Concatenate along axis 1, then reshape to [batchSize, sequenceLength, hiddenSize]
-            output = Engine.Reshape(Tensor<T>.Concatenate([.. _allHiddenStates], 1), [batchSize, sequenceLength, _hiddenSize]);
+            output = Engine.Reshape(Engine.TensorConcatenate(_allHiddenStates.ToArray(), axis: 1), [batchSize, sequenceLength, _hiddenSize]);
         }
         else
         {
