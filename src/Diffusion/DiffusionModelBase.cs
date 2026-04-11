@@ -294,17 +294,60 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </remarks>
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // For diffusion models, training involves:
-        // 1. Sample random timesteps
-        // 2. Add noise to input at those timesteps
-        // 3. Predict the noise
-        // 4. Update parameters to minimize prediction error
+        // Tape-based direct per-tensor SGD step. The forward pass records Engine
+        // ops onto the thread-local gradient tape, backward returns per-tensor
+        // gradients, and we apply them in place via param -= lr * grad. This
+        // bypasses the legacy flat-vector round-trip (GetParameters →
+        // FlattenGradients → ApplyGradients → SetParameters) entirely — that
+        // path doesn't work once the reflection walker discovers more trainable
+        // tensors than GetParameters knows about, which is now the norm after
+        // migrating layers like FlashAttentionLayer from Matrix<T> to Tensor<T>.
 
-        // Compute gradients using the denoising score matching objective
-        var gradients = ComputeGradients(input, expectedOutput, LossFunction);
+        // Sample a random timestep and build the noisy training sample.
+        var timestep = RandomGenerator.Next(_scheduler.Config.TrainTimesteps);
+        var inputVector = input.ToVector();
+        var noiseVector = SampleNoise(inputVector.Length, RandomGenerator);
+        var noisySample = _scheduler.AddNoise(inputVector, noiseVector, timestep);
+        var noisySampleTensor = new Tensor<T>(input._shape, noisySample);
 
-        // Apply gradients using the configured learning rate
-        ApplyGradients(gradients, LearningRate);
+        using var tape = new GradientTape<T>();
+
+        // Forward pass — triggers lazy layer initialization, then we walk for
+        // trainable parameters. Collection must happen AFTER the forward pass so
+        // newly-initialized layers are visible to the walker.
+        var predicted = PredictNoise(noisySampleTensor, timestep);
+        var paramTensors = CollectTrainableParameters();
+        if (paramTensors.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} has no trainable parameters discoverable via " +
+                "CollectTrainableParameters. Make sure layers register their weights via " +
+                "LayerBase.RegisterTrainableParameter so the gradient tape can reach them.");
+        }
+
+        // MSE loss against the true noise — tape-tracked.
+        var noiseTensor = new Tensor<T>(predicted._shape, noiseVector);
+        var diff = Engine.TensorSubtract(predicted, noiseTensor);
+        var sq = Engine.TensorMultiply(diff, diff);
+        var loss = Engine.ReduceSum(sq, null);
+
+        // Backward pass via graph-based autodiff.
+        var grads = tape.ComputeGradients(loss, paramTensors);
+
+        // Per-tensor SGD: param -= lr * grad, applied in place so registered
+        // tensor references stay stable across training steps.
+        foreach (var param in paramTensors)
+        {
+            if (!grads.TryGetValue(param, out var grad) || grad is null) continue;
+            var update = Engine.TensorMultiplyScalar(grad, LearningRate);
+            var paramSpan = param.Data.Span;
+            var updateSpan = update.AsSpan();
+            int n = Math.Min(paramSpan.Length, updateSpan.Length);
+            for (int i = 0; i < n; i++)
+            {
+                paramSpan[i] = NumOps.Subtract(paramSpan[i], updateSpan[i]);
+            }
+        }
     }
 
     /// <inheritdoc />
@@ -623,140 +666,43 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         if (target == null)
             throw new ArgumentNullException(nameof(target));
 
-        var effectiveLossFunction = lossFunction ?? LossFunction;
-
         // Sample a random timestep
         var timestep = RandomGenerator.Next(_scheduler.Config.TrainTimesteps);
 
-        // Sample noise
+        // Sample noise and build the noisy sample
         var inputVector = input.ToVector();
         var noiseVector = SampleNoise(inputVector.Length, RandomGenerator);
-
-        // Add noise to the clean sample using the scheduler
         var noisySample = _scheduler.AddNoise(inputVector, noiseVector, timestep);
         var noisySampleTensor = new Tensor<T>(input._shape, noisySample);
 
-        // Primary path: tape-based automatic differentiation.
-        // Uses GradientTape to track the forward pass and compute exact gradients
-        // through all engine operations (MatMul, Conv2D, ReLU, etc.) automatically.
-        // This replaces both manual BackpropagateNoise AND SPSA fallback:
-        // - 1 forward pass + 1 backward pass (vs SPSA's 6 forward passes)
-        // - Exact gradients (vs SPSA's noisy gradient estimates)
-        try
+        // Tape-based automatic differentiation. Forward pass runs first so lazy
+        // layer initialization (DiTNoisePredictor.EnsureLayersInitialized etc.)
+        // fires before we walk for trainable parameters. Every Engine op in the
+        // forward records a GradFn entry, so tape.ComputeGradients returns exact
+        // per-tensor gradients without requiring a manual backward.
+        using var tape = new GradientTape<T>();
+        var predicted = PredictNoise(noisySampleTensor, timestep);
+        var paramTensors = CollectTrainableParameters();
+        if (paramTensors.Length == 0)
         {
-            // Forward pass FIRST: many noise predictors use lazy layer initialization
-            // (e.g., DiTNoisePredictor.EnsureLayersInitialized) so the first call to
-            // PredictNoise is what actually creates the DenseLayers. Collecting
-            // trainable parameters before the forward pass would walk an empty layer
-            // list and silently fall through to SPSA — this was the primary cause
-            // of slow diffusion training.
-            using var tape = new GradientTape<T>();
-
-            // Forward pass: predict noise (all Engine ops are tape-tracked)
-            var predicted = PredictNoise(noisySampleTensor, timestep);
-
-            // Now the layers exist — walk them and cache for subsequent Train calls.
-            var paramTensors = CollectTrainableParameters();
-
-            if (paramTensors.Length > 0)
-            {
-                // Compute MSE loss as a tape-tracked scalar
-                var noiseTensor = new Tensor<T>(predicted._shape, noiseVector);
-                var diff = Engine.TensorSubtract(predicted, noiseTensor);
-                var sq = Engine.TensorMultiply(diff, diff);
-                var loss = Engine.ReduceSum(sq, null);
-
-                // Backward pass: compute exact gradients for all parameters
-                var grads = tape.ComputeGradients(loss, paramTensors);
-
-                // Flatten gradients into a single vector matching GetParameters() layout
-                var flatGradients = FlattenGradients(paramTensors, grads);
-
-                // Verify gradients are meaningful
-                bool hasValidGradients = false;
-                for (int i = 0; i < Math.Min(flatGradients.Length, 100); i++)
-                {
-                    if (!NumOps.Equals(flatGradients[i], NumOps.Zero))
-                    {
-                        hasValidGradients = true;
-                        break;
-                    }
-                }
-
-                if (hasValidGradients)
-                    return flatGradients;
-            }
-        }
-        catch (Exception ex)
-        {
-            // Fall through to SPSA if tape-based training fails. Swallowing the
-            // exception silently hid a real bug (CollectTrainableParameters not
-            // walking nested predictors) for many releases — record the failure
-            // reason via Trace so diagnostics can catch future regressions.
-            System.Diagnostics.Trace.TraceWarning(
-                "DiffusionModelBase.ComputeGradients tape path failed; falling back to SPSA. {0}: {1}",
-                ex.GetType().Name, ex.Message);
+            throw new InvalidOperationException(
+                $"{GetType().Name} has no trainable parameters discoverable via " +
+                "CollectTrainableParameters. Make sure layers register their weights via " +
+                "LayerBase.RegisterTrainableParameter so the gradient tape can reach them.");
         }
 
-        // Fallback: SPSA (Simultaneous Perturbation Stochastic Approximation).
-        // Only used when tape-based training fails (e.g., unsupported ops).
-        // SPSA estimates gradients with 2 forward passes per sample.
-        var parameters = GetParameters();
-        var gradients_spsa = new Vector<T>(parameters.Length);
-        var epsilon = NumOps.FromDouble(1e-3);
-        var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
-        var rng = RandomGenerator;
+        var noiseTensor = new Tensor<T>(predicted._shape, noiseVector);
+        var diff = Engine.TensorSubtract(predicted, noiseTensor);
+        var sq = Engine.TensorMultiply(diff, diff);
+        var loss = Engine.ReduceSum(sq, null);
+        var grads = tape.ComputeGradients(loss, paramTensors);
 
-        // Vectorized Rademacher random direction (#6 fix: avoid scalar loop)
-        var delta = new Vector<T>(parameters.Length);
-        var rngBytes = new byte[(parameters.Length + 7) / 8];
-        rng.NextBytes(rngBytes);
-        for (int i = 0; i < parameters.Length; i++)
-            delta[i] = ((rngBytes[i / 8] >> (i % 8)) & 1) == 0
-                ? NumOps.FromDouble(-1.0) : NumOps.FromDouble(1.0);
-
-        // Single SPSA sample (reduced from 3 since this is fallback only)
-        var eDelta = Engine.Multiply(delta, epsilon);
-        SetParameters(Engine.Add(parameters, eDelta));
-        var lossPlus = effectiveLossFunction.CalculateLoss(
-            PredictNoise(noisySampleTensor, timestep).ToVector(), noiseVector);
-
-        SetParameters(Engine.Subtract(parameters, eDelta));
-        var lossMinus = effectiveLossFunction.CalculateLoss(
-            PredictNoise(noisySampleTensor, timestep).ToVector(), noiseVector);
-
-        var lossDiff = NumOps.Subtract(lossPlus, lossMinus);
-        var scaledDelta = Engine.Multiply(delta, twoEpsilon);
-        gradients_spsa = Engine.Divide(
-            Engine.Fill(parameters.Length, lossDiff), scaledDelta);
-
-        SetParameters(parameters);
-        return gradients_spsa;
-    }
-
-    /// <summary>
-    /// Backpropagates the loss gradient through the noise prediction model's layers.
-    /// Override in derived classes to implement layer-by-layer gradient computation.
-    /// </summary>
-    /// <param name="lossGradient">Gradient of the loss w.r.t. the noise predictor output.</param>
-    /// <param name="timestep">The timestep used during the forward pass.</param>
-    protected virtual void BackpropagateNoise(Tensor<T> lossGradient, int timestep)
-    {
-        throw new NotSupportedException(
-            $"{GetType().Name} does not implement BackpropagateNoise. " +
-            "Override this method to enable layer-level gradient computation.");
-    }
-
-    /// <summary>
-    /// Extracts accumulated parameter gradients from all layers after backpropagation.
-    /// Override in derived classes to collect gradients from the model's layer structure.
-    /// </summary>
-    /// <returns>Flat vector of parameter gradients matching <see cref="GetParameters"/> layout.</returns>
-    protected virtual Vector<T> GetParameterGradients()
-    {
-        throw new NotSupportedException(
-            $"{GetType().Name} does not implement GetParameterGradients. " +
-            "Override this method to extract layer-level gradients.");
+        // Flatten gradients into a single vector matching the tape-collected
+        // parameter order. External callers that go through IGradientComputable
+        // still get a flat Vector<T>, though the internal Train path prefers the
+        // per-tensor direct apply via TryTapeDirectTrainStep to avoid the flat
+        // round-trip entirely.
+        return FlattenGradients(paramTensors, grads);
     }
 
     /// <summary>

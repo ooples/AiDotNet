@@ -109,6 +109,14 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies Sparsemax to a tensor via <c>Engine.Sparsemax</c> so the gradient tape
+    /// records the op. The vector-level implementation is correct for inference but
+    /// bypasses the tape entirely.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input) =>
+        Engine.Sparsemax(input, axis: -1);
+
+    /// <summary>
     /// Calculates the Jacobian matrix of the Sparsemax function for a given input vector.
     /// </summary>
     /// <param name="input">The input vector.</param>
