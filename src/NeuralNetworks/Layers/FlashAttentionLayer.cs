@@ -59,26 +59,9 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
     private Tensor<T> _outputWeights;
     private Tensor<T> _outputBias;
 
-    // Cached values for backward pass
-    private Tensor<T>? _lastInput;
-    private Tensor<T>? _lastOutput;
-    private Tensor<T>? _lastQuery;
-    private Tensor<T>? _lastKey;
-    private Tensor<T>? _lastValue;
-    private Tensor<T>? _lastAttentionOutput;
-    private Tensor<T>? _lastSoftmaxStats;
-    private Tensor<T>? _lastAlibiBias;
-    private double _lastScale;
+    // Tracks the original input shape so ForwardGpu / Forward can reshape the
+    // output back to the caller's rank before returning.
     private int[]? _originalInputShape;
-
-    // Legacy gradients retained for the manual SPSA / blame-on-step fallback
-    // (used only when a GradientTape isn't active). Tape-based training ignores
-    // these — it walks the forward-graph GradFn pointers instead.
-    private Tensor<T>? _queryWeightsGradient;
-    private Tensor<T>? _keyWeightsGradient;
-    private Tensor<T>? _valueWeightsGradient;
-    private Tensor<T>? _outputWeightsGradient;
-    private Tensor<T>? _outputBiasGradient;
 
     /// <summary>
     /// Gets whether this layer supports training.
@@ -287,7 +270,6 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
     {
         _originalInputShape = input._shape;
         var input3D = NormalizeTo3D(input, out int batchSize, out int sequenceLength, out int embeddingDimension);
-        _lastInput = input3D;
 
         // Every shape + projection op goes through Engine so the gradient tape
         // records the forward chain. The previous implementation used direct
@@ -319,39 +301,27 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
             (queries, keys) = _ropeLayer.ApplyRoPE(queries, keys, startPosition: 0);
         }
 
-        // Cache for backward pass
-        _lastQuery = queries;
-        _lastKey = keys;
-        _lastValue = values;
-
-        // Compute scale factor for attention
+        // Compute scale factor for attention (null lets IEngine use 1/sqrt(headDim))
         double? scale = _config.ScaleFactor.HasValue
             ? (double)_config.ScaleFactor.Value
-            : null; // null means 1/sqrt(headDim) will be computed by IEngine
-        _lastScale = scale ?? 1.0 / Math.Sqrt(_headDimension);
+            : null;
 
-        Tensor<T> attentionOutput;
-        Tensor<T>? softmaxStats;
-
-        // Compute ALiBi bias if configured, passing it directly to the engine
+        // Compute ALiBi bias if configured, passing it directly to the engine.
+        // The engine natively supports additive attention bias.
         Tensor<T>? aliBiBias = _alibiLayer != null
             ? _alibiLayer.ComputeBias(queries.Shape[2], keys.Shape[2], _config.UseCausalMask)
             : null;
-        _lastAlibiBias = aliBiBias;
 
-        // Apply Flash Attention using IEngine for GPU acceleration
-        // The engine now natively supports additive attention bias (e.g. ALiBi)
-        attentionOutput = Engine.FlashAttention(
+        // Apply Flash Attention — tape records the op so backward flows through
+        // FlashAttentionBackward automatically via the gradient tape.
+        var attentionOutput = Engine.FlashAttention(
             queries,
             keys,
             values,
             scale,
             _config.UseCausalMask,
-            out softmaxStats,
+            out _,
             attentionBias: aliBiBias);
-
-        _lastAttentionOutput = attentionOutput;
-        _lastSoftmaxStats = softmaxStats;
 
         // Reshape back to [batch, seq, embedding] via tape-tracked shape ops.
         var permutedOut = Engine.TensorPermute(attentionOutput, new[] { 0, 2, 1, 3 });
@@ -360,25 +330,19 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
         // Output projection with broadcast bias add — all tape-tracked.
         var projected = Engine.TensorMatMul(attentionOutput, _outputWeights);
         var output = Engine.TensorBroadcastAdd(projected, _outputBias);
-
-        _lastOutput = ApplyActivation(output);
+        var activated = ApplyActivation(output);
 
         if (_originalInputShape == null || _originalInputShape.Length == 3)
         {
-            return _lastOutput;
-        }
-
-        if (_originalInputShape.Length == 2)
-        {
-            return Engine.Reshape(_lastOutput, _originalInputShape);
+            return activated;
         }
 
         if (_originalInputShape.Length == 1)
         {
-            return Engine.Reshape(_lastOutput, new[] { embeddingDimension });
+            return Engine.Reshape(activated, new[] { embeddingDimension });
         }
 
-        return Engine.Reshape(_lastOutput, _originalInputShape);
+        return Engine.Reshape(activated, _originalInputShape);
     }
 
     private Tensor<T> NormalizeTo3D(Tensor<T> input, out int batchSize, out int sequenceLength, out int embeddingDimension)
@@ -396,7 +360,7 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
             batchSize = 1;
             sequenceLength = input.Shape[0];
             embeddingDimension = input.Shape[1];
-            return input.Reshape([1, sequenceLength, embeddingDimension]);
+            return Engine.Reshape(input, new[] { 1, sequenceLength, embeddingDimension });
         }
 
         if (input.Rank > 3)
@@ -409,89 +373,26 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
             batchSize = flatBatch;
             sequenceLength = input.Shape[input.Rank - 2];
             embeddingDimension = input.Shape[input.Rank - 1];
-            return input.Reshape([batchSize, sequenceLength, embeddingDimension]);
+            return Engine.Reshape(input, new[] { batchSize, sequenceLength, embeddingDimension });
         }
 
         batchSize = 1;
         sequenceLength = 1;
         embeddingDimension = input.Shape[0];
-        return input.Reshape([1, 1, embeddingDimension]);
+        return Engine.Reshape(input, new[] { 1, 1, embeddingDimension });
     }
 
-    private Tensor<T> NormalizeOutputGradient(Tensor<T> outputGradient, out int batchSize, out int sequenceLength, out int embeddingDimension)
-    {
-        if (_originalInputShape == null)
-        {
-            return NormalizeTo3D(outputGradient, out batchSize, out sequenceLength, out embeddingDimension);
-        }
-
-        if (_originalInputShape.Length == 3)
-        {
-            batchSize = _originalInputShape[0];
-            sequenceLength = _originalInputShape[1];
-            embeddingDimension = _originalInputShape[2];
-            return outputGradient;
-        }
-
-        if (_originalInputShape.Length == 2)
-        {
-            batchSize = 1;
-            sequenceLength = _originalInputShape[0];
-            embeddingDimension = _originalInputShape[1];
-            return outputGradient.Reshape([1, sequenceLength, embeddingDimension]);
-        }
-
-        if (_originalInputShape.Length == 1)
-        {
-            batchSize = 1;
-            sequenceLength = 1;
-            embeddingDimension = _originalInputShape[0];
-            return outputGradient.Reshape([1, 1, embeddingDimension]);
-        }
-
-        int flatBatch = 1;
-        for (int d = 0; d < _originalInputShape.Length - 2; d++)
-        {
-            flatBatch *= _originalInputShape[d];
-        }
-        batchSize = flatBatch;
-        sequenceLength = _originalInputShape[^2];
-        embeddingDimension = _originalInputShape[^1];
-        return outputGradient.Reshape([batchSize, sequenceLength, embeddingDimension]);
-    }
     /// <summary>
-    /// Updates parameters using computed gradients.
+    /// Legacy scalar-learning-rate parameter update. Tape-based training flows through
+    /// <see cref="SetParameters"/> after <c>GradientTape&lt;T&gt;</c> computes gradients and
+    /// the optimizer applies them, so this override is a no-op. The hand-rolled SPSA /
+    /// blame-on-step fallback that used private <c>_*Gradient</c> fields was deleted along
+    /// with those fields once the Forward path moved to <c>Engine.FlashAttention</c>.
     /// </summary>
     public override void UpdateParameters(T learningRate)
     {
-        if (_queryWeightsGradient == null || _keyWeightsGradient == null ||
-            _valueWeightsGradient == null || _outputWeightsGradient == null ||
-            _outputBiasGradient == null)
-        {
-            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        }
-
-        // Legacy SPSA / manual-backward fallback — tape-based training bypasses
-        // this path entirely and applies gradients via the external optimizer.
-        // Apply in-place so existing tensor references (and any tape-recorded
-        // grad entries) stay consistent.
-        ApplySgdInPlace(_queryWeights, _queryWeightsGradient, learningRate);
-        ApplySgdInPlace(_keyWeights, _keyWeightsGradient, learningRate);
-        ApplySgdInPlace(_valueWeights, _valueWeightsGradient, learningRate);
-        ApplySgdInPlace(_outputWeights, _outputWeightsGradient, learningRate);
-        ApplySgdInPlace(_outputBias, _outputBiasGradient, learningRate);
-    }
-
-    private void ApplySgdInPlace(Tensor<T> param, Tensor<T>? grad, T learningRate)
-    {
-        if (grad is null) return;
-        var paramSpan = param.Data.Span;
-        var gradSpan = grad.Data.Span;
-        int n = Math.Min(paramSpan.Length, gradSpan.Length);
-        for (int i = 0; i < n; i++)
-        {
-            paramSpan[i] = NumOps.Subtract(paramSpan[i], NumOps.Multiply(gradSpan[i], learningRate));
-        }
+        // No-op: weights are updated via SetParameters(Vector<T>) after the tape
+        // computes gradients through Engine.FlashAttention + FlashAttentionBackward.
     }
 
     /// <summary>
@@ -563,22 +464,7 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
     /// </summary>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastQuery = null;
-        _lastKey = null;
-        _lastValue = null;
-        _lastAttentionOutput = null;
-        _lastSoftmaxStats = null;
-        _lastAlibiBias = null;
-        _lastScale = 0;
         _originalInputShape = null;
-
-        _queryWeightsGradient = null;
-        _keyWeightsGradient = null;
-        _valueWeightsGradient = null;
-        _outputWeightsGradient = null;
-        _outputBiasGradient = null;
     }
 
     /// <summary>
