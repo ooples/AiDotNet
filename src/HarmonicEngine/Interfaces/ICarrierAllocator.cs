@@ -20,8 +20,8 @@ public interface ICarrierAllocator
     /// </summary>
     /// <param name="numCarriers">Number of carriers to allocate.</param>
     /// <param name="fftSize">Total FFT size (determines available frequency bins).</param>
-    /// <returns>Array of frequency bin indices.</returns>
-    int[] AllocateCarriers(int numCarriers, int fftSize);
+    /// <returns>Read-only list of frequency bin indices.</returns>
+    IReadOnlyList<int> AllocateCarriers(int numCarriers, int fftSize);
 
     /// <summary>
     /// Validates that a set of carrier indices has no IMD collisions up to the specified order.
@@ -29,7 +29,7 @@ public interface ICarrierAllocator
     /// <param name="carriers">The carrier frequency bin indices to validate.</param>
     /// <param name="maxOrder">Maximum IMD order to check.</param>
     /// <returns>True if no collisions exist; false otherwise.</returns>
-    bool ValidateNoCollisions(int[] carriers, int maxOrder = 2);
+    bool ValidateNoCollisions(IReadOnlyList<int> carriers, int maxOrder = 2);
 
     /// <summary>
     /// Gets the maximum number of carriers that can be allocated collision-free

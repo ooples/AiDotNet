@@ -17,7 +17,7 @@ public class CarrierAllocatorTests
         var allocator = new CarrierAllocator();
         var carriers = allocator.AllocateCarriers(numCarriers, fftSize);
 
-        Assert.Equal(numCarriers, carriers.Length);
+        Assert.Equal(numCarriers, carriers.Count);
     }
 
     [Theory]
@@ -34,17 +34,27 @@ public class CarrierAllocatorTests
     }
 
     [Fact]
-    public void ValidateNoCollisions_ThirdOrder_DetectsCollisions()
+    public void ValidateNoCollisions_ThirdOrder_RejectsKnownCollision()
     {
-        // Third-order collisions (2fi - fj) are expected with the greedy Sidon construction,
-        // which only guarantees second-order freedom. This test verifies the validator detects them.
+        // Hand-picked carriers with a known third-order collision:
+        // carriers {1, 2, 3} → 2*1 - 3 = -1 (abs=1) which equals carrier 1
+        var allocator = new CarrierAllocator();
+
+        // These carriers are collision-free at second order but have a third-order collision
+        int[] colliding = [1, 5, 9]; // 2*5 - 9 = 1, which is carrier[0]
+        Assert.False(allocator.ValidateNoCollisions(colliding, maxOrder: 3),
+            "Should detect third-order IMD collision: 2*5 - 9 = 1 hits carrier[0]");
+    }
+
+    [Fact]
+    public void ValidateNoCollisions_SecondOrder_AcceptsAllocatedCarriers()
+    {
+        // Carriers from the allocator should always be second-order collision-free
         var allocator = new CarrierAllocator();
         var carriers = allocator.AllocateCarriers(8, 4096);
 
-        // The validator should return a result (true or false) without throwing
-        bool result = allocator.ValidateNoCollisions(carriers, maxOrder: 3);
-        // We accept either result — the point is the validator works correctly
-        Assert.True(result || !result);
+        Assert.True(allocator.ValidateNoCollisions(carriers, maxOrder: 2),
+            "Allocated carriers should be second-order collision-free");
     }
 
     [Fact]
@@ -67,7 +77,7 @@ public class CarrierAllocatorTests
         var allocator = new CarrierAllocator();
         var carriers = allocator.AllocateCarriers(16, 1024);
 
-        Assert.Equal(carriers.Length, carriers.Distinct().Count());
+        Assert.Equal(carriers.Count, carriers.Distinct().Count());
     }
 
     [Fact]
@@ -77,9 +87,9 @@ public class CarrierAllocatorTests
         int minSpacing = 5;
         var carriers = allocator.AllocateCarriersWithSpacing(8, 1024, minSpacing);
 
-        for (int i = 0; i < carriers.Length; i++)
+        for (int i = 0; i < carriers.Count; i++)
         {
-            for (int j = i + 1; j < carriers.Length; j++)
+            for (int j = i + 1; j < carriers.Count; j++)
             {
                 Assert.True(Math.Abs(carriers[i] - carriers[j]) >= minSpacing,
                     $"Carriers {carriers[i]} and {carriers[j]} are closer than minimum spacing {minSpacing}");

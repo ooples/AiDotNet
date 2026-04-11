@@ -28,7 +28,7 @@ public class IMDExtractor<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly FastFourierTransform<T> _fft;
-    private readonly int[] _carriers;
+    private readonly IReadOnlyList<int> _carriers;
     private readonly int _fftSize;
 
     // Precomputed IMD product locations for each carrier pair
@@ -39,7 +39,7 @@ public class IMDExtractor<T>
     /// </summary>
     /// <param name="carriers">Carrier frequency bin indices.</param>
     /// <param name="fftSize">FFT size.</param>
-    public IMDExtractor(int[] carriers, int fftSize)
+    public IMDExtractor(IReadOnlyList<int> carriers, int fftSize)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         _fft = new FastFourierTransform<T>();
@@ -47,7 +47,7 @@ public class IMDExtractor<T>
         _fftSize = fftSize;
 
         // Precompute IMD bin locations for all carrier pairs
-        int n = carriers.Length;
+        int n = carriers.Count;
         _imdBins = new (int, int)[n, n];
         for (int i = 0; i < n; i++)
         {
@@ -73,7 +73,7 @@ public class IMDExtractor<T>
     public Matrix<T> ExtractPairwise(Vector<T> nonlinearOutput)
     {
         var spectrum = _fft.Forward(nonlinearOutput);
-        int n = _carriers.Length;
+        int n = _carriers.Count;
         var interactions = new Matrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
@@ -100,7 +100,7 @@ public class IMDExtractor<T>
                 {
                     // Cross-interaction: average of sum and difference products
                     T sumMag = sumBin < _fftSize ? spectrum[sumBin].Magnitude : _numOps.Zero;
-                    T diffMag = diffBin >= 0 && diffBin < _fftSize ? spectrum[diffBin].Magnitude : _numOps.Zero;
+                    T diffMag = diffBin < _fftSize ? spectrum[diffBin].Magnitude : _numOps.Zero;
                     interactionStrength = _numOps.Multiply(
                         _numOps.FromDouble(0.5),
                         _numOps.Add(sumMag, diffMag));
@@ -123,7 +123,7 @@ public class IMDExtractor<T>
     public Vector<T> ExtractFlat(Vector<T> nonlinearOutput)
     {
         var spectrum = _fft.Forward(nonlinearOutput);
-        int n = _carriers.Length;
+        int n = _carriers.Count;
         int flatSize = n * (n + 1) / 2;
         var flat = new Vector<T>(flatSize);
         int idx = 0;
@@ -141,7 +141,7 @@ public class IMDExtractor<T>
                 else
                 {
                     T sumMag = sumBin < _fftSize ? spectrum[sumBin].Magnitude : _numOps.Zero;
-                    T diffMag = diffBin >= 0 && diffBin < _fftSize ? spectrum[diffBin].Magnitude : _numOps.Zero;
+                    T diffMag = diffBin < _fftSize ? spectrum[diffBin].Magnitude : _numOps.Zero;
                     flat[idx] = _numOps.Multiply(
                         _numOps.FromDouble(0.5),
                         _numOps.Add(sumMag, diffMag));
@@ -163,7 +163,7 @@ public class IMDExtractor<T>
     public Matrix<T> ExtractAttentionWeights(Vector<T> nonlinearOutput)
     {
         var interactions = ExtractPairwise(nonlinearOutput);
-        int n = _carriers.Length;
+        int n = _carriers.Count;
 
         // Convert interaction matrix to 2D tensor for Engine.TensorSoftmaxRows
         var matrix = new Tensor<T>([n, n]);

@@ -32,6 +32,11 @@ public class SyntheticSignalGenerator<T>
     /// <returns>The generated signal and the ground-truth frequency bins.</returns>
     public (Vector<T> signal, int[] frequencyBins) GenerateKSparse(int length, int k, double snr = 40.0)
     {
+        if (k > length / 2 - 1)
+            throw new ArgumentException(
+                $"K ({k}) cannot exceed the number of positive frequency bins ({length / 2 - 1}).",
+                nameof(k));
+
         var signal = new Vector<T>(length);
         var bins = new int[k];
 
@@ -46,6 +51,15 @@ public class SyntheticSignalGenerator<T>
 
         Array.Sort(bins);
 
+        // Pre-generate amplitude and phase for each component (fixed per component, not per time step)
+        var amplitudes = new double[k];
+        var phases = new double[k];
+        for (int j = 0; j < k; j++)
+        {
+            amplitudes[j] = 1.0 + _rng.NextDouble() * 2.0;
+            phases[j] = _rng.NextDouble() * 2.0 * Math.PI;
+        }
+
         // Generate signal as sum of K sinusoids
         double signalPower = 0;
         for (int t = 0; t < length; t++)
@@ -53,9 +67,7 @@ public class SyntheticSignalGenerator<T>
             double val = 0;
             for (int j = 0; j < k; j++)
             {
-                double amplitude = 1.0 + _rng.NextDouble() * 2.0;
-                double phase = _rng.NextDouble() * 2.0 * Math.PI;
-                val += amplitude * Math.Cos(2 * Math.PI * bins[j] * t / length + phase);
+                val += amplitudes[j] * Math.Cos(2 * Math.PI * bins[j] * t / length + phases[j]);
             }
             signal[t] = _numOps.FromDouble(val);
             signalPower += val * val;
@@ -89,6 +101,10 @@ public class SyntheticSignalGenerator<T>
     public Vector<T> GenerateComposite(int length, double[] frequencies, double[] amplitudes,
         double trendSlope = 0, double noiseLevel = 0.1)
     {
+        if (frequencies.Length != amplitudes.Length)
+            throw new ArgumentException(
+                $"Frequencies ({frequencies.Length}) and amplitudes ({amplitudes.Length}) must have equal length.");
+
         var signal = new Vector<T>(length);
 
         for (int t = 0; t < length; t++)
@@ -114,6 +130,9 @@ public class SyntheticSignalGenerator<T>
     /// <returns>Array of character codes.</returns>
     public int[] GeneratePeriodicSequence(int length, int period, int vocabSize = 26)
     {
+        if (period <= 0) throw new ArgumentOutOfRangeException(nameof(period), "Period must be positive.");
+        if (vocabSize <= 0) throw new ArgumentOutOfRangeException(nameof(vocabSize), "Vocabulary size must be positive.");
+
         var seq = new int[length];
         for (int i = 0; i < length; i++)
         {

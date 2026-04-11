@@ -28,23 +28,16 @@ public class CarrierAllocator : ICarrierAllocator
     public int MaxCarriers(int fftSize, int maxOrder = 2)
     {
         // Estimate max carriers by trying to allocate until failure
-        int maxBin = fftSize / 2;
+        int maxBin = fftSize / 2 - 1; // Exclude Nyquist bin
         var carriers = new List<int>();
         var allProducts = new HashSet<int>();
         var carrierSet = new HashSet<int>();
 
         for (int candidate = 1; candidate <= maxBin; candidate++)
         {
-            if (CanAddCarrier(carriers, carrierSet, allProducts, candidate))
+            if (CanAddCarrier(carriers, carrierSet, allProducts, candidate, maxOrder))
             {
-                foreach (int existing in carriers)
-                {
-                    allProducts.Add(candidate + existing);
-                    allProducts.Add(Math.Abs(candidate - existing));
-                }
-                allProducts.Add(candidate + candidate);
-                carriers.Add(candidate);
-                carrierSet.Add(candidate);
+                AddCarrierProducts(carriers, allProducts, carrierSet, candidate, maxOrder);
             }
         }
 
@@ -58,14 +51,14 @@ public class CarrierAllocator : ICarrierAllocator
     /// <param name="numCarriers">Number of carriers to allocate.</param>
     /// <param name="fftSize">Total FFT size (determines available frequency bins).</param>
     /// <returns>
-    /// Array of frequency bin indices where carriers should be placed.
+    /// Read-only list of frequency bin indices where carriers should be placed.
     /// All pairwise sums and differences are guaranteed unique.
     /// </returns>
-    public int[] AllocateCarriers(int numCarriers, int fftSize)
+    public IReadOnlyList<int> AllocateCarriers(int numCarriers, int fftSize)
     {
         // Use a greedy construction where all IMD products (sums AND differences)
         // are tracked in a single set to prevent any collision.
-        int maxBin = fftSize / 2; // Only use positive frequencies (up to Nyquist)
+        int maxBin = fftSize / 2 - 1; // Exclude Nyquist bin (only positive frequencies)
         var carriers = new List<int>();
         var allProducts = new HashSet<int>(); // Combined set of ALL IMD products
         var carrierSet = new HashSet<int>();
@@ -75,15 +68,7 @@ public class CarrierAllocator : ICarrierAllocator
         {
             if (CanAddCarrier(carriers, carrierSet, allProducts, candidate))
             {
-                // Record all new sums and differences in the combined set
-                foreach (int existing in carriers)
-                {
-                    allProducts.Add(candidate + existing);
-                    allProducts.Add(Math.Abs(candidate - existing));
-                }
-                allProducts.Add(candidate + candidate); // Self-sum (2nd harmonic)
-                carriers.Add(candidate);
-                carrierSet.Add(candidate);
+                AddCarrierProducts(carriers, allProducts, carrierSet, candidate);
             }
         }
 
@@ -103,10 +88,10 @@ public class CarrierAllocator : ICarrierAllocator
     /// <param name="numCarriers">Number of carriers to allocate.</param>
     /// <param name="fftSize">Total FFT size.</param>
     /// <param name="minSpacing">Minimum spacing between adjacent carriers (in bins).</param>
-    /// <returns>Array of frequency bin indices.</returns>
-    public int[] AllocateCarriersWithSpacing(int numCarriers, int fftSize, int minSpacing)
+    /// <returns>Read-only list of frequency bin indices.</returns>
+    public IReadOnlyList<int> AllocateCarriersWithSpacing(int numCarriers, int fftSize, int minSpacing)
     {
-        int maxBin = fftSize / 2;
+        int maxBin = fftSize / 2 - 1;
         var carriers = new List<int>();
         var allProducts = new HashSet<int>();
         var carrierSet = new HashSet<int>();
@@ -126,14 +111,7 @@ public class CarrierAllocator : ICarrierAllocator
 
             if (spacingOk && CanAddCarrier(carriers, carrierSet, allProducts, candidate))
             {
-                foreach (int existing in carriers)
-                {
-                    allProducts.Add(candidate + existing);
-                    allProducts.Add(Math.Abs(candidate - existing));
-                }
-                allProducts.Add(candidate + candidate);
-                carriers.Add(candidate);
-                carrierSet.Add(candidate);
+                AddCarrierProducts(carriers, allProducts, carrierSet, candidate);
             }
         }
 
@@ -153,15 +131,21 @@ public class CarrierAllocator : ICarrierAllocator
     /// <param name="carriers">The carrier frequency bin indices to validate.</param>
     /// <param name="maxOrder">Maximum IMD order to check (2 = second-order, 3 = third-order).</param>
     /// <returns>True if no collisions exist; false otherwise.</returns>
-    public bool ValidateNoCollisions(int[] carriers, int maxOrder = 2)
+    public bool ValidateNoCollisions(IReadOnlyList<int> carriers, int maxOrder = 2)
     {
+        var carrierSet = new HashSet<int>();
+        foreach (int c in carriers)
+        {
+            if (!carrierSet.Add(c))
+                return false; // Duplicate carrier
+        }
+
         var imdProducts = new HashSet<int>();
-        var carrierSet = new HashSet<int>(carriers);
 
         // Check second-order products: fi + fj, fi - fj for all i != j
-        for (int i = 0; i < carriers.Length; i++)
+        for (int i = 0; i < carriers.Count; i++)
         {
-            for (int j = i + 1; j < carriers.Length; j++)
+            for (int j = i + 1; j < carriers.Count; j++)
             {
                 int sum = carriers[i] + carriers[j];
                 int diff = Math.Abs(carriers[i] - carriers[j]);
@@ -179,9 +163,9 @@ public class CarrierAllocator : ICarrierAllocator
         if (maxOrder >= 3)
         {
             // Check third-order products: 2fi - fj, 2fi + fj
-            for (int i = 0; i < carriers.Length; i++)
+            for (int i = 0; i < carriers.Count; i++)
             {
-                for (int j = 0; j < carriers.Length; j++)
+                for (int j = 0; j < carriers.Count; j++)
                 {
                     if (i == j) continue;
                     int prod1 = Math.Abs(2 * carriers[i] - carriers[j]);
@@ -210,23 +194,20 @@ public class CarrierAllocator : ICarrierAllocator
     }
 
     private static bool CanAddCarrier(List<int> existing, HashSet<int> carrierSet,
-        HashSet<int> allProducts, int candidate)
+        HashSet<int> allProducts, int candidate, int maxOrder = 2)
     {
         // Reject if candidate is itself an existing IMD product
         if (allProducts.Contains(candidate))
             return false;
 
-        // Check if any new IMD product would collide with existing products or carriers
+        // Check second-order products
         foreach (int e in existing)
         {
             int newSum = candidate + e;
             int newDiff = Math.Abs(candidate - e);
 
-            // Would this product collide with an existing carrier?
             if (carrierSet.Contains(newSum) || carrierSet.Contains(newDiff))
                 return false;
-
-            // Would this product collide with an existing IMD product?
             if (allProducts.Contains(newSum) || allProducts.Contains(newDiff))
                 return false;
         }
@@ -236,6 +217,46 @@ public class CarrierAllocator : ICarrierAllocator
         if (allProducts.Contains(selfSum) || carrierSet.Contains(selfSum))
             return false;
 
+        // Check third-order products if requested
+        if (maxOrder >= 3)
+        {
+            foreach (int e in existing)
+            {
+                int prod1 = Math.Abs(2 * candidate - e);
+                int prod2 = 2 * candidate + e;
+                int prod3 = Math.Abs(2 * e - candidate);
+                int prod4 = 2 * e + candidate;
+
+                if (carrierSet.Contains(prod1) || carrierSet.Contains(prod2) ||
+                    carrierSet.Contains(prod3) || carrierSet.Contains(prod4))
+                    return false;
+                if (allProducts.Contains(prod1) || allProducts.Contains(prod2) ||
+                    allProducts.Contains(prod3) || allProducts.Contains(prod4))
+                    return false;
+            }
+        }
+
         return true;
+    }
+
+    private static void AddCarrierProducts(List<int> carriers, HashSet<int> allProducts,
+        HashSet<int> carrierSet, int candidate, int maxOrder = 2)
+    {
+        foreach (int existing in carriers)
+        {
+            allProducts.Add(candidate + existing);
+            allProducts.Add(Math.Abs(candidate - existing));
+
+            if (maxOrder >= 3)
+            {
+                allProducts.Add(2 * candidate + existing);
+                allProducts.Add(Math.Abs(2 * candidate - existing));
+                allProducts.Add(2 * existing + candidate);
+                allProducts.Add(Math.Abs(2 * existing - candidate));
+            }
+        }
+        allProducts.Add(candidate + candidate); // Self-sum (2nd harmonic)
+        carriers.Add(candidate);
+        carrierSet.Add(candidate);
     }
 }

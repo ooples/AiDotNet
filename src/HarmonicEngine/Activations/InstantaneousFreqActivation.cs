@@ -39,6 +39,10 @@ public class InstantaneousFreqActivation<T> : ActivationFunctionBase<T>
     /// </param>
     public InstantaneousFreqActivation(double modulationStrength = 0.5)
     {
+        if (modulationStrength < 0.0 || modulationStrength > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(modulationStrength),
+                $"Modulation strength must be in [0, 1], got {modulationStrength}.");
+
         _analyticSignal = new AnalyticSignal<T>();
         _modulationStrength = NumOps.FromDouble(modulationStrength);
     }
@@ -108,7 +112,6 @@ public class InstantaneousFreqActivation<T> : ActivationFunctionBase<T>
         // Modulate input by frequency deviation
         var output = new Vector<T>(n);
         var alpha = NumOps.ToDouble(_modulationStrength);
-        var oneMinusAlpha = NumOps.FromDouble(1.0 - alpha);
 
         for (int i = 0; i < n; i++)
         {

@@ -30,9 +30,7 @@ public class IMDAttentionLayer<T> : LayerBase<T>
     private readonly IMDExtractor<T> _extractor;
     private readonly int _numCarriers;
     private readonly int _fftSize;
-    private readonly int[] _carrierBins;
 
-    private Tensor<T>? _lastInput;
     private Matrix<T>? _lastAttentionWeights;
 
     /// <inheritdoc/>
@@ -42,7 +40,7 @@ public class IMDAttentionLayer<T> : LayerBase<T>
     public override int ParameterCount => 0;
 
     /// <inheritdoc/>
-    public override bool SupportsTraining => true;
+    public override bool SupportsTraining => false;
 
     /// <summary>
     /// Gets the most recent attention weight matrix (for visualization/debugging).
@@ -61,9 +59,9 @@ public class IMDAttentionLayer<T> : LayerBase<T>
         _fftSize = fftSize;
 
         var allocator = new CarrierAllocator();
-        _carrierBins = allocator.AllocateCarriers(numCarriers, fftSize);
-        _bus = new SpectralBus<T>(_carrierBins, fftSize);
-        _extractor = new IMDExtractor<T>(_carrierBins, fftSize);
+        var carrierBins = allocator.AllocateCarriers(numCarriers, fftSize);
+        _bus = new SpectralBus<T>(carrierBins, fftSize);
+        _extractor = new IMDExtractor<T>(carrierBins, fftSize);
 
         Parameters = Vector<T>.Empty();
     }
@@ -73,7 +71,6 @@ public class IMDAttentionLayer<T> : LayerBase<T>
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
         int n = Math.Min(input.Length, _numCarriers);
 
         // Extract features
@@ -128,12 +125,16 @@ public class IMDAttentionLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override void Deserialize(BinaryReader reader) { }
+    public override void Deserialize(BinaryReader reader)
+    {
+        // Consume the values written by Serialize
+        _ = reader.ReadInt32(); // numCarriers
+        _ = reader.ReadInt32(); // fftSize
+    }
 
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _lastInput = null;
         _lastAttentionWeights = null;
     }
 }

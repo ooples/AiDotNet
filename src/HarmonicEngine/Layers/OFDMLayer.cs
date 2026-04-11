@@ -27,14 +27,10 @@ namespace AiDotNet.HarmonicEngine.Layers;
 public class OFDMLayer<T> : LayerBase<T>
 {
     private readonly SpectralBus<T> _bus;
-    private readonly CarrierAllocator _allocator;
     private readonly IActivationFunction<T> _activation;
     private readonly int _numCarriers;
     private readonly int _fftSize;
-    private readonly int[] _carrierBins;
-
-    private Tensor<T>? _lastInput;
-    private Tensor<T>? _lastEncoded;
+    private readonly IReadOnlyList<int> _carrierBins;
 
     /// <inheritdoc/>
     public override string LayerName => $"OFDM_{_numCarriers}c_{_fftSize}fft";
@@ -43,12 +39,12 @@ public class OFDMLayer<T> : LayerBase<T>
     public override int ParameterCount => 0; // No learnable weights — carrier positions are fixed
 
     /// <inheritdoc/>
-    public override bool SupportsTraining => true;
+    public override bool SupportsTraining => false;
 
     /// <summary>
     /// Gets the carrier frequency bin indices used by this layer.
     /// </summary>
-    public int[] CarrierBins => _carrierBins;
+    public IReadOnlyList<int> CarrierBins => _carrierBins;
 
     /// <summary>
     /// Creates a new OFDM layer.
@@ -64,8 +60,8 @@ public class OFDMLayer<T> : LayerBase<T>
         _numCarriers = numCarriers;
         _fftSize = fftSize;
 
-        _allocator = new CarrierAllocator();
-        _carrierBins = _allocator.AllocateCarriers(numCarriers, fftSize);
+        var allocator = new CarrierAllocator();
+        _carrierBins = allocator.AllocateCarriers(numCarriers, fftSize);
         _bus = new SpectralBus<T>(_carrierBins, fftSize);
 
         _activation = nonlinearity switch
@@ -84,7 +80,6 @@ public class OFDMLayer<T> : LayerBase<T>
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
         int featureCount = input.Length;
 
         // Extract features from tensor to vector
@@ -109,14 +104,6 @@ public class OFDMLayer<T> : LayerBase<T>
 
         // Step 3: Decode features from carrier frequencies (FFT)
         var decoded = _bus.Decode(activated);
-
-        // Store for backward pass
-        var encodedTensor = new Tensor<T>([encoded.Length]);
-        for (int i = 0; i < encoded.Length; i++)
-        {
-            encodedTensor[i] = encoded[i];
-        }
-        _lastEncoded = encodedTensor;
 
         // Convert output vector to tensor
         var output = new Tensor<T>([_numCarriers]);
@@ -157,13 +144,15 @@ public class OFDMLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void Deserialize(BinaryReader reader)
     {
-        // Carrier positions are fixed at construction
+        // Consume the values written by Serialize
+        int numCarriers = reader.ReadInt32();
+        _ = reader.ReadInt32(); // fftSize
+        for (int i = 0; i < numCarriers; i++)
+        {
+            _ = reader.ReadInt32(); // carrier bin
+        }
     }
 
     /// <inheritdoc/>
-    public override void ResetState()
-    {
-        _lastInput = null;
-        _lastEncoded = null;
-    }
+    public override void ResetState() { }
 }

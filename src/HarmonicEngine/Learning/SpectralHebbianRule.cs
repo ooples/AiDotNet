@@ -36,6 +36,10 @@ public class SpectralHebbianRule<T> : ISpectralLearningRule<T>
     {
         int n = filter.Length;
 
+        if (inputSpectrum.Length != n || targetSpectrum.Length != n)
+            throw new ArgumentException(
+                $"All vectors must have equal length. Filter: {n}, Input: {inputSpectrum.Length}, Target: {targetSpectrum.Length}.");
+
         // Convert to tensors for Engine acceleration
         var inputT = SpectralEngineHelper.ToComplexTensor(inputSpectrum);
         var targetT = SpectralEngineHelper.ToComplexTensor(targetSpectrum);

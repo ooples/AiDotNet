@@ -1,4 +1,3 @@
-using AiDotNet.HarmonicEngine.Layers;
 using AiDotNet.HarmonicEngine.Options;
 
 namespace AiDotNet.HarmonicEngine.Models;
@@ -54,6 +53,14 @@ public class HRESequenceModel<T>
     /// <param name="options">HRE model options.</param>
     public HRESequenceModel(int contextLength = 64, int vocabularySize = 128, HREModelOptions? options = null)
     {
+        if (contextLength < 2 || (contextLength & (contextLength - 1)) != 0)
+            throw new ArgumentException(
+                $"Context length must be a power of 2, got {contextLength}.", nameof(contextLength));
+
+        if (vocabularySize < 2)
+            throw new ArgumentOutOfRangeException(nameof(vocabularySize),
+                $"Vocabulary size must be at least 2, got {vocabularySize}.");
+
         _numOps = MathHelper.GetNumericOperations<T>();
         _contextLength = contextLength;
         _vocabularySize = vocabularySize;
@@ -76,15 +83,14 @@ public class HRESequenceModel<T>
             throw new ArgumentException(
                 $"Context must have {_contextLength} elements, got {context.Length}.");
 
-        // Normalize character codes to [-1, 1] range
+        // Normalize character codes to [-1, 1] range: 2.0 * val / (vocabSize - 1) - 1.0
         var normalized = new Tensor<T>([_contextLength]);
-        var vocabScale = _numOps.FromDouble(2.0 / _vocabularySize);
-        var one = _numOps.One;
+        double scaleFactor = 2.0 / (_vocabularySize - 1);
 
         for (int i = 0; i < _contextLength; i++)
         {
-            normalized[i] = _numOps.Subtract(
-                _numOps.Multiply(context[i], vocabScale), one);
+            double charVal = _numOps.ToDouble(context[i]);
+            normalized[i] = _numOps.FromDouble(charVal * scaleFactor - 1.0);
         }
 
         _model.SetTrainingMode(false);

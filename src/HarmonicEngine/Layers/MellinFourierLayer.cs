@@ -30,8 +30,6 @@ public class MellinFourierLayer<T> : LayerBase<T>
     private readonly MellinTransform<T> _mellin;
     private readonly int _outputSize;
 
-    private Tensor<T>? _lastInput;
-
     /// <inheritdoc/>
     public override string LayerName => $"MellinFourier_{_outputSize}";
 
@@ -39,7 +37,7 @@ public class MellinFourierLayer<T> : LayerBase<T>
     public override int ParameterCount => 0; // No learnable parameters
 
     /// <inheritdoc/>
-    public override bool SupportsTraining => true;
+    public override bool SupportsTraining => false;
 
     /// <summary>
     /// Creates a new Mellin-Fourier invariance layer.
@@ -61,8 +59,6 @@ public class MellinFourierLayer<T> : LayerBase<T>
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-
         // Extract signal from tensor
         var signal = new Vector<T>(input.Length);
         for (int i = 0; i < input.Length; i++)
@@ -105,11 +101,12 @@ public class MellinFourierLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override void Deserialize(BinaryReader reader) { }
+    public override void Deserialize(BinaryReader reader)
+    {
+        // Consume the values written by Serialize
+        _ = reader.ReadInt32(); // outputSize
+    }
 
     /// <inheritdoc/>
-    public override void ResetState()
-    {
-        _lastInput = null;
-    }
+    public override void ResetState() { }
 }

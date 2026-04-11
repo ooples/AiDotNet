@@ -28,6 +28,10 @@ public class WienerFilterRule<T>
     {
         int n = input.Length;
 
+        if (target.Length != n)
+            throw new ArgumentException(
+                $"Input and target must have equal length. Input: {n}, Target: {target.Length}.");
+
         // Engine-accelerated FFT
         var inputSpec = SpectralEngineHelper.FFT(input);
         var targetSpec = SpectralEngineHelper.FFT(target);
@@ -58,6 +62,10 @@ public class WienerFilterRule<T>
     /// </summary>
     public Vector<T> Apply(Vector<T> input, Vector<Complex<T>> filter)
     {
+        if (filter.Length != input.Length)
+            throw new ArgumentException(
+                $"Filter length ({filter.Length}) must equal input length ({input.Length}).");
+
         var spectrum = SpectralEngineHelper.FFT(input);
         var filterT = SpectralEngineHelper.ToComplexTensor(filter);
 

@@ -50,6 +50,10 @@ public class HREForecaster<T>
     /// <param name="options">HRE model options. InputSize will be set to windowSize.</param>
     public HREForecaster(int windowSize = 64, int predictionHorizon = 1, HREModelOptions? options = null)
     {
+        if (windowSize < 2 || (windowSize & (windowSize - 1)) != 0)
+            throw new ArgumentException(
+                $"Window size must be a power of 2, got {windowSize}.", nameof(windowSize));
+
         _numOps = MathHelper.GetNumericOperations<T>();
         _windowSize = windowSize;
         _predictionHorizon = predictionHorizon;
@@ -98,13 +102,22 @@ public class HREForecaster<T>
     /// <returns>All predicted values.</returns>
     public Vector<T> PredictAutoregressive(Vector<T> initialWindow, int steps)
     {
+        if (initialWindow.Length < _windowSize)
+            throw new ArgumentException(
+                $"Initial window must have at least {_windowSize} elements, got {initialWindow.Length}.",
+                nameof(initialWindow));
+
+        if (steps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(steps), "Steps must be positive.");
+
         var predictions = new Vector<T>(steps);
         var currentWindow = new Vector<T>(_windowSize);
 
-        // Copy initial window
+        // Copy initial window (last _windowSize elements if longer)
+        int offset = initialWindow.Length - _windowSize;
         for (int i = 0; i < _windowSize; i++)
         {
-            currentWindow[i] = initialWindow[i];
+            currentWindow[i] = initialWindow[offset + i];
         }
 
         int predicted = 0;
@@ -144,6 +157,9 @@ public class HREForecaster<T>
     /// <returns>MSE on the test portion.</returns>
     public double Evaluate(Vector<T> timeSeries, int trainEnd)
     {
+        if (timeSeries is null)
+            throw new ArgumentNullException(nameof(timeSeries));
+
         int testLength = timeSeries.Length - trainEnd;
         if (testLength <= 0) return double.NaN;
 

@@ -26,7 +26,6 @@ namespace AiDotNet.HarmonicEngine.Transforms;
 public class AnalyticSignal<T>
 {
     private readonly INumericOperations<T> _numOps;
-    private readonly INumericOperations<Complex<T>> _complexOps;
     private readonly FastFourierTransform<T> _fft;
 
     /// <summary>
@@ -35,7 +34,6 @@ public class AnalyticSignal<T>
     public AnalyticSignal()
     {
         _numOps = MathHelper.GetNumericOperations<T>();
-        _complexOps = MathHelper.GetNumericOperations<Complex<T>>();
         _fft = new FastFourierTransform<T>();
     }
 
@@ -53,6 +51,14 @@ public class AnalyticSignal<T>
     public Vector<Complex<T>> Compute(Vector<T> signal)
     {
         int n = signal.Length;
+
+        if (n < 2)
+            throw new ArgumentException("Signal must have at least 2 samples.", nameof(signal));
+
+        if ((n & (n - 1)) != 0)
+            throw new ArgumentException(
+                $"Signal length ({n}) must be a power of 2 for FFT.", nameof(signal));
+
         var spectrum = _fft.Forward(signal);
 
         // Build the analytic signal in frequency domain:
@@ -189,9 +195,6 @@ public class AnalyticSignal<T>
         var phase = InstantaneousPhase(signal);
         int n = phase.Length;
         var freq = new Vector<T>(n - 1);
-        var twoPi = _numOps.FromDouble(2.0 * Math.PI);
-        var pi = _numOps.FromDouble(Math.PI);
-        var negPi = _numOps.Negate(pi);
         var invTwoPi = _numOps.FromDouble(sampleRate / (2.0 * Math.PI));
 
         for (int i = 0; i < n - 1; i++)

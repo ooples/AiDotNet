@@ -60,6 +60,13 @@ public class MellinTransform<T>
     {
         int n = signal.Length;
 
+        if (n < 2)
+            throw new ArgumentException("Signal must have at least 2 samples.", nameof(signal));
+
+        if ((n & (n - 1)) != 0)
+            throw new ArgumentException(
+                $"Signal length ({n}) must be a power of 2 for FFT.", nameof(signal));
+
         // Resample to logarithmic time grid
         // Map uniform indices [0, n-1] to exponential positions in [0, n-1]
         var logResampled = new Vector<T>(n);

@@ -40,7 +40,6 @@ public class SpectralHebbianLayer<T> : LayerBase<T>
 
     // The learned spectral filter H(k)
     private Vector<Complex<T>> _filter;
-    private Tensor<T>? _lastInput;
 
     /// <inheritdoc/>
     public override string LayerName => $"SpectralHebbian_{_signalLength}";
@@ -88,8 +87,6 @@ public class SpectralHebbianLayer<T> : LayerBase<T>
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-
         // Extract signal
         var signal = new Vector<T>(_signalLength);
         for (int i = 0; i < _signalLength && i < input.Length; i++)
@@ -122,19 +119,20 @@ public class SpectralHebbianLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the spectral filter using the Hebbian rule given a target signal.
-    /// Call this during training after Forward() to update the filter.
+    /// Updates the spectral filter using the Hebbian rule given an input and target signal.
+    /// Call this during training to update the filter.
     /// </summary>
+    /// <param name="inputSignal">The input signal that was passed to Forward().</param>
     /// <param name="target">The desired output signal.</param>
-    public void HebbianUpdate(Vector<T> target)
+    public void HebbianUpdate(Vector<T> inputSignal, Vector<T> target)
     {
-        if (!IsTrainingMode || _lastInput is null) return;
+        if (!IsTrainingMode) return;
 
         // Get input signal
         var input = new Vector<T>(_signalLength);
-        for (int i = 0; i < _signalLength && i < _lastInput.Length; i++)
+        for (int i = 0; i < _signalLength && i < inputSignal.Length; i++)
         {
-            input[i] = _lastInput[i];
+            input[i] = inputSignal[i];
         }
 
         // Compute spectra
@@ -174,11 +172,21 @@ public class SpectralHebbianLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
+        if (parameters.Length < _signalLength * 2)
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must be at least {_signalLength * 2}.",
+                nameof(parameters));
+
         for (int k = 0; k < _signalLength; k++)
         {
             _filter[k] = new Complex<T>(parameters[k * 2], parameters[k * 2 + 1]);
         }
-        Parameters = parameters;
+
+        // Copy the values into our own Parameters vector
+        for (int i = 0; i < _signalLength * 2; i++)
+        {
+            Parameters[i] = parameters[i];
+        }
     }
 
     /// <inheritdoc/>
@@ -196,6 +204,11 @@ public class SpectralHebbianLayer<T> : LayerBase<T>
     public override void Deserialize(BinaryReader reader)
     {
         int length = reader.ReadInt32();
+
+        if (length != _signalLength)
+            throw new InvalidOperationException(
+                $"Serialized signal length ({length}) does not match layer signal length ({_signalLength}).");
+
         for (int i = 0; i < length * 2; i++)
         {
             Parameters[i] = NumOps.FromDouble(reader.ReadDouble());
@@ -221,8 +234,5 @@ public class SpectralHebbianLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override void ResetState()
-    {
-        _lastInput = null;
-    }
+    public override void ResetState() { }
 }

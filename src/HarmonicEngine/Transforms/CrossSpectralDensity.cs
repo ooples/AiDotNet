@@ -25,6 +25,10 @@ public class CrossSpectralDensity<T>
     /// </summary>
     public Vector<Complex<T>> Compute(Vector<T> x, Vector<T> y)
     {
+        if (x.Length != y.Length)
+            throw new ArgumentException(
+                $"Signals must have equal length. X: {x.Length}, Y: {y.Length}.");
+
         var specX = SpectralEngineHelper.FFT(x);
         var specY = SpectralEngineHelper.FFT(y);
         var csd = SpectralEngineHelper.CrossSpectral(specX, specY);
@@ -36,6 +40,10 @@ public class CrossSpectralDensity<T>
     /// </summary>
     public Vector<Complex<T>> ComputeFromSpectra(Vector<Complex<T>> spectrumX, Vector<Complex<T>> spectrumY)
     {
+        if (spectrumX.Length != spectrumY.Length)
+            throw new ArgumentException(
+                $"Spectra must have equal length. X: {spectrumX.Length}, Y: {spectrumY.Length}.");
+
         var tx = SpectralEngineHelper.ToComplexTensor(spectrumX);
         var ty = SpectralEngineHelper.ToComplexTensor(spectrumY);
         var csd = SpectralEngineHelper.CrossSpectral(tx, ty);

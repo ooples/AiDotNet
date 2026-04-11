@@ -25,15 +25,14 @@ namespace AiDotNet.HarmonicEngine.Core;
 public class SpectralBus<T>
 {
     private readonly INumericOperations<T> _numOps;
-    private readonly INumericOperations<Complex<T>> _complexOps;
     private readonly FastFourierTransform<T> _fft;
-    private readonly int[] _carriers;
+    private readonly IReadOnlyList<int> _carriers;
     private readonly int _fftSize;
 
     /// <summary>
     /// Gets the carrier frequency bin indices used by this bus.
     /// </summary>
-    public int[] Carriers => _carriers;
+    public IReadOnlyList<int> Carriers => _carriers;
 
     /// <summary>
     /// Gets the FFT size used by this bus.
@@ -43,17 +42,16 @@ public class SpectralBus<T>
     /// <summary>
     /// Gets the number of carriers (feature channels) in this bus.
     /// </summary>
-    public int NumCarriers => _carriers.Length;
+    public int NumCarriers => _carriers.Count;
 
     /// <summary>
     /// Initializes a new SpectralBus with pre-allocated carrier positions.
     /// </summary>
     /// <param name="carriers">Frequency bin indices for each carrier (from CarrierAllocator).</param>
     /// <param name="fftSize">FFT size. Must be a power of 2 and large enough for all carriers.</param>
-    public SpectralBus(int[] carriers, int fftSize)
+    public SpectralBus(IReadOnlyList<int> carriers, int fftSize)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
-        _complexOps = MathHelper.GetNumericOperations<Complex<T>>();
         _fft = new FastFourierTransform<T>();
         _carriers = carriers;
         _fftSize = fftSize;
@@ -76,9 +74,9 @@ public class SpectralBus<T>
     /// <returns>Time-domain signal of length FftSize containing all features as superimposed carriers.</returns>
     public Vector<T> Encode(Vector<T> features)
     {
-        if (features.Length != _carriers.Length)
+        if (features.Length != _carriers.Count)
             throw new ArgumentException(
-                $"Feature count ({features.Length}) must equal carrier count ({_carriers.Length}).");
+                $"Feature count ({features.Length}) must equal carrier count ({_carriers.Count}).");
 
         // Build frequency-domain representation
         var spectrum = new Vector<Complex<T>>(_fftSize);
@@ -90,14 +88,14 @@ public class SpectralBus<T>
         }
 
         // Place each feature as the amplitude of its assigned carrier
-        for (int i = 0; i < _carriers.Length; i++)
+        for (int i = 0; i < _carriers.Count; i++)
         {
             int bin = _carriers[i];
             spectrum[bin] = new Complex<T>(features[i], _numOps.Zero);
 
             // Mirror to negative frequency for real-valued output
             int mirrorBin = _fftSize - bin;
-            if (mirrorBin != bin && mirrorBin < _fftSize)
+            if (mirrorBin != bin)
             {
                 spectrum[mirrorBin] = new Complex<T>(features[i], _numOps.Zero);
             }
@@ -115,12 +113,14 @@ public class SpectralBus<T>
     public Vector<T> Decode(Vector<T> signal)
     {
         var spectrum = _fft.Forward(signal);
-        var features = new Vector<T>(_carriers.Length);
+        var features = new Vector<T>(_carriers.Count);
 
-        for (int i = 0; i < _carriers.Length; i++)
+        for (int i = 0; i < _carriers.Count; i++)
         {
-            // Read the magnitude at the carrier frequency
-            features[i] = spectrum[_carriers[i]].Magnitude;
+            // Read the real part at the carrier frequency.
+            // Encode stores features as real-valued amplitudes (imag=0),
+            // so the real part preserves sign information that magnitude would discard.
+            features[i] = spectrum[_carriers[i]].Real;
         }
 
         return features;
@@ -134,9 +134,9 @@ public class SpectralBus<T>
     public Vector<Complex<T>> DecodeComplex(Vector<T> signal)
     {
         var spectrum = _fft.Forward(signal);
-        var features = new Vector<Complex<T>>(_carriers.Length);
+        var features = new Vector<Complex<T>>(_carriers.Count);
 
-        for (int i = 0; i < _carriers.Length; i++)
+        for (int i = 0; i < _carriers.Count; i++)
         {
             features[i] = spectrum[_carriers[i]];
         }
@@ -152,7 +152,7 @@ public class SpectralBus<T>
     /// <returns>Time-domain signal.</returns>
     public Vector<T> EncodeWithPhase(Vector<T> amplitudes, Vector<T> phases)
     {
-        if (amplitudes.Length != _carriers.Length || phases.Length != _carriers.Length)
+        if (amplitudes.Length != _carriers.Count || phases.Length != _carriers.Count)
             throw new ArgumentException("Amplitude and phase vectors must have length equal to carrier count.");
 
         var spectrum = new Vector<Complex<T>>(_fftSize);
@@ -163,14 +163,14 @@ public class SpectralBus<T>
             spectrum[i] = zero;
         }
 
-        for (int i = 0; i < _carriers.Length; i++)
+        for (int i = 0; i < _carriers.Count; i++)
         {
             int bin = _carriers[i];
             spectrum[bin] = Complex<T>.FromPolarCoordinates(amplitudes[i], phases[i]);
 
             // Conjugate mirror for real-valued output
             int mirrorBin = _fftSize - bin;
-            if (mirrorBin != bin && mirrorBin < _fftSize)
+            if (mirrorBin != bin)
             {
                 spectrum[mirrorBin] = new Complex<T>(
                     spectrum[bin].Real,

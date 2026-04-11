@@ -44,6 +44,8 @@ public class SpectralSparsityMask<T>
     public Vector<Complex<T>> Apply(Vector<Complex<T>> spectrum, int k)
     {
         int n = spectrum.Length;
+        if (n == 0) return spectrum;
+        if (k <= 0) throw new ArgumentOutOfRangeException(nameof(k), "K must be positive.");
         k = Math.Min(k, n);
 
         // Engine-accelerated TopK by magnitude
@@ -61,6 +63,8 @@ public class SpectralSparsityMask<T>
     public int[] GetTopKIndices(Vector<Complex<T>> spectrum, int k)
     {
         int n = spectrum.Length;
+        if (n == 0) return [];
+        if (k <= 0) throw new ArgumentOutOfRangeException(nameof(k), "K must be positive.");
         k = Math.Min(k, n);
 
         var magnitudes = new (double magnitude, int index)[n];

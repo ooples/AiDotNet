@@ -7,7 +7,6 @@ using AiDotNet.HarmonicEngine.Options;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
-using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.HarmonicEngine.Models;
@@ -45,11 +44,6 @@ namespace AiDotNet.HarmonicEngine.Models;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper(
-    "The Harmonic Resonance Engine: A Spectral Architecture for Neural Computation via Intermodulation",
-    "https://arxiv.org/abs/TBD",
-    Year = 2026,
-    Authors = "TBD")]
 public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
     private readonly HREModelOptions _options;
@@ -57,12 +51,15 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     // Pipeline stages
     private MellinFourierLayer<T>? _mellinFourierLayer;
     private readonly List<OFDMLayer<T>> _ofdmLayers = [];
-    private IMDAttentionLayer<T>? _attentionLayer;
+    private readonly List<IMDAttentionLayer<T>> _attentionLayers = [];
     private readonly SpectralSparsityMask<T> _sparsityMask;
 
     // Output projection (simple linear layer for mapping spectral features to output)
     private Vector<T> _outputWeights;
     private T _outputBias;
+
+    // Cached features from last forward pass (needed for gradient-based weight update in Train)
+    private Vector<T>? _lastFeatures;
 
     /// <summary>
     /// Gets the model configuration options.
@@ -74,10 +71,11 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     {
         get
         {
-            int count = _options.OutputSize * _options.CarrierCount + _options.OutputSize; // Output projection
+            // Output projection: weights (OutputSize * CarrierCount) + 1 scalar bias
+            int count = _options.OutputSize * _options.CarrierCount + 1;
             if (_mellinFourierLayer is not null) count += _mellinFourierLayer.ParameterCount;
             foreach (var layer in _ofdmLayers) count += layer.ParameterCount;
-            if (_attentionLayer is not null) count += _attentionLayer.ParameterCount;
+            foreach (var layer in _attentionLayers) count += layer.ParameterCount;
             return count;
         }
     }
@@ -86,9 +84,9 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
 
     /// <summary>
-    /// Gets the last computed attention weights (for visualization).
+    /// Gets the last computed attention weights from the first attention layer (for visualization).
     /// </summary>
-    public Matrix<T>? LastAttentionWeights => _attentionLayer?.LastAttentionWeights;
+    public Matrix<T>? LastAttentionWeights => _attentionLayers.Count > 0 ? _attentionLayers[0].LastAttentionWeights : null;
 
     /// <summary>
     /// Creates a new Harmonic Resonance Engine model.
@@ -129,28 +127,27 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         }
 
         // Stage 3: IMD attention
-        if (_attentionLayer is not null)
+        foreach (var attnLayer in _attentionLayers)
         {
-            current = _attentionLayer.Forward(current);
+            current = attnLayer.Forward(current);
         }
 
-        // Stage 4: Output projection via Engine.DotProduct per output dimension
-        var output = new Tensor<T>([_options.OutputSize]);
+        // Stage 4: Spectral sparsity — keep only top-K strongest components
+        current = ApplySparsity(current);
+
+        // Stage 5: Output projection via Engine.DotProduct per output dimension
         int carrierCount = Math.Min(current.Length, _options.CarrierCount);
+        _lastFeatures = new Vector<T>(carrierCount);
+        for (int i = 0; i < carrierCount; i++) _lastFeatures[i] = current[i];
 
-        // Extract features as Vector for DotProduct
-        var featureVec = new Vector<T>(carrierCount);
-        for (int i = 0; i < carrierCount; i++) featureVec[i] = current[i];
-
+        var output = new Tensor<T>([_options.OutputSize]);
         for (int o = 0; o < _options.OutputSize; o++)
         {
-            // Extract weight row for this output
             var weightRow = new Vector<T>(carrierCount);
             int offset = o * _options.CarrierCount;
             for (int i = 0; i < carrierCount; i++) weightRow[i] = _outputWeights[offset + i];
 
-            // Vectorized dot product + bias
-            output[o] = NumOps.Add(Engine.DotProduct(weightRow, featureVec), _outputBias);
+            output[o] = NumOps.Add(Engine.DotProduct(weightRow, _lastFeatures), _outputBias);
         }
 
         return output;
@@ -169,16 +166,27 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         SetTrainingMode(true);
         var prediction = Forward(input);
 
-        // Compute gradient for output projection via simple gradient descent
-        int carrierCount = Math.Min(_options.CarrierCount, _ofdmLayers.Count > 0 ? _options.CarrierCount : _options.InputSize);
+        // Gradient descent on output projection: dL/dw_oj = error_o * feature_j
         var lr = NumOps.FromDouble(_options.HebbianLearningRate);
+        int carrierCount = _lastFeatures is not null ? _lastFeatures.Length : _options.CarrierCount;
 
         for (int o = 0; o < _options.OutputSize; o++)
         {
             T error = NumOps.Subtract(prediction[o], expectedOutput[o]);
-            // dL/dw_ij = error * x_j (for MSE)
-            // We don't have the intermediate activations stored for output projection,
-            // so we use a simple error signal for the output weights
+
+            // Update output weights: w_oj -= lr * error * feature_j
+            if (_lastFeatures is not null)
+            {
+                int offset = o * _options.CarrierCount;
+                for (int j = 0; j < carrierCount; j++)
+                {
+                    T grad = NumOps.Multiply(error, _lastFeatures[j]);
+                    _outputWeights[offset + j] = NumOps.Subtract(
+                        _outputWeights[offset + j], NumOps.Multiply(lr, grad));
+                }
+            }
+
+            // Update bias: b -= lr * error
             _outputBias = NumOps.Subtract(_outputBias, NumOps.Multiply(lr, error));
         }
     }
@@ -190,7 +198,7 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     {
         _mellinFourierLayer?.SetTrainingMode(isTraining);
         foreach (var layer in _ofdmLayers) layer.SetTrainingMode(isTraining);
-        _attentionLayer?.SetTrainingMode(isTraining);
+        foreach (var layer in _attentionLayers) layer.SetTrainingMode(isTraining);
     }
 
     /// <inheritdoc/>
@@ -260,14 +268,44 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         for (int i = 0; i < _ofdmLayers.Count; i++)
             lines.Add($"  OFDMLayer[{i}]: {_ofdmLayers[i].LayerName} ({_ofdmLayers[i].ParameterCount} params)");
 
-        if (_attentionLayer is not null)
-            lines.Add($"  IMDAttentionLayer: {_attentionLayer.LayerName} ({_attentionLayer.ParameterCount} params)");
+        for (int i = 0; i < _attentionLayers.Count; i++)
+            lines.Add($"  IMDAttentionLayer[{i}]: {_attentionLayers[i].LayerName} ({_attentionLayers[i].ParameterCount} params)");
 
         lines.Add($"  OutputProjection: {_options.CarrierCount} -> {_options.OutputSize}");
         lines.Add($"");
         lines.Add($"Total parameters: {ParameterCount}");
 
         return string.Join(Environment.NewLine, lines);
+    }
+
+    private Tensor<T> ApplySparsity(Tensor<T> current)
+    {
+        int n = current.Length;
+
+        // Convert tensor to complex spectrum for sparsity mask
+        var spectrum = new Vector<Complex<T>>(n);
+        for (int i = 0; i < n; i++)
+        {
+            spectrum[i] = new Complex<T>(current[i], NumOps.Zero);
+        }
+
+        // Determine K
+        int k = _options.UseMDLAutoK
+            ? _sparsityMask.SelectK(spectrum)
+            : Math.Min(_options.SparsityK, n);
+
+        if (k >= n) return current; // No sparsity needed
+
+        // Apply top-K sparsity
+        var sparse = _sparsityMask.Apply(spectrum, k);
+
+        // Convert back to tensor (take real part)
+        var result = new Tensor<T>([n]);
+        for (int i = 0; i < n; i++)
+        {
+            result[i] = sparse[i].Real;
+        }
+        return result;
     }
 
     private void BuildPipeline()
@@ -292,10 +330,10 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             currentSize = _options.CarrierCount;
         }
 
-        // Stage 3: IMD attention
-        if (_options.NumAttentionLayers > 0)
+        // Stage 3: IMD attention layers
+        for (int i = 0; i < _options.NumAttentionLayers; i++)
         {
-            _attentionLayer = new IMDAttentionLayer<T>(_options.CarrierCount, _options.FftSize);
+            _attentionLayers.Add(new IMDAttentionLayer<T>(_options.CarrierCount, _options.FftSize));
         }
     }
 

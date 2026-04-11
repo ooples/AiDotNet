@@ -36,6 +36,10 @@ public class HREBenchmarkSuite<T>
         var results = new List<BenchmarkResult>();
         int trainEnd = (int)(timeSeries.Length * (1.0 - testFraction));
 
+        if (trainEnd <= windowSize)
+            throw new ArgumentException(
+                $"Training set too small: trainEnd ({trainEnd}) must be > windowSize ({windowSize}).");
+
         foreach (var nonlinearity in new[] { NonlinearityType.ModReLU, NonlinearityType.SpectralGating, NonlinearityType.InstantaneousFreq })
         {
             var options = new HREModelOptions
@@ -74,7 +78,7 @@ public class HREBenchmarkSuite<T>
     /// <summary>
     /// Measures average inference latency over test windows.
     /// </summary>
-    public double MeasureLatency(HREForecaster<T> forecaster, Vector<T> timeSeries, int trainEnd, int windowSize)
+    private double MeasureLatency(HREForecaster<T> forecaster, Vector<T> timeSeries, int trainEnd, int windowSize)
     {
         // Warm up
         var warmupWindow = new Vector<T>(windowSize);
@@ -106,14 +110,14 @@ public class HREBenchmarkSuite<T>
     /// <summary>
     /// Measures prediction accuracy on the test portion.
     /// </summary>
-    public (double mse, double mae, int count) MeasureAccuracy(HREForecaster<T> forecaster,
+    private (double mse, double mae, int count) MeasureAccuracy(HREForecaster<T> forecaster,
         Vector<T> timeSeries, int trainEnd, int windowSize)
     {
         double totalSqError = 0;
         double totalAbsError = 0;
         int count = 0;
 
-        for (int t = trainEnd; t < timeSeries.Length - 1; t++)
+        for (int t = trainEnd; t < timeSeries.Length; t++)
         {
             if (t - windowSize < 0) continue;
 
@@ -125,7 +129,7 @@ public class HREBenchmarkSuite<T>
 
             var pred = forecaster.Predict(window);
             double predVal = _numOps.ToDouble(pred[0]);
-            double actualVal = _numOps.ToDouble(timeSeries[t + 1]);
+            double actualVal = _numOps.ToDouble(timeSeries[t]);
 
             if (!double.IsNaN(predVal) && !double.IsInfinity(predVal))
             {

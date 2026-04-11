@@ -44,6 +44,10 @@ public class PhaseAlignmentRule<T> : ISpectralLearningRule<T>
     /// <param name="learningRate">Learning rate for phase updates.</param>
     public PhaseAlignmentRule(double learningRate = 0.05)
     {
+        if (learningRate <= 0.0 || !double.IsFinite(learningRate))
+            throw new ArgumentOutOfRangeException(nameof(learningRate),
+                $"Learning rate must be a positive finite number, got {learningRate}.");
+
         _numOps = MathHelper.GetNumericOperations<T>();
         _learningRate = learningRate;
     }
@@ -55,6 +59,10 @@ public class PhaseAlignmentRule<T> : ISpectralLearningRule<T>
     public void Update(Vector<Complex<T>> filter, Vector<Complex<T>> inputSpectrum, Vector<Complex<T>> targetSpectrum)
     {
         int n = filter.Length;
+
+        if (inputSpectrum.Length != n || targetSpectrum.Length != n)
+            throw new ArgumentException(
+                $"All vectors must have equal length. Filter: {n}, Input: {inputSpectrum.Length}, Target: {targetSpectrum.Length}.");
 
         for (int k = 0; k < n; k++)
         {

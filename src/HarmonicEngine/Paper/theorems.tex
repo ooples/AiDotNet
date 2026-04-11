@@ -10,7 +10,7 @@
 
 \title{Harmonic Resonance Engine: Core Theorems\\
 \large Draft Proof Sketches for arXiv Preprint}
-\author{[Author Names]}
+\author{AiDotNet Contributors}
 \date{\today}
 
 \begin{document}
@@ -179,15 +179,17 @@ is a regularization constant.
 Under the spectral Hebbian update rule with stationary input,
 the filter $H(k)$ converges to:
 \begin{equation}
-H_{\text{opt}}(k) = \frac{S_{yx}(k)}{(1 + \alpha) \cdot S_{xx}(k)}
-= \frac{1}{1+\alpha} \cdot \frac{S_{yx}(k)}{S_{xx}(k)}
+H_{\text{opt}}(k) = \frac{S_{yx}(k)}{\alpha \cdot S_{xx}(k)}
+= \frac{1}{\alpha} \cdot H_W(k)
 \end{equation}
 which is a scaled version of the Wiener optimal filter
 $H_W(k) = S_{yx}(k) / S_{xx}(k)$.
-For $\alpha \to 0$, this converges to the exact Wiener filter.
+As $\alpha \to 1$, this equals the exact Wiener filter.
+For $\alpha < 1$, the filter amplifies beyond the Wiener optimal;
+for $\alpha > 1$, it attenuates.
 
-The convergence rate is geometric with rate $r = 1 - \eta(1 + \alpha)$,
-requiring $O(\frac{1}{\eta(1+\alpha)} \log(1/\epsilon))$ iterations
+The convergence rate is geometric with rate $r = 1 - \eta\alpha$,
+requiring $O(\frac{1}{\eta\alpha} \log(1/\epsilon))$ iterations
 for $\epsilon$-accuracy.
 \end{theorem}
 
@@ -247,7 +249,7 @@ for gradient descent.
 \end{remark}
 
 %% ============================================================
-%% REFERENCES (placeholder)
+%% REFERENCES
 %% ============================================================
 \begin{thebibliography}{9}
 \bibitem{candes2006}
