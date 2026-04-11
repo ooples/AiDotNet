@@ -52,7 +52,7 @@ public class SparsityGeneralizationTests
     }
 
     [Fact]
-    public void TopK_OversparseSRetainsSignal_UndersparseAddsNoise()
+    public void TopK_OversparseRetainsSignal_UndersparseAddsNoise()
     {
         // Pure sinusoids at integer bin frequencies
         int n = 64;
@@ -139,12 +139,14 @@ public class SparsityGeneralizationTests
     }
 
     [Fact]
-    public void SparsityMask_GetTopKIndices_ReturnsCorrectCount()
+    public void SparsityMask_GetTopKIndices_ReturnsLargestComponents()
     {
         var mask = new SpectralSparsityMask<double>();
         int n = 64;
         int k = 5;
 
+        // Create a spectrum where magnitudes are proportional to index
+        // so the top-K should be indices [63, 62, 61, 60, 59]
         var spectrum = new Vector<Complex<double>>(n);
         for (int i = 0; i < n; i++)
         {
@@ -155,6 +157,18 @@ public class SparsityGeneralizationTests
 
         Assert.Equal(k, indices.Length);
         Assert.Equal(indices.Length, indices.Distinct().Count()); // All unique
+
+        // Verify these are the K largest — all should be in the top portion
+        var sortedExpected = Enumerable.Range(0, n)
+            .OrderByDescending(i => Math.Abs(i * 0.1))
+            .Take(k)
+            .ToHashSet();
+
+        foreach (int idx in indices)
+        {
+            Assert.True(sortedExpected.Contains(idx),
+                $"Index {idx} is not among the top-{k} by magnitude");
+        }
     }
 
     [Fact]

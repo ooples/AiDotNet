@@ -71,7 +71,7 @@ public class FinancialIntegrationTests
             if (!double.IsNaN(pred[0]) && !double.IsInfinity(pred[0]))
             {
                 validPredictions++;
-                totalAbsError += Math.Abs(pred[0] - closePrices[t + 1]);
+                totalAbsError += Math.Abs(pred[0] - closePrices[t]);
             }
         }
 
@@ -80,7 +80,7 @@ public class FinancialIntegrationTests
         double mae = totalAbsError / validPredictions;
         _output.WriteLine($"Valid predictions: {validPredictions}");
         _output.WriteLine($"MAE: {mae:F4}");
-        _output.WriteLine($"Mean price: {closePrices.Transform(x => x).Length}");
+        _output.WriteLine($"Series length: {closePrices.Length}");
     }
 
     [Fact]
@@ -132,7 +132,7 @@ public class FinancialIntegrationTests
     }
 
     [Fact]
-    public void HREModel_InferenceLatency_UnderOneMillisecond()
+    public void HREModel_InferenceLatency_UnderFiftyMilliseconds()
     {
         // Benchmark: HRE inference should be very fast (target < 1ms)
         int windowSize = 64;

@@ -120,6 +120,10 @@ public class CrossSpectralDensityTests
 
         _output.WriteLine($"Average coherence between orthogonal signals: {avgCoherence:F4}");
 
+        // Average coherence between orthogonal signals should be near zero
+        Assert.True(avgCoherence < 0.1,
+            $"Average coherence between orthogonal signals should be near zero, got {avgCoherence:F4}");
+
         // Coherence values are in [0, 1]
         for (int k = 0; k < n; k++)
         {
