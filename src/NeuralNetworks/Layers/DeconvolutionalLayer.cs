@@ -530,8 +530,12 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
 
             var output = Engine.ConvTranspose2D(input, _kernels, stride, padding, outputPadding);
 
-            // Add bias using broadcast: reshape [OutputDepth] to [1, OutputDepth, 1, 1] for NCHW format
-            var biasReshaped = _biases.Reshape([1, OutputDepth, 1, 1]);
+            // Add bias using broadcast: reshape [OutputDepth] to [1, OutputDepth, 1, 1] for NCHW format.
+            // Reshape via Engine.Reshape every call so the gradient tape records a
+            // fresh GradFn chain back to _biases on each training step. Caching the
+            // reshape across calls would reuse a handle primed during inference
+            // (no GradFn), causing backward to dead-end before reaching _biases.
+            var biasReshaped = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
             var biasedOutput = Engine.TensorBroadcastAdd(output, biasReshaped);
 
             result = ApplyActivation(biasedOutput);

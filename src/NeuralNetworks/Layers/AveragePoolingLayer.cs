@@ -263,11 +263,14 @@ public class AveragePoolingLayer<T> : LayerBase<T>
         _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
+        // Every shape op must go through Engine so the gradient tape records the
+        // reshape — direct Tensor<T>.Reshape bypasses the tape and snaps the
+        // gradient chain through the pooling layer.
         Tensor<T> input4D;
         if (rank == 3)
         {
             _addedBatchDimension = true;
-            input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
+            input4D = Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
         }
         else if (rank == 4)
         {
@@ -281,13 +284,19 @@ public class AveragePoolingLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < rank - 3; d++)
                 flatBatch *= input.Shape[d];
-            input4D = input.Reshape(flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]);
+            input4D = Engine.Reshape(input, new[]
+            {
+                flatBatch,
+                input.Shape[rank - 3],
+                input.Shape[rank - 2],
+                input.Shape[rank - 1]
+            });
         }
 
         // Use Engine's GPU-accelerated AvgPool2D (operates on 4D); return shape matches input rank
         var output4D = Engine.AvgPool2D(input4D, PoolSize, Strides, padding: 0);
 
-        // Return with matching dimensions to preserve original tensor rank
+        // Return with matching dimensions to preserve original tensor rank (via Engine)
         if (_originalInputShape.Length > 4)
         {
             var outputShape = new int[_originalInputShape.Length];
@@ -297,12 +306,12 @@ public class AveragePoolingLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 2] = output4D.Shape[2];
             outputShape[_originalInputShape.Length - 1] = output4D.Shape[3];
             _lastOutputShape = outputShape;
-            return output4D.Reshape(outputShape);
+            return Engine.Reshape(output4D, outputShape);
         }
         if (_addedBatchDimension)
         {
             var actualOutputShape = new int[] { output4D.Shape[1], output4D.Shape[2], output4D.Shape[3] };
-            var output = output4D.Reshape(actualOutputShape);
+            var output = Engine.Reshape(output4D, actualOutputShape);
             _lastOutputShape = actualOutputShape;
             return output;
         }

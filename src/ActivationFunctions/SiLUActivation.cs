@@ -64,6 +64,23 @@ public class SiLUActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies SiLU/Swish to a tensor via the engine so the gradient tape records it.
+    /// </summary>
+    /// <remarks>
+    /// The default <see cref="ActivationFunctionBase{T}.Activate(Tensor{T})"/> implementation
+    /// iterates element-by-element through the scalar <see cref="Activate(T)"/> overload and
+    /// writes into a fresh rent tensor that has no tape connection to the input. That path
+    /// silently breaks gradient flow through any layer whose activation is a scalar-only
+    /// implementation — which is every layer that wires up SiLU via <c>new SiLUActivation&lt;T&gt;()</c>
+    /// (the time-embedding MLP in every diffusion model, every DDPM/SD ResBlock's time projection,
+    /// and more). Delegating to <c>Engine.Swish</c> records the forward op on the active
+    /// <see cref="AiDotNet.Tensors.Engines.Autodiff.GradientTape{T}"/> via the standard
+    /// <c>DifferentiableOps.RecordUnary</c> path, so backward propagation can follow the chain
+    /// through the activation.
+    /// </remarks>
+    public override Tensor<T> Activate(Tensor<T> input) => Engine.Swish(input);
+
+    /// <summary>
     /// Calculates the derivative of the SiLU function for a single input value.
     /// </summary>
     /// <param name="input">The input value to calculate the derivative for.</param>

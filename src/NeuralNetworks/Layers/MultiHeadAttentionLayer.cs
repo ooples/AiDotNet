@@ -799,9 +799,15 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 $"_queryWeights shape: [{string.Join(", ", _queryWeights.Shape.ToArray())}]");
         }
 
-        var queries = Engine.Reshape(Q_flat, [batchSize, seqLengthQ, _headCount, _headDimension]).Transpose(new[] { 0, 2, 1, 3 });
-        var keys = Engine.Reshape(K_flat, [batchSize, seqLengthKV, _headCount, _headDimension]).Transpose(new[] { 0, 2, 1, 3 });
-        var values = Engine.Reshape(V_flat, [batchSize, seqLengthKV, _headCount, _headDimension]).Transpose(new[] { 0, 2, 1, 3 });
+        // Every shape op must go through Engine so the gradient tape records the
+        // transformation — direct Tensor<T>.Transpose bypasses the tape and breaks
+        // gradient flow through Q/K/V projections and back to the weight tensors.
+        var queriesReshaped = Engine.Reshape(Q_flat, [batchSize, seqLengthQ, _headCount, _headDimension]);
+        var keysReshaped = Engine.Reshape(K_flat, [batchSize, seqLengthKV, _headCount, _headDimension]);
+        var valuesReshaped = Engine.Reshape(V_flat, [batchSize, seqLengthKV, _headCount, _headDimension]);
+        var queries = Engine.TensorPermute(queriesReshaped, new[] { 0, 2, 1, 3 });
+        var keys = Engine.TensorPermute(keysReshaped, new[] { 0, 2, 1, 3 });
+        var values = Engine.TensorPermute(valuesReshaped, new[] { 0, 2, 1, 3 });
 
         // Apply RoPE to Q and K if configured
         if (_ropeLayer != null)
@@ -845,13 +851,13 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // Cache attention weights for backward pass
         _lastAttentionScores = attentionWeights4D;
 
-        // 3. Cache Head Outputs
-        var permutedForCache = context_4D.Transpose(new[] { 1, 0, 2, 3 }); // [H, B, S, D]
+        // 3. Cache Head Outputs — via Engine so the tape records the transpose.
+        var permutedForCache = Engine.TensorPermute(context_4D, new[] { 1, 0, 2, 3 }); // [H, B, S, D]
         _lastHeadOutputs = new List<Tensor<T>> { permutedForCache }; // store stacked heads
 
         // 5. Concatenate and Project Output
-        // [B, H, S, D] -> [B, S, H, D] -> [B, S, E]
-        var context_transposed = context_4D.Transpose(new[] { 0, 2, 1, 3 });
+        // [B, H, S, D] -> [B, S, H, D] -> [B, S, E] (Engine op keeps tape connected)
+        var context_transposed = Engine.TensorPermute(context_4D, new[] { 0, 2, 1, 3 });
         var context_flat = Engine.Reshape(context_transposed, [batchSize * seqLengthQ, embeddingDimension]);
 
         // Cache pre-projection context for weight gradient computation in backward pass

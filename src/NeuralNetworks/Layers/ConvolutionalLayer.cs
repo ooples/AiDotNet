@@ -932,19 +932,28 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             result = Engine.FusedConv2D(_lastInput, _kernels, _biasReshaped4D,
                 Stride, Stride, Padding, Padding, 1, 1, fusedActivation);
         }
-        else if (IsTrainingMode)
+        else if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+                 && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed)
         {
             // Tape-tracked path: zero-alloc Into/InPlace variants bypass the gradient
-            // tape, so during training we must use the non-in-place Engine ops
+            // tape, so while a tape is active we must use the non-in-place Engine ops
             // (Conv2D + TensorBroadcastAdd) so the backward pass can follow the
-            // gradient chain back to the kernel and bias tensors. This was the root
-            // cause of diffusion tape training producing all-zero gradients — every
-            // ResBlock's internal Conv layers used IdentityActivation, taking the
-            // fallback path whose in-place ops snapped the tape chain at every
-            // convolution.
+            // gradient chain back to the kernel and bias tensors.
+            //
+            // Check the tape directly rather than IsTrainingMode because not every
+            // caller flips IsTrainingMode before invoking the forward pass —
+            // DiffusionModelBase.Train opens a GradientTape without ever calling
+            // SetTrainingMode, which caused this branch to be silently skipped.
+            //
+            // CRITICAL: reshape the bias fresh each training step instead of reusing
+            // the _biasReshaped4D cache. The cache is typically primed during the
+            // first Predict call (under NoGradScope) and holds a reshape tensor
+            // with no GradFn pointing back to _biases. Reusing that cached handle
+            // would make the gradient walk hit a dead end at _biasReshaped4D,
+            // leaving _biases with zero gradient on every training step.
             var conv = Engine.Conv2D(_lastInput, _kernels, Stride, Padding, dilation: 1);
-            _biasReshaped4D ??= Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-            result = Engine.TensorBroadcastAdd(conv, _biasReshaped4D);
+            var biasReshapedForTape = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
+            result = Engine.TensorBroadcastAdd(conv, biasReshapedForTape);
         }
         else
         {
