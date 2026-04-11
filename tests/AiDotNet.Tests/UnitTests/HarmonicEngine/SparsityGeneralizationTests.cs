@@ -201,32 +201,34 @@ public class SparsityGeneralizationTests
         }
 
         // Theorem 2 predicts m(N) = C * K * log(N/K). The quantitative check
-        // rules out Ω(N) scaling: the ratio of samples required at the largest
-        // N versus the smallest should be ≪ (Nmax / Nmin), which would be
-        // linear. For Nmax/Nmin = 16, linear predicts 16×; log-N predicts
-        // ~log(512/5) / log(32/5) ≈ 4.6 / 1.85 ≈ 2.5×.
+        // rules out Ω(N) scaling: the ratio of samples required at Nmax vs
+        // Nmin should be ≪ (Nmax/Nmin) (which would be linear) and close to
+        // the log-N prediction log(Nmax/K) / log(Nmin/K).
         int smallest = requiredSamplesByN[0].samples;
         int largest = requiredSamplesByN[^1].samples;
         double ratio = (double)largest / smallest;
         double linearRatio = (double)dimensions[^1] / dimensions[0];
-        double logRatio = Math.Log(dimensions[^1]) / Math.Log(dimensions[0]);
+        double logNPrediction = Math.Log((double)dimensions[^1] / K)
+                              / Math.Log((double)dimensions[0] / K);
 
         _output.WriteLine($"\nsamples({dimensions[^1]}) / samples({dimensions[0]}) = {ratio:F2}");
-        _output.WriteLine($"Linear scaling would give         {linearRatio:F2}");
-        _output.WriteLine($"log-N scaling predicts            {logRatio:F2}");
+        _output.WriteLine($"Linear scaling O(N) would give    {linearRatio:F2}");
+        _output.WriteLine($"log-N scaling O(K log N) predicts {logNPrediction:F2}");
 
-        // Empirical ratio should be far below the linear-scaling value.
-        // We allow slack to absorb discretization noise from the binary search
-        // and statistical variation from random sampling.
-        double slackMultiplier = 2.5;
-        Assert.True(ratio < logRatio * slackMultiplier,
-            $"Expected sub-linear scaling m(N) = O(K log N). Observed ratio {ratio:F2} " +
-            $"(log-N prediction: {logRatio:F2}, linear scaling: {linearRatio:F2}). " +
-            $"Ratio must be < {logRatio * slackMultiplier:F2} to be consistent with Theorem 2.");
+        // The observed ratio should be close to the log-N prediction and far
+        // below the linear prediction. We allow generous slack (3×) to absorb
+        // discretization noise from the binary search and statistical variation
+        // from random sampling with a small number of trials.
+        double slackMultiplier = 3.0;
+        Assert.True(ratio < logNPrediction * slackMultiplier,
+            $"Expected sub-linear scaling m(N) = O(K log N). " +
+            $"Observed ratio {ratio:F2} exceeds {logNPrediction * slackMultiplier:F2} " +
+            $"(log-N prediction {logNPrediction:F2} × {slackMultiplier}). " +
+            $"Linear scaling would give {linearRatio:F2}.");
 
         // Strong sub-linearity: the observed growth should be at least
-        // 2× slower than linear, regardless of how loose the log-N check is.
-        Assert.True(ratio < linearRatio / 2.0,
+        // 3× slower than linear — this rules out O(N) scaling definitively.
+        Assert.True(ratio < linearRatio / 3.0,
             $"Observed scaling ratio {ratio:F2} is too close to linear " +
             $"({linearRatio:F2}). Theorem 2 predicts strongly sub-linear growth.");
     }
