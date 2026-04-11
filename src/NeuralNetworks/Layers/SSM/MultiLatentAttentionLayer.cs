@@ -257,25 +257,25 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>
         if (rank < 3) batchSize = 1;
 
         var input3D = rank == 2
-            ? input.Reshape(1, seqLen, modelDim)
-            : input.Reshape(batchSize, seqLen, modelDim);
+            ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
         _lastInput = input3D;
 
-        var inputFlat = input3D.Reshape(batchSize * seqLen, _modelDimension);
+        var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
 
         // Step 1: Compress input to latent c_t = W_c * x_t + b_c
         var latentFlat = Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _compressWeights),
-            _compressBias.Reshape(1, _latentDimension));
-        var latent = latentFlat.Reshape(batchSize, seqLen, _latentDimension);
+            Engine.Reshape(_compressBias, new[] { 1, _latentDimension }));
+        var latent = Engine.Reshape(latentFlat, new[] { batchSize, seqLen, _latentDimension });
         _lastLatent = latent;
 
         // Step 2: Reconstruct K and V from latent
         var kFlat = Engine.TensorMatMul(latentFlat, _keyUpWeights);
         var vFlat = Engine.TensorMatMul(latentFlat, _valueUpWeights);
-        var k = kFlat.Reshape(batchSize, seqLen, _modelDimension);
-        var v = vFlat.Reshape(batchSize, seqLen, _modelDimension);
+        var k = Engine.Reshape(kFlat, new[] { batchSize, seqLen, _modelDimension });
+        var v = Engine.Reshape(vFlat, new[] { batchSize, seqLen, _modelDimension });
         _lastKey = k;
         _lastValue = v;
 
@@ -286,7 +286,7 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>
         // Step 4: Output gate
         var gateRaw = Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
-            _outputGateBias.Reshape(1, _modelDimension)).Reshape(batchSize, seqLen, _modelDimension);
+            Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })).Reshape(batchSize, seqLen, _modelDimension);
         var gate = Engine.Swish(gateRaw);
         _lastOutputGate = gate;
         _lastOutputGateRaw = gateRaw;
@@ -299,24 +299,24 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>
         var gatedOutput = Engine.TensorMultiply(attnOutput, gate);
 
         // Step 7: Output projection
-        var gatedFlat = gatedOutput.Reshape(batchSize * seqLen, _modelDimension);
+        var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(gatedFlat, _outputProjectionWeights);
-        var outBias = _outputProjectionBias.Reshape(1, _modelDimension);
+        var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
         outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
-        var output3D = outputFlat.Reshape(batchSize, seqLen, _modelDimension);
+        var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
         _lastOutput = result;
 
         if (rank == 2)
-            return result.Reshape(seqLen, _modelDimension);
+            return Engine.Reshape(result, new[] { seqLen, _modelDimension });
 
         var outputShape = new int[rank];
         for (int i = 0; i < rank - 2; i++)
             outputShape[i] = input.Shape[i];
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
-        return result.Reshape(outputShape);
+        return Engine.Reshape(result, outputShape);
     }
 
     /// <summary>

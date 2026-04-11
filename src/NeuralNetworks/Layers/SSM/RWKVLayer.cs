@@ -306,8 +306,8 @@ public partial class RWKVLayer<T> : LayerBase<T>
         if (rank < 3) batchSize = 1;
 
         var input3D = rank == 2
-            ? input.Reshape(1, seqLen, modelDim)
-            : input.Reshape(batchSize, seqLen, modelDim);
+            ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
         _lastInput = input3D;
 
@@ -327,14 +327,14 @@ public partial class RWKVLayer<T> : LayerBase<T>
         _lastOutput = result;
 
         if (rank == 2)
-            return result.Reshape(seqLen, _modelDimension);
+            return Engine.Reshape(result, new[] { seqLen, _modelDimension });
 
         var outputShape = new int[rank];
         for (int i = 0; i < rank - 2; i++)
             outputShape[i] = input.Shape[i];
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
-        return result.Reshape(outputShape);
+        return Engine.Reshape(result, outputShape);
     }
 
     /// <summary>

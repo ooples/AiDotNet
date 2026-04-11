@@ -299,17 +299,17 @@ public partial class S5Layer<T> : LayerBase<T>
         if (rank < 3) batchSize = 1;
 
         var input3D = rank == 2
-            ? input.Reshape(1, seqLen, modelDim)
-            : input.Reshape(batchSize, seqLen, modelDim);
+            ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
         _lastInput = input3D;
 
         // Step 1: Input projection [batch*seq, modelDim] -> [batch*seq, modelDim]
-        var input2D = input3D.Reshape(batchSize * seqLen, _modelDimension);
+        var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
         var projected = Engine.TensorMatMul(input2D, _inputProjectionWeights);
-        var bias2D = _inputProjectionBias.Reshape(1, _modelDimension);
+        var bias2D = Engine.Reshape(_inputProjectionBias, new[] { 1, _modelDimension });
         var projectedWithBias = Engine.TensorBroadcastAdd(projected, bias2D);
-        var projected3D = projectedWithBias.Reshape(batchSize, seqLen, _modelDimension);
+        var projected3D = Engine.Reshape(projectedWithBias, new[] { batchSize, seqLen, _modelDimension });
         _lastProjectedInput = projected3D;
 
         // Step 2: Kernel-based MIMO SSM (numerically stable for gradient checking)
@@ -317,24 +317,24 @@ public partial class S5Layer<T> : LayerBase<T>
         _lastScanOutputReal = scanOutput;
 
         // Step 3: Output projection [batch*seq, modelDim] -> [batch*seq, modelDim]
-        var scanFlat = scanOutput.Reshape(batchSize * seqLen, _modelDimension);
+        var scanFlat = Engine.Reshape(scanOutput, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(scanFlat, _outputProjectionWeights);
-        var outBias2D = _outputProjectionBias.Reshape(1, _modelDimension);
+        var outBias2D = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
         var outputWithBias = Engine.TensorBroadcastAdd(outputFlat, outBias2D);
-        var output3D = outputWithBias.Reshape(batchSize, seqLen, _modelDimension);
+        var output3D = Engine.Reshape(outputWithBias, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
         _lastOutput = result;
 
         if (rank == 2)
-            return result.Reshape(seqLen, _modelDimension);
+            return Engine.Reshape(result, new[] { seqLen, _modelDimension });
 
         var outputShape = new int[rank];
         for (int i = 0; i < rank - 2; i++)
             outputShape[i] = input.Shape[i];
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
-        return result.Reshape(outputShape);
+        return Engine.Reshape(result, outputShape);
     }
 
     /// <summary>

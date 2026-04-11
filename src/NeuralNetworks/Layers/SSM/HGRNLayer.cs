@@ -245,25 +245,25 @@ public partial class HGRNLayer<T> : LayerBase<T>
         if (rank < 3) batchSize = 1;
 
         var input3D = rank == 2
-            ? input.Reshape(1, seqLen, modelDim)
-            : input.Reshape(batchSize, seqLen, modelDim);
+            ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
         _lastInput = input3D;
 
         // Step 1: Input projection
-        var input2D = input3D.Reshape(batchSize * seqLen, modelDim);
+        var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, modelDim });
         var projected = Engine.TensorMatMul(input2D, _inputProjectionWeights);
-        var projBias = _inputProjectionBias.Reshape(1, _modelDimension);
+        var projBias = Engine.Reshape(_inputProjectionBias, new[] { 1, _modelDimension });
         projected = Engine.TensorBroadcastAdd(projected, projBias);
-        var projected3D = projected.Reshape(batchSize, seqLen, _modelDimension);
+        var projected3D = Engine.Reshape(projected, new[] { batchSize, seqLen, _modelDimension });
         _lastProjectedInput = projected3D;
 
         // Step 2: Compute forget and input gates from projected input
         var forgetGate3D = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         var inputGate3D = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
-        var fBias = _forgetGateBias.Reshape(1, _modelDimension);
-        var iBias = _inputGateBias.Reshape(1, _modelDimension);
+        var fBias = Engine.Reshape(_forgetGateBias, new[] { 1, _modelDimension });
+        var iBias = Engine.Reshape(_inputGateBias, new[] { 1, _modelDimension });
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -293,24 +293,24 @@ public partial class HGRNLayer<T> : LayerBase<T>
         _lastRecurrenceOutput = recurrenceOutput;
 
         // Step 4: Output projection
-        var outFlat = recurrenceOutput.Reshape(batchSize * seqLen, _modelDimension);
+        var outFlat = Engine.Reshape(recurrenceOutput, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(outFlat, _outputProjectionWeights);
-        var outBias = _outputProjectionBias.Reshape(1, _modelDimension);
+        var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
         outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
-        var output3D = outputFlat.Reshape(batchSize, seqLen, _modelDimension);
+        var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
         _lastOutput = result;
 
         if (rank == 2)
-            return result.Reshape(seqLen, _modelDimension);
+            return Engine.Reshape(result, new[] { seqLen, _modelDimension });
 
         var outputShape = new int[rank];
         for (int i = 0; i < rank - 2; i++)
             outputShape[i] = input.Shape[i];
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
-        return result.Reshape(outputShape);
+        return Engine.Reshape(result, outputShape);
     }
 
     /// <summary>

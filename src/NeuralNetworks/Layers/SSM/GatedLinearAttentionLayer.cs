@@ -219,23 +219,23 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
         if (rank < 3) batchSize = 1;
 
         var input3D = rank == 2
-            ? input.Reshape(1, seqLen, modelDim)
-            : input.Reshape(batchSize, seqLen, modelDim);
+            ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
         _lastInput = input3D;
 
         int totalDim = _numHeads * _headDimension;
 
         // Project Q, K, V, G
-        var input2D = input3D.Reshape(batchSize * seqLen, modelDim);
+        var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, modelDim });
         var q = Engine.TensorMatMul(input2D, _queryWeights).Reshape(batchSize, seqLen, totalDim);
         var k = Engine.TensorMatMul(input2D, _keyWeights).Reshape(batchSize, seqLen, totalDim);
         var v = Engine.TensorMatMul(input2D, _valueWeights).Reshape(batchSize, seqLen, totalDim);
 
         var gFlat = Engine.TensorMatMul(input2D, _gateWeights);
-        var gBias = _gateBias.Reshape(1, totalDim);
+        var gBias = Engine.Reshape(_gateBias, new[] { 1, totalDim });
         gFlat = Engine.TensorBroadcastAdd(gFlat, gBias);
-        var gate = Engine.Sigmoid(gFlat.Reshape(batchSize, seqLen, totalDim));
+        var gate = Engine.Sigmoid(Engine.Reshape(gFlat, new[] { batchSize, seqLen, totalDim }));
 
         _lastQuery = q;
         _lastKey = k;
@@ -297,24 +297,24 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
         _lastAttnOutput = output;
 
         // Output projection
-        var outFlat = output.Reshape(batchSize * seqLen, totalDim);
+        var outFlat = Engine.Reshape(output, new[] { batchSize * seqLen, totalDim });
         var outputFlat = Engine.TensorMatMul(outFlat, _outputWeights);
-        var outBias2D = _outputBias.Reshape(1, _modelDimension);
+        var outBias2D = Engine.Reshape(_outputBias, new[] { 1, _modelDimension });
         outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias2D);
-        var output3D = outputFlat.Reshape(batchSize, seqLen, _modelDimension);
+        var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
         _lastOutput = result;
 
         if (rank == 2)
-            return result.Reshape(seqLen, _modelDimension);
+            return Engine.Reshape(result, new[] { seqLen, _modelDimension });
 
         var outputShape = new int[rank];
         for (int i = 0; i < rank - 2; i++)
             outputShape[i] = input.Shape[i];
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
-        return result.Reshape(outputShape);
+        return Engine.Reshape(result, outputShape);
     }
 
     #region Parameter Management

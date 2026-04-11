@@ -381,17 +381,17 @@ public partial class Mamba2Block<T> : LayerBase<T>
         if (rank < 3) batchSize = 1;
 
         var input3D = rank == 2
-            ? input.Reshape(1, seqLen, modelDim)
-            : input.Reshape(batchSize, seqLen, modelDim);
+            ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
         _lastInput = input3D;
 
         // Step 1: Input projection -> x and z branches
-        var input2D = input3D.Reshape(batchSize * seqLen, modelDim);
+        var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, modelDim });
         var projected = Engine.TensorMatMul(input2D, _inputProjectionWeights);
-        var bias2D = _inputProjectionBias.Reshape(1, _innerDimension * 2);
+        var bias2D = Engine.Reshape(_inputProjectionBias, new[] { 1, _innerDimension * 2 });
         var projectedWithBias = Engine.TensorBroadcastAdd(projected, bias2D);
-        var projected3D = projectedWithBias.Reshape(batchSize, seqLen, _innerDimension * 2);
+        var projected3D = Engine.Reshape(projectedWithBias, new[] { batchSize, seqLen, _innerDimension * 2 });
 
         var xBranch = SliceTensor(projected3D, 2, 0, _innerDimension);
         var zBranch = SliceTensor(projected3D, 2, _innerDimension, _innerDimension);
@@ -406,15 +406,15 @@ public partial class Mamba2Block<T> : LayerBase<T>
         _lastSiluOutput = siluOutput;
 
         // Step 4: Project to B, C, delta
-        var siluFlat = siluOutput.Reshape(batchSize * seqLen, _innerDimension);
+        var siluFlat = Engine.Reshape(siluOutput, new[] { batchSize * seqLen, _innerDimension });
         var bParam = Engine.TensorMatMul(siluFlat, _bProjectionWeights)
             .Reshape(batchSize, seqLen, _stateDimension);
         var cParam = Engine.TensorMatMul(siluFlat, _cProjectionWeights)
             .Reshape(batchSize, seqLen, _stateDimension);
         var dtParam = Engine.TensorMatMul(siluFlat, _dtProjectionWeights);
-        var dtBias2D = _dtProjectionBias.Reshape(1, _numHeads);
+        var dtBias2D = Engine.Reshape(_dtProjectionBias, new[] { 1, _numHeads });
         dtParam = Engine.TensorBroadcastAdd(dtParam, dtBias2D);
-        var dt3D = dtParam.Reshape(batchSize, seqLen, _numHeads);
+        var dt3D = Engine.Reshape(dtParam, new[] { batchSize, seqLen, _numHeads });
         _lastDeltaPreSoftplus = dt3D;
         var delta = Engine.Softplus(dt3D);
         _lastDelta = delta;
@@ -435,24 +435,24 @@ public partial class Mamba2Block<T> : LayerBase<T>
         _lastGatedOutput = gatedOutput;
 
         // Step 8: Output projection
-        var gatedFlat = gatedOutput.Reshape(batchSize * seqLen, _innerDimension);
+        var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _innerDimension });
         var outputFlat = Engine.TensorMatMul(gatedFlat, _outputProjectionWeights);
-        var outBias2D = _outputProjectionBias.Reshape(1, _modelDimension);
+        var outBias2D = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
         var outputWithBias = Engine.TensorBroadcastAdd(outputFlat, outBias2D);
-        var output3D = outputWithBias.Reshape(batchSize, seqLen, _modelDimension);
+        var output3D = Engine.Reshape(outputWithBias, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
         _lastOutput = result;
 
         if (rank == 2)
-            return result.Reshape(seqLen, _modelDimension);
+            return Engine.Reshape(result, new[] { seqLen, _modelDimension });
 
         var outputShape = new int[rank];
         for (int i = 0; i < rank - 2; i++)
             outputShape[i] = input.Shape[i];
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
-        return result.Reshape(outputShape);
+        return Engine.Reshape(result, outputShape);
     }
 
     /// <summary>

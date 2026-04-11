@@ -259,28 +259,28 @@ public partial class DeltaNetLayer<T> : LayerBase<T>
         if (rank < 3) batchSize = 1;
 
         var input3D = rank == 2
-            ? input.Reshape(1, seqLen, modelDim)
-            : input.Reshape(batchSize, seqLen, modelDim);
+            ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
         _lastInput = input3D;
 
         // Step 1: Q, K, V projections
-        var inputFlat = input3D.Reshape(batchSize * seqLen, _modelDimension);
+        var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
 
         var qFlat = Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _queryWeights),
-            _queryBias.Reshape(1, _modelDimension));
-        var q = qFlat.Reshape(batchSize, seqLen, _modelDimension);
+            Engine.Reshape(_queryBias, new[] { 1, _modelDimension }));
+        var q = Engine.Reshape(qFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var kFlat = Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _keyWeights),
-            _keyBias.Reshape(1, _modelDimension));
-        var k = kFlat.Reshape(batchSize, seqLen, _modelDimension);
+            Engine.Reshape(_keyBias, new[] { 1, _modelDimension }));
+        var k = Engine.Reshape(kFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var vFlat = Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _valueWeights),
-            _valueBias.Reshape(1, _modelDimension));
-        var v = vFlat.Reshape(batchSize, seqLen, _modelDimension);
+            Engine.Reshape(_valueBias, new[] { 1, _modelDimension }));
+        var v = Engine.Reshape(vFlat, new[] { batchSize, seqLen, _modelDimension });
 
         _lastQuery = q;
         _lastKey = k;
@@ -289,7 +289,7 @@ public partial class DeltaNetLayer<T> : LayerBase<T>
         // Step 2: Beta (write strength) via sigmoid
         var betaRaw = Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _betaWeights),
-            _betaBias.Reshape(1, _numHeads)).Reshape(batchSize, seqLen, _numHeads);
+            Engine.Reshape(_betaBias, new[] { 1, _numHeads })).Reshape(batchSize, seqLen, _numHeads);
         var beta = Engine.Sigmoid(betaRaw);
         _lastBeta = beta;
 
@@ -299,24 +299,24 @@ public partial class DeltaNetLayer<T> : LayerBase<T>
 
         // Step 4: Output projection
         var outputFlat = Engine.TensorMatMul(
-            output.Reshape(batchSize * seqLen, _modelDimension),
+            Engine.Reshape(output, new[] { batchSize * seqLen, _modelDimension }),
             _outputProjectionWeights);
-        var outBias = _outputProjectionBias.Reshape(1, _modelDimension);
+        var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
         outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
-        var output3D = outputFlat.Reshape(batchSize, seqLen, _modelDimension);
+        var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
         _lastOutput = result;
 
         if (rank == 2)
-            return result.Reshape(seqLen, _modelDimension);
+            return Engine.Reshape(result, new[] { seqLen, _modelDimension });
 
         var outputShape = new int[rank];
         for (int i = 0; i < rank - 2; i++)
             outputShape[i] = input.Shape[i];
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
-        return result.Reshape(outputShape);
+        return Engine.Reshape(result, outputShape);
     }
 
     /// <summary>

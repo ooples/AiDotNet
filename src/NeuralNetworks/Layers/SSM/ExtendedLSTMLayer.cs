@@ -262,8 +262,8 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
         if (rank < 3) batchSize = 1;
 
         var input3D = rank == 2
-            ? input.Reshape(1, seqLen, modelDim)
-            : input.Reshape(batchSize, seqLen, modelDim);
+            ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
         _lastInput = input3D;
 
@@ -293,13 +293,13 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
             // Gate computations
             var iGateRaw = Engine.TensorBroadcastAdd(
                 Engine.TensorMatMul(x_t, _inputGateWeights),
-                _inputGateBias.Reshape(1, _modelDimension));
+                Engine.Reshape(_inputGateBias, new[] { 1, _modelDimension }));
             var fGateRaw = Engine.TensorBroadcastAdd(
                 Engine.TensorMatMul(x_t, _forgetGateWeights),
-                _forgetGateBias.Reshape(1, _modelDimension));
+                Engine.Reshape(_forgetGateBias, new[] { 1, _modelDimension }));
             var oGate = Engine.Sigmoid(Engine.TensorBroadcastAdd(
                 Engine.TensorMatMul(x_t, _outputGateWeights),
-                _outputGateBias.Reshape(1, _modelDimension)));
+                Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })));
 
             // Exponential input gate (xLSTM innovation)
             var iGate = Engine.TensorExp(iGateRaw);
@@ -393,7 +393,7 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
 
             // Output projection
             var y_t = Engine.TensorMatMul(h_t, _outputProjectionWeights);
-            var outBias = _outputProjectionBias.Reshape(1, _modelDimension);
+            var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
             y_t = Engine.TensorBroadcastAdd(y_t, outBias);
 
             output.SetSlice(1, t, y_t);
@@ -413,14 +413,14 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
         _lastOutput = result;
 
         if (rank == 2)
-            return result.Reshape(seqLen, _modelDimension);
+            return Engine.Reshape(result, new[] { seqLen, _modelDimension });
 
         var outputShape = new int[rank];
         for (int i = 0; i < rank - 2; i++)
             outputShape[i] = input.Shape[i];
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
-        return result.Reshape(outputShape);
+        return Engine.Reshape(result, outputShape);
     }
 
     #region Parameter Management

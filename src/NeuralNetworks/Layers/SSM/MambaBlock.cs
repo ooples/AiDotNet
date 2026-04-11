@@ -362,17 +362,17 @@ internal partial class MambaBlock<T> : LayerBase<T>
         if (rank < 3) batchSize = 1;
 
         var input3D = rank == 2
-            ? input.Reshape(1, seqLen, modelDim)
-            : input.Reshape(batchSize, seqLen, modelDim);
+            ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
         _lastInput = input3D;
 
         // Step 1: Input projection -> x branch and z branch
-        var input2D = input3D.Reshape(batchSize * seqLen, modelDim);
+        var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, modelDim });
         var projected = Engine.TensorMatMul(input2D, _inputProjectionWeights);
-        var bias2D = _inputProjectionBias.Reshape(1, _innerDimension * 2);
+        var bias2D = Engine.Reshape(_inputProjectionBias, new[] { 1, _innerDimension * 2 });
         var projectedWithBias = Engine.TensorBroadcastAdd(projected, bias2D);
-        var projected3D = projectedWithBias.Reshape(batchSize, seqLen, _innerDimension * 2);
+        var projected3D = Engine.Reshape(projectedWithBias, new[] { batchSize, seqLen, _innerDimension * 2 });
 
         // Split into x and z branches
         var xBranch = SliceTensor(projected3D, 2, 0, _innerDimension);
@@ -390,20 +390,20 @@ internal partial class MambaBlock<T> : LayerBase<T>
         _lastSiluOutput = siluOutput;
 
         // Step 4: Project to SSM parameters (delta, B, C)
-        var siluFlat = siluOutput.Reshape(batchSize * seqLen, _innerDimension);
+        var siluFlat = Engine.Reshape(siluOutput, new[] { batchSize * seqLen, _innerDimension });
         var xProj = Engine.TensorMatMul(siluFlat, _xProjectionWeights);
-        var xProj3D = xProj.Reshape(batchSize, seqLen, _dtRank + _stateDimension * 2);
+        var xProj3D = Engine.Reshape(xProj, new[] { batchSize, seqLen, _dtRank + _stateDimension * 2 });
 
         var deltaLowRank = SliceTensor(xProj3D, 2, 0, _dtRank);
         var bParam = SliceTensor(xProj3D, 2, _dtRank, _stateDimension);
         var cParam = SliceTensor(xProj3D, 2, _dtRank + _stateDimension, _stateDimension);
 
         // Step 5: Project delta from low rank to inner dimension and apply softplus
-        var deltaFlat = deltaLowRank.Reshape(batchSize * seqLen, _dtRank);
+        var deltaFlat = Engine.Reshape(deltaLowRank, new[] { batchSize * seqLen, _dtRank });
         var deltaProjFlat = Engine.TensorMatMul(deltaFlat, _dtProjectionWeights);
-        var dtBias2D = _dtProjectionBias.Reshape(1, _innerDimension);
+        var dtBias2D = Engine.Reshape(_dtProjectionBias, new[] { 1, _innerDimension });
         var deltaProjWithBias = Engine.TensorBroadcastAdd(deltaProjFlat, dtBias2D);
-        var deltaProj3D = deltaProjWithBias.Reshape(batchSize, seqLen, _innerDimension);
+        var deltaProj3D = Engine.Reshape(deltaProjWithBias, new[] { batchSize, seqLen, _innerDimension });
 
         _lastDeltaPreSoftplus = deltaProj3D;
         var delta = Engine.Softplus(deltaProj3D);
@@ -426,25 +426,25 @@ internal partial class MambaBlock<T> : LayerBase<T>
         _lastGatedOutput = gatedOutput;
 
         // Step 8: Output projection
-        var gatedFlat = gatedOutput.Reshape(batchSize * seqLen, _innerDimension);
+        var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _innerDimension });
         var outputFlat = Engine.TensorMatMul(gatedFlat, _outputProjectionWeights);
-        var outBias2D = _outputProjectionBias.Reshape(1, _modelDimension);
+        var outBias2D = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
         var outputWithBias = Engine.TensorBroadcastAdd(outputFlat, outBias2D);
-        var output3D = outputWithBias.Reshape(batchSize, seqLen, _modelDimension);
+        var output3D = Engine.Reshape(outputWithBias, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
         _lastOutput = result;
 
         // Reshape back to original rank
         if (rank == 2)
-            return result.Reshape(seqLen, _modelDimension);
+            return Engine.Reshape(result, new[] { seqLen, _modelDimension });
 
         var outputShape = new int[rank];
         for (int i = 0; i < rank - 2; i++)
             outputShape[i] = input.Shape[i];
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
-        return result.Reshape(outputShape);
+        return Engine.Reshape(result, outputShape);
     }
 
     #region Engine-Accelerated Conv1D

@@ -314,13 +314,13 @@ public partial class RodimusLayer<T> : LayerBase<T>
         if (rank < 3) batchSize = 1;
 
         var input3D = rank == 2
-            ? input.Reshape(1, seqLen, modelDim)
-            : input.Reshape(batchSize, seqLen, modelDim);
+            ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
         _lastInput = input3D;
 
         // Step 1: Q, K, V projections
-        var inputFlat = input3D.Reshape(batchSize * seqLen, _modelDimension);
+        var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
         var q = Engine.TensorMatMul(inputFlat, _queryWeights).Reshape(batchSize, seqLen, _modelDimension);
         var k = Engine.TensorMatMul(inputFlat, _keyWeights).Reshape(batchSize, seqLen, _modelDimension);
         var v = Engine.TensorMatMul(inputFlat, _valueWeights).Reshape(batchSize, seqLen, _modelDimension);
@@ -331,7 +331,7 @@ public partial class RodimusLayer<T> : LayerBase<T>
         // Step 2: Data-dependent temperature via softplus
         var tempRaw = Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _temperatureWeights),
-            _temperatureBias.Reshape(1, _numHeads)).Reshape(batchSize, seqLen, _numHeads);
+            Engine.Reshape(_temperatureBias, new[] { 1, _numHeads })).Reshape(batchSize, seqLen, _numHeads);
         _lastTemperatureRaw = tempRaw;
 
         var temperature = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
@@ -342,14 +342,14 @@ public partial class RodimusLayer<T> : LayerBase<T>
         // Step 3: Forget gate
         var forgetRaw = Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _forgetGateWeights),
-            _forgetGateBias.Reshape(1, _numHeads)).Reshape(batchSize, seqLen, _numHeads);
+            Engine.Reshape(_forgetGateBias, new[] { 1, _numHeads })).Reshape(batchSize, seqLen, _numHeads);
         var forgetGate = Engine.Sigmoid(forgetRaw);
         _lastForgetGate = forgetGate;
 
         // Step 4: Output gate
         var gateRaw = Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
-            _outputGateBias.Reshape(1, _modelDimension)).Reshape(batchSize, seqLen, _modelDimension);
+            Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })).Reshape(batchSize, seqLen, _modelDimension);
         var outputGate = Engine.Swish(gateRaw);
         _lastOutputGate = outputGate;
         _lastOutputGateRaw = gateRaw;
@@ -362,24 +362,24 @@ public partial class RodimusLayer<T> : LayerBase<T>
         var gatedOutput = Engine.TensorMultiply(recurrenceOutput, outputGate);
 
         // Step 7: Output projection
-        var gatedFlat = gatedOutput.Reshape(batchSize * seqLen, _modelDimension);
+        var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(gatedFlat, _outputProjectionWeights);
-        var outBias = _outputProjectionBias.Reshape(1, _modelDimension);
+        var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
         outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
-        var output3D = outputFlat.Reshape(batchSize, seqLen, _modelDimension);
+        var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
         _lastOutput = result;
 
         if (rank == 2)
-            return result.Reshape(seqLen, _modelDimension);
+            return Engine.Reshape(result, new[] { seqLen, _modelDimension });
 
         var outputShape = new int[rank];
         for (int i = 0; i < rank - 2; i++)
             outputShape[i] = input.Shape[i];
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
-        return result.Reshape(outputShape);
+        return Engine.Reshape(result, outputShape);
     }
 
     /// <summary>

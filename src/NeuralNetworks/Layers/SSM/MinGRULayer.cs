@@ -264,33 +264,33 @@ public partial class MinGRULayer<T> : LayerBase<T>
         if (rank < 3) batchSize = 1;
 
         var input3D = rank == 2
-            ? input.Reshape(1, seqLen, modelDim)
-            : input.Reshape(batchSize, seqLen, modelDim);
+            ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
         _lastInput = input3D;
 
         // Step 1: Input projection from modelDim to expandedDim
-        var inputFlat = input3D.Reshape(batchSize * seqLen, _modelDimension);
+        var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
         var projected = Engine.TensorMatMul(inputFlat, _inputProjectionWeights);
-        var projBias = _inputProjectionBias.Reshape(1, _expandedDimension);
+        var projBias = Engine.Reshape(_inputProjectionBias, new[] { 1, _expandedDimension });
         projected = Engine.TensorBroadcastAdd(projected, projBias);
-        var projected3D = projected.Reshape(batchSize, seqLen, _expandedDimension);
+        var projected3D = Engine.Reshape(projected, new[] { batchSize, seqLen, _expandedDimension });
         _lastProjectedInput = projected3D;
 
         // Step 2: Gate computation: z_t = sigma(W_z * projected_t + b_z)
-        var gatePreAct = Engine.TensorMatMul(projected.Reshape(batchSize * seqLen, _expandedDimension), _gateWeights);
-        var gateBias2D = _gateBias.Reshape(1, _expandedDimension);
+        var gatePreAct = Engine.TensorMatMul(Engine.Reshape(projected, new[] { batchSize * seqLen, _expandedDimension }), _gateWeights);
+        var gateBias2D = Engine.Reshape(_gateBias, new[] { 1, _expandedDimension });
         gatePreAct = Engine.TensorBroadcastAdd(gatePreAct, gateBias2D);
-        var gatePreAct3D = gatePreAct.Reshape(batchSize, seqLen, _expandedDimension);
+        var gatePreAct3D = Engine.Reshape(gatePreAct, new[] { batchSize, seqLen, _expandedDimension });
         var gate = Engine.Sigmoid(gatePreAct3D);
         _lastGatePreAct = gatePreAct3D;
         _lastGate = gate;
 
         // Step 3: Candidate computation: h_tilde_t = W_h * projected_t + b_h
-        var candidate = Engine.TensorMatMul(projected.Reshape(batchSize * seqLen, _expandedDimension), _candidateWeights);
-        var candBias2D = _candidateBias.Reshape(1, _expandedDimension);
+        var candidate = Engine.TensorMatMul(Engine.Reshape(projected, new[] { batchSize * seqLen, _expandedDimension }), _candidateWeights);
+        var candBias2D = Engine.Reshape(_candidateBias, new[] { 1, _expandedDimension });
         candidate = Engine.TensorBroadcastAdd(candidate, candBias2D);
-        var candidate3D = candidate.Reshape(batchSize, seqLen, _expandedDimension);
+        var candidate3D = Engine.Reshape(candidate, new[] { batchSize, seqLen, _expandedDimension });
         _lastCandidate = candidate3D;
 
         // Step 4: Sequential recurrence: h_t = (1 - z_t) * h_{t-1} + z_t * h_tilde_t
@@ -298,24 +298,24 @@ public partial class MinGRULayer<T> : LayerBase<T>
         _lastRecurrenceOutput = recurrenceOutput;
 
         // Step 5: Output projection from expandedDim back to modelDim
-        var recFlat = recurrenceOutput.Reshape(batchSize * seqLen, _expandedDimension);
+        var recFlat = Engine.Reshape(recurrenceOutput, new[] { batchSize * seqLen, _expandedDimension });
         var outputFlat = Engine.TensorMatMul(recFlat, _outputProjectionWeights);
-        var outBias = _outputProjectionBias.Reshape(1, _modelDimension);
+        var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
         outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
-        var output3D = outputFlat.Reshape(batchSize, seqLen, _modelDimension);
+        var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
         _lastOutput = result;
 
         if (rank == 2)
-            return result.Reshape(seqLen, _modelDimension);
+            return Engine.Reshape(result, new[] { seqLen, _modelDimension });
 
         var outputShape = new int[rank];
         for (int i = 0; i < rank - 2; i++)
             outputShape[i] = input.Shape[i];
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
-        return result.Reshape(outputShape);
+        return Engine.Reshape(result, outputShape);
     }
 
     /// <summary>

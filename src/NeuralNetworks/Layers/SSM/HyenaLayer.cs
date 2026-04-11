@@ -304,8 +304,8 @@ public partial class HyenaLayer<T> : LayerBase<T>
         if (rank < 3) batchSize = 1;
 
         var input3D = rank == 2
-            ? input.Reshape(1, seqLen, modelDim)
-            : input.Reshape(batchSize, seqLen, modelDim);
+            ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
         _lastInput = input3D;
 
@@ -313,14 +313,14 @@ public partial class HyenaLayer<T> : LayerBase<T>
         // Projection 0 = v (value), projections 1..order = gates x_1..x_N
         var projections = new Tensor<T>[_order + 1];
         var projectionsRaw = new Tensor<T>[_order + 1];
-        var inputFlat = input3D.Reshape(batchSize * seqLen, _modelDimension);
+        var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
 
         for (int i = 0; i <= _order; i++)
         {
             var rawProj = Engine.TensorBroadcastAdd(
                 Engine.TensorMatMul(inputFlat, _inputProjectionWeights[i]),
                 _inputProjectionBiases[i].Reshape(1, _modelDimension));
-            projectionsRaw[i] = rawProj.Reshape(batchSize, seqLen, _modelDimension);
+            projectionsRaw[i] = Engine.Reshape(rawProj, new[] { batchSize, seqLen, _modelDimension });
 
             // Apply element-wise activation for gates (SiLU for gates, identity for v)
             if (i == 0)
@@ -409,24 +409,24 @@ public partial class HyenaLayer<T> : LayerBase<T>
         _lastPreProjection = current;
 
         // Step 4: Output projection
-        var currentFlat = current.Reshape(batchSize * seqLen, _modelDimension);
+        var currentFlat = Engine.Reshape(current, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(currentFlat, _outputProjectionWeights),
-            _outputProjectionBias.Reshape(1, _modelDimension));
-        var output3D = outputFlat.Reshape(batchSize, seqLen, _modelDimension);
+            Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension }));
+        var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
         _lastOutput = result;
 
         if (rank == 2)
-            return result.Reshape(seqLen, _modelDimension);
+            return Engine.Reshape(result, new[] { seqLen, _modelDimension });
 
         var outputShape = new int[rank];
         for (int i = 0; i < rank - 2; i++)
             outputShape[i] = input.Shape[i];
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
-        return result.Reshape(outputShape);
+        return Engine.Reshape(result, outputShape);
     }
 
     /// <summary>

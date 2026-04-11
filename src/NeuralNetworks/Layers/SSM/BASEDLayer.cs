@@ -315,13 +315,13 @@ public partial class BASEDLayer<T> : LayerBase<T>
         if (rank < 3) batchSize = 1;
 
         var input3D = rank == 2
-            ? input.Reshape(1, seqLen, modelDim)
-            : input.Reshape(batchSize, seqLen, modelDim);
+            ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
         _lastInput = input3D;
 
         // Step 1: Compute projections for both attention mechanisms
-        var inputFlat = input3D.Reshape(batchSize * seqLen, _modelDimension);
+        var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
 
         // Linear attention Q, K, V
         var linQ = Engine.TensorMatMul(inputFlat, _linearQueryWeights).Reshape(batchSize, seqLen, _modelDimension);
@@ -342,7 +342,7 @@ public partial class BASEDLayer<T> : LayerBase<T>
         // Step 2: Compute mixing gate alpha
         var alphaRaw = Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _mixingGateWeights),
-            _mixingGateBias.Reshape(1, _numHeads)).Reshape(batchSize, seqLen, _numHeads);
+            Engine.Reshape(_mixingGateBias, new[] { 1, _numHeads })).Reshape(batchSize, seqLen, _numHeads);
         var alpha = Engine.Sigmoid(alphaRaw);
         _lastMixingAlphaRaw = alphaRaw;
         _lastMixingAlpha = alpha;
@@ -360,24 +360,24 @@ public partial class BASEDLayer<T> : LayerBase<T>
         _lastCombinedOutput = combined;
 
         // Step 6: Output projection
-        var combinedFlat = combined.Reshape(batchSize * seqLen, _modelDimension);
+        var combinedFlat = Engine.Reshape(combined, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(combinedFlat, _outputProjectionWeights);
-        var outBias = _outputProjectionBias.Reshape(1, _modelDimension);
+        var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
         outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
-        var output3D = outputFlat.Reshape(batchSize, seqLen, _modelDimension);
+        var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
         _lastOutput = result;
 
         if (rank == 2)
-            return result.Reshape(seqLen, _modelDimension);
+            return Engine.Reshape(result, new[] { seqLen, _modelDimension });
 
         var outputShape = new int[rank];
         for (int i = 0; i < rank - 2; i++)
             outputShape[i] = input.Shape[i];
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
-        return result.Reshape(outputShape);
+        return Engine.Reshape(result, outputShape);
     }
 
     /// <summary>

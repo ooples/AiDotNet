@@ -225,8 +225,8 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
         if (rank < 3) batchSize = 1;
 
         var current = rank == 2
-            ? input.Reshape(1, seqLen, modelDim)
-            : input.Reshape(batchSize, seqLen, modelDim);
+            ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
+            : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
         _lastInput = current;
         _lastNormedInputs = new Tensor<T>[_blocks.Length];
@@ -255,9 +255,9 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
 
         // Reshape back to original rank
         if (rank == 2)
-            return result.Reshape(seqLen, modelDim);
+            return Engine.Reshape(result, new[] { seqLen, modelDim });
 
-        return result.Reshape(_originalInputShape);
+        return Engine.Reshape(result, _originalInputShape);
     }
 
     private Tensor<T> ApplyRMSNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta,
