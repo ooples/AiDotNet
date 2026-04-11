@@ -469,21 +469,26 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>
 
         for (int t = 0; t < seqLen; t++)
         {
-            var result_t = Engine.TensorBroadcastAdd(
-                new Tensor<T>(new[] { batchSize, _modelDimension }), bias2D);
-
+            // Accumulate weighted past inputs, then add bias last.
+            Tensor<T>? result_t = null;
             for (int ki = 0; ki < _convKernelSize; ki++)
             {
                 int srcT = t - ki;
                 if (srcT >= 0)
                 {
                     var x_src = input.GetSliceAlongDimension(srcT, 1);
-                    result_t = Engine.TensorAdd(result_t,
-                        Engine.TensorBroadcastMultiply(x_src, weightSlices[ki]));
+                    var weighted = Engine.TensorBroadcastMultiply(x_src, weightSlices[ki]);
+                    result_t = result_t is null
+                        ? weighted
+                        : Engine.TensorAdd(result_t, weighted);
                 }
             }
 
-            output.SetSlice(1, t, result_t);
+            var final_t = result_t is null
+                ? Engine.TensorBroadcastAdd(new Tensor<T>(new[] { batchSize, _modelDimension }), bias2D)
+                : Engine.TensorBroadcastAdd(result_t, bias2D);
+
+            output.SetSlice(1, t, final_t);
         }
 
         return output;

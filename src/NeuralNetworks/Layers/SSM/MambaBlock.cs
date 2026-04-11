@@ -472,22 +472,27 @@ internal partial class MambaBlock<T> : LayerBase<T>
 
         for (int t = 0; t < seqLen; t++)
         {
-            // Start with bias: broadcast [1, innerDim] to [batch, innerDim]
-            var result_t = Engine.TensorBroadcastAdd(
-                new Tensor<T>(new[] { batchSize, _innerDimension }), bias2D);
-
+            // Accumulate weighted past inputs, then add bias last.
+            Tensor<T>? result_t = null;
             for (int k = 0; k < _convKernelSize; k++)
             {
                 int srcT = t - k;  // causal: only current and past positions
                 if (srcT >= 0)
                 {
-                    var x_src = input.GetSliceAlongDimension(srcT, 1).Clone();
-                    result_t = Engine.TensorAdd(result_t,
-                        Engine.TensorBroadcastMultiply(x_src, weightSlices[k]).Clone());
+                    var x_src = input.GetSliceAlongDimension(srcT, 1);
+                    var weighted = Engine.TensorBroadcastMultiply(x_src, weightSlices[k]);
+                    result_t = result_t is null
+                        ? weighted
+                        : Engine.TensorAdd(result_t, weighted);
                 }
             }
 
-            output.SetSlice(1, t, result_t);
+            // Add bias: broadcast [1, innerDim] to [batch, innerDim]
+            var final_t = result_t is null
+                ? Engine.TensorBroadcastAdd(new Tensor<T>(new[] { batchSize, _innerDimension }), bias2D)
+                : Engine.TensorBroadcastAdd(result_t, bias2D);
+
+            output.SetSlice(1, t, final_t);
         }
 
         return output;

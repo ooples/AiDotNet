@@ -581,19 +581,6 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
         _outputBiasGradient = null;
     }
 
-    private Tensor<T> MatrixToTensor(Matrix<T> matrix)
-    {
-        var tensor = new Tensor<T>(new[] { matrix.Rows, matrix.Columns });
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                tensor[i, j] = matrix[i, j];
-            }
-        }
-        return tensor;
-    }
-
     /// <summary>
     /// Gets diagnostic information about the layer.
     /// </summary>
