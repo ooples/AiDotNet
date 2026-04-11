@@ -87,6 +87,14 @@ public class LogSoftmaxActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies LogSoftmax to a tensor via <c>Engine.TensorLogSoftmax</c> so the gradient
+    /// tape records the op. The vector-level SIMD implementation is fine for inference
+    /// but bypasses the tape entirely.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input) =>
+        Engine.TensorLogSoftmax(input, axis: -1);
+
+    /// <summary>
     /// Calculates the derivative (Jacobian matrix) of the LogSoftmax function for a vector input.
     /// </summary>
     /// <param name="input">The input vector at which to calculate the derivative.</param>

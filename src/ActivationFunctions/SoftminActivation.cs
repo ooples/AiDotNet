@@ -78,6 +78,14 @@ public class SoftminActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies Softmin to a tensor via engine primitives so the gradient tape records
+    /// every step. Softmin(x) is mathematically equivalent to Softmax(-x), so this
+    /// decomposes as <c>Engine.Softmax(Engine.TensorNegate(input))</c>.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input) =>
+        Engine.Softmax(Engine.TensorNegate(input), axis: -1);
+
+    /// <summary>
     /// Calculates the Jacobian matrix of the Softmin function for a vector input.
     /// </summary>
     /// <param name="input">The vector of input values.</param>

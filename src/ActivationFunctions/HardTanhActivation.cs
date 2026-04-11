@@ -76,6 +76,23 @@ public class HardTanhActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies HardTanh to a tensor via engine primitives so the gradient tape records
+    /// every step. Decomposes <c>clip(x, -1, 1)</c> as
+    /// <c>ReLU(x + 1) - ReLU(x - 1) - 1</c>, which evaluates to the same piecewise-linear
+    /// function while keeping every op on the tape.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        var one = NumOps.One;
+        var shiftedUp = Engine.TensorAddScalar(input, one);
+        var shiftedDown = Engine.TensorSubtractScalar(input, one);
+        var leftPiece = Engine.ReLU(shiftedUp);
+        var rightPiece = Engine.ReLU(shiftedDown);
+        var diff = Engine.TensorSubtract(leftPiece, rightPiece);
+        return Engine.TensorSubtractScalar(diff, one);
+    }
+
+    /// <summary>
     /// Calculates the derivative of the Hard Tanh function for a given input value.
     /// </summary>
     /// <param name="input">The input value at which to calculate the derivative.</param>

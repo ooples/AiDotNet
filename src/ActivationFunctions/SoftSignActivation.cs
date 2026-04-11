@@ -83,6 +83,18 @@ public class SoftSignActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies SoftSign to a tensor via engine primitives so the gradient tape records
+    /// every step of <c>x / (1 + |x|)</c>. Overrides the scalar element-by-element
+    /// default which bypasses the tape.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        var abs = Engine.TensorAbs(input);
+        var denom = Engine.TensorAddScalar(abs, NumOps.One);
+        return Engine.TensorDivide(input, denom);
+    }
+
+    /// <summary>
     /// Calculates the derivative of the SoftSign function for a given input.
     /// </summary>
     /// <param name="input">The input value.</param>

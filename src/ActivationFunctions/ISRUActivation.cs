@@ -103,6 +103,20 @@ public class ISRUActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies ISRU to a tensor via engine primitives so the gradient tape records
+    /// every step of <c>x / sqrt(1 + αx²)</c>. Overrides the scalar element-by-element
+    /// default which bypasses the tape.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        var squared = Engine.TensorMultiply(input, input);
+        var alphaSquared = Engine.TensorMultiplyScalar(squared, _alpha);
+        var onePlus = Engine.TensorAddScalar(alphaSquared, NumOps.One);
+        var sqrt = Engine.TensorSqrt(onePlus);
+        return Engine.TensorDivide(input, sqrt);
+    }
+
+    /// <summary>
     /// Calculates the derivative (gradient) of the ISRU function for a single value.
     /// </summary>
     /// <param name="input">The input value at which to calculate the derivative.</param>

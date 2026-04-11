@@ -112,6 +112,19 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies ScaledTanh to a tensor via engine primitives so the gradient tape records
+    /// every step. The formula <c>(1 - exp(-βx)) / (1 + exp(-βx))</c> is algebraically
+    /// equivalent to <c>tanh(β*x/2)</c>, which is a single tape-tracked Engine.Tanh call
+    /// after a scalar multiply.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        var halfBeta = NumOps.Multiply(_beta, NumOps.FromDouble(0.5));
+        var scaled = Engine.TensorMultiplyScalar(input, halfBeta);
+        return Engine.Tanh(scaled);
+    }
+
+    /// <summary>
     /// Calculates the derivative of the Scaled Tanh function for a single input value.
     /// </summary>
     /// <param name="input">The input value.</param>

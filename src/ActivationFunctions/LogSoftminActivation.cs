@@ -73,6 +73,14 @@ public class LogSoftminActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies LogSoftmin to a tensor via engine primitives so the gradient tape records
+    /// every step. LogSoftmin(x) = LogSoftmax(-x), which is a single negate followed by
+    /// Engine.TensorLogSoftmax.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input) =>
+        Engine.TensorLogSoftmax(Engine.TensorNegate(input), axis: -1);
+
+    /// <summary>
     /// Calculates the derivative (Jacobian matrix) of the LogSoftmin function for a vector input.
     /// </summary>
     /// <param name="input">The input vector at which to calculate the derivative.</param>

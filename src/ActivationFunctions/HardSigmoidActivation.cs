@@ -74,6 +74,23 @@ public class HardSigmoidActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies HardSigmoid to a tensor via engine primitives so the gradient tape
+    /// records every step. Decomposes <c>clip(0.5x + 0.5, 0, 1)</c> as
+    /// <c>ReLU(0.5x + 0.5) - ReLU(0.5x - 0.5)</c>, which evaluates to the same
+    /// piecewise-linear function while keeping every op on the tape.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        var half = NumOps.FromDouble(0.5);
+        var scaled = Engine.TensorMultiplyScalar(input, half);                          // 0.5x
+        var shiftedUp = Engine.TensorAddScalar(scaled, half);                           // 0.5x + 0.5
+        var shiftedDown = Engine.TensorSubtractScalar(scaled, half);                    // 0.5x - 0.5
+        var leftPiece = Engine.ReLU(shiftedUp);
+        var rightPiece = Engine.ReLU(shiftedDown);
+        return Engine.TensorSubtract(leftPiece, rightPiece);
+    }
+
+    /// <summary>
     /// Calculates the derivative of the Hard Sigmoid function for a given input value.
     /// </summary>
     /// <param name="input">The input value at which to calculate the derivative.</param>

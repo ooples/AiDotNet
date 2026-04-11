@@ -66,6 +66,17 @@ public class GaussianActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies Gaussian to a tensor via engine primitives so the gradient tape records
+    /// every step of <c>exp(-x²)</c>. Overrides the scalar element-by-element default.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        var squared = Engine.TensorMultiply(input, input);
+        var negated = Engine.TensorNegate(squared);
+        return Engine.TensorExp(negated);
+    }
+
+    /// <summary>
     /// Calculates the derivative of the Gaussian function for a single input value.
     /// </summary>
     /// <param name="input">The input value.</param>

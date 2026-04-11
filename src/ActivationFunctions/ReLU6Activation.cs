@@ -111,13 +111,18 @@ public class ReLU6Activation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
-    /// Applies the ReLU6 activation function to each element in a tensor.
+    /// Applies the ReLU6 activation function to each element in a tensor via Engine ops
+    /// so the gradient tape records the full chain. Decomposes as
+    /// <c>ReLU(x) - ReLU(x - 6)</c>: for x≤0 both terms are 0; for 0&lt;x&lt;6 the first
+    /// term is x and the second is 0; for x≥6 the first term is x and the second is
+    /// x-6 so the result saturates at 6.
     /// </summary>
-    /// <param name="input">The input tensor to activate.</param>
-    /// <returns>A new tensor with the ReLU6 function applied to each element.</returns>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        return input.Transform((x, _) => MathHelper.Min(_six, MathHelper.Max(NumOps.Zero, x)));
+        var left = Engine.ReLU(input);
+        var shifted = Engine.TensorSubtractScalar(input, _six);
+        var right = Engine.ReLU(shifted);
+        return Engine.TensorSubtract(left, right);
     }
 
     /// <summary>

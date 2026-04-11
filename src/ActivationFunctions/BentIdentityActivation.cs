@@ -60,6 +60,21 @@ public class BentIdentityActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies BentIdentity to a tensor via engine primitives so the gradient tape
+    /// records every step of <c>(sqrt(x² + 1) - 1) / 2 + x</c>. Overrides the scalar
+    /// element-by-element default which bypasses the tape entirely.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        var squared = Engine.TensorMultiply(input, input);
+        var plusOne = Engine.TensorAddScalar(squared, NumOps.One);
+        var sqrt = Engine.TensorSqrt(plusOne);
+        var minusOne = Engine.TensorSubtractScalar(sqrt, NumOps.One);
+        var halved = Engine.TensorMultiplyScalar(minusOne, NumOps.FromDouble(0.5));
+        return Engine.TensorAdd(halved, input);
+    }
+
+    /// <summary>
     /// Calculates the derivative of the Bent Identity function for a single input value.
     /// </summary>
     /// <param name="input">The input value.</param>

@@ -70,6 +70,16 @@ public class LiSHTActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies LiSHT to a tensor via engine primitives so the gradient tape records
+    /// every step of <c>x * tanh(x)</c>. Overrides the scalar element-by-element default.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        var tanh = Engine.Tanh(input);
+        return Engine.TensorMultiply(input, tanh);
+    }
+
+    /// <summary>
     /// Calculates the derivative of the LiSHT function for a single input value.
     /// </summary>
     /// <param name="input">The input value at which to calculate the derivative.</param>

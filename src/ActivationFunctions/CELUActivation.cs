@@ -93,6 +93,26 @@ public class CELUActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies CELU to a tensor via engine primitives so the gradient tape records
+    /// every step. Decomposes as <c>ReLU(x) - α * ReLU(1 - exp(x/α))</c>:
+    /// for x ≥ 0, <c>exp(x/α) ≥ 1</c> so the right term zeroes out and the result is
+    /// just <c>x</c>; for x &lt; 0, <c>ReLU(x) = 0</c> and the right term becomes
+    /// <c>α*(1 - exp(x/α))</c>, giving the negative branch <c>α*(exp(x/α) - 1)</c>.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        var invAlpha = NumOps.Divide(NumOps.One, _alpha);
+        var scaled = Engine.TensorMultiplyScalar(input, invAlpha);            // x / α
+        var expScaled = Engine.TensorExp(scaled);                             // exp(x/α)
+        var negExp = Engine.TensorNegate(expScaled);
+        var oneMinus = Engine.TensorAddScalar(negExp, NumOps.One);            // 1 - exp(x/α)
+        var reluOneMinus = Engine.ReLU(oneMinus);                             // ReLU(1 - exp(x/α))
+        var negAlphaTerm = Engine.TensorMultiplyScalar(reluOneMinus, _alpha); // α * ReLU(1 - exp(x/α))
+        var reluX = Engine.ReLU(input);
+        return Engine.TensorSubtract(reluX, negAlphaTerm);
+    }
+
+    /// <summary>
     /// Calculates the derivative of the CELU function for a single input value.
     /// </summary>
     /// <param name="input">The input value.</param>
