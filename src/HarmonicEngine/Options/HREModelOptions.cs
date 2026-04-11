@@ -97,6 +97,27 @@ public class HREModelOptions : ModelOptions
     public bool UseMellinFourier { get; set; } = true;
 
     /// <summary>
+    /// Whether to use the Spectral Hebbian Layer as the primary forecasting path.
+    /// When enabled, HREModel uses a pure Hebbian-learned spectral filter to
+    /// predict outputs from inputs, bypassing the OFDM/attention/sparsity pipeline.
+    /// This is the architecture Theorem 3 analyzes — the Hebbian filter converges
+    /// to the Wiener optimum for stationary data, making HREModel a principled
+    /// forecaster for spectral signals.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Turn this on when you want HRE to *learn* a time-series
+    /// mapping (e.g., predict the next value of a sinusoid, forecast stock prices).
+    /// The Hebbian layer learns a frequency-domain filter in a single pass over the
+    /// data, which is much faster and more principled than gradient descent on a
+    /// linear output projection for signal-to-signal prediction tasks.
+    /// Leave this off for classification tasks (one-hot targets) where the output
+    /// doesn't have a natural spectral interpretation.
+    /// </para>
+    /// </remarks>
+    public bool UseSpectralHebbian { get; set; } = false;
+
+    /// <summary>
     /// Number of OFDM layers in the model.
     /// </summary>
     public int NumOFDMLayers { get; set; } = 2;

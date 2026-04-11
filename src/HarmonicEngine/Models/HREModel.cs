@@ -59,6 +59,11 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     private readonly List<IMDAttentionLayer<T>> _attentionLayers = [];
     private readonly SpectralSparsityMask<T> _sparsityMask;
 
+    // Optional Spectral Hebbian forecasting layer. When present, replaces the
+    // OFDM/attention/sparsity/linear pipeline with a pure Hebbian-learned
+    // spectral filter — the architecture Theorem 3 analyzes.
+    private SpectralHebbianLayer<T>? _hebbianLayer;
+
     // Output projection (simple linear layer for mapping spectral features to output).
     // Stored as a Matrix [OutputSize x CarrierCount] for efficient vectorized mat-vec.
     private Matrix<T> _outputWeights;
@@ -77,6 +82,10 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     {
         get
         {
+            // Spectral Hebbian path: just the complex filter coefficients
+            if (_hebbianLayer is not null)
+                return _hebbianLayer.ParameterCount;
+
             // Output projection: weights (OutputSize * CarrierCount) + 1 scalar bias
             int count = _options.OutputSize * _options.CarrierCount + 1;
             if (_mellinFourierLayer is not null) count += _mellinFourierLayer.ParameterCount;
@@ -118,6 +127,12 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// <returns>Output tensor of shape [OutputSize].</returns>
     public Tensor<T> Forward(Tensor<T> input)
     {
+        // Spectral Hebbian forecasting path (Theorem 3 architecture)
+        if (_hebbianLayer is not null)
+        {
+            return ForwardHebbian(input);
+        }
+
         var current = input;
 
         // Stage 1: Mellin-Fourier invariance (optional)
@@ -169,6 +184,14 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
+
+        // Spectral Hebbian forecasting path (Theorem 3 architecture)
+        if (_hebbianLayer is not null)
+        {
+            TrainHebbian(input, expectedOutput);
+            return;
+        }
+
         var prediction = Forward(input);
 
         // Gradient descent on output projection: dL/dw_oj = error_o * feature_j
@@ -217,11 +240,18 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         _mellinFourierLayer?.SetTrainingMode(isTraining);
         foreach (var layer in _ofdmLayers) layer.SetTrainingMode(isTraining);
         foreach (var layer in _attentionLayers) layer.SetTrainingMode(isTraining);
+        _hebbianLayer?.SetTrainingMode(isTraining);
     }
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
+        // Spectral Hebbian path: parameters are the complex filter coefficients
+        if (_hebbianLayer is not null)
+        {
+            return _hebbianLayer.GetParameters();
+        }
+
         int rows = _outputWeights.Rows;
         int cols = _outputWeights.Columns;
         int totalParams = rows * cols + 1; // weights + bias
@@ -241,6 +271,13 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Spectral Hebbian path: parameters are the complex filter coefficients
+        if (_hebbianLayer is not null)
+        {
+            _hebbianLayer.SetParameters(parameters);
+            return;
+        }
+
         int rows = _outputWeights.Rows;
         int cols = _outputWeights.Columns;
         int weightCount = rows * cols;
@@ -293,20 +330,115 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             ""
         };
 
-        if (_mellinFourierLayer is not null)
-            lines.Add($"  MellinFourierLayer: {_mellinFourierLayer.LayerName} ({_mellinFourierLayer.ParameterCount} params)");
+        if (_hebbianLayer is not null)
+        {
+            lines.Add($"  SpectralHebbianLayer: {_hebbianLayer.LayerName} ({_hebbianLayer.ParameterCount} params)");
+            lines.Add($"  (Hebbian forecasting path — OFDM/attention/sparsity disabled)");
+        }
+        else
+        {
+            if (_mellinFourierLayer is not null)
+                lines.Add($"  MellinFourierLayer: {_mellinFourierLayer.LayerName} ({_mellinFourierLayer.ParameterCount} params)");
 
-        for (int i = 0; i < _ofdmLayers.Count; i++)
-            lines.Add($"  OFDMLayer[{i}]: {_ofdmLayers[i].LayerName} ({_ofdmLayers[i].ParameterCount} params)");
+            for (int i = 0; i < _ofdmLayers.Count; i++)
+                lines.Add($"  OFDMLayer[{i}]: {_ofdmLayers[i].LayerName} ({_ofdmLayers[i].ParameterCount} params)");
 
-        for (int i = 0; i < _attentionLayers.Count; i++)
-            lines.Add($"  IMDAttentionLayer[{i}]: {_attentionLayers[i].LayerName} ({_attentionLayers[i].ParameterCount} params)");
+            for (int i = 0; i < _attentionLayers.Count; i++)
+                lines.Add($"  IMDAttentionLayer[{i}]: {_attentionLayers[i].LayerName} ({_attentionLayers[i].ParameterCount} params)");
 
-        lines.Add($"  OutputProjection: {_options.CarrierCount} -> {_options.OutputSize}");
+            lines.Add($"  OutputProjection: {_options.CarrierCount} -> {_options.OutputSize}");
+        }
+
         lines.Add($"");
         lines.Add($"Total parameters: {ParameterCount}");
 
         return string.Join(Environment.NewLine, lines);
+    }
+
+    /// <summary>
+    /// Forward pass for the Spectral Hebbian forecasting path. Applies the
+    /// learned spectral filter to the input signal and extracts the last
+    /// OutputSize positions as the prediction.
+    /// </summary>
+    private Tensor<T> ForwardHebbian(Tensor<T> input)
+    {
+        if (_hebbianLayer is null)
+            throw new InvalidOperationException(
+                "ForwardHebbian called but _hebbianLayer is not initialized.");
+
+        // SpectralHebbianLayer.Forward expects a tensor of shape [signalLength]
+        // and returns the filtered signal. We need to make sure the input matches.
+        int n = _options.InputSize;
+
+        // Handle shape mismatch by copying into a fixed-length tensor
+        var inputVec = new Tensor<T>([n]);
+        int copyLen = Math.Min(input.Length, n);
+        for (int i = 0; i < copyLen; i++) inputVec[i] = input[i];
+        for (int i = copyLen; i < n; i++) inputVec[i] = NumOps.Zero;
+
+        var filtered = _hebbianLayer.Forward(inputVec);
+
+        // Apply α scaling to correct for the Hebbian fixed point:
+        // Theorem 3 shows H_eq = (1/α) · H_wiener, so applying H_eq · X gives
+        // (1/α) · Y. Multiplying by α here recovers the actual Wiener prediction Y.
+        var alphaT = NumOps.FromDouble(_options.AntiHebbianAlpha);
+
+        // Extract the last OutputSize positions as the output
+        var output = new Tensor<T>([_options.OutputSize]);
+        int startIdx = filtered.Length - _options.OutputSize;
+        for (int i = 0; i < _options.OutputSize; i++)
+        {
+            output[i] = NumOps.Multiply(filtered[startIdx + i], alphaT);
+        }
+        return output;
+    }
+
+    /// <summary>
+    /// Training pass for the Spectral Hebbian forecasting path. Constructs a
+    /// target signal by taking the input shifted forward, with the last
+    /// OutputSize positions replaced by the expectedOutput values, then
+    /// applies the Hebbian update rule.
+    /// </summary>
+    private void TrainHebbian(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (_hebbianLayer is null)
+            throw new InvalidOperationException(
+                "TrainHebbian called but _hebbianLayer is not initialized.");
+
+        int n = _options.InputSize;
+        _hebbianLayer.SetTrainingMode(true);
+
+        // Build the input signal as a length-n vector (zero-padded if needed)
+        var inputSignal = new Vector<T>(n);
+        int copyLen = Math.Min(input.Length, n);
+        for (int i = 0; i < copyLen; i++) inputSignal[i] = input[i];
+
+        // Construct the target signal for the Hebbian update.
+        //
+        // For next-step forecasting with OutputSize=1, the natural target is
+        // the input shifted forward by 1, with the new last position being
+        // expectedOutput[0]:
+        //
+        //   target = [ x[1], x[2], ..., x[n-1], expectedOutput[0] ]
+        //
+        // This lets the Hebbian layer learn a "shift by 1" spectral filter
+        // whose last output position equals the next-step prediction.
+        // For OutputSize > 1, we shift by OutputSize positions.
+        var targetSignal = new Vector<T>(n);
+        int shift = _options.OutputSize;
+        for (int i = 0; i < n - shift; i++)
+        {
+            targetSignal[i] = inputSignal[i + shift];
+        }
+        for (int i = 0; i < _options.OutputSize; i++)
+        {
+            targetSignal[n - _options.OutputSize + i] = expectedOutput[i];
+        }
+
+        // Apply the Hebbian update. SpectralHebbianLayer.HebbianUpdate takes
+        // (inputSignal, target) and updates its internal complex filter H(k)
+        // via the rule ΔH = η · (Y·X* − α·H·|X|²) / (|X|² + ε).
+        _hebbianLayer.HebbianUpdate(inputSignal, targetSignal);
     }
 
     private Tensor<T> ApplySparsity(Tensor<T> current)
@@ -351,6 +483,29 @@ public class HREModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
     private void BuildPipeline()
     {
+        // Spectral Hebbian forecasting mode: pure Hebbian-learned spectral filter,
+        // no OFDM/attention/sparsity. Requires InputSize to be a power of 2 (FFT).
+        if (_options.UseSpectralHebbian)
+        {
+            if (_options.InputSize < 2 || (_options.InputSize & (_options.InputSize - 1)) != 0)
+                throw new ArgumentException(
+                    $"UseSpectralHebbian requires InputSize to be a power of 2, got {_options.InputSize}.",
+                    nameof(_options.InputSize));
+
+            if (_options.OutputSize > _options.InputSize)
+                throw new ArgumentException(
+                    $"UseSpectralHebbian requires OutputSize ({_options.OutputSize}) " +
+                    $"≤ InputSize ({_options.InputSize}). The output is extracted as the " +
+                    $"last OutputSize positions of the filtered signal.");
+
+            _hebbianLayer = new SpectralHebbianLayer<T>(
+                _options.InputSize,
+                learningRate: _options.HebbianLearningRate,
+                antiHebbianAlpha: _options.AntiHebbianAlpha);
+            return;
+        }
+
+        // Standard OFDM/attention/sparsity path (for classification and general tasks)
         // Stage 1: Mellin-Fourier invariance layer
         if (_options.UseMellinFourier)
         {
