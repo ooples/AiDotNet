@@ -1141,13 +1141,15 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             _lastInput = input;
 
-            // 2D fast path: tape-tracked spectral conv using Engine.FFT2D.
-            // Backward propagates automatically via the FFT2D grad node. Other
-            // ranks still use the hand-rolled path until a separable N-D tape
-            // implementation lands (see issue #135 for native FFTND support).
+            // Tape-tracked spectral conv using Engine.FFT* for every rank.
+            //   - 2-D: single fused Engine.FFT2D call (fast path).
+            //   - Other ranks: separable 1-D Engine.FFT loop. Will collapse into
+            //     a single Engine.FFTND call once native N-D FFT ships — see
+            //     https://github.com/ooples/AiDotNet.Tensors/issues/135.
+            // Backward flows through the FFT / FFT2D grad nodes automatically.
             var spectral = _spatialDimensions.Length == 2
                 ? ApplySpectralConvolution2DTape(input)
-                : ApplySpectralConvolution(input);
+                : ApplySpectralConvolutionNDTape(input);
             var local = ApplyPointwiseMixing(input);
             var combined = Engine.TensorAdd(spectral, local);
 
@@ -1691,6 +1693,200 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             // [mh*mw, B, C_out] → [mh, mw, B, C_out] → permute to [B, C_out, mh, mw]
             var resultUnbatched = Engine.Reshape(resultBatched, new[] { modesH, modesW, batchSize, outChannels });
             return Engine.TensorPermute(resultUnbatched, new[] { 2, 3, 0, 1 });
+        }
+
+        /// <summary>
+        /// N-D generalization of <see cref="PerLocationMatMul"/>. Applies compact
+        /// per-frequency weights <c>[C_out, C_in, m_1, ..., m_N]</c> to an input
+        /// block <c>[B, C_in, m_1, ..., m_N]</c> producing <c>[B, C_out, m_1, ..., m_N]</c>
+        /// by treating the <c>N</c> spatial location axes as a flattened batch for
+        /// <c>TensorBatchMatMul</c>.
+        /// </summary>
+        private Tensor<T> PerLocationMatMulND(
+            Tensor<T> input, Tensor<T> weights,
+            int batchSize, int inChannels, int outChannels,
+            int[] modeShape)
+        {
+            int nSpatial = modeShape.Length;
+            int rank = nSpatial + 2;
+            int modeTotal = 1;
+            for (int d = 0; d < nSpatial; d++) modeTotal *= modeShape[d];
+
+            // Permute input [B, C_in, m_1, ..., m_N] → [m_1, ..., m_N, B, C_in]
+            // axes: [2, 3, ..., rank-1, 0, 1]
+            int[] inputPerm = new int[rank];
+            for (int d = 0; d < nSpatial; d++) inputPerm[d] = 2 + d;
+            inputPerm[nSpatial] = 0;
+            inputPerm[nSpatial + 1] = 1;
+            var inputPermuted = Engine.TensorPermute(input, inputPerm);
+            var inputBatched = Engine.Reshape(inputPermuted, new[] { modeTotal, batchSize, inChannels });
+
+            // Permute weights [C_out, C_in, m_1, ..., m_N] → [m_1, ..., m_N, C_in, C_out]
+            // axes: [2, 3, ..., rank-1, 1, 0]
+            int[] weightPerm = new int[rank];
+            for (int d = 0; d < nSpatial; d++) weightPerm[d] = 2 + d;
+            weightPerm[nSpatial] = 1;
+            weightPerm[nSpatial + 1] = 0;
+            var weightsPermuted = Engine.TensorPermute(weights, weightPerm);
+            var weightsBatched = Engine.Reshape(weightsPermuted, new[] { modeTotal, inChannels, outChannels });
+
+            // Batched matmul: [modeTotal, B, C_in] @ [modeTotal, C_in, C_out] → [modeTotal, B, C_out]
+            var resultBatched = Engine.TensorBatchMatMul(inputBatched, weightsBatched);
+
+            // Reshape [modeTotal, B, C_out] → [m_1, ..., m_N, B, C_out]
+            int[] unbatchedShape = new int[rank];
+            for (int d = 0; d < nSpatial; d++) unbatchedShape[d] = modeShape[d];
+            unbatchedShape[nSpatial] = batchSize;
+            unbatchedShape[nSpatial + 1] = outChannels;
+            var resultUnbatched = Engine.Reshape(resultBatched, unbatchedShape);
+
+            // Permute back: [m_1, ..., m_N, B, C_out] → [B, C_out, m_1, ..., m_N]
+            // axes: [rank-2, rank-1, 0, 1, ..., nSpatial-1]
+            int[] outPerm = new int[rank];
+            outPerm[0] = nSpatial;
+            outPerm[1] = nSpatial + 1;
+            for (int d = 0; d < nSpatial; d++) outPerm[2 + d] = d;
+            return Engine.TensorPermute(resultUnbatched, outPerm);
+        }
+
+        /// <summary>
+        /// Applies an N-D forward or inverse FFT as a sequence of 1-D
+        /// <c>Engine.FFT</c> / <c>Engine.IFFT</c> calls, one per spatial axis.
+        /// Each call transforms the last axis, so we permute the target axis
+        /// into the last position before each call and permute back afterward.
+        /// All ops record on the gradient tape. This is the interim separable
+        /// implementation — once native <c>FFTND</c> / <c>IFFTND</c> ship
+        /// (<see href="https://github.com/ooples/AiDotNet.Tensors/issues/135">
+        /// AiDotNet.Tensors#135</see>) this method becomes a single engine call.
+        /// </summary>
+        private (Tensor<T> real, Tensor<T> imag) ApplySeparableFft(
+            Tensor<T> inputReal, Tensor<T> inputImag, bool inverse)
+        {
+            int rank = inputReal.Rank;
+            Tensor<T> re = inputReal;
+            Tensor<T> im = inputImag;
+
+            for (int axis = 2; axis < rank; axis++)
+            {
+                // Build the permutation that moves `axis` to the last position
+                // while preserving the relative order of the other axes.
+                int[] perm = new int[rank];
+                int[] invPerm = new int[rank];
+                int idx = 0;
+                for (int d = 0; d < rank; d++)
+                {
+                    if (d != axis)
+                    {
+                        perm[idx++] = d;
+                    }
+                }
+                perm[rank - 1] = axis;
+                for (int d = 0; d < rank; d++)
+                {
+                    invPerm[perm[d]] = d;
+                }
+
+                var rePerm = Engine.TensorPermute(re, perm);
+                var imPerm = Engine.TensorPermute(im, perm);
+
+                Tensor<T> newRe;
+                Tensor<T> newIm;
+                if (inverse)
+                {
+                    Engine.IFFT(rePerm, imPerm, out newRe, out newIm);
+                }
+                else
+                {
+                    Engine.FFT(rePerm, imPerm, out newRe, out newIm);
+                }
+
+                re = Engine.TensorPermute(newRe, invPerm);
+                im = Engine.TensorPermute(newIm, invPerm);
+            }
+
+            return (re, im);
+        }
+
+        /// <summary>
+        /// Tape-tracked spectral convolution for arbitrary spatial rank. Uses
+        /// separable 1-D <c>Engine.FFT</c> / <c>Engine.IFFT</c> over each spatial
+        /// axis, then iterates the <c>2^N</c> mode corners, slicing out the
+        /// compact block, running the four-real-op complex matmul, and scattering
+        /// the result back into a zero-filled output spectrum. The 2-D case goes
+        /// through <see cref="ApplySpectralConvolution2DTape"/> instead, which
+        /// uses native <c>Engine.FFT2D</c> as a faster fused call.
+        /// </summary>
+        private Tensor<T> ApplySpectralConvolutionNDTape(Tensor<T> input)
+        {
+            int rank = input.Rank;
+            int nSpatial = rank - 2;
+            int batchSize = input.Shape[0];
+            int[] spatialShape = input._shape.Skip(2).ToArray();
+            int[] modeShape = new int[nSpatial];
+            for (int d = 0; d < nSpatial; d++)
+            {
+                modeShape[d] = Math.Min(_modeSizes[d], spatialShape[d]);
+            }
+
+            // Real input → zero imaginary companion for the FFT's split-complex API.
+            var inputImag = new Tensor<T>(input._shape);
+            inputImag.Fill(_numOps.Zero);
+
+            var (specRe, specIm) = ApplySeparableFft(input, inputImag, inverse: false);
+
+            var outSpecRe = new Tensor<T>(specRe._shape);
+            var outSpecIm = new Tensor<T>(specIm._shape);
+            outSpecRe.Fill(_numOps.Zero);
+            outSpecIm.Fill(_numOps.Zero);
+
+            // 2^nSpatial mode corners. For each corner a bit i chooses the low
+            // frequencies [0..modes-1] on axis i when 0 or the high frequencies
+            // [dim-modes..dim-1] when 1. This mirrors the legacy BuildModeIndices
+            // behavior exactly — it keeps both positive and negative frequencies.
+            int cornerCount = 1 << nSpatial;
+            for (int corner = 0; corner < cornerCount; corner++)
+            {
+                int[] sliceStart = new int[rank];
+                int[] sliceSize = new int[rank];
+                sliceStart[0] = 0;
+                sliceStart[1] = 0;
+                sliceSize[0] = batchSize;
+                sliceSize[1] = _width;
+
+                bool validCorner = true;
+                for (int d = 0; d < nSpatial; d++)
+                {
+                    bool useHigh = ((corner >> d) & 1) == 1;
+                    int start = useHigh ? spatialShape[d] - modeShape[d] : 0;
+                    if (start < 0 || start + modeShape[d] > spatialShape[d])
+                    {
+                        validCorner = false;
+                        break;
+                    }
+
+                    sliceStart[2 + d] = start;
+                    sliceSize[2 + d] = modeShape[d];
+                }
+
+                if (!validCorner) continue;
+
+                var inBlockRe = Engine.TensorSlice(specRe, sliceStart, sliceSize);
+                var inBlockIm = Engine.TensorSlice(specIm, sliceStart, sliceSize);
+
+                var arWr = PerLocationMatMulND(inBlockRe, _spectralWeightsReal, batchSize, _width, _width, modeShape);
+                var aiWi = PerLocationMatMulND(inBlockIm, _spectralWeightsImag, batchSize, _width, _width, modeShape);
+                var arWi = PerLocationMatMulND(inBlockRe, _spectralWeightsImag, batchSize, _width, _width, modeShape);
+                var aiWr = PerLocationMatMulND(inBlockIm, _spectralWeightsReal, batchSize, _width, _width, modeShape);
+
+                var outBlockRe = Engine.TensorSubtract(arWr, aiWi);
+                var outBlockIm = Engine.TensorAdd(arWi, aiWr);
+
+                outSpecRe = Engine.TensorSetSlice(outSpecRe, outBlockRe, sliceStart);
+                outSpecIm = Engine.TensorSetSlice(outSpecIm, outBlockIm, sliceStart);
+            }
+
+            var (spatialRe, _) = ApplySeparableFft(outSpecRe, outSpecIm, inverse: true);
+            return spatialRe;
         }
 
         private Tensor<T> ApplyPointwiseMixing(Tensor<T> input)
