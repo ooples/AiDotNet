@@ -5,8 +5,23 @@
       <DataCollector friendlyName="XPlat Code Coverage">
         <Configuration>
           <Format>opencover</Format>
-          <Exclude>[*Tests*]*,[*Benchmark*]*,[xunit.*]*</Exclude>
+          <!--
+            Assembly exclusions. Tightened to drop instrumentation for anything not meaningfully
+            covered by this test project, because Coverlet's per-shard finalization scales with
+            the size of the instrumented surface and was adding ~14 minutes to every shard.
+          -->
+          <Exclude>[*Tests*]*,[*Benchmark*]*,[xunit.*]*,[AiDotNet.Generators]*,[AiDotNet.ProgramSynthesis.Tooling]*,[AiDotNet.Playground*]*,[AiDotNet.Dashboard]*</Exclude>
           <ExcludeByAttribute>Obsolete,GeneratedCodeAttribute,CompilerGeneratedAttribute</ExcludeByAttribute>
+          <!--
+            File exclusions mirror sonar.coverage.exclusions in sonarcloud.yml — Sonar discards
+            these anyway, so there is no point instrumenting or serializing them.
+          -->
+          <ExcludeByFile>**/ProgramSynthesis/Models/**/*.cs,**/ProgramSynthesis/Execution/**/*.cs,**/ProgramSynthesis/Requests/**/*.cs,**/ProgramSynthesis/Results/**/*.cs,**/ProgramSynthesis/Interfaces/**/*.cs,**/ProgramSynthesis/Enums/**/*.cs,**/AiDotNet.Serving/Configuration/**/*.cs,**/AiDotNet.Serving/Models/**/*.cs,**/AiDotNet.Serving/Persistence/Entities/**/*.cs,**/AiDotNet.Serving/Persistence/Migrations/**/*.cs,**/AiDotNet.Serving/**/I*.cs,**/Interfaces/**/*.cs</ExcludeByFile>
+          <!-- SingleHit: record only whether each line was hit, not the hit count. Smaller XML, faster write. -->
+          <SingleHit>true</SingleHit>
+          <!-- SkipAutoProps: don't instrument trivial compiler-generated property accessors. -->
+          <SkipAutoProps>true</SkipAutoProps>
+          <IncludeTestAssembly>false</IncludeTestAssembly>
         </Configuration>
       </DataCollector>
     </DataCollectors>
