@@ -719,7 +719,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             return _cachedTrainableParameters;
 
         var allParams = new List<Tensor<T>>();
-        CollectLayerParameters(this, allParams, new HashSet<object>(ReferenceEqualityComparer.Instance));
+        CollectLayerParameters(this, allParams, new HashSet<object>(AiDotNet.Helpers.TensorReferenceComparer<object>.Instance));
 
         // Only cache non-empty results. An empty result usually means lazy
         // initialization hasn't run yet — don't pin that empty list.
