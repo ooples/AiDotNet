@@ -1,3 +1,4 @@
+using AiDotNet.HarmonicEngine.Core;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.HarmonicEngine.Core;
@@ -45,32 +46,10 @@ public class SpectralSparsityMask<T>
         int n = spectrum.Length;
         k = Math.Min(k, n);
 
-        // Compute magnitudes and find top-K indices
-        var magnitudes = new (double magnitude, int index)[n];
-        for (int i = 0; i < n; i++)
-        {
-            magnitudes[i] = (_numOps.ToDouble(spectrum[i].Magnitude), i);
-        }
-
-        // Sort descending by magnitude
-        Array.Sort(magnitudes, (a, b) => b.magnitude.CompareTo(a.magnitude));
-
-        // Build the sparse spectrum
-        var sparse = new Vector<Complex<T>>(n);
-        var zero = new Complex<T>(_numOps.Zero, _numOps.Zero);
-        for (int i = 0; i < n; i++)
-        {
-            sparse[i] = zero;
-        }
-
-        // Keep top-K
-        for (int i = 0; i < k; i++)
-        {
-            int idx = magnitudes[i].index;
-            sparse[idx] = spectrum[idx];
-        }
-
-        return sparse;
+        // Engine-accelerated TopK by magnitude
+        var tensorSpec = SpectralEngineHelper.ToComplexTensor(spectrum);
+        var sparseResult = SpectralEngineHelper.TopK(tensorSpec, k);
+        return SpectralEngineHelper.ToComplexVector(sparseResult);
     }
 
     /// <summary>

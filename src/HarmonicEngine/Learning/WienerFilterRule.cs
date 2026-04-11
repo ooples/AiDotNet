@@ -1,70 +1,46 @@
+using AiDotNet.HarmonicEngine.Core;
 using AiDotNet.HarmonicEngine.Transforms;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.HarmonicEngine.Learning;
 
 /// <summary>
-/// Computes the Wiener optimal filter directly from input and target signals.
-/// The Wiener filter H_opt(k) = S_xy(k) / S_xx(k) minimizes the mean squared error
-/// between filtered input and target in a single computation (no iteration needed).
+/// Computes the Wiener optimal filter using Engine-accelerated spectral operations.
+/// H_opt(k) = S_xy(k) / S_xx(k) — the minimum MSE linear filter.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks>
-/// <para>
-/// <b>For Beginners:</b> The Wiener filter is the mathematically optimal answer to the question:
-/// "What is the best linear filter to apply to signal X to produce signal Y?"
-///
-/// It computes this optimum directly from two quantities:
-/// 1. Cross-spectral density S_xy: how input and target correlate at each frequency
-/// 2. Auto-spectral density S_xx: how much energy the input has at each frequency
-///
-/// The ratio H_opt = S_xy / S_xx tells you exactly how much to scale and phase-shift
-/// each frequency to best reconstruct the target from the input.
-///
-/// This serves as the ground truth for validating that Hebbian learning converges correctly.
-/// If Hebbian learning works, the filter it produces should approach the Wiener filter.
-/// </para>
-/// </remarks>
 public class WienerFilterRule<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly CrossSpectralDensity<T> _csd;
-    private readonly FastFourierTransform<T> _fft;
+    private static IEngine Engine => AiDotNetEngine.Current;
 
-    /// <summary>
-    /// Initializes a new WienerFilterRule.
-    /// </summary>
     public WienerFilterRule()
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         _csd = new CrossSpectralDensity<T>();
-        _fft = new FastFourierTransform<T>();
     }
 
     /// <summary>
-    /// Computes the Wiener optimal filter from input and target signals.
+    /// Computes the Wiener optimal filter using Engine-accelerated CSD and magnitude.
     /// </summary>
-    /// <param name="input">The input signal x(t).</param>
-    /// <param name="target">The target signal y(t).</param>
-    /// <returns>The optimal filter H_opt(k) = S_xy(k) / S_xx(k) as complex coefficients.</returns>
     public Vector<Complex<T>> ComputeOptimal(Vector<T> input, Vector<T> target)
     {
         int n = input.Length;
 
-        // Compute spectra
-        var inputSpectrum = _fft.Forward(input);
-        var targetSpectrum = _fft.Forward(target);
+        // Engine-accelerated FFT
+        var inputSpec = SpectralEngineHelper.FFT(input);
+        var targetSpec = SpectralEngineHelper.FFT(target);
 
-        // Cross-spectral density: S_xy(k) = X(k) * conj(Y(k))
-        // Note: We want Y * conj(X) for H = S_yx / S_xx convention
-        var crossSpectral = _csd.ComputeFromSpectra(targetSpectrum, inputSpectrum);
+        // Engine-accelerated cross-spectral density: Y * conj(X)
+        var crossSpectral = SpectralEngineHelper.CrossSpectral(targetSpec, inputSpec);
 
-        // Auto-spectral density: S_xx(k) = |X(k)|^2
-        var autoSpectral = _csd.AutoSpectralFromSpectrum(inputSpectrum);
+        // Engine-accelerated power spectrum: |X|^2
+        var autoSpectral = SpectralEngineHelper.MagnitudeSquared(inputSpec);
 
-        // H_opt(k) = S_yx(k) / S_xx(k)
-        var filter = new Vector<Complex<T>>(n);
+        // H_opt(k) = S_yx(k) / S_xx(k) — per-element complex/real division
         var epsilon = _numOps.FromDouble(1e-10);
+        var filter = new Vector<Complex<T>>(n);
 
         for (int k = 0; k < n; k++)
         {
@@ -78,44 +54,34 @@ public class WienerFilterRule<T>
     }
 
     /// <summary>
-    /// Applies a spectral filter to an input signal and returns the filtered output.
+    /// Applies a spectral filter using Engine-accelerated complex multiply + IFFT.
     /// </summary>
-    /// <param name="input">The input signal.</param>
-    /// <param name="filter">The spectral filter H(k).</param>
-    /// <returns>The filtered signal.</returns>
     public Vector<T> Apply(Vector<T> input, Vector<Complex<T>> filter)
     {
-        var spectrum = _fft.Forward(input);
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-        int n = input.Length;
+        var spectrum = SpectralEngineHelper.FFT(input);
+        var filterT = SpectralEngineHelper.ToComplexTensor(filter);
 
-        var filteredSpectrum = new Vector<Complex<T>>(n);
-        for (int k = 0; k < n; k++)
-        {
-            filteredSpectrum[k] = complexOps.Multiply(filter[k], spectrum[k]);
-        }
+        // Engine-accelerated complex multiply: H(k) * X(k)
+        var filtered = Engine.NativeComplexMultiply(filterT, spectrum);
 
-        return _fft.Inverse(filteredSpectrum);
+        // Engine-accelerated IFFT
+        return SpectralEngineHelper.IFFTReal(filtered);
     }
 
     /// <summary>
-    /// Computes the MSE between filtered input and target to validate filter quality.
+    /// Computes MSE using Engine-accelerated operations.
     /// </summary>
-    /// <param name="input">The input signal.</param>
-    /// <param name="target">The target signal.</param>
-    /// <param name="filter">The filter to evaluate.</param>
-    /// <returns>Mean squared error between filtered input and target.</returns>
     public T ComputeMSE(Vector<T> input, Vector<T> target, Vector<Complex<T>> filter)
     {
         var filtered = Apply(input, filter);
         int n = input.Length;
-        T totalError = _numOps.Zero;
 
-        for (int i = 0; i < n; i++)
-        {
-            var diff = _numOps.Subtract(filtered[i], target[i]);
-            totalError = _numOps.Add(totalError, _numOps.Multiply(diff, diff));
-        }
+        // Engine: diff = filtered - target, then sum of squares
+        var filteredT = SpectralEngineHelper.ToTensor(filtered);
+        var targetT = SpectralEngineHelper.ToTensor(target);
+        var diff = Engine.TensorSubtract(filteredT, targetT);
+        var sqDiff = Engine.TensorMultiply(diff, diff);
+        var totalError = Engine.TensorSum(sqDiff);
 
         return _numOps.Divide(totalError, _numOps.FromDouble(n));
     }

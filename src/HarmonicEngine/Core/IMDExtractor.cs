@@ -164,27 +164,21 @@ public class IMDExtractor<T>
     {
         var interactions = ExtractPairwise(nonlinearOutput);
         int n = _carriers.Length;
-        var weights = new Matrix<T>(n, n);
 
-        var engine = AiDotNetEngine.Current;
-
-        // Softmax per row using Engine vectorized operations
+        // Convert interaction matrix to 2D tensor for Engine.TensorSoftmaxRows
+        var matrix = new Tensor<T>([n, n]);
         for (int i = 0; i < n; i++)
-        {
-            // Extract row as Tensor for Engine acceleration
-            var row = new Tensor<T>([n]);
-            for (int j = 0; j < n; j++) row[j] = interactions[i, j];
+            for (int j = 0; j < n; j++)
+                matrix[i * n + j] = interactions[i, j];
 
-            // Numerically stable softmax: subtract max, exp, normalize
-            T maxVal = engine.TensorMaxValue(row);
-            var shifted = engine.TensorSubtractScalar(row, maxVal);
-            var expValues = engine.TensorExp(shifted);
-            T sumExp = engine.TensorSum(expValues);
-            var normalized = engine.TensorDivideScalar(expValues, sumExp);
+        // Single Engine call for all rows — SIMD/GPU accelerated
+        var softmaxed = SpectralEngineHelper.SoftmaxRows(matrix);
 
-            // Write back
-            for (int j = 0; j < n; j++) weights[i, j] = normalized[j];
-        }
+        // Convert back to Matrix
+        var weights = new Matrix<T>(n, n);
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+                weights[i, j] = softmaxed[i * n + j];
 
         return weights;
     }
