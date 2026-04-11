@@ -504,73 +504,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             return Engine.TensorPermute(reshaped, perm);
         }
 
-        private Tensor<T> ApplyVectorActivation(Tensor<T> input, IVectorActivationFunction<T> activation)
-        {
-            int batchSize = input.Shape[0];
-            int channels = input.Shape[1];
-            int spatialRank = input.Rank - 2;
-            int[] spatialShape = input._shape.Skip(2).ToArray();
-            int spatialSize = spatialShape.Aggregate(1, (a, b) => a * b);
-            int[] spatialStrides = ComputeStrides(spatialShape);
-
-            var output = new Tensor<T>(input._shape);
-            var inputIndices = new int[input.Rank];
-            var outputIndices = new int[input.Rank];
-            var channelVector = new Vector<T>(channels);
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                inputIndices[0] = b;
-                outputIndices[0] = b;
-
-                for (int s = 0; s < spatialSize; s++)
-                {
-                    FillSpatialIndices(s, spatialShape, spatialStrides, inputIndices, 2);
-                    FillSpatialIndices(s, spatialShape, spatialStrides, outputIndices, 2);
-
-                    for (int c = 0; c < channels; c++)
-                    {
-                        inputIndices[1] = c;
-                        channelVector[c] = input[inputIndices];
-                    }
-
-                    var activated = ActivationHelper.ApplyActivation(activation, channelVector, AiDotNetEngine.Current);
-                    for (int c = 0; c < channels; c++)
-                    {
-                        outputIndices[1] = c;
-                        output[outputIndices] = activated[c];
-                    }
-                }
-            }
-
-            return output;
-        }
-
-        private static int[] ComputeStrides(int[] shape)
-        {
-            int[] strides = new int[shape.Length];
-            int stride = 1;
-
-            for (int i = shape.Length - 1; i >= 0; i--)
-            {
-                strides[i] = stride;
-                stride *= shape[i];
-            }
-
-            return strides;
-        }
-
-        private static void FillSpatialIndices(int linearIndex, int[] shape, int[] strides, int[] indices, int offset)
-        {
-            int remaining = linearIndex;
-            for (int i = 0; i < shape.Length; i++)
-            {
-                int coord = remaining / strides[i];
-                remaining %= strides[i];
-                indices[offset + i] = coord;
-            }
-        }
-
         /// <summary>
         /// Makes a prediction using the FNO.
         /// </summary>
@@ -945,32 +878,24 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     public class FourierLayer<T> : NeuralNetworks.Layers.LayerBase<T>
     {
         private readonly INumericOperations<T> _numOps;
-        private readonly INumericOperations<Complex<T>> _complexOps;
         private readonly int _width;
         private readonly int _modes;
         private readonly int[] _spatialDimensions;
         private readonly int[] _modeSizes;
         private readonly IActivationFunction<T> _activation;
 
-        // Split-complex spectral weights (trainable, tape-tracked). These are the
-        // source of truth during the tape-based forward path. _spectralWeights below
-        // is kept as a derived read-only mirror so the legacy Backward /
-        // ComputeSpectralGradients paths still compile until they are removed in a
-        // follow-up commit.
+        // Split-complex spectral weights stored as two real tensors so they can
+        // participate directly in the gradient tape alongside the rest of the
+        // Engine.FFT / Engine.FFT2D pipeline. Registered as trainable parameters
+        // below in the constructor.
         [TrainableParameter(Role = PersistentTensorRole.Weights)]
         private Tensor<T> _spectralWeightsReal;
 
         [TrainableParameter(Role = PersistentTensorRole.Weights)]
         private Tensor<T> _spectralWeightsImag;
 
-        private Tensor<Complex<T>> _spectralWeights;
         private Tensor<T> _pointwiseWeights;
         private Vector<T> _pointwiseBias;
-        private Tensor<T>? _lastInput;
-        private Tensor<T>? _lastPreActivation;
-        private Tensor<Complex<T>>? _spectralWeightsGradient;
-        private Tensor<T>? _pointwiseWeightsGradient;
-        private Vector<T>? _pointwiseBiasGradient;
 
         public FourierLayer(int width, int modes, int[] spatialDimensions, IActivationFunction<T>? activation = null)
             : base(new[] { width }, new[] { width })
@@ -981,7 +906,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
 
             _numOps = MathHelper.GetNumericOperations<T>();
-            _complexOps = MathHelper.GetNumericOperations<Complex<T>>();
             _width = width;
             _modes = modes;
             _spatialDimensions = spatialDimensions.ToArray();
@@ -989,7 +913,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             _activation = activation ?? new GELUActivation<T>();
 
             var spectralShape = new[] { _width, _width }.Concat(_modeSizes).ToArray();
-            _spectralWeights = new Tensor<Complex<T>>(spectralShape);
             _spectralWeightsReal = new Tensor<T>(spectralShape);
             _spectralWeightsImag = new Tensor<T>(spectralShape);
             _pointwiseWeights = new Tensor<T>(new[] { _width, _width });
@@ -998,42 +921,25 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             InitializeSpectralWeights();
             InitializePointwiseWeights();
 
-            // Register split-complex spectral weights for tape-based training. The
-            // legacy _spectralWeights mirror is not registered — it's kept only for
-            // the old hand-rolled backward path which will be deleted in a follow-up.
             RegisterTrainableParameter(_spectralWeightsReal, PersistentTensorRole.Weights);
             RegisterTrainableParameter(_spectralWeightsImag, PersistentTensorRole.Weights);
         }
 
         public override bool SupportsTraining => true;
 
+        /// <summary>
+        /// Legacy scalar-learning-rate parameter update. The tape training path
+        /// (FNO.TapeTrainStep → tape.ComputeGradients → in-place SGD on the
+        /// tensor spans) bypasses this method entirely, and the hand-rolled
+        /// backward that used to populate the private <c>_*Gradient</c> fields
+        /// was removed along with those fields. Kept as a no-op so the abstract
+        /// base contract is still satisfied.
+        /// </summary>
         public override void UpdateParameters(T learningRate)
         {
-            if (_spectralWeightsGradient == null || _pointwiseWeightsGradient == null || _pointwiseBiasGradient == null)
-            {
-                throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-            }
-
-            var lrComplex = new Complex<T>(learningRate, _numOps.Zero);
-            for (int i = 0; i < _spectralWeights.Length; i++)
-            {
-                var update = _complexOps.Multiply(_spectralWeightsGradient[i], lrComplex);
-                _spectralWeights[i] = _complexOps.Subtract(_spectralWeights[i], update);
-            }
-
-            for (int i = 0; i < _pointwiseWeights.Length; i++)
-            {
-                _pointwiseWeights[i] = _numOps.Subtract(
-                    _pointwiseWeights[i],
-                    _numOps.Multiply(_pointwiseWeightsGradient[i], learningRate));
-            }
-
-            for (int i = 0; i < _pointwiseBias.Length; i++)
-            {
-                _pointwiseBias[i] = _numOps.Subtract(
-                    _pointwiseBias[i],
-                    _numOps.Multiply(_pointwiseBiasGradient[i], learningRate));
-            }
+            // No-op: tape-based training updates weights via SetParameters on
+            // the split-complex _spectralWeightsReal / _spectralWeightsImag
+            // tensors (and _pointwiseWeights / _pointwiseBias) directly.
         }
 
         public override Tensor<T> Forward(Tensor<T> input)
@@ -1050,8 +956,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 throw new ArgumentException($"Expected channel width {_width}, got {input.Shape[1]}.");
             }
 
-            _lastInput = input;
-
             // Tape-tracked spectral conv using Engine.FFT* for every rank.
             //   - 2-D: single fused Engine.FFT2D call (fast path).
             //   - Other ranks: separable 1-D Engine.FFT loop. Will collapse into
@@ -1064,45 +968,26 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             var local = ApplyPointwiseMixing(input);
             var combined = Engine.TensorAdd(spectral, local);
 
-            _lastPreActivation = combined;
             return _activation.Activate(combined);
         }
 
-        /// <summary>
-        /// Computes gradients for this Fourier layer given the gradient from the next layer.
-        /// Stores weight/bias gradients internally and returns the gradient w.r.t. input.
-        /// </summary>
-        /// <param name="outputGradient">Gradient of the loss w.r.t. this layer's output.</param>
-        /// <returns>Gradient of the loss w.r.t. this layer's input.</returns>
-
         public override Vector<T> GetParameters()
         {
-            int spectralCount = _spectralWeights.Length;
+            int spectralCount = _spectralWeightsReal.Length;
             int pointwiseCount = _pointwiseWeights.Length;
             int biasCount = _pointwiseBias.Length;
 
             var parameters = new Vector<T>(spectralCount * 2 + pointwiseCount + biasCount);
             int index = 0;
 
-            for (int i = 0; i < spectralCount; i++)
-            {
-                parameters[index++] = _spectralWeights[i].Real;
-            }
+            // Layout: [real spectral weights, imag spectral weights, pointwise weights, pointwise bias].
+            var realSpan = _spectralWeightsReal.Data.Span;
+            var imagSpan = _spectralWeightsImag.Data.Span;
+            for (int i = 0; i < spectralCount; i++) parameters[index++] = realSpan[i];
+            for (int i = 0; i < spectralCount; i++) parameters[index++] = imagSpan[i];
 
-            for (int i = 0; i < spectralCount; i++)
-            {
-                parameters[index++] = _spectralWeights[i].Imaginary;
-            }
-
-            for (int i = 0; i < pointwiseCount; i++)
-            {
-                parameters[index++] = _pointwiseWeights[i];
-            }
-
-            for (int i = 0; i < biasCount; i++)
-            {
-                parameters[index++] = _pointwiseBias[i];
-            }
+            for (int i = 0; i < pointwiseCount; i++) parameters[index++] = _pointwiseWeights[i];
+            for (int i = 0; i < biasCount; i++) parameters[index++] = _pointwiseBias[i];
 
             return parameters;
         }
@@ -1114,109 +999,43 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}.");
             }
 
-            int spectralCount = _spectralWeights.Length;
+            int spectralCount = _spectralWeightsReal.Length;
             int pointwiseCount = _pointwiseWeights.Length;
             int biasCount = _pointwiseBias.Length;
             int index = 0;
 
-            var realParts = new T[spectralCount];
-            for (int i = 0; i < spectralCount; i++)
-            {
-                realParts[i] = parameters[index++];
-            }
+            // Write in place so engine persistent tensor references stay valid.
+            var realSpan = _spectralWeightsReal.Data.Span;
+            var imagSpan = _spectralWeightsImag.Data.Span;
+            for (int i = 0; i < spectralCount; i++) realSpan[i] = parameters[index++];
+            for (int i = 0; i < spectralCount; i++) imagSpan[i] = parameters[index++];
 
-            for (int i = 0; i < spectralCount; i++)
-            {
-                _spectralWeights[i] = new Complex<T>(realParts[i], parameters[index++]);
-            }
+            for (int i = 0; i < pointwiseCount; i++) _pointwiseWeights[i] = parameters[index++];
+            for (int i = 0; i < biasCount; i++) _pointwiseBias[i] = parameters[index++];
 
-            for (int i = 0; i < pointwiseCount; i++)
-            {
-                _pointwiseWeights[i] = parameters[index++];
-            }
-
-            for (int i = 0; i < biasCount; i++)
-            {
-                _pointwiseBias[i] = parameters[index++];
-            }
+            Engine.InvalidatePersistentTensor(_spectralWeightsReal);
+            Engine.InvalidatePersistentTensor(_spectralWeightsImag);
         }
 
         public override Vector<T> GetParameterGradients()
         {
-            if (_spectralWeightsGradient == null || _pointwiseWeightsGradient == null || _pointwiseBiasGradient == null)
-            {
-                return new Vector<T>(ParameterCount);
-            }
-
-            int spectralCount = _spectralWeightsGradient.Length;
-            int pointwiseCount = _pointwiseWeightsGradient.Length;
-            int biasCount = _pointwiseBiasGradient.Length;
-
-            var gradients = new Vector<T>(spectralCount * 2 + pointwiseCount + biasCount);
-            int index = 0;
-
-            for (int i = 0; i < spectralCount; i++)
-            {
-                gradients[index++] = _spectralWeightsGradient[i].Real;
-            }
-
-            for (int i = 0; i < spectralCount; i++)
-            {
-                gradients[index++] = _spectralWeightsGradient[i].Imaginary;
-            }
-
-            for (int i = 0; i < pointwiseCount; i++)
-            {
-                gradients[index++] = _pointwiseWeightsGradient[i];
-            }
-
-            for (int i = 0; i < biasCount; i++)
-            {
-                gradients[index++] = _pointwiseBiasGradient[i];
-            }
-
-            return gradients;
+            // Tape-based training computes gradients through GradientTape<T> on
+            // each forward call and applies them immediately — no persistent
+            // gradient buffers are maintained here.
+            return new Vector<T>(ParameterCount);
         }
 
         public override void ClearGradients()
         {
-            if (_spectralWeightsGradient != null)
-            {
-                for (int i = 0; i < _spectralWeightsGradient.Length; i++)
-                {
-                    _spectralWeightsGradient[i] = _complexOps.Zero;
-                }
-            }
-
-            if (_pointwiseWeightsGradient != null)
-            {
-                _pointwiseWeightsGradient.Fill(_numOps.Zero);
-            }
-
-            if (_pointwiseBiasGradient != null)
-            {
-                _pointwiseBiasGradient.Fill(_numOps.Zero);
-            }
+            // No-op: see GetParameterGradients — no persistent gradient buffers.
         }
 
-        public override int ParameterCount
-        {
-            get
-            {
-                int spectralCount = _spectralWeights.Length;
-                int pointwiseCount = _pointwiseWeights.Length;
-                int biasCount = _pointwiseBias.Length;
-                return spectralCount * 2 + pointwiseCount + biasCount;
-            }
-        }
+        public override int ParameterCount =>
+            _spectralWeightsReal.Length * 2 + _pointwiseWeights.Length + _pointwiseBias.Length;
 
         public override void ResetState()
         {
-            _lastInput = null;
-            _lastPreActivation = null;
-            _spectralWeightsGradient = null;
-            _pointwiseWeightsGradient = null;
-            _pointwiseBiasGradient = null;
+            // No cached state — tape owns the gradient graph for the current forward.
         }
 
         private void InitializeSpectralWeights()
@@ -1225,18 +1044,12 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             double scale = 1.0 / Math.Max(1, _width);
             T scaleValue = _numOps.FromDouble(scale);
 
-            // Populate both the trainable split-complex tensors (source of truth for
-            // tape-based forward) and the legacy _spectralWeights mirror (read by the
-            // old hand-rolled backward helpers until they are removed).
             var realSpan = _spectralWeightsReal.Data.Span;
             var imagSpan = _spectralWeightsImag.Data.Span;
-            for (int i = 0; i < _spectralWeights.Length; i++)
+            for (int i = 0; i < realSpan.Length; i++)
             {
-                T real = _numOps.Multiply(_numOps.FromDouble(random.NextDouble() * 2.0 - 1.0), scaleValue);
-                T imag = _numOps.Multiply(_numOps.FromDouble(random.NextDouble() * 2.0 - 1.0), scaleValue);
-                realSpan[i] = real;
-                imagSpan[i] = imag;
-                _spectralWeights[i] = new Complex<T>(real, imag);
+                realSpan[i] = _numOps.Multiply(_numOps.FromDouble(random.NextDouble() * 2.0 - 1.0), scaleValue);
+                imagSpan[i] = _numOps.Multiply(_numOps.FromDouble(random.NextDouble() * 2.0 - 1.0), scaleValue);
             }
         }
 
