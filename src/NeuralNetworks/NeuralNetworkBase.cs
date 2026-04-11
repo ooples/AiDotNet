@@ -2373,12 +2373,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Arena-scope the forward activations, tape buffers, and gradient tensors
-        // allocated during this step. Every TensorAllocator.Rent in the forward
-        // and backward paths pulls from a thread-local pre-sized pool and is
-        // released en masse on Dispose — bounds peak memory for large models.
-        using var _arena = TensorArena.Create();
-
         SetTrainingMode(true);
         try
         {

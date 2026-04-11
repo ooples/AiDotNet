@@ -180,11 +180,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         if (invalidDims.Length > 0)
             throw new ArgumentOutOfRangeException(nameof(shape), $"All dimensions must be positive, but found {invalidDims[0]}.");
 
-        // Arena-scope all intermediate tensor allocations for the denoising loop so
-        // every TensorAllocator.Rent call inside PredictNoise pulls from a pre-sized
-        // thread-local pool and is released en masse on Dispose — caps peak memory
-        // and avoids leaking buffers between Generate calls.
-        using var _arena = TensorArena.Create();
         // Suppress tape recording during inference (like PyTorch torch.no_grad())
         using var _ = new NoGradScope<T>();
 
@@ -295,10 +290,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // 2. Add noise to input at those timesteps
         // 3. Predict the noise
         // 4. Update parameters to minimize prediction error
-
-        // Arena-scope per-step allocations (forward activations, gradient buffers)
-        // so the training loop doesn't accumulate intermediate tensors across calls.
-        using var _arena = TensorArena.Create();
 
         // Compute gradients using the denoising score matching objective
         var gradients = ComputeGradients(input, expectedOutput, LossFunction);
