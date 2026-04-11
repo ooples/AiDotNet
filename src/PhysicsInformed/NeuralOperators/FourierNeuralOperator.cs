@@ -894,8 +894,11 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         [TrainableParameter(Role = PersistentTensorRole.Weights)]
         private Tensor<T> _spectralWeightsImag;
 
+        [TrainableParameter(Role = PersistentTensorRole.Weights)]
         private Tensor<T> _pointwiseWeights;
-        private Vector<T> _pointwiseBias;
+
+        [TrainableParameter(Role = PersistentTensorRole.Biases)]
+        private Tensor<T> _pointwiseBias;
 
         public FourierLayer(int width, int modes, int[] spatialDimensions, IActivationFunction<T>? activation = null)
             : base(new[] { width }, new[] { width })
@@ -916,13 +919,15 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             _spectralWeightsReal = new Tensor<T>(spectralShape);
             _spectralWeightsImag = new Tensor<T>(spectralShape);
             _pointwiseWeights = new Tensor<T>(new[] { _width, _width });
-            _pointwiseBias = new Vector<T>(_width);
+            _pointwiseBias = new Tensor<T>(new[] { _width });
 
             InitializeSpectralWeights();
             InitializePointwiseWeights();
 
             RegisterTrainableParameter(_spectralWeightsReal, PersistentTensorRole.Weights);
             RegisterTrainableParameter(_spectralWeightsImag, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_pointwiseWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_pointwiseBias, PersistentTensorRole.Biases);
         }
 
         public override bool SupportsTraining => true;
@@ -986,8 +991,11 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             for (int i = 0; i < spectralCount; i++) parameters[index++] = realSpan[i];
             for (int i = 0; i < spectralCount; i++) parameters[index++] = imagSpan[i];
 
-            for (int i = 0; i < pointwiseCount; i++) parameters[index++] = _pointwiseWeights[i];
-            for (int i = 0; i < biasCount; i++) parameters[index++] = _pointwiseBias[i];
+            var pointwiseSpan = _pointwiseWeights.Data.Span;
+            for (int i = 0; i < pointwiseCount; i++) parameters[index++] = pointwiseSpan[i];
+
+            var biasSpan = _pointwiseBias.Data.Span;
+            for (int i = 0; i < biasCount; i++) parameters[index++] = biasSpan[i];
 
             return parameters;
         }
@@ -1010,11 +1018,16 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             for (int i = 0; i < spectralCount; i++) realSpan[i] = parameters[index++];
             for (int i = 0; i < spectralCount; i++) imagSpan[i] = parameters[index++];
 
-            for (int i = 0; i < pointwiseCount; i++) _pointwiseWeights[i] = parameters[index++];
-            for (int i = 0; i < biasCount; i++) _pointwiseBias[i] = parameters[index++];
+            var pointwiseSpan = _pointwiseWeights.Data.Span;
+            for (int i = 0; i < pointwiseCount; i++) pointwiseSpan[i] = parameters[index++];
+
+            var biasSpan = _pointwiseBias.Data.Span;
+            for (int i = 0; i < biasCount; i++) biasSpan[i] = parameters[index++];
 
             Engine.InvalidatePersistentTensor(_spectralWeightsReal);
             Engine.InvalidatePersistentTensor(_spectralWeightsImag);
+            Engine.InvalidatePersistentTensor(_pointwiseWeights);
+            Engine.InvalidatePersistentTensor(_pointwiseBias);
         }
 
         public override Vector<T> GetParameterGradients()
@@ -1059,16 +1072,18 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             double scale = 1.0 / Math.Max(1, _width);
             T scaleValue = _numOps.FromDouble(scale);
 
-            for (int i = 0; i < _pointwiseWeights.Length; i++)
+            var weightsSpan = _pointwiseWeights.Data.Span;
+            for (int i = 0; i < weightsSpan.Length; i++)
             {
-                _pointwiseWeights[i] = _numOps.Multiply(
+                weightsSpan[i] = _numOps.Multiply(
                     _numOps.FromDouble(random.NextDouble() * 2.0 - 1.0),
                     scaleValue);
             }
 
-            for (int i = 0; i < _pointwiseBias.Length; i++)
+            var biasSpan = _pointwiseBias.Data.Span;
+            for (int i = 0; i < biasSpan.Length; i++)
             {
-                _pointwiseBias[i] = _numOps.Zero;
+                biasSpan[i] = _numOps.Zero;
             }
         }
 
@@ -1370,71 +1385,56 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             return spatialRe;
         }
 
+        /// <summary>
+        /// Tape-tracked 1×1 pointwise mixing across the channel axis.
+        /// Implements <c>output[b, oc, ...spatial] = bias[oc] + sum_ic(W[oc, ic] * input[b, ic, ...spatial])</c>
+        /// as permute → reshape → MatMul(W^T) → broadcast-add(bias) → reshape → permute,
+        /// so every op records on the gradient tape. Previous implementation was an
+        /// element-by-element triple loop that allocated a detached output tensor and
+        /// broke the gradient tape connection to the pointwise weights and bias.
+        /// </summary>
         private Tensor<T> ApplyPointwiseMixing(Tensor<T> input)
         {
+            int rank = input.Rank;
             int batchSize = input.Shape[0];
-            int spatialRank = input.Rank - 2;
             int[] spatialShape = input._shape.Skip(2).ToArray();
             int spatialSize = spatialShape.Aggregate(1, (a, b) => a * b);
-            int[] spatialStrides = ComputeStrides(spatialShape);
+            int flatRows = batchSize * spatialSize;
 
-            var output = new Tensor<T>(input._shape);
-            var inputIndices = new int[input.Rank];
-            var outputIndices = new int[input.Rank];
+            // [B, C_in, d_1, ..., d_N] → [B, d_1, ..., d_N, C_in]
+            // perm axes: [0, 2, 3, ..., rank-1, 1]
+            int[] toFlatPerm = new int[rank];
+            toFlatPerm[0] = 0;
+            for (int d = 0; d < rank - 2; d++) toFlatPerm[1 + d] = 2 + d;
+            toFlatPerm[rank - 1] = 1;
+            var permuted = Engine.TensorPermute(input, toFlatPerm);
 
-            for (int b = 0; b < batchSize; b++)
-            {
-                inputIndices[0] = b;
-                outputIndices[0] = b;
+            // [B, d_1, ..., d_N, C_in] → [B * spatialSize, C_in]
+            var flat = Engine.Reshape(permuted, new[] { flatRows, _width });
 
-                for (int s = 0; s < spatialSize; s++)
-                {
-                    FillSpatialIndices(s, spatialShape, spatialStrides, inputIndices, 2);
-                    FillSpatialIndices(s, spatialShape, spatialStrides, outputIndices, 2);
+            // Weights stored as [C_out, C_in] — need [C_in, C_out] for the matmul.
+            var weightsT = Engine.TensorPermute(_pointwiseWeights, new[] { 1, 0 });
 
-                    for (int outCh = 0; outCh < _width; outCh++)
-                    {
-                        T sum = _pointwiseBias[outCh];
-                        for (int inCh = 0; inCh < _width; inCh++)
-                        {
-                            inputIndices[1] = inCh;
-                            sum = _numOps.Add(sum, _numOps.Multiply(_pointwiseWeights[outCh, inCh], input[inputIndices]));
-                        }
+            // [B*S, C_in] @ [C_in, C_out] → [B*S, C_out]
+            var matmul = Engine.TensorMatMul(flat, weightsT);
 
-                        outputIndices[1] = outCh;
-                        output[outputIndices] = sum;
-                    }
-                }
-            }
+            // Bias shape [C_out] broadcasts across the B*S rows.
+            var biased = Engine.TensorBroadcastAdd(matmul, _pointwiseBias);
 
-            return output;
+            // [B*S, C_out] → [B, d_1, ..., d_N, C_out]
+            int[] unflatShape = new int[rank];
+            unflatShape[0] = batchSize;
+            for (int d = 0; d < rank - 2; d++) unflatShape[1 + d] = spatialShape[d];
+            unflatShape[rank - 1] = _width;
+            var unflat = Engine.Reshape(biased, unflatShape);
+
+            // [B, d_1, ..., d_N, C_out] → [B, C_out, d_1, ..., d_N]
+            // perm axes: [0, rank-1, 1, 2, ..., rank-2]
+            int[] fromFlatPerm = new int[rank];
+            fromFlatPerm[0] = 0;
+            fromFlatPerm[1] = rank - 1;
+            for (int d = 0; d < rank - 2; d++) fromFlatPerm[2 + d] = 1 + d;
+            return Engine.TensorPermute(unflat, fromFlatPerm);
         }
-
-
-        private static int[] ComputeStrides(int[] shape)
-        {
-            int[] strides = new int[shape.Length];
-            int stride = 1;
-
-            for (int i = shape.Length - 1; i >= 0; i--)
-            {
-                strides[i] = stride;
-                stride *= shape[i];
-            }
-
-            return strides;
-        }
-
-        private static void FillSpatialIndices(int linearIndex, int[] shape, int[] strides, int[] indices, int offset)
-        {
-            int remaining = linearIndex;
-            for (int i = 0; i < shape.Length; i++)
-            {
-                int coord = remaining / strides[i];
-                remaining %= strides[i];
-                indices[offset + i] = coord;
-            }
-        }
-
     }
 }
