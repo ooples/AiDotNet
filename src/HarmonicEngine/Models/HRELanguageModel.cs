@@ -250,4 +250,22 @@ public class HRELanguageModel<T>
     {
         foreach (var block in _blocks) block.SetTrainingMode(isTraining);
     }
+
+    /// <summary>
+    /// Returns the embedding vector (row of the token embedding matrix) for a
+    /// given token ID. Used by training strategies that need direct access to
+    /// the embedding table (e.g., SpectralTargetPropagation).
+    /// </summary>
+    /// <param name="tokenId">Token ID in <c>[0, VocabSize)</c>.</param>
+    /// <returns>The length-<see cref="EmbeddingDim"/> embedding vector for this token.</returns>
+    public Vector<T> GetTokenEmbedding(int tokenId)
+    {
+        if (tokenId < 0 || tokenId >= _vocabSize)
+            throw new ArgumentOutOfRangeException(nameof(tokenId),
+                $"Token ID {tokenId} is outside vocab range [0, {_vocabSize}).");
+
+        var row = new Vector<T>(_embedDim);
+        for (int e = 0; e < _embedDim; e++) row[e] = _tokenEmbedding[tokenId, e];
+        return row;
+    }
 }

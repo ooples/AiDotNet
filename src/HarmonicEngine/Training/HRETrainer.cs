@@ -1,3 +1,4 @@
+using AiDotNet.Data.Loaders;
 using AiDotNet.HarmonicEngine.Models;
 
 namespace AiDotNet.HarmonicEngine.Training;
@@ -56,6 +57,26 @@ public class HRETrainer<T>
         foreach (var batch in batches)
         {
             Step(batch);
+        }
+    }
+
+    /// <summary>
+    /// Runs multiple training steps by pulling batches from a standard
+    /// AiDotNet <see cref="IInputOutputDataLoader{T, TInput, TOutput}"/>. Converts
+    /// each <c>(Features, Labels)</c> tuple into a <see cref="TrainingBatch{T}"/>
+    /// and calls <see cref="Step(TrainingBatch{T})"/>.
+    /// </summary>
+    /// <param name="loader">A loaded data loader that yields token pairs of shape [B, S].</param>
+    /// <param name="batchSize">Batch size. Default 32.</param>
+    /// <param name="shuffle">Whether to shuffle the loader before iterating. Default true.</param>
+    public void TrainEpoch(
+        IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> loader,
+        int batchSize = 32,
+        bool shuffle = true)
+    {
+        foreach (var (features, labels) in loader.GetBatches(batchSize: batchSize, shuffle: shuffle))
+        {
+            Step(new TrainingBatch<T>(features, labels));
         }
     }
 
