@@ -552,7 +552,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]
             _addedBatchDimension = true;
-            input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
+            input4D = Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
         }
         else if (rank == 4)
         {
@@ -568,7 +568,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < rank - 3; d++)
                 flatBatch *= input.Shape[d];
-            input4D = input.Reshape(flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]);
+            input4D = Engine.Reshape(input, new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
         _lastInput = input4D;
@@ -581,7 +581,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
         {
             // Use FusedConv2D for optimal GPU kernel fusion (conv + bias + activation)
             // Reshape bias from [outputDepth] to [1, outputDepth, 1, 1] for NCHW broadcast
-            var biasReshaped4D = _biases.Reshape([1, _outputDepth, 1, 1]);
+            var biasReshaped4D = Engine.Reshape(_biases, [1, _outputDepth, 1, 1]);
             outputNCHW = Engine.FusedConv2D(
                 input4D, _kernels, biasReshaped4D,
                 _stride, _stride,
@@ -602,7 +602,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
                 [_dilation, _dilation]);
 
             // Add bias using broadcast: reshape [outputDepth] to [1, outputDepth, 1, 1]
-            var biasReshaped = _biases.Reshape([1, _outputDepth, 1, 1]);
+            var biasReshaped = Engine.Reshape(_biases, [1, _outputDepth, 1, 1]);
             var withBias = Engine.TensorBroadcastAdd(convOutput, biasReshaped);
             outputNCHW = ApplyActivation(withBias);
             _lastOutput = outputNCHW;
@@ -618,13 +618,13 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 3] = _outputDepth;
             outputShape[_originalInputShape.Length - 2] = _lastOutput.Shape[2];
             outputShape[_originalInputShape.Length - 1] = _lastOutput.Shape[3];
-            return _lastOutput.Reshape(outputShape);
+            return Engine.Reshape(_lastOutput, outputShape);
         }
 
         if (_addedBatchDimension)
         {
             // 3D input [C, H, W] should produce 3D output [OutputDepth, outH, outW]
-            return _lastOutput.Reshape(_outputDepth, _lastOutput.Shape[2], _lastOutput.Shape[3]);
+            return Engine.Reshape(_lastOutput, new[] { _outputDepth, _lastOutput.Shape[2], _lastOutput.Shape[3] });
         }
 
         return _lastOutput;

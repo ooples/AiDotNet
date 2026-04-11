@@ -373,7 +373,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
             {
                 // NCHW format: [C, H, W] -> [1, C, H, W]
                 inputIsNCHW = true;
-                processInput = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+                processInput = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
                 batchSize = 1;
             }
             else
@@ -388,7 +388,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
                     shape4D[i] = 1;
                 for (int i = 0; i < rank; i++)
                     shape4D[offset + i] = input.Shape[i];
-                processInput = input.Reshape(shape4D);
+                processInput = Engine.Reshape(input, shape4D);
                 batchSize = shape4D[0];
             }
         }
@@ -415,7 +415,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
             int height = input.Shape[rank - 3];
             int width = input.Shape[rank - 2];
             int channels = input.Shape[rank - 1];
-            processInput = input.Reshape([flatBatch, height, width, channels]);
+            processInput = Engine.Reshape(input, [flatBatch, height, width, channels]);
         }
 
         _inputWasNCHW = inputIsNCHW;
@@ -441,31 +441,31 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
 
         // Reshape weights to Conv2D kernel format [outChannels, inChannels, kH, kW]
         int outputChannels = _capsuleChannels * _capsuleDimension;
-        var kernelNCHW = _convWeights.Reshape([outputChannels, _inputChannels, _kernelSize, _kernelSize]);
+        var kernelNCHW = Engine.Reshape(_convWeights, [outputChannels, _inputChannels, _kernelSize, _kernelSize]);
 
         // Convert input to NCHW for Conv2D if needed
         Tensor<T> inputNCHW = inputIsNCHW
             ? processInput
-            : processInput.Transpose([0, 3, 1, 2]);
+            : Engine.TensorPermute(processInput, [0, 3, 1, 2]);
 
         // Convolution
         var convNCHW = Engine.Conv2D(inputNCHW, kernelNCHW, new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
 
         // Add bias (reshape to [1, outChannels, 1, 1] for broadcast)
-        var biasNCHW = _convBias.Reshape([1, outputChannels, 1, 1]);
+        var biasNCHW = Engine.Reshape(_convBias, [1, outputChannels, 1, 1]);
         convNCHW = Engine.TensorBroadcastAdd(convNCHW, biasNCHW);
 
         // Convert back to NHWC and reshape to capsule layout
-        var convNHWC = convNCHW.Transpose([0, 2, 3, 1]);
-        var output = convNHWC.Reshape([batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
+        var convNHWC = Engine.TensorPermute(convNCHW, [0, 2, 3, 1]);
+        var output = Engine.Reshape(convNHWC, [batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
 
         // Apply activation (Squash) to each capsule vector
         // SquashActivation expects 2D input [numCapsules, capsuleDim], so reshape and apply
         int totalCapsules = batchSize * outputHeight * outputWidth * _capsuleChannels;
-        var flatOutput = output.Reshape([totalCapsules, _capsuleDimension]);
+        var flatOutput = Engine.Reshape(output, [totalCapsules, _capsuleDimension]);
         _lastPreSquash = flatOutput;
         var activatedFlat = ApplyActivation(flatOutput);
-        _lastOutput = activatedFlat.Reshape([batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
+        _lastOutput = Engine.Reshape(activatedFlat, [batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
 
         // Restore output shape to match original input rank
         // Output is 5D [B, OH, OW, capsuleChannels, capsuleDim]
@@ -475,7 +475,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
             {
                 // Lower-rank: remove batch dimension
                 // 3D input -> 4D output [OH, OW, capsuleChannels, capsuleDim]
-                return _lastOutput.Reshape([outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
+                return Engine.Reshape(_lastOutput, [outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
             }
             else
             {
@@ -488,7 +488,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
                 outShape[_originalInputShape.Length - 2] = outputWidth;
                 outShape[_originalInputShape.Length - 1] = _capsuleChannels;
                 outShape[_originalInputShape.Length] = _capsuleDimension;
-                return _lastOutput.Reshape(outShape);
+                return Engine.Reshape(_lastOutput, outShape);
             }
         }
 

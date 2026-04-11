@@ -222,7 +222,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
         }
         else if (rank == 4)
         {
-            batchedInput = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3]);
+            batchedInput = Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3] });
         }
         else if (rank >= 6)
         {
@@ -230,7 +230,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < rank - 4; d++)
                 flatBatch *= input.Shape[d];
-            batchedInput = input.Reshape(flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]);
+            batchedInput = Engine.Reshape(input, new[] { flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
         else
         {
@@ -254,11 +254,11 @@ public class MaxPool3DLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 3] = output.Shape[2];
             outputShape[_originalInputShape.Length - 2] = output.Shape[3];
             outputShape[_originalInputShape.Length - 1] = output.Shape[4];
-            return output.Reshape(outputShape);
+            return Engine.Reshape(output, outputShape);
         }
         if (_originalInputShape.Length == 4)
         {
-            return output.Reshape(output.Shape[1], output.Shape[2], output.Shape[3], output.Shape[4]);
+            return Engine.Reshape(output, new[] { output.Shape[1], output.Shape[2], output.Shape[3], output.Shape[4] });
         }
 
         return output;

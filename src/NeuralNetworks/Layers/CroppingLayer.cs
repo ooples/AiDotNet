@@ -386,7 +386,7 @@ public class CroppingLayer<T> : LayerBase<T>
         if (rank == 3)
         {
             // [H, W, C] -> [1, H, W, C]
-            input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
+            input4D = Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
         }
         else if (rank == 4)
         {
@@ -398,13 +398,13 @@ public class CroppingLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < rank - 3; d++)
                 flatBatch *= input.Shape[d];
-            input4D = input.Reshape(flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]);
+            input4D = Engine.Reshape(input, new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
         _lastInput = input4D;
 
         // Convert from NHWC [batch, height, width, channels] to NCHW [batch, channels, height, width]
-        var inputNCHW = input4D.Transpose([0, 3, 1, 2]);
+        var inputNCHW = Engine.TensorPermute(input4D, [0, 3, 1, 2]);
 
         // Perform crop on NCHW format
         // input4D is NHWC [batch, H, W, C], so H crop = _cropTop[1], W crop = _cropLeft[2]
@@ -415,7 +415,7 @@ public class CroppingLayer<T> : LayerBase<T>
         var croppedNCHW = Engine.Crop(inputNCHW, _cropTop[hCropIdx], _cropLeft[wCropIdx], hDim, wDim);
 
         // Convert back from NCHW to NHWC [batch, height, width, channels]
-        var cropped = croppedNCHW.Transpose([0, 2, 3, 1]);
+        var cropped = Engine.TensorPermute(croppedNCHW, [0, 2, 3, 1]);
 
         var result = ApplyActivation(cropped);
 
@@ -428,11 +428,11 @@ public class CroppingLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 3] = result.Shape[1]; // H
             outputShape[_originalInputShape.Length - 2] = result.Shape[2]; // W
             outputShape[_originalInputShape.Length - 1] = result.Shape[3]; // C
-            return result.Reshape(outputShape);
+            return Engine.Reshape(result, outputShape);
         }
         if (_originalInputShape.Length == 3)
         {
-            return result.Reshape(result.Shape[1], result.Shape[2], result.Shape[3]);
+            return Engine.Reshape(result, new[] { result.Shape[1], result.Shape[2], result.Shape[3] });
         }
 
         return result;

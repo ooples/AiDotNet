@@ -483,7 +483,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             batchSize = 1;
             inputCapsules = input.Shape[0];
             inputDimension = input.Shape[1];
-            input3D = input.Reshape([1, inputCapsules, inputDimension]);
+            input3D = Engine.Reshape(input, [1, inputCapsules, inputDimension]);
         }
         else if (rank == 3)
         {
@@ -502,7 +502,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             batchSize = flatBatch;
             inputCapsules = input.Shape[rank - 2];
             inputDimension = input.Shape[rank - 1];
-            input3D = input.Reshape([flatBatch, inputCapsules, inputDimension]);
+            input3D = Engine.Reshape(input, [flatBatch, inputCapsules, inputDimension]);
         }
         else
         {
@@ -517,9 +517,9 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             var inputSlice = input3D.GetSliceAlongDimension(i, 1);
             var weightsSlice = _transformationMatrix.GetSliceAlongDimension(i, 0);
-            var weightsFlat = weightsSlice.Reshape([inputDimension, _numCapsules * _capsuleDimension]);
+            var weightsFlat = Engine.Reshape(weightsSlice, [inputDimension, _numCapsules * _capsuleDimension]);
             var transformed = Engine.TensorMatMul(inputSlice, weightsFlat);
-            var transformedReshaped = transformed.Reshape([batchSize, _numCapsules, _capsuleDimension]);
+            var transformedReshaped = Engine.Reshape(transformed, [batchSize, _numCapsules, _capsuleDimension]);
             transformedInput.SetSlice(1, i, transformedReshaped);
         }
 
@@ -539,7 +539,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // weightedSum: [batchSize, numCapsules, capsuleDimension]
 
             // Reshape coupling coefficients to broadcast: [batchSize, inputCapsules, numCapsules, 1]
-            var coefExpanded = couplingCoefficients.Reshape([batchSize, inputCapsules, _numCapsules, 1]);
+            var coefExpanded = Engine.Reshape(couplingCoefficients, [batchSize, inputCapsules, _numCapsules, 1]);
 
             // Element-wise multiply to weight the capsules (broadcast multiply for dimension mismatch)
             var weighted = Engine.TensorBroadcastMultiply(transformedInput, coefExpanded);
@@ -549,7 +549,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
             // === VECTORIZED Bias Addition ===
             // Reshape bias from [numCapsules * capsuleDimension] to [1, numCapsules, capsuleDimension]
-            var biasReshaped = _bias.Reshape([1, _numCapsules, _capsuleDimension]);
+            var biasReshaped = Engine.Reshape(_bias, [1, _numCapsules, _capsuleDimension]);
             weightedSum = Engine.TensorBroadcastAdd(weightedSum, biasReshaped);
 
             // Apply squash activation
@@ -566,7 +566,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 // Need to compute: agreement[b, j, k] = sum_d(transformedInput[b, j, k, d] * output[b, k, d])
 
                 // Reshape output to broadcast: [batchSize, 1, numCapsules, capsuleDimension]
-                var outputExpanded = output.Reshape([batchSize, 1, _numCapsules, _capsuleDimension]);
+                var outputExpanded = Engine.Reshape(output, [batchSize, 1, _numCapsules, _capsuleDimension]);
 
                 // Element-wise multiply (broadcast multiply for dimension mismatch)
                 var agreementProduct = Engine.TensorBroadcastMultiply(transformedInput, outputExpanded);
@@ -593,12 +593,12 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 newShape[d] = _originalInputShape[d];
             newShape[_originalInputShape.Length - 2] = _numCapsules;
             newShape[_originalInputShape.Length - 1] = _capsuleDimension;
-            output = output.Reshape(newShape);
+            output = Engine.Reshape(output, newShape);
         }
         else if (_originalInputShape != null && _originalInputShape.Length == 2)
         {
             // 2D input -> 2D output (remove batch dim)
-            output = output.Reshape([_numCapsules, _capsuleDimension]);
+            output = Engine.Reshape(output, [_numCapsules, _capsuleDimension]);
         }
 
         _lastOutput = output;

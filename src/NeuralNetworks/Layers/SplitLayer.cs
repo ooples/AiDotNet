@@ -207,7 +207,7 @@ public class SplitLayer<T> : LayerBase<T>
         {
             // 1D: add batch dim
             batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0]]);
+            processInput = Engine.Reshape(input, [1, input.Shape[0]]);
         }
         else if (rank == 2)
         {
@@ -222,7 +222,7 @@ public class SplitLayer<T> : LayerBase<T>
             for (int d = 0; d < rank - 1; d++)
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+            processInput = Engine.Reshape(input, [flatBatch, input.Shape[rank - 1]]);
         }
 
         _lastInput = processInput;
@@ -236,7 +236,7 @@ public class SplitLayer<T> : LayerBase<T>
             if (_originalInputShape.Length == 1)
             {
                 // 1D input: output shape becomes [numSplits, splitSize]
-                return output.Reshape([_numSplits, splitSize]);
+                return Engine.Reshape(output, [_numSplits, splitSize]);
             }
             else
             {
@@ -246,7 +246,7 @@ public class SplitLayer<T> : LayerBase<T>
                     outShape[d] = _originalInputShape[d];
                 outShape[_originalInputShape.Length - 1] = _numSplits;
                 outShape[_originalInputShape.Length] = splitSize;
-                return output.Reshape(outShape);
+                return Engine.Reshape(output, outShape);
             }
         }
 

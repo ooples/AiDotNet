@@ -178,13 +178,13 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
         {
             // 2D [batch, channels] -> [batch, channels, 1, 1]
             channels = input.Shape[1];
-            flattenedInput = input.Reshape(new int[] { input.Shape[0], channels, 1, 1 });
+            flattenedInput = Engine.Reshape(input, new int[] { input.Shape[0], channels, 1, 1 });
         }
         else if (input.Rank == 3)
         {
             // 3D [batch, channels, length] -> [batch, channels, length, 1]
             channels = input.Shape[1];
-            flattenedInput = input.Reshape(new int[] { input.Shape[0], channels, input.Shape[2], 1 });
+            flattenedInput = Engine.Reshape(input, new int[] { input.Shape[0], channels, input.Shape[2], 1 });
         }
         else if (input.Rank == 4)
         {
@@ -197,7 +197,7 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
             // 5D [batch, channels, D, H, W] -> flatten spatial dims
             channels = input.Shape[1];
             int spatialDim = input.Shape[2] * input.Shape[3] * input.Shape[4];
-            flattenedInput = input.Reshape(new int[] { input.Shape[0], channels, spatialDim, 1 });
+            flattenedInput = Engine.Reshape(input, new int[] { input.Shape[0], channels, spatialDim, 1 });
         }
         else
         {
@@ -209,7 +209,7 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
             {
                 spatialDim *= input.Shape[i];
             }
-            flattenedInput = input.Reshape(new int[] { batch, channels, spatialDim, 1 });
+            flattenedInput = Engine.Reshape(input, new int[] { batch, channels, spatialDim, 1 });
         }
 
         if (channels != _numChannels)
@@ -232,7 +232,7 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
         _lastVariance = variance;
 
         // Reshape output back to original shape
-        return output.Reshape(_originalInputShape);
+        return Engine.Reshape(output, _originalInputShape);
     }
 
     /// <summary>

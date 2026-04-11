@@ -160,7 +160,7 @@ public class TransitionLayer<T> : LayerBase<T>
         if (rank == 3)
         {
             // Standard 3D: [C, H, W] → add batch dim [1, C, H, W] for BN/Conv
-            processInput = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+            processInput = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
         }
         else if (rank == 4)
         {
@@ -175,7 +175,7 @@ public class TransitionLayer<T> : LayerBase<T>
             int channels = input.Shape[rank - 3];
             int height = input.Shape[rank - 2];
             int width = input.Shape[rank - 1];
-            processInput = input.Reshape(new[] { flatBatch, channels, height, width });
+            processInput = Engine.Reshape(input, new[] { flatBatch, channels, height, width });
         }
         else
         {
@@ -210,12 +210,12 @@ public class TransitionLayer<T> : LayerBase<T>
             newShape[_originalInputShape.Length - 3] = outChannels;
             newShape[_originalInputShape.Length - 2] = outH;
             newShape[_originalInputShape.Length - 1] = outW;
-            output = output.Reshape(newShape);
+            output = Engine.Reshape(output, newShape);
         }
 
         // Remove batch dim if we added it for 3D input
         if (rank == 3 && output.Shape.Length == 4 && output.Shape[0] == 1)
-            output = output.Reshape([output.Shape[1], output.Shape[2], output.Shape[3]]);
+            output = Engine.Reshape(output, [output.Shape[1], output.Shape[2], output.Shape[3]]);
 
         return output;
     }

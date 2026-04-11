@@ -279,8 +279,8 @@ public partial class ReservoirLayer<T> : LayerBase<T>
         }
 
         var input2D = rank == 1
-            ? input.Reshape([1, _inputSize])
-            : input.Reshape([flatBatch, _inputSize]);
+            ? Engine.Reshape(input, [1, _inputSize])
+            : Engine.Reshape(input, [flatBatch, _inputSize]);
 
         var outputs = new Tensor<T>([flatBatch, _reservoirSize]);
         T inputScale = NumOps.FromDouble(_inputScaling);
@@ -326,7 +326,7 @@ public partial class ReservoirLayer<T> : LayerBase<T>
 
             var reservoirInput = Engine.TensorAdd(weightedState, inputContribution);
 
-            var newState = ApplyActivation(reservoirInput.Reshape([1, _reservoirSize])).Reshape([_reservoirSize]);
+            var newState = ApplyActivation(Engine.Reshape(reservoirInput, [1, _reservoirSize])).Reshape([_reservoirSize]);
             var oldComponent = Engine.TensorMultiplyScalar(_reservoirState, NumOps.FromDouble(1 - _leakingRate));
             var newComponent = Engine.TensorMultiplyScalar(newState, NumOps.FromDouble(_leakingRate));
             _reservoirState = Engine.TensorAdd(oldComponent, newComponent);
@@ -339,7 +339,7 @@ public partial class ReservoirLayer<T> : LayerBase<T>
 
         if (rank == 1)
         {
-            return outputs.Reshape([_reservoirSize]);
+            return Engine.Reshape(outputs, [_reservoirSize]);
         }
 
         var outputShape = new int[rank];
@@ -349,7 +349,7 @@ public partial class ReservoirLayer<T> : LayerBase<T>
         }
         outputShape[rank - 1] = _reservoirSize;
 
-        return outputs.Reshape(outputShape);
+        return Engine.Reshape(outputs, outputShape);
     }
 
     // Cached GPU buffers for weights (uploaded once, reused)

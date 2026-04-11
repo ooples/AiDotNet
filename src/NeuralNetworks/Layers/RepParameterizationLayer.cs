@@ -200,7 +200,7 @@ public class RepParameterizationLayer<T> : LayerBase<T>
             // 1D: add batch dim
             batchSize = 1;
             latentSize = input.Shape[0] / 2;
-            processInput = input.Reshape([1, input.Shape[0]]);
+            processInput = Engine.Reshape(input, [1, input.Shape[0]]);
         }
         else if (rank == 2)
         {
@@ -217,7 +217,7 @@ public class RepParameterizationLayer<T> : LayerBase<T>
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
             latentSize = input.Shape[rank - 1] / 2;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+            processInput = Engine.Reshape(input, [flatBatch, input.Shape[rank - 1]]);
         }
 
         // Use Engine.TensorSlice to split mean and logvar
@@ -252,11 +252,11 @@ public class RepParameterizationLayer<T> : LayerBase<T>
             for (int d = 0; d < _originalInputShape.Length - 1; d++)
                 newShape[d] = _originalInputShape[d];
             newShape[_originalInputShape.Length - 1] = latentSize;
-            output = output.Reshape(newShape);
+            output = Engine.Reshape(output, newShape);
         }
         else if (_originalInputShape != null && _originalInputShape.Length == 1)
         {
-            output = output.Reshape([latentSize]);
+            output = Engine.Reshape(output, [latentSize]);
         }
 
         return output;

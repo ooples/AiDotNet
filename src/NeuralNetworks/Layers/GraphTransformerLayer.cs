@@ -474,7 +474,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         {
             // 2D [nodes, features]: add batch dim
             batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
+            processInput = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1]]);
         }
         else if (rank == 3)
         {
@@ -489,13 +489,13 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
             for (int d = 0; d < rank - 2; d++)
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+            processInput = Engine.Reshape(input, [flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
         else
         {
             // 1D: treat as single node with features
             batchSize = 1;
-            processInput = input.Reshape([1, 1, input.Shape[0]]);
+            processInput = Engine.Reshape(input, [1, 1, input.Shape[0]]);
         }
 
         _lastInput = processInput;
@@ -550,12 +550,12 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
             if (_originalInputShape.Length == 2)
             {
                 // Was 2D, return [nodes, outputFeatures]
-                return result.Reshape([numNodes, _outputFeatures]);
+                return Engine.Reshape(result, [numNodes, _outputFeatures]);
             }
             else if (_originalInputShape.Length == 1)
             {
                 // Was 1D, return [outputFeatures]
-                return result.Reshape([_outputFeatures]);
+                return Engine.Reshape(result, [_outputFeatures]);
             }
             else
             {
@@ -564,7 +564,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
                 for (int d = 0; d < _originalInputShape.Length - 1; d++)
                     newShape[d] = _originalInputShape[d];
                 newShape[_originalInputShape.Length - 1] = _outputFeatures;
-                return result.Reshape(newShape);
+                return Engine.Reshape(result, newShape);
             }
         }
 

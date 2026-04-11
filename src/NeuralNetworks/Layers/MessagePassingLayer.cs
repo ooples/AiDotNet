@@ -538,7 +538,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
             // 2D: [nodes, features] - single unbatched graph
             batchSize = 1;
             numNodes = input.Shape[0];
-            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
+            processInput = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1]]);
         }
         else
         {
@@ -554,7 +554,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
                     flatBatch *= input.Shape[d];
                 batchSize = flatBatch;
                 numNodes = input.Shape[rank - 2];
-                processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+                processInput = Engine.Reshape(input, [flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
             }
         }
 

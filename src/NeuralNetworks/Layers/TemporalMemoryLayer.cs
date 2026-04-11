@@ -245,12 +245,12 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     {
         _lastInput = input;
         // Reshape CellStates from [ColumnCount, CellsPerColumn] to [ColumnCount * CellsPerColumn]
-        var flatCellStates = CellStates.Reshape([ColumnCount * CellsPerColumn]);
+        var flatCellStates = Engine.Reshape(CellStates, [ColumnCount * CellsPerColumn]);
 
         // Create mask by repeating input values CellsPerColumn times each
         // input is [ColumnCount], we need mask of [ColumnCount * CellsPerColumn]
         // Use Engine.TensorRepeatElements to repeat each input element CellsPerColumn times
-        var inputFlat = input.Reshape([ColumnCount]);
+        var inputFlat = Engine.Reshape(input, [ColumnCount]);
         var mask = Engine.TensorRepeatElements(inputFlat, CellsPerColumn, axis: 0);
 
         // output = mask * flatCellStates (element-wise)

@@ -778,7 +778,7 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         {
             // 3D: [C, H, W] -> [1, C, H, W] (add batch dim)
             _addedBatchDimension = true;
-            input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
+            input4D = Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
         }
         else if (rank == 4)
         {
@@ -793,7 +793,7 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < rank - 3; d++)
                 flatBatch *= input.Shape[d];
-            input4D = input.Reshape(flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]);
+            input4D = Engine.Reshape(input, new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
         else
         {
@@ -822,7 +822,7 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         {
             // Use FusedConv2D for pointwise (1x1) conv + bias + activation
             // Reshape bias from [outputDepth] to [1, outputDepth, 1, 1] for NCHW broadcast
-            var biasReshaped4D = _biases.Reshape([1, _outputDepth, 1, 1]);
+            var biasReshaped4D = Engine.Reshape(_biases, [1, _outputDepth, 1, 1]);
             activated = Engine.FusedConv2D(
                 depthwiseOutputNCHW, _pointwiseKernels, biasReshaped4D,
                 1, 1,   // stride
@@ -841,7 +841,7 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
                 [1, 1], [0, 0], [1, 1]);
 
             // Add bias using broadcast: reshape [outputDepth] to [1, outputDepth, 1, 1]
-            var biasReshaped = _biases.Reshape([1, _outputDepth, 1, 1]);
+            var biasReshaped = Engine.Reshape(_biases, [1, _outputDepth, 1, 1]);
             pointwiseOutputNCHW = Engine.TensorBroadcastAdd(pointwiseOutputNCHW, biasReshaped);
 
             // Cache pre-activation for derivative computation
@@ -863,13 +863,13 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
             newShape[_originalInputShape.Length - 3] = _outputDepth;
             newShape[_originalInputShape.Length - 2] = outH;
             newShape[_originalInputShape.Length - 1] = outW;
-            return activated.Reshape(newShape);
+            return Engine.Reshape(activated, newShape);
         }
 
         if (_addedBatchDimension)
         {
             // 3D input [C, H, W] should produce 3D output [OutputDepth, outH, outW]
-            return activated.Reshape(_outputDepth, activated.Shape[2], activated.Shape[3]);
+            return Engine.Reshape(activated, new[] { _outputDepth, activated.Shape[2], activated.Shape[3] });
         }
 
         return activated;

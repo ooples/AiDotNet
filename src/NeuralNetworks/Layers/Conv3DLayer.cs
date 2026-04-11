@@ -483,7 +483,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         }
         else if (input.Rank == 4)
         {
-            batchedInput = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3]);
+            batchedInput = Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3] });
         }
         else if (input.Rank >= 6)
         {
@@ -491,7 +491,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < input.Rank - 4; d++)
                 flatBatch *= input.Shape[d];
-            batchedInput = input.Reshape(flatBatch, input.Shape[input.Rank - 4], input.Shape[input.Rank - 3], input.Shape[input.Rank - 2], input.Shape[input.Rank - 1]);
+            batchedInput = Engine.Reshape(input, new[] { flatBatch, input.Shape[input.Rank - 4], input.Shape[input.Rank - 3], input.Shape[input.Rank - 2], input.Shape[input.Rank - 1] });
         }
         else
         {
@@ -545,12 +545,12 @@ public partial class Conv3DLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 3] = activated.Shape[2]; // OutD
             outputShape[_originalInputShape.Length - 2] = activated.Shape[3]; // OutH
             outputShape[_originalInputShape.Length - 1] = activated.Shape[4]; // OutW
-            return activated.Reshape(outputShape);
+            return Engine.Reshape(activated, outputShape);
         }
         if (_originalInputShape != null && _originalInputShape.Length == 4)
         {
             // Input was 4D [C,D,H,W], remove batch dim
-            return activated.Reshape(activated.Shape[1], activated.Shape[2], activated.Shape[3], activated.Shape[4]);
+            return Engine.Reshape(activated, new[] { activated.Shape[1], activated.Shape[2], activated.Shape[3], activated.Shape[4] });
         }
 
         return activated;

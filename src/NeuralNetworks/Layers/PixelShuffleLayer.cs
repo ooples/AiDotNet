@@ -248,11 +248,11 @@ public class PixelShuffleLayer<T> : LayerBase<T>
         // For 3D tensors (channels, height, width), add batch dimension
         if (shape.Length == 3)
         {
-            var input4D = input.Reshape([1, shape[0], shape[1], shape[2]]);
+            var input4D = Engine.Reshape(input, [1, shape[0], shape[1], shape[2]]);
             _lastInput = input4D;
             var output4D = Engine.PixelShuffle(input4D, _upscaleFactor);
             // Remove batch dimension from output
-            return output4D.Reshape([output4D.Shape[1], output4D.Shape[2], output4D.Shape[3]]);
+            return Engine.Reshape(output4D, [output4D.Shape[1], output4D.Shape[2], output4D.Shape[3]]);
         }
 
         // For higher-rank tensors, collapse batch dimensions and use Engine
@@ -269,7 +269,7 @@ public class PixelShuffleLayer<T> : LayerBase<T>
             int height = shape[^2];
             int width = shape[^1];
 
-            var input4D = input.Reshape([batchSize, channels, height, width]);
+            var input4D = Engine.Reshape(input, [batchSize, channels, height, width]);
             _lastInput = input4D;
             var output4D = Engine.PixelShuffle(input4D, _upscaleFactor);
 
@@ -283,7 +283,7 @@ public class PixelShuffleLayer<T> : LayerBase<T>
             outputShape[^2] = output4D.Shape[2]; // new height
             outputShape[^1] = output4D.Shape[3]; // new width
 
-            return output4D.Reshape(outputShape);
+            return Engine.Reshape(output4D, outputShape);
         }
 
         throw new ArgumentException($"Pixel shuffle requires at least 3 dimensions, got {shape.Length}.");

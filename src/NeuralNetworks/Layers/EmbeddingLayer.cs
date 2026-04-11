@@ -456,7 +456,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
             // Flatten input to 2D [total_samples, inputFeatures] for projection
             int totalSamples = input.Length / inputFeatures;
-            var input2D = input.Reshape([totalSamples, inputFeatures]);
+            var input2D = Engine.Reshape(input, [totalSamples, inputFeatures]);
             flatOutput = input2D.MatrixMultiply(_projectionWeights);
         }
         else
@@ -516,7 +516,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             outputShape[^1] = embeddingDim;
         }
 
-        return flatOutput.Reshape(outputShape);
+        return Engine.Reshape(flatOutput, outputShape);
     }
 
     /// <summary>

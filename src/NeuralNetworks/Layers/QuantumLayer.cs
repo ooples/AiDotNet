@@ -181,7 +181,7 @@ public partial class QuantumLayer<T> : LayerBase<T>
         {
             // 1D: add batch dim
             batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0]]);
+            processInput = Engine.Reshape(input, [1, input.Shape[0]]);
         }
         else if (rank == 2)
         {
@@ -196,7 +196,7 @@ public partial class QuantumLayer<T> : LayerBase<T>
             for (int d = 0; d < rank - 1; d++)
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 1]]);
+            processInput = Engine.Reshape(input, [flatBatch, input.Shape[rank - 1]]);
         }
 
         _lastInput = processInput;

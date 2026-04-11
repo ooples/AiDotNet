@@ -373,13 +373,13 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
         {
             // 1D: treat as single sample, single node
             batchSize = 1;
-            processInput = input.Reshape([1, 1, input.Shape[0]]);
+            processInput = Engine.Reshape(input, [1, 1, input.Shape[0]]);
         }
         else if (rank == 2)
         {
             // 2D [numNodes, features]: add batch dimension
             batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
+            processInput = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1]]);
         }
         else if (rank == 3)
         {
@@ -396,7 +396,7 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
             batchSize = flatBatch;
             int numNodes = input.Shape[rank - 2];
             int features = input.Shape[rank - 1];
-            processInput = input.Reshape([flatBatch, numNodes, features]);
+            processInput = Engine.Reshape(input, [flatBatch, numNodes, features]);
         }
 
         _lastInput = processInput;
@@ -484,12 +484,12 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
             if (_originalInputShape.Length == 2)
             {
                 // 2D input [numNodes, features] -> 2D output [numNodes, outputFeatures]
-                result = result.Reshape([processNumNodes, _outputFeatures]);
+                result = Engine.Reshape(result, [processNumNodes, _outputFeatures]);
             }
             else if (_originalInputShape.Length == 1)
             {
                 // 1D input -> 1D output
-                result = result.Reshape([_outputFeatures]);
+                result = Engine.Reshape(result, [_outputFeatures]);
             }
             else
             {
@@ -499,7 +499,7 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
                     outShape[d] = _originalInputShape[d];
                 outShape[_originalInputShape.Length - 2] = processNumNodes;
                 outShape[_originalInputShape.Length - 1] = _outputFeatures;
-                result = result.Reshape(outShape);
+                result = Engine.Reshape(result, outShape);
             }
         }
 

@@ -278,7 +278,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]
             _addedBatchDimension = true;
-            input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
+            input4D = Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
         }
         else if (rank == 4)
         {
@@ -293,7 +293,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < rank - 3; d++)
                 flatBatch *= input.Shape[d];
-            input4D = input.Reshape(flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]);
+            input4D = Engine.Reshape(input, new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
         var poolSizeArr = new[] { PoolSize, PoolSize };
@@ -313,13 +313,13 @@ public class MaxPoolingLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 2] = output4D.Shape[2];
             outputShape[_originalInputShape.Length - 1] = output4D.Shape[3];
             _lastOutputShape = outputShape;
-            return output4D.Reshape(outputShape);
+            return Engine.Reshape(output4D, outputShape);
         }
         if (_addedBatchDimension)
         {
             var actualOutputShape = new int[] { output4D.Shape[1], output4D.Shape[2], output4D.Shape[3] };
             _lastOutputShape = actualOutputShape;
-            return output4D.Reshape(actualOutputShape);
+            return Engine.Reshape(output4D, actualOutputShape);
         }
         return output4D;
     }

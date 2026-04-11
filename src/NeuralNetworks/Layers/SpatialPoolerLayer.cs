@@ -310,14 +310,14 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         // Flatten to 1D tensor if needed
         LastInput = input.Shape.Length == 1
             ? input
-            : input.Reshape([input.Length]);
+            : Engine.Reshape(input, [input.Length]);
 
         // Use Engine tensor operations: output = Connections^T @ input
-        var inputTensor = LastInput.Reshape([InputSize, 1]);
+        var inputTensor = Engine.Reshape(LastInput, [InputSize, 1]);
 
         var connectionsT = Engine.TensorTranspose(Connections);
         var activations = Engine.TensorMatMul(connectionsT, inputTensor);
-        var activationsFlat = activations.Reshape([ColumnCount]);
+        var activationsFlat = Engine.Reshape(activations, [ColumnCount]);
 
         // Normalize activations to [0,1] range for meaningful thresholding.
         // Raw activations scale with input magnitude, making a fixed threshold useless.
@@ -342,13 +342,13 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         var outputMask = Engine.TensorGreaterThan(normalizedActivations, threshold);
 
         // Store binary mask for Hebbian learning (per Hawkins 2004, learning uses binary SDR)
-        _lastBinaryOutput = outputMask.Reshape([ColumnCount]);
+        _lastBinaryOutput = Engine.Reshape(outputMask, [ColumnCount]);
 
         // Output preserves activation magnitude for downstream differentiation.
         // Different input scales produce different output values even when
         // the same columns are selected (same binary mask).
         var maskedActivations = Engine.TensorMultiply(outputMask, activationsFlat);
-        var output = maskedActivations.Reshape([ColumnCount]);
+        var output = Engine.Reshape(maskedActivations, [ColumnCount]);
 
         LastOutput = output;
         return output;

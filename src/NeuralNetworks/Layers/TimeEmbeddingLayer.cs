@@ -337,7 +337,7 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
         int batch = input.Shape[0];
 
         // Flatten if needed
-        var timesteps = input.Rank == 1 ? input : input.Reshape([batch]);
+        var timesteps = input.Rank == 1 ? input : Engine.Reshape(input, [batch]);
 
         // Step 1: Compute sinusoidal embedding
         var sinEmbed = ComputeSinusoidalEmbedding(timesteps);
@@ -346,7 +346,7 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
         // Step 2: First linear layer + SiLU activation
         // sinEmbed: [batch, embeddingDim] @ _linear1Weights: [embeddingDim, outputDim] -> [batch, outputDim]
         var preActivation = Engine.TensorMatMul(sinEmbed, _linear1Weights);
-        var bias1Broadcast = _linear1Bias.Reshape([1, _outputDim]);
+        var bias1Broadcast = Engine.Reshape(_linear1Bias, [1, _outputDim]);
         preActivation = Engine.TensorBroadcastAdd(preActivation, bias1Broadcast);
 
         // Apply SiLU element-wise (no tensor op available for SiLU)
@@ -363,7 +363,7 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
         // Step 3: Second linear layer
         // hidden: [batch, outputDim] @ _linear2Weights: [outputDim, outputDim] -> [batch, outputDim]
         var output = Engine.TensorMatMul(hidden, _linear2Weights);
-        var bias2Broadcast = _linear2Bias.Reshape([1, _outputDim]);
+        var bias2Broadcast = Engine.Reshape(_linear2Bias, [1, _outputDim]);
         output = Engine.TensorBroadcastAdd(output, bias2Broadcast);
 
         return output;

@@ -388,7 +388,7 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         if (rank == 2)
         {
             batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
+            processInput = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1]]);
         }
         else if (rank == 3)
         {
@@ -401,7 +401,7 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
             for (int d = 0; d < rank - 2; d++)
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+            processInput = Engine.Reshape(input, [flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
         _lastInput = processInput;
@@ -415,7 +415,7 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         {
             if (batchSize == 1)
             {
-                adjForBatch = _adjacencyMatrix.Reshape([1, numNodes, numNodes]);
+                adjForBatch = Engine.Reshape(_adjacencyMatrix, [1, numNodes, numNodes]);
             }
             else
             {
@@ -499,12 +499,12 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         if (_originalInputShape != null && _originalInputShape.Length == 2)
         {
             // Original was 2D [N, F] -> return [N, outputFeatures]
-            return result.Reshape([numNodes, _outputFeatures]);
+            return Engine.Reshape(result, [numNodes, _outputFeatures]);
         }
         else if (_originalInputShape != null && _originalInputShape.Length == 1)
         {
             // Original was 1D [F] -> return [outputFeatures]
-            return result.Reshape([_outputFeatures]);
+            return Engine.Reshape(result, [_outputFeatures]);
         }
 
         return result;

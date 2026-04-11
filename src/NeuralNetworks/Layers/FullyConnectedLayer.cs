@@ -392,7 +392,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
         _inputWas1D = input.Shape.Length == 1;
         if (_inputWas1D)
         {
-            input = input.Reshape(1, input.Length);
+            input = Engine.Reshape(input, new[] { 1, input.Length });
         }
 
         _lastInput = input;
@@ -408,7 +408,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
         var linearOutput = Engine.TensorMatMul(input, weightsT);
 
         // Add biases (broadcast)
-        var biasBroadcast = _biases.Reshape(1, _biases.Shape[0]);
+        var biasBroadcast = Engine.Reshape(_biases, new[] { 1, _biases.Shape[0] });
         var biasedOutput = Engine.TensorBroadcastAdd(linearOutput, biasBroadcast);
 
         var result = ApplyActivation(biasedOutput);
@@ -423,7 +423,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
         // Preserve original rank: if input was 1D, output should be 1D
         if (_inputWas1D)
         {
-            result = result.Reshape(result.Length);
+            result = Engine.Reshape(result, new[] { result.Length });
         }
 
         return result;

@@ -248,7 +248,7 @@ public partial class RBFLayer<T> : LayerBase<T>
         // Handle unbatched input (1D) by adding batch dimension
         bool wasUnbatched = input.Rank == 1;
         var processedInput = wasUnbatched
-            ? input.Reshape([1, input.Shape[0]])
+            ? Engine.Reshape(input, [1, input.Shape[0]])
             : input;
 
         // Store 2D input for backward pass (RBFKernelBackward requires 2D)
@@ -264,7 +264,7 @@ public partial class RBFLayer<T> : LayerBase<T>
         _lastOutput = output;
 
         // Remove batch dimension if input was unbatched
-        return wasUnbatched ? output.Reshape([output.Shape[1]]) : output;
+        return wasUnbatched ? Engine.Reshape(output, [output.Shape[1]]) : output;
     }
 
     /// <summary>

@@ -602,7 +602,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>
         // Flatten to 1D tensor if needed
         var inputFlat = input.Shape.Length == 1
             ? input
-            : input.Reshape([input.Length]);
+            : Engine.Reshape(input, [input.Length]);
 
         // Store for STDP learning
         _lastInput = inputFlat;

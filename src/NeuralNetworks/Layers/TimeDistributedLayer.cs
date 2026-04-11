@@ -373,7 +373,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         int timeSteps = rank == 2 ? 1 : input.Shape[1];
 
         var processInput = rank == 2
-            ? input.Reshape([batchSize, 1, input.Shape[1]])
+            ? Engine.Reshape(input, [batchSize, 1, input.Shape[1]])
             : input;
 
         _lastInput = processInput;
@@ -394,7 +394,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
 
         if (_originalInputShape != null && _originalInputShape.Length == 2)
         {
-            activated = activated.Reshape(new[] { batchSize }.Concat(innerOutputShape).ToArray());
+            activated = Engine.Reshape(activated, new[] { batchSize }.Concat(innerOutputShape).ToArray());
         }
 
         _lastOutput = activated;

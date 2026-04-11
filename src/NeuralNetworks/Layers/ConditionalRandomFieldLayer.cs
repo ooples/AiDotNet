@@ -500,7 +500,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         {
             // 2D [sequenceLength, numClasses]: add batch dim
             batchSize = 1;
-            input3D = input.Reshape([1, input.Shape[0], input.Shape[1]]);
+            input3D = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1]]);
         }
         else if (rank == 3)
         {
@@ -516,13 +516,13 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
             for (int d = 0; d < rank - 2; d++)
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
-            input3D = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+            input3D = Engine.Reshape(input, [flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
         else
         {
             // 1D: treat as [1, 1, features] - single batch, single timestep
             batchSize = 1;
-            input3D = input.Reshape([1, 1, input.Shape[0]]);
+            input3D = Engine.Reshape(input, [1, 1, input.Shape[0]]);
         }
 
         _lastInput = input3D;
@@ -571,7 +571,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
                 // prevViterbi: [numClasses, 1] + transition: [numClasses, numClasses] -> [numClasses, numClasses]
                 // Then max over axis 0
 
-                var prevExpanded = prevViterbi.Reshape([_numClasses, 1]); // [numClasses, 1]
+                var prevExpanded = Engine.Reshape(prevViterbi, [_numClasses, 1]); // [numClasses, 1]
                 var scoresWithTrans = Engine.TensorBroadcastAdd(prevExpanded, _transitionMatrix); // [numClasses, numClasses]
 
                 // During training: use log-sum-exp (smooth, differentiable)
@@ -673,7 +673,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         // Restore original rank if needed for any-rank tensor support
         if (_originalInputShape != null && _originalInputShape.Length != 3)
         {
-            return output.Reshape(_originalInputShape);
+            return Engine.Reshape(output, _originalInputShape);
         }
 
         return output;

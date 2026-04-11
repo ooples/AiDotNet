@@ -273,7 +273,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>
         Tensor<T> flattenedInput;
         if (input.Rank == 1)
         {
-            flattenedInput = input.Reshape(1, inputSize);
+            flattenedInput = Engine.Reshape(input, new[] { 1, inputSize });
         }
         else if (input.Rank == 2)
         {
@@ -286,7 +286,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>
             {
                 batchDim *= input.Shape[i];
             }
-            flattenedInput = input.Reshape(batchDim, inputSize);
+            flattenedInput = Engine.Reshape(input, new[] { batchDim, inputSize });
         }
 
         // Forward: output = input @ weights.T + bias
@@ -304,7 +304,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>
 
         if (input.Rank == 1)
         {
-            return activated.Reshape([OutputShape[0]]);
+            return Engine.Reshape(activated, [OutputShape[0]]);
         }
 
         if (input.Rank > 2)
@@ -315,7 +315,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>
                 outputShape[i] = _originalInputShape[i];
             }
             outputShape[^1] = OutputShape[0];
-            return activated.Reshape(outputShape);
+            return Engine.Reshape(activated, outputShape);
         }
 
         return activated;

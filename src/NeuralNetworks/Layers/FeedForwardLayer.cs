@@ -382,7 +382,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
         var matmul = Engine.TensorMatMul(Input, _weights);
 
         // Add biases (broadcast [1, outputSize] to [batchSize, outputSize]) using engine op
-        var biasBroadcast = _biases.Reshape([1, _weights.Shape[1]]);
+        var biasBroadcast = Engine.Reshape(_biases, [1, _weights.Shape[1]]);
         var linearOutput = Engine.TensorBroadcastAdd(matmul, biasBroadcast);
 
         PreActivationOutput = linearOutput;

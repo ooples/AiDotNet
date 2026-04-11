@@ -107,13 +107,13 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>
         int embDim = input.Shape[2];
 
         // Transpose to [numFeatures, batchSize, embeddingDim] for intersample attention
-        var transposed = input.Transpose(new[] { 1, 0, 2 });
+        var transposed = Engine.TensorPermute(input, new[] { 1, 0, 2 });
 
         // Apply multi-head self-attention across samples
         var attended = ApplyMultiHeadAttention(transposed, numFeatures, batchSize, embDim);
 
         // Transpose back to [batchSize, numFeatures, embeddingDim]
-        var output = attended.Transpose(new[] { 1, 0, 2 });
+        var output = Engine.TensorPermute(attended, new[] { 1, 0, 2 });
 
         // Residual connection and layer normalization
         output = AddResidualAndNormalize(input, output, batchSize, numFeatures, embDim);

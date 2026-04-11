@@ -177,7 +177,7 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
         {
             batchSize = 1;
             inputLen = input.Shape[0];
-            inputTensor = input.Reshape([1, inputLen]);
+            inputTensor = Engine.Reshape(input, [1, inputLen]);
         }
         else if (input.Rank == 2)
         {
@@ -194,7 +194,7 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
             }
             batchSize = flatBatch;
             inputLen = input.Shape[input.Rank - 1];
-            inputTensor = input.Reshape([batchSize, inputLen]);
+            inputTensor = Engine.Reshape(input, [batchSize, inputLen]);
         }
 
         // Validate input shape
@@ -206,7 +206,7 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
         }
 
         // Reshape flat input [batch, inputFeatures*8] → [batch, inputFeatures, 8]
-        var input3D = inputTensor.Reshape([batchSize, InputFeatures, 8]);
+        var input3D = Engine.Reshape(inputTensor, [batchSize, InputFeatures, 8]);
         _lastInput = input3D;
 
         // Tensor-based octonion matrix multiplication — no Octonion<T> allocation
@@ -225,7 +225,7 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
         _lastOutput = output3D;
 
         // Flatten back to [batch, outputFeatures*8] for activation and output
-        var outputTensor = output3D.Reshape([batchSize, OutputFeatures * 8]);
+        var outputTensor = Engine.Reshape(output3D, [batchSize, OutputFeatures * 8]);
 
         // Apply activation function
         var activated = ApplyActivation(outputTensor);
@@ -237,7 +237,7 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
 
         if (_originalInputShape.Length == 1)
         {
-            return activated.Reshape([OutputFeatures * 8]);
+            return Engine.Reshape(activated, [OutputFeatures * 8]);
         }
 
         var outputShape = new int[_originalInputShape.Length];
@@ -246,7 +246,7 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
             outputShape[d] = _originalInputShape[d];
         }
         outputShape[_originalInputShape.Length - 1] = OutputFeatures * 8;
-        return activated.Reshape(outputShape);
+        return Engine.Reshape(activated, outputShape);
     }
 
     /// <summary>

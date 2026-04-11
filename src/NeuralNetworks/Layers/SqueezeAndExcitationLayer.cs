@@ -699,7 +699,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
             // 1D: [C] -> add batch dim -> [1, C]
             batchSize = 1;
             // No spatial dims to squeeze, just reshape to [1, C]
-            squeezed = input.Reshape([1, input.Shape[0]]);
+            squeezed = Engine.Reshape(input, [1, input.Shape[0]]);
         }
         else if (rank == 2)
         {
@@ -736,7 +736,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         // 2. Excitation: FC1 + Activation
         // squeezed: [batchSize, channels], weights1: [channels, reducedChannels]
         var fc1Output = Engine.TensorMatMul(squeezed, _weights1);
-        var fc1BiasReshaped = _bias1.Reshape(1, _reducedChannels);
+        var fc1BiasReshaped = Engine.Reshape(_bias1, new[] { 1, _reducedChannels });
         var fc1Biased = Engine.TensorBroadcastAdd(fc1Output, fc1BiasReshaped);
         _lastFc1Biased = fc1Biased;
 
@@ -746,7 +746,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         // Excitation: FC2 + Activation
         // activated1: [batchSize, reducedChannels], weights2: [reducedChannels, channels]
         var fc2Output = Engine.TensorMatMul(activated1, _weights2);
-        var fc2BiasReshaped = _bias2.Reshape(1, _channels);
+        var fc2BiasReshaped = Engine.Reshape(_bias2, new[] { 1, _channels });
         var fc2Biased = Engine.TensorBroadcastAdd(fc2Output, fc2BiasReshaped);
         _lastFc2Biased = fc2Biased;
 
@@ -761,7 +761,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         if (rank == 1)
         {
             // [1, C] -> [C] for element-wise multiply with [C]
-            excitationReshaped = excitation.Reshape([_channels]);
+            excitationReshaped = Engine.Reshape(excitation, [_channels]);
         }
         else if (rank == 2)
         {
@@ -771,12 +771,12 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         else if (rank == 4)
         {
             // [B, C] -> [B, 1, 1, C] for broadcasting with [B, H, W, C]
-            excitationReshaped = excitation.Reshape([batchSize, 1, 1, _channels]);
+            excitationReshaped = Engine.Reshape(excitation, [batchSize, 1, 1, _channels]);
         }
         else if (rank == 3)
         {
             // [B, C] -> [B, 1, C] for broadcasting with [B, L, C]
-            excitationReshaped = excitation.Reshape([batchSize, 1, _channels]);
+            excitationReshaped = Engine.Reshape(excitation, [batchSize, 1, _channels]);
         }
         else
         {
@@ -786,7 +786,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
             for (int i = 1; i < rank - 1; i++)
                 shape[i] = 1;
             shape[rank - 1] = _channels;
-            excitationReshaped = excitation.Reshape(shape);
+            excitationReshaped = Engine.Reshape(excitation, shape);
         }
 
         var output = Engine.TensorBroadcastMultiply(input, excitationReshaped);

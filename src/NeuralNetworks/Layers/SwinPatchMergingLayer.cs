@@ -143,9 +143,9 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
 
         // Apply linear reduction: [batch*newSeqLen, 4*dim] -> [batch*newSeqLen, 2*dim]
         // Batch all tokens into a single matmul for correctness (single _lastInput for backward)
-        var flatNorm = normalized.Reshape([batch * newSeqLen, dim * 4]);
+        var flatNorm = Engine.Reshape(normalized, [batch * newSeqLen, dim * 4]);
         var flatOut = _reduction.Forward(flatNorm);
-        var output = flatOut.Reshape([batch, newSeqLen, _outputDim]);
+        var output = Engine.Reshape(flatOut, [batch, newSeqLen, _outputDim]);
 
         return output;
     }

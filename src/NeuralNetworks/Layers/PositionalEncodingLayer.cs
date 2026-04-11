@@ -256,7 +256,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         if (was1D)
         {
             // Reshape [embed] -> [1, embed]
-            workingInput = input.Reshape([1, input.Shape[0]]);
+            workingInput = Engine.Reshape(input, [1, input.Shape[0]]);
         }
 
         // Handle any rank >= 2: last dim is embed, second-to-last is sequence
@@ -353,7 +353,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
             broadcastShape[rank - 2] = seqLength;
             broadcastShape[rank - 1] = currentEmbeddingSize;
 
-            var reshapedEncodings = slicedEncodings.Reshape(broadcastShape);
+            var reshapedEncodings = Engine.Reshape(slicedEncodings, broadcastShape);
             result = Engine.TensorBroadcastAdd(workingInput, reshapedEncodings);
         }
 
@@ -361,7 +361,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         if (was1D)
         {
             // Reshape [1, embed] -> [embed]
-            result = result.Reshape([result.Shape[result.Shape.Length - 1]]);
+            result = Engine.Reshape(result, [result.Shape[result.Shape.Length - 1]]);
         }
 
         return result;

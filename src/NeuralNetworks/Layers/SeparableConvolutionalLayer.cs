@@ -604,7 +604,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
         _lastInput = input;
 
         // Convert input from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
-        var inputNCHW = input.Transpose([0, 3, 1, 2]);
+        var inputNCHW = Engine.TensorPermute(input, [0, 3, 1, 2]);
 
         var strideArr = new int[] { _stride, _stride };
         var paddingArr = new int[] { _padding, _padding };
@@ -621,7 +621,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
         // Step 2: Pointwise convolution (1x1 conv) with fused bias using Engine
         // Note: Can't fuse activation because it's applied after NCHW->NHWC transpose
         // Reshape bias from [outputDepth] to [1, outputDepth, 1, 1] for NCHW broadcast
-        var biasReshaped4D = _biases.Reshape([1, _outputDepth, 1, 1]);
+        var biasReshaped4D = Engine.Reshape(_biases, [1, _outputDepth, 1, 1]);
         var pointwiseOutputNCHW = Engine.FusedConv2D(
             depthwiseOutputNCHW, pointwiseKernelNCHW, biasReshaped4D,
             1, 1,   // stride
@@ -630,7 +630,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
             FusedActivationType.None);  // Activation applied after transpose
 
         // Convert output from NCHW back to NHWC
-        var output = pointwiseOutputNCHW.Transpose([0, 2, 3, 1]);
+        var output = Engine.TensorPermute(pointwiseOutputNCHW, [0, 2, 3, 1]);
 
         var result = ApplyActivation(output);
 

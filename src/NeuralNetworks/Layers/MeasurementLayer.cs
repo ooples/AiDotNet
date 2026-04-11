@@ -151,7 +151,7 @@ public class MeasurementLayer<T> : LayerBase<T>
         Tensor<T> input2D;
         if (input.Rank == 1)
         {
-            input2D = input.Reshape(1, stateSize);
+            input2D = Engine.Reshape(input, new[] { 1, stateSize });
         }
         else if (input.Rank == 2)
         {
@@ -164,7 +164,7 @@ public class MeasurementLayer<T> : LayerBase<T>
             {
                 batchDim *= input.Shape[i];
             }
-            input2D = input.Reshape(batchDim, stateSize);
+            input2D = Engine.Reshape(input, new[] { batchDim, stateSize });
         }
 
         _lastInput = input2D;
@@ -201,12 +201,12 @@ public class MeasurementLayer<T> : LayerBase<T>
 
         if (input.Rank == 1)
         {
-            return probabilities.Reshape([stateSize]);
+            return Engine.Reshape(probabilities, [stateSize]);
         }
 
         if (input.Rank > 2)
         {
-            return probabilities.Reshape(_originalInputShape);
+            return Engine.Reshape(probabilities, _originalInputShape);
         }
 
         return probabilities;

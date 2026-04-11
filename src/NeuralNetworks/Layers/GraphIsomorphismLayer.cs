@@ -248,14 +248,14 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
             // 1D: treat as single node with F features -> [1, 1, F]
             batchSize = 1;
             numNodes = 1;
-            processInput = input.Reshape([1, 1, input.Shape[0]]);
+            processInput = Engine.Reshape(input, [1, 1, input.Shape[0]]);
         }
         else if (rank == 2)
         {
             // 2D: [numNodes, features] -> reshape to [1, numNodes, features]
             batchSize = 1;
             numNodes = input.Shape[0];
-            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
+            processInput = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1]]);
         }
         else
         {
@@ -271,7 +271,7 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
         Tensor<T> adjForBatch;
         if (_adjacencyMatrix.Shape.Length == 2 && batchSize == 1)
         {
-            adjForBatch = _adjacencyMatrix.Reshape([1, _adjacencyMatrix.Shape[0], _adjacencyMatrix.Shape[1]]);
+            adjForBatch = Engine.Reshape(_adjacencyMatrix, [1, _adjacencyMatrix.Shape[0], _adjacencyMatrix.Shape[1]]);
         }
         else if (_adjacencyMatrix.Shape.Length == 2 && batchSize > 1)
         {
@@ -330,12 +330,12 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
         if (_originalInputShape != null && _originalInputShape.Length == 2)
         {
             // Original was 2D [N, F] -> return [N, outputFeatures]
-            return result.Reshape([numNodes, _outputFeatures]);
+            return Engine.Reshape(result, [numNodes, _outputFeatures]);
         }
         else if (_originalInputShape != null && _originalInputShape.Length == 1)
         {
             // Original was 1D [F] -> return [outputFeatures]
-            return result.Reshape([_outputFeatures]);
+            return Engine.Reshape(result, [_outputFeatures]);
         }
 
         return result;

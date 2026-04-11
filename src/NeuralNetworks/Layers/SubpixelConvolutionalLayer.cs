@@ -589,7 +589,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]
             _addedBatchDimension = true;
-            input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
+            input4D = Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
         }
         else if (rank == 4)
         {
@@ -604,7 +604,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < rank - 3; d++)
                 flatBatch *= input.Shape[d];
-            input4D = input.Reshape(flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]);
+            input4D = Engine.Reshape(input, new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
         _lastInput = input4D;
@@ -614,7 +614,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
         int padSize = _kernelSize / 2;
         // Reshape bias from [intermediateChannels] to [1, intermediateChannels, 1, 1] for NCHW broadcast
         int intermediateChannels = _biases.Shape[0];
-        var biasReshaped4D = _biases.Reshape([1, intermediateChannels, 1, 1]);
+        var biasReshaped4D = Engine.Reshape(_biases, [1, intermediateChannels, 1, 1]);
         var convOutputNCHW = Engine.FusedConv2D(
             input4D, _kernels, biasReshaped4D,
             1, 1,           // stride
@@ -644,13 +644,13 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 3] = _outputDepth;
             outputShape[_originalInputShape.Length - 2] = result.Shape[2];
             outputShape[_originalInputShape.Length - 1] = result.Shape[3];
-            return result.Reshape(outputShape);
+            return Engine.Reshape(result, outputShape);
         }
 
         if (_addedBatchDimension)
         {
             // 3D input [C, H, W] should produce 3D output [OutputDepth, outH, outW]
-            return result.Reshape(_outputDepth, result.Shape[2], result.Shape[3]);
+            return Engine.Reshape(result, new[] { _outputDepth, result.Shape[2], result.Shape[3] });
         }
 
         return result;

@@ -243,12 +243,12 @@ public class DecoderLayer<T> : LayerBase<T>
                 throw new ArgumentException($"Encoder output last dimension does not match expected InputSize {InputSize}.");
 
             int batchSize = decoderInput.Shape[0];
-            input3D = decoderInput.Reshape(batchSize, 1, InputSize);
+            input3D = Engine.Reshape(decoderInput, new[] { batchSize, 1, InputSize });
 
             // Handle encoder output reshaping
             int encRank = encoderOutput.Shape.Length;
             if (encRank == 2)
-                encoderOutput3D = encoderOutput.Reshape(encoderOutput.Shape[0], 1, InputSize);
+                encoderOutput3D = Engine.Reshape(encoderOutput, new[] { encoderOutput.Shape[0], 1, InputSize });
             else if (encRank == 3)
                 encoderOutput3D = encoderOutput;
             else
@@ -256,7 +256,7 @@ public class DecoderLayer<T> : LayerBase<T>
                 int encFlatBatch = 1;
                 for (int d = 0; d < encRank - 2; d++)
                     encFlatBatch *= encoderOutput.Shape[d];
-                encoderOutput3D = encoderOutput.Reshape(encFlatBatch, encoderOutput.Shape[encRank - 2], encoderOutput.Shape[encRank - 1]);
+                encoderOutput3D = Engine.Reshape(encoderOutput, new[] { encFlatBatch, encoderOutput.Shape[encRank - 2], encoderOutput.Shape[encRank - 1] });
             }
         }
         else if (rank == 3)
@@ -276,7 +276,7 @@ public class DecoderLayer<T> : LayerBase<T>
                 int encFlatBatch = 1;
                 for (int d = 0; d < encRank - 2; d++)
                     encFlatBatch *= encoderOutput.Shape[d];
-                encoderOutput3D = encoderOutput.Reshape(encFlatBatch, encoderOutput.Shape[encRank - 2], encoderOutput.Shape[encRank - 1]);
+                encoderOutput3D = Engine.Reshape(encoderOutput, new[] { encFlatBatch, encoderOutput.Shape[encRank - 2], encoderOutput.Shape[encRank - 1] });
             }
         }
         else
@@ -288,14 +288,14 @@ public class DecoderLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < rank - 2; d++)
                 flatBatch *= decoderInput.Shape[d];
-            input3D = decoderInput.Reshape(flatBatch, decoderInput.Shape[rank - 2], decoderInput.Shape[rank - 1]);
+            input3D = Engine.Reshape(decoderInput, new[] { flatBatch, decoderInput.Shape[rank - 2], decoderInput.Shape[rank - 1] });
 
             // Handle encoder output
             int encRank = encoderOutput.Shape.Length;
             int encFlatBatch = 1;
             for (int d = 0; d < encRank - 2; d++)
                 encFlatBatch *= encoderOutput.Shape[d];
-            encoderOutput3D = encoderOutput.Reshape(encFlatBatch, encoderOutput.Shape[encRank - 2], encoderOutput.Shape[encRank - 1]);
+            encoderOutput3D = Engine.Reshape(encoderOutput, new[] { encFlatBatch, encoderOutput.Shape[encRank - 2], encoderOutput.Shape[encRank - 1] });
         }
 
         return ForwardInternal(input3D, encoderOutput3D, attentionMask);

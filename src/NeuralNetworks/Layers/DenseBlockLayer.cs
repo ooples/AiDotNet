@@ -97,7 +97,7 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>
         _lastInput = input;
 
         // BN/Conv expect [N, C, H, W] format. Add batch dim if 3D [C, H, W].
-        var x = input.Shape.Length == 3 ? input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]) : input;
+        var x = input.Shape.Length == 3 ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]) : input;
 
         // BN-ReLU-Conv1x1 (DenseNet paper: pre-activation bottleneck)
         _bn1Out = _bn1.Forward(x);
@@ -111,7 +111,7 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>
 
         // Remove batch dim if we added it
         if (input.Shape.Length == 3 && output.Shape.Length == 4 && output.Shape[0] == 1)
-            output = output.Reshape([output.Shape[1], output.Shape[2], output.Shape[3]]);
+            output = Engine.Reshape(output, [output.Shape[1], output.Shape[2], output.Shape[3]]);
 
         return output;
     }
