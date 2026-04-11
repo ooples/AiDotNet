@@ -1040,6 +1040,18 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         private readonly int[] _spatialDimensions;
         private readonly int[] _modeSizes;
         private readonly IActivationFunction<T> _activation;
+
+        // Split-complex spectral weights (trainable, tape-tracked). These are the
+        // source of truth during the tape-based forward path. _spectralWeights below
+        // is kept as a derived read-only mirror so the legacy Backward /
+        // ComputeSpectralGradients paths still compile until they are removed in a
+        // follow-up commit.
+        [TrainableParameter(Role = PersistentTensorRole.Weights)]
+        private Tensor<T> _spectralWeightsReal;
+
+        [TrainableParameter(Role = PersistentTensorRole.Weights)]
+        private Tensor<T> _spectralWeightsImag;
+
         private Tensor<Complex<T>> _spectralWeights;
         private Tensor<T> _pointwiseWeights;
         private Vector<T> _pointwiseBias;
@@ -1065,12 +1077,21 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             _modeSizes = _spatialDimensions.Select(dim => Math.Min(_modes, dim)).ToArray();
             _activation = activation ?? new GELUActivation<T>();
 
-            _spectralWeights = new Tensor<Complex<T>>(new[] { _width, _width }.Concat(_modeSizes).ToArray());
+            var spectralShape = new[] { _width, _width }.Concat(_modeSizes).ToArray();
+            _spectralWeights = new Tensor<Complex<T>>(spectralShape);
+            _spectralWeightsReal = new Tensor<T>(spectralShape);
+            _spectralWeightsImag = new Tensor<T>(spectralShape);
             _pointwiseWeights = new Tensor<T>(new[] { _width, _width });
             _pointwiseBias = new Vector<T>(_width);
 
             InitializeSpectralWeights();
             InitializePointwiseWeights();
+
+            // Register split-complex spectral weights for tape-based training. The
+            // legacy _spectralWeights mirror is not registered — it's kept only for
+            // the old hand-rolled backward path which will be deleted in a follow-up.
+            RegisterTrainableParameter(_spectralWeightsReal, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_spectralWeightsImag, PersistentTensorRole.Weights);
         }
 
         public override bool SupportsTraining => true;
@@ -1119,9 +1140,16 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
 
             _lastInput = input;
-            var spectral = ApplySpectralConvolution(input);
+
+            // 2D fast path: tape-tracked spectral conv using Engine.FFT2D.
+            // Backward propagates automatically via the FFT2D grad node. Other
+            // ranks still use the hand-rolled path until a separable N-D tape
+            // implementation lands (see issue #135 for native FFTND support).
+            var spectral = _spatialDimensions.Length == 2
+                ? ApplySpectralConvolution2DTape(input)
+                : ApplySpectralConvolution(input);
             var local = ApplyPointwiseMixing(input);
-            var combined = AddTensors(spectral, local);
+            var combined = Engine.TensorAdd(spectral, local);
 
             _lastPreActivation = combined;
             return _activation.Activate(combined);
@@ -1458,10 +1486,17 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             double scale = 1.0 / Math.Max(1, _width);
             T scaleValue = _numOps.FromDouble(scale);
 
+            // Populate both the trainable split-complex tensors (source of truth for
+            // tape-based forward) and the legacy _spectralWeights mirror (read by the
+            // old hand-rolled backward helpers until they are removed).
+            var realSpan = _spectralWeightsReal.Data.Span;
+            var imagSpan = _spectralWeightsImag.Data.Span;
             for (int i = 0; i < _spectralWeights.Length; i++)
             {
                 T real = _numOps.Multiply(_numOps.FromDouble(random.NextDouble() * 2.0 - 1.0), scaleValue);
                 T imag = _numOps.Multiply(_numOps.FromDouble(random.NextDouble() * 2.0 - 1.0), scaleValue);
+                realSpan[i] = real;
+                imagSpan[i] = imag;
                 _spectralWeights[i] = new Complex<T>(real, imag);
             }
         }
@@ -1553,6 +1588,109 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
 
             return output;
+        }
+
+        /// <summary>
+        /// Tape-tracked spectral convolution for the 2D case using Engine.FFT2D.
+        /// Replaces the hand-rolled ForwardFFT / mode-index loop in
+        /// <see cref="ApplySpectralConvolution"/> when the input has exactly 2
+        /// spatial dimensions, which is the common FNO use case (Navier-Stokes,
+        /// Darcy flow, 2D weather). Every op records on the gradient tape so
+        /// backward propagates through Engine.FFT2D's grad node automatically —
+        /// no manual Backward needed for this path.
+        /// </summary>
+        private Tensor<T> ApplySpectralConvolution2DTape(Tensor<T> input)
+        {
+            int batchSize = input.Shape[0];
+            int height = input.Shape[2];
+            int width = input.Shape[3];
+            int modesH = _modeSizes[0];
+            int modesW = _modeSizes[1];
+
+            // Real input → zero imaginary companion for FFT2D's split-complex API.
+            var inputImag = new Tensor<T>(input._shape);
+            inputImag.Fill(_numOps.Zero);
+
+            // Forward FFT over the last two spatial axes.
+            Engine.FFT2D(input, inputImag, out var specRe, out var specIm);
+
+            // Output spectrum starts as zeros — scatter sums the active corners.
+            var outSpecRe = new Tensor<T>(specRe._shape);
+            var outSpecIm = new Tensor<T>(specIm._shape);
+            outSpecRe.Fill(_numOps.Zero);
+            outSpecIm.Fill(_numOps.Zero);
+
+            // FNO keeps the low-frequency corner [0..modes-1] AND the high-frequency
+            // (negative-frequency via DFT symmetry) corner [H-modes..H-1] on each
+            // spatial axis. In 2D that is 4 corners. Each corner reuses the same
+            // compact weights via the MapModeIndex folding in the legacy code;
+            // we match that behavior exactly.
+            for (int cornerH = 0; cornerH < 2; cornerH++)
+            {
+                int hStart = cornerH == 0 ? 0 : height - modesH;
+                if (hStart < 0 || hStart + modesH > height) continue;
+
+                for (int cornerW = 0; cornerW < 2; cornerW++)
+                {
+                    int wStart = cornerW == 0 ? 0 : width - modesW;
+                    if (wStart < 0 || wStart + modesW > width) continue;
+
+                    var sliceStart = new[] { 0, 0, hStart, wStart };
+                    var sliceSize = new[] { batchSize, _width, modesH, modesW };
+
+                    var inBlockRe = Engine.TensorSlice(specRe, sliceStart, sliceSize);
+                    var inBlockIm = Engine.TensorSlice(specIm, sliceStart, sliceSize);
+
+                    // Per-location complex matmul:
+                    //   (aR + aI*i)(wR + wI*i) = (aR*wR - aI*wI) + (aR*wI + aI*wR)*i
+                    // each real matmul is PerLocationMatMul which reduces over the
+                    // input-channel axis.
+                    var arWr = PerLocationMatMul(inBlockRe, _spectralWeightsReal, batchSize, _width, _width, modesH, modesW);
+                    var aiWi = PerLocationMatMul(inBlockIm, _spectralWeightsImag, batchSize, _width, _width, modesH, modesW);
+                    var arWi = PerLocationMatMul(inBlockRe, _spectralWeightsImag, batchSize, _width, _width, modesH, modesW);
+                    var aiWr = PerLocationMatMul(inBlockIm, _spectralWeightsReal, batchSize, _width, _width, modesH, modesW);
+
+                    var outBlockRe = Engine.TensorSubtract(arWr, aiWi);
+                    var outBlockIm = Engine.TensorAdd(arWi, aiWr);
+
+                    outSpecRe = Engine.TensorSetSlice(outSpecRe, outBlockRe, sliceStart);
+                    outSpecIm = Engine.TensorSetSlice(outSpecIm, outBlockIm, sliceStart);
+                }
+            }
+
+            // Inverse FFT back to spatial. Imaginary part should be numerically
+            // near zero for a real-roundtrip signal; we return the real part.
+            Engine.IFFT2D(outSpecRe, outSpecIm, out var spatialRe, out _);
+            return spatialRe;
+        }
+
+        /// <summary>
+        /// Per-frequency batched matmul used by the 2D spectral conv. For each
+        /// spatial location (h, w) the compact weight tensor <c>[C_out, C_in]</c>
+        /// is applied to the <c>[B, C_in]</c> input slice producing <c>[B, C_out]</c>,
+        /// reducing over the input-channel axis. Implemented as a single
+        /// <c>TensorBatchMatMul</c> with <c>(mh * mw)</c> batch dims after
+        /// permuting the location axes to the front.
+        /// </summary>
+        private Tensor<T> PerLocationMatMul(
+            Tensor<T> input, Tensor<T> weights,
+            int batchSize, int inChannels, int outChannels,
+            int modesH, int modesW)
+        {
+            // input   [B, C_in, mh, mw]  → permute to [mh, mw, B, C_in]  → reshape [mh*mw, B, C_in]
+            var inputPermuted = Engine.TensorPermute(input, new[] { 2, 3, 0, 1 });
+            var inputBatched = Engine.Reshape(inputPermuted, new[] { modesH * modesW, batchSize, inChannels });
+
+            // weights [C_out, C_in, mh, mw] → permute to [mh, mw, C_in, C_out] → reshape [mh*mw, C_in, C_out]
+            var weightsPermuted = Engine.TensorPermute(weights, new[] { 2, 3, 1, 0 });
+            var weightsBatched = Engine.Reshape(weightsPermuted, new[] { modesH * modesW, inChannels, outChannels });
+
+            // Batched matmul: [mh*mw, B, C_in] @ [mh*mw, C_in, C_out] → [mh*mw, B, C_out]
+            var resultBatched = Engine.TensorBatchMatMul(inputBatched, weightsBatched);
+
+            // [mh*mw, B, C_out] → [mh, mw, B, C_out] → permute to [B, C_out, mh, mw]
+            var resultUnbatched = Engine.Reshape(resultBatched, new[] { modesH, modesW, batchSize, outChannels });
+            return Engine.TensorPermute(resultUnbatched, new[] { 2, 3, 0, 1 });
         }
 
         private Tensor<T> ApplyPointwiseMixing(Tensor<T> input)
