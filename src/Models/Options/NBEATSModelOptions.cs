@@ -105,7 +105,8 @@ public class NBEATSModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// Higher values allow for more wiggly trends, while lower values are more restricted.
     /// </para>
     /// </remarks>
-    public int PolynomialDegree { get; set; } = 3;
+    /// Per Oreshkin et al. 2020 Table 18: p_trend = 2
+    public int PolynomialDegree { get; set; } = 2;
 
     /// <summary>
     /// Gets or sets the lookback window size (number of historical time steps used as input).
@@ -154,7 +155,8 @@ public class NBEATSModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// most time series problems.
     /// </para>
     /// </remarks>
-    public int HiddenLayerSize { get; set; } = 256;
+    /// Per Oreshkin et al. 2020 Table 1: default width = 512
+    public int HiddenLayerSize { get; set; } = 512;
 
     /// <summary>
     /// Gets or sets the number of hidden layers within each block.

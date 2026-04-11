@@ -151,9 +151,31 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         _fcWeights = new List<Tensor<T>>();
         _fcBiases = new List<Tensor<T>>();
 
-        // Precompute basis matrices (constant, not trainable)
-        _basisBackcast = ComputeBasisTensor(_thetaSizeBackcast, _lookbackWindow);
-        _basisForecast = ComputeBasisTensor(_thetaSizeForecast, _forecastHorizon);
+        if (_useInterpretableBasis)
+        {
+            // Interpretable blocks: fixed polynomial basis (not trainable)
+            // Per Oreshkin et al. 2020 Section 3.3
+            _basisBackcast = ComputeBasisTensor(_thetaSizeBackcast, _lookbackWindow);
+            _basisForecast = ComputeBasisTensor(_thetaSizeForecast, _forecastHorizon);
+        }
+        else
+        {
+            // Generic blocks: V_b and V_f are fully learnable linear functions.
+            // Per Oreshkin et al. 2020 Section 3.2:
+            // "In the generic architecture, we do not restrict g^b and g^f to a
+            //  particular functional form, and instead make them fully learnable"
+            // Initialize near identity for stable initial behavior.
+            var data_b = new T[_lookbackWindow * _thetaSizeBackcast];
+            var data_f = new T[_forecastHorizon * _thetaSizeForecast];
+            for (int i = 0; i < _lookbackWindow; i++)
+                for (int j = 0; j < _thetaSizeBackcast; j++)
+                    data_b[i * _thetaSizeBackcast + j] = (i == j) ? NumOps.One : NumOps.Zero;
+            for (int i = 0; i < _forecastHorizon; i++)
+                for (int j = 0; j < _thetaSizeForecast; j++)
+                    data_f[i * _thetaSizeForecast + j] = (i == j) ? NumOps.One : NumOps.Zero;
+            _basisBackcast = new Tensor<T>(data_b, new[] { _lookbackWindow, _thetaSizeBackcast });
+            _basisForecast = new Tensor<T>(data_f, new[] { _forecastHorizon, _thetaSizeForecast });
+        }
 
         InitializeWeights();
     }
@@ -210,6 +232,14 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         bias = CreateBiasTensor(_thetaSizeForecast, 0.0);
         _fcBiases.Add(bias);
         RegisterTrainableParameter(bias, PersistentTensorRole.Biases);
+
+        // For generic blocks: register V_b and V_f as trainable
+        // Per Oreshkin et al. 2020 Section 3.2
+        if (!_useInterpretableBasis)
+        {
+            RegisterTrainableParameter(_basisBackcast, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_basisForecast, PersistentTensorRole.Weights);
+        }
     }
 
     /// <summary>
