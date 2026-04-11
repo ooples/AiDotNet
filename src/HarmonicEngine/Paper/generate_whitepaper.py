@@ -84,8 +84,6 @@ def add_callout(doc, title, body, bg_color="FFF9C4", border_color="F57F17"):
         tc_borders.append(b)
     tc_pr.append(tc_borders)
 
-    doc.add_paragraph()  # spacing
-
 
 def add_figure(doc, filename, caption, width_inches=6.0):
     path = os.path.join(FIGDIR, filename)
@@ -100,14 +98,14 @@ def add_figure(doc, filename, caption, width_inches=6.0):
     cap_run.font.size = Pt(9)
     cap_run.italic = True
     cap_run.font.color.rgb = GRAY_DARK
-    doc.add_paragraph()
 
 
 def add_bullet(doc, text, indent=0.25):
     p = doc.add_paragraph(style='List Bullet')
     p.paragraph_format.left_indent = Inches(indent)
-    for run in p.runs:
-        run.font.size = Pt(11)
+    run = p.add_run(text)
+    run.font.size = Pt(11)
+    run.font.name = 'Calibri'
 
 
 def add_equation_line(doc, text):
@@ -353,7 +351,6 @@ def build():
     )
 
     # ----- 3. The Radio Metaphor -----
-    doc.add_page_break()
     add_heading_styled(doc, "3. The Radio Metaphor", level=1)
     add_paragraph(doc,
         "Here's the intuition that makes everything else in HRE click. Imagine you're standing in a "

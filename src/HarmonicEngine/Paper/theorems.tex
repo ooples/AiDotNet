@@ -106,57 +106,118 @@ before carrier encoding, maintaining the $O(N \log N)$ overall complexity.
 %% ============================================================
 \section{Theorem 2: Spectral Sparsity Generalization}
 
+\begin{definition}[$K$-sparse spectral hypothesis class]
+Let $\mathcal{F}_{N,K,B}$ denote the class of functions
+$f: \mathbb{R}^N \to \mathbb{R}$ of the form
+\begin{equation}
+f(x) = \sum_{k \in S} h_k \cdot \widehat{x}(k),
+\qquad S \subseteq \{1, \ldots, N\},\;|S| = K,\;\|h\|_2 \leq B,
+\end{equation}
+where $\widehat{x}(k)$ is the $k$-th Fourier coefficient of $x$.
+This is the hypothesis class implemented by HRE after spectral sparsity
+with top-$K$ selection and bounded filter coefficients.
+\end{definition}
+
 \begin{theorem}[Spectral Sparsity Generalization Bound]
 \label{thm:sparsity}
-Let $f^*: \mathbb{R}^N \to \mathbb{R}$ be a target function that is
-$K$-sparse in the spectral domain (i.e., its Fourier representation has
-at most $K$ non-zero coefficients). An HRE model with top-$K$ spectral
-selection can recover $f^*$ to within $\epsilon$ accuracy using
-$m = O(K \log(N/K) \cdot \text{poly}(1/\epsilon))$ training samples,
-compared to $O(N^2/\epsilon^2)$ for a dense two-layer network with
-$N$ hidden units.
+Let $f^* \in \mathcal{F}_{N,K,B}$ and let $\mathcal{D}$ be any distribution
+over $\mathbb{R}^N \times \mathbb{R}$ with bounded second moments such that
+$\mathbb{E}_{(x,y) \sim \mathcal{D}}[\|\widehat{x}\|_\infty^2] \leq R^2$
+and $|y| \leq M$ almost surely. Fix $\epsilon, \delta \in (0, 1)$. If the
+number of independent training samples satisfies
+\begin{equation}
+m \;\geq\; C \cdot \frac{B^2 R^2 \cdot \left( K \log(eN/K) + \log(1/\delta) \right)}{\epsilon^2}
+\end{equation}
+for a universal constant $C > 0$, then with probability at least $1 - \delta$,
+the empirical risk minimizer $\hat{f}_m \in \mathcal{F}_{N,K,B}$ satisfies
+\begin{equation}
+\mathbb{E}_{(x,y) \sim \mathcal{D}}[(\hat{f}_m(x) - y)^2]
+\;\leq\; \inf_{f \in \mathcal{F}_{N,K,B}} \mathbb{E}_{(x,y) \sim \mathcal{D}}[(f(x) - y)^2] + \epsilon.
+\end{equation}
+In particular, the sample complexity scales as $O(K \log(N/K) / \epsilon^2)$,
+exponentially fewer than the $\Omega(N)$ samples required for a dense linear
+predictor over the full Fourier basis.
 \end{theorem}
 
 \begin{proof}[Proof Sketch]
-The proof applies compressed sensing theory to the spectral learning problem.
+The proof proceeds by bounding the Rademacher complexity of
+$\mathcal{F}_{N,K,B}$ and applying the standard generalization bound.
 
-\textbf{Step 1: Measurement matrix.}
-Each training sample $(x^{(m)}, y^{(m)})$ provides a linear measurement
-of the target function's spectral coefficients. The FFT of the input
-$x^{(m)}$ acts as a row of the measurement matrix $\mathbf{\Phi}$.
-
-\textbf{Step 2: Restricted Isometry Property (RIP).}
-By the Cand\`es-Tao RIP theorem \cite{candes2006}, random Fourier measurements
-satisfy the RIP of order $K$ with probability exceeding $1 - \delta$ when
-$m \geq C \cdot K \log(N/K) \cdot \log(1/\delta)$
-for a universal constant $C$.
-
-\textbf{Step 3: Recovery guarantee.}
-Under RIP, the top-$K$ spectral selection (equivalent to $\ell_0$-constrained
-minimization relaxed to $\ell_1$) recovers the true $K$-sparse spectral
-coefficients with error:
+\textbf{Step 1: Decomposition into support classes.}
+The class $\mathcal{F}_{N,K,B}$ is a union of $\binom{N}{K}$ sub-classes, one
+for each choice of support set $S$. Within each support class, the predictor
+is a $K$-dimensional linear function with bounded weights, so its empirical
+Rademacher complexity on a sample of size $m$ is at most
 \begin{equation}
-\|\hat{h} - h^*\|_2 \leq C' \cdot \frac{\sigma}{\sqrt{m}}
+\widehat{\mathfrak{R}}_m(\mathcal{F}_S) \;\leq\; \frac{B R \sqrt{K}}{\sqrt{m}},
 \end{equation}
-where $\sigma$ is the noise level and $\hat{h}$ is the recovered coefficient vector.
+by the standard bound for bounded linear predictors \cite{bartlett2002}.
 
-\textbf{Step 4: Comparison to dense networks.}
-A dense two-layer network with $N$ hidden units has $O(N^2)$ parameters.
-By standard VC-dimension bounds, it requires $O(N^2/\epsilon^2)$ samples
-for $\epsilon$-accurate generalization. When $K \ll N$, the spectral approach
-achieves exponential sample efficiency.
+\textbf{Step 2: Union over supports.}
+Taking a union bound over all $\binom{N}{K}$ possible supports inflates the
+uniform deviation by a factor of $\sqrt{\log \binom{N}{K}}$. Using
+$\log \binom{N}{K} \leq K \log(eN/K)$, we obtain the uniform Rademacher
+bound
+\begin{equation}
+\widehat{\mathfrak{R}}_m(\mathcal{F}_{N,K,B}) \;\leq\; B R \sqrt{\frac{K \log(eN/K)}{m}}.
+\end{equation}
+
+\textbf{Step 3: Generalization bound.}
+By the standard Rademacher generalization theorem \cite{bartlett2002}, with
+probability at least $1 - \delta$ over the draw of the training sample,
+every $f \in \mathcal{F}_{N,K,B}$ satisfies
+\begin{equation}
+\mathbb{E}[(f(x) - y)^2] \;\leq\; \widehat{\mathbb{E}}_m[(f(x) - y)^2]
++ 4 L \cdot B R \sqrt{\frac{K \log(eN/K)}{m}}
++ M^2 \sqrt{\frac{\log(1/\delta)}{2m}},
+\end{equation}
+where $L = 2(BR + M)$ is the Lipschitz constant of the squared loss on the
+relevant domain. Setting the right-hand side equal to the empirical risk
+plus $\epsilon$ and solving for $m$ yields the stated sample complexity.
+
+\textbf{Step 4: Comparison to dense predictors.}
+A dense linear predictor over the full Fourier basis has $N$ parameters and
+Rademacher complexity $\Theta(BR\sqrt{N/m})$, yielding sample complexity
+$\Theta(N/\epsilon^2)$. The ratio
+$N / (K \log(eN/K))$ quantifies the exponential sample efficiency of the
+sparse representation: for $K \ll N$ this ratio grows essentially linearly
+in $N$.
 \end{proof}
 
-\begin{remark}[MDL-based K selection]
+\begin{remark}[Why not compressed sensing directly?]
+Classical compressed sensing bounds (e.g., the Cand\`es-Tao RIP theorem
+\cite{candes2006}) apply to the \emph{measurement} setting: given $m \ll N$
+linear observations of an unknown $K$-sparse signal, can we reconstruct it?
+HRE's training setup is different: each training sample gives a
+\emph{full-dimensional} input vector together with a target scalar, and we
+learn a sparse spectral filter via empirical risk minimization. The
+Rademacher/Natarajan-style argument above is the natural framing for this
+learning problem and yields a matching $O(K \log N)$ scaling.
+\end{remark}
+
+\begin{remark}[MDL-based $K$ selection]
 The Minimum Description Length principle provides an automatic method for
 choosing $K$ without cross-validation:
 \begin{equation}
 K^* = \arg\min_K \left[ \underbrace{\|y - \hat{y}_K\|^2}_{\text{reconstruction error}}
-+ \underbrace{K \cdot \log N}_{\text{model complexity}} \right]
++ \underbrace{K \cdot \log N}_{\text{model complexity}} \right].
 \end{equation}
-This balances signal fidelity against model complexity, automatically adapting
-to the true sparsity level of the data.
+The $K \log N$ penalty has a direct learning-theoretic interpretation via
+Theorem~\ref{thm:sparsity}: increasing $K$ by one requires roughly
+$\log(eN/K)$ additional samples to generalize, and the MDL criterion
+implicitly trades off this extra sample complexity against any improvement
+in training fit.
 \end{remark}
+
+\begin{corollary}[Sample complexity at fixed $\epsilon$]
+For any fixed target error $\epsilon$ and sparsity level $K$, the sample
+complexity of Theorem~\ref{thm:sparsity} is $m(N) = O(\log N)$. Therefore,
+on a semilog plot of required sample count versus problem dimension $N$
+(with $K$ held fixed), the empirical curve should be approximately
+\emph{linear} in $\log N$. This is directly testable via a sweep over
+$N \in \{32, 64, 128, 256, 512, 1024\}$ on synthetic $K$-sparse targets;
+see the \texttt{SparsityGeneralizationTests} integration suite.
+\end{corollary}
 
 %% ============================================================
 %% THEOREM 3: SPECTRAL HEBBIAN CONVERGENCE
@@ -277,6 +338,16 @@ Z.~Li, N.~Kovachki, K.~Azizzadenesheli, B.~Liu, K.~Bhatt, A.~Stuart, and A.~Anan
 C.~Trabelsi et al.,
 ``Deep complex networks,''
 \textit{Proc. ICLR}, 2018.
+
+\bibitem{bartlett2002}
+P.~L.~Bartlett and S.~Mendelson,
+``Rademacher and Gaussian complexities: Risk bounds and structural results,''
+\textit{J. Machine Learning Research}, vol.~3, pp.~463--482, 2002.
+
+\bibitem{kakade2009}
+S.~M.~Kakade, K.~Sridharan, and A.~Tewari,
+``On the complexity of linear prediction: Risk bounds, margin bounds, and regularization,''
+\textit{Advances in Neural Information Processing Systems (NeurIPS)}, 2009.
 \end{thebibliography}
 
 \end{document}
