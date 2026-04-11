@@ -207,16 +207,10 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        // Capsule squash: y = v * ||v||^2 / ((1 + ||v||^2) * ||v||)
-        //               = v * ||v|| / (1 + ||v||^2)
-        // Decompose via engine primitives so every op lands on the gradient tape.
-        int lastAxis = input.Shape.Length - 1;
-        var squared = Engine.TensorMultiply(input, input);
-        var normSquared = Engine.ReduceSum(squared, new[] { lastAxis }, keepDims: true);
-        var norm = Engine.TensorSqrt(normSquared);
-        var onePlusNormSquared = Engine.TensorAddScalar(normSquared, NumOps.One);
-        var coef = Engine.TensorDivide(norm, onePlusNormSquared);
-        return Engine.TensorBroadcastMultiply(input, coef);
+        // Capsule squash: y = v * ||v||^2 / ((1 + ||v||^2) * ||v||). AiDotNet.Tensors
+        // ships a native tape-tracked TensorSquash with a matching TensorSquashBackward
+        // grad node, so delegate directly instead of hand-decomposing the formula.
+        return Engine.TensorSquash(input, axis: input.Shape.Length - 1);
     }
 
     /// <summary>
