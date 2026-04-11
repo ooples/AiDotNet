@@ -244,7 +244,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInputShape = input.Shape.ToArray();
+        _lastInputShape = input._shape;
         int rank = input.Shape.Length;
         int featureSize = input.Shape[^1];
         if (featureSize % 2 != 0)
@@ -252,12 +252,12 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
 
         int halfSize = featureSize / 2;
         int[] startActual = new int[rank];
-        int[] lengthActual = (int[])input.Shape.ToArray().Clone();
+        int[] lengthActual = (int[])input._shape.Clone();
         lengthActual[rank - 1] = halfSize;
 
         int[] startPred = new int[rank];
         startPred[rank - 1] = halfSize;
-        int[] lengthPred = (int[])input.Shape.ToArray().Clone();
+        int[] lengthPred = (int[])input._shape.Clone();
         lengthPred[rank - 1] = halfSize;
 
         var actual = Engine.TensorSlice(input, startActual, lengthActual);
@@ -301,7 +301,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
         var input = inputs[0];
-        var shape = input.Shape.ToArray();
+        var shape = input._shape;
         _lastInputShape = shape;
 
         int rank = shape.Length;

@@ -170,7 +170,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        if (input.Shape.ToArray() == null || input.Shape.Length == 0)
+        if (input._shape == null || input.Shape.Length == 0)
             throw new ArgumentException("Input tensor must have a valid shape", nameof(input));
 
         LastInput = input;

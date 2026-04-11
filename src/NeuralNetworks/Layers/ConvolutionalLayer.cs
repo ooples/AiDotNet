@@ -870,7 +870,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             throw new ArgumentException($"Convolutional layer requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
 
         Tensor<T> input4D;
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         if (rank == 3)
@@ -1032,7 +1032,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
                 $"Conv2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
         }
 
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Reshape input to 4D [B, C, H, W] for convolution
@@ -1088,7 +1088,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             // Store GPU-resident tensors for BackwardGpu (no CPU roundtrip)
             _lastInputGpu = input4D;
             _lastOutputGpu = result;
-            _gpuInputShape4D = input4D.Shape.ToArray();
+            _gpuInputShape4D = input4D._shape;
 
             // Also download to CPU for hybrid CPU/GPU backward compatibility
             _lastInput = input4D;

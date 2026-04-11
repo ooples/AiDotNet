@@ -239,7 +239,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
         // Cache input shape for backward pass during training
         if (IsTrainingMode)
         {
-            _gpuCachedInputShape = (int[])input.Shape.ToArray().Clone();
+            _gpuCachedInputShape = (int[])input._shape.Clone();
         }
 
         return gpuEngine.UpsampleGpu(input, _scaleFactor);

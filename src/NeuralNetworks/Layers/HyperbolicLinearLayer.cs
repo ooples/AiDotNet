@@ -180,7 +180,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
     /// <returns>Output tensor with shape [outputFeatures] or [batch, outputFeatures].</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
 
         int batchSize;
         int inputLen;

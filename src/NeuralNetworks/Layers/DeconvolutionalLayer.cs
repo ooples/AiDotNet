@@ -579,7 +579,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
                 $"ConvTranspose2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
         }
 
-        var originalInputShape = input.Shape.ToArray();
+        var originalInputShape = input._shape;
         int rank = input.Shape.Length;
         bool addedBatchDimension = false;
 
@@ -635,7 +635,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
             _gpuOutput?.Dispose();
             _gpuInput = input4D;
             _gpuOutput = result;
-            _gpuInputShape4D = input4D.Shape.ToArray();
+            _gpuInputShape4D = input4D._shape;
             _gpuAddedBatchDimension = addedBatchDimension;
         }
 

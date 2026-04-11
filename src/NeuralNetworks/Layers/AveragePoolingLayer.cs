@@ -126,7 +126,7 @@ public class AveragePoolingLayer<T> : LayerBase<T>
 
         Tensor<T> input4D;
         bool addedBatch = false;
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         if (rank == 3)
@@ -147,7 +147,7 @@ public class AveragePoolingLayer<T> : LayerBase<T>
             input4D = input.Reshape(new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
-        _gpuInputShape = input4D.Shape.ToArray();
+        _gpuInputShape = input4D._shape;
         _addedBatchDimension = addedBatch;
 
         var poolSizeArr = new[] { PoolSize, PoolSize };
@@ -260,7 +260,7 @@ public class AveragePoolingLayer<T> : LayerBase<T>
 
         // Store input for autodiff backward pass
         _lastInput = input;
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Every shape op must go through Engine so the gradient tape records the
@@ -317,7 +317,7 @@ public class AveragePoolingLayer<T> : LayerBase<T>
         }
         else
         {
-            _lastOutputShape = output4D.Shape.ToArray();
+            _lastOutputShape = output4D._shape;
             return output4D;
         }
     }

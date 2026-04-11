@@ -587,7 +587,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
             _lastGateOutput = gateOutput;
         }
 
-        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, linearOutput.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, linearOutput._shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

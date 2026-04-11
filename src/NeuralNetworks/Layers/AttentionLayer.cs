@@ -452,7 +452,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int rank = input.Shape.Length;
         _inputWas2D = rank == 2;
         Tensor<T> input3D;
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
 
         if (_inputWas2D)
         {
@@ -474,7 +474,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             {
                 throw new ArgumentException(
                     $"AttentionLayer input size mismatch. Expected InputSize={_inputSize}, " +
-                    $"but got {input.Shape[2]} in shape [{string.Join(", ", input.Shape.ToArray())}].",
+                    $"but got {input.Shape[2]} in shape [{string.Join(", ", input._shape)}].",
                     nameof(input));
             }
             input3D = input;
@@ -486,7 +486,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             {
                 throw new ArgumentException(
                     $"AttentionLayer input size mismatch. Expected InputSize={_inputSize}, " +
-                    $"but got {input.Shape[rank - 1]} in shape [{string.Join(", ", input.Shape.ToArray())}].",
+                    $"but got {input.Shape[rank - 1]} in shape [{string.Join(", ", input._shape)}].",
                     nameof(input));
             }
             int flatBatch = 1;
@@ -629,7 +629,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        var shape = input.Shape.ToArray();
+        var shape = input._shape;
 
         // Handle 2D [Batch, InputSize] or 3D [Batch, Seq, InputSize] input
         int batchSize;
@@ -703,7 +703,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _gpuInput = input3D;
             _gpuBatchSize = batchSize;
             _gpuSeqLen = seqLen;
-            _gpuInputShape = input.Shape.ToArray();
+            _gpuInputShape = input._shape;
 
             // Reshape Q, K, V back to 3D [B, S, A] for backward
             _gpuQ = gpuEngine.ReshapeGpu(qFlat, [batchSize, seqLen, _attentionSize]);
@@ -844,7 +844,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             else
             {
                 throw new ArgumentException(
-                    $"Second input tensor has ambiguous shape {string.Join("x", secondInput.Shape.ToArray())}. " +
+                    $"Second input tensor has ambiguous shape {string.Join("x", secondInput._shape)}. " +
                     $"Expected either a mask [batch, queryLen, keyLen] or cross-attention K/V [batch, seqLen, {_inputSize}].");
             }
         }

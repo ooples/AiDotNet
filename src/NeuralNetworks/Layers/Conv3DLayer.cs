@@ -473,7 +473,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
 
         Tensor<T> batchedInput;
 

@@ -323,7 +323,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
         }
 
         var input = inputs[0];
-        var shape = input.Shape.ToArray();
+        var shape = input._shape;
 
         // Expected input shape: [batch, timeSteps, features] or [timeSteps, features]
         int batchSize, timeSteps, features;

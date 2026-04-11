@@ -696,7 +696,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
         }
 
         var input = inputs[0];
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
 
         // FullyConnectedLayer stores weights as [outputSize, inputSize]
         // We need to transpose for FusedLinearGpu which expects [inputSize, outputSize]

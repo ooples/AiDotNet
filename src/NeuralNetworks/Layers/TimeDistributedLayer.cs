@@ -152,7 +152,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
 
         int batch = input.Shape[0];
         int time = input.Shape[1];
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
 
         int[] flattenedShape = new int[inputShape.Length - 1];
         flattenedShape[0] = batch * time;
@@ -162,7 +162,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         var reshapedInput = gpuEngine.ReshapeGpu(input, flattenedShape);
         var innerOutput = _innerLayer.ForwardGpu(reshapedInput);
 
-        int[] innerOutputShape = innerOutput.Shape.ToArray();
+        int[] innerOutputShape = innerOutput._shape;
         int[] outputShape = new int[innerOutputShape.Length + 1];
         outputShape[0] = batch;
         outputShape[1] = time;
@@ -180,7 +180,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         {
             _lastInput = input;
             _lastOutput = output;
-            _originalInputShape = input.Shape.ToArray();
+            _originalInputShape = input._shape;
         }
 
         return output;
@@ -363,7 +363,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         if (rank < 2)

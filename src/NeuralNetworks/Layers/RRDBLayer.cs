@@ -228,7 +228,7 @@ public class RRDBLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        var shape = input.Shape.ToArray();
+        var shape = input._shape;
 
         // Cache input for backward pass
         if (IsTrainingMode)

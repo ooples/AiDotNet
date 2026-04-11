@@ -160,7 +160,7 @@ public class CroppingLayer<T> : LayerBase<T>
 
         var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
 
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int[] outputShape = CalculateOutputShape(inputShape, _cropTop, _cropBottom, _cropLeft, _cropRight);
         int outputSize = 1;
         foreach (var dim in outputShape) outputSize *= dim;
@@ -379,7 +379,7 @@ public class CroppingLayer<T> : LayerBase<T>
                 nameof(input));
         }
 
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Rank;
 
         Tensor<T> input4D;

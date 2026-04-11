@@ -461,7 +461,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
             _lastInput = input;
             _lastOutput = output;
             _lastOutputGpu = output;
-            _lastInputGpuShape = input.Shape.ToArray().ToArray();
+            _lastInputGpuShape = input._shape.ToArray();
         }
 
         return output;

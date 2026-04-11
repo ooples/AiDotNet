@@ -2425,14 +2425,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             var output = ForwardForTraining(input);
 
             // Align output shape to target: squeeze leading batch dim when batch=1
-            // (ForwardForTraining may add a batch dim that the target doesn't have)
+            // (ForwardForTraining may add a batch dim that the target doesn't have).
+            // Must go through Engine so the gradient tape records the reshape —
+            // direct Tensor<T>.Reshape bypasses the tape and breaks backward flow
+            // between ForwardForTraining and the loss. Use the internal _shape
+            // field (zero-alloc) rather than Shape.ToArray().
             if (output.Rank > expected.Rank && output.Shape[0] == 1 && output.Length == expected.Length)
             {
-                output = output.Reshape(expected._shape);
+                output = Engine.Reshape(output, expected._shape);
             }
             else if (expected.Rank > output.Rank && expected.Shape[0] == 1 && expected.Length == output.Length)
             {
-                expected = expected.Reshape(output._shape);
+                expected = Engine.Reshape(expected, output._shape);
             }
 
             var lossTensor = loss.ComputeTapeLoss(output, expected);
@@ -2456,12 +2460,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Resolve optimizer
             var opt = optimizer ?? GetOrCreateBaseOptimizer();
 
-            // Re-evaluation callback applies same shape alignment as initial forward
+            // Re-evaluation callback applies same shape alignment as initial forward.
+            // Engine.Reshape so the tape records the reshape when this is called
+            // inside the optimizer's Step; also zero-alloc via the _shape field.
             Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> tgt)
             {
                 var fwd = ForwardForTraining(inp);
                 if (fwd.Rank > tgt.Rank && fwd.Shape[0] == 1 && fwd.Length == tgt.Length)
-                    fwd = fwd.Reshape(tgt._shape);
+                    fwd = Engine.Reshape(fwd, tgt._shape);
                 return fwd;
             }
 

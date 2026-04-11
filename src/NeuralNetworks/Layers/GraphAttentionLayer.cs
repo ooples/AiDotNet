@@ -315,7 +315,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: ensure 3D [batch, numNodes, inputFeatures]
@@ -1142,7 +1142,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
         var input = inputs[0];
-        if (input.Shape.ToArray() == null || input.Shape.Length < 2)
+        if (input._shape == null || input.Shape.Length < 2)
             throw new ArgumentException("Input must be at least 2D [numNodes, inputFeatures].");
 
         // Check that either adjacency matrix or edge indices are set

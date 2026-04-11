@@ -296,7 +296,7 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
         if (input.Rank != 2 || input.Shape[1] != InputChannels)
         {
             throw new ArgumentException(
-                $"MeshEdgeConvLayer expects input shape [numEdges, {InputChannels}], got [{string.Join(", ", input.Shape.ToArray())}].",
+                $"MeshEdgeConvLayer expects input shape [numEdges, {InputChannels}], got [{string.Join(", ", input._shape)}].",
                 nameof(input));
         }
 
@@ -460,7 +460,7 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
         }
 
         var input = inputs[0];
-        int[] shape = input.Shape.ToArray();
+        int[] shape = input._shape;
 
         if (shape.Length != 2 || shape[1] != InputChannels)
         {

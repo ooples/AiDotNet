@@ -914,7 +914,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         var input = inputs[0];
 
         // Handle input shape - flatten to 3D [batch, seq, embedding]
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int seqLength, embeddingDimension, batchSize;
 
         if (inputShape.Length == 2)

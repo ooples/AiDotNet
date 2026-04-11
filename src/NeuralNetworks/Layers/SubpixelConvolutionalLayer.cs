@@ -579,7 +579,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Support any rank >= 3: last 3 dims are interpreted as [C, H, W]
@@ -674,7 +674,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        var shape = input.Shape.ToArray();
+        var shape = input._shape;
 
         // Ensure 4D [B, C, H, W] format
         Tensor<T> input4D;

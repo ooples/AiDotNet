@@ -356,7 +356,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for backward pass restoration
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
 
         // Auto-reshape 1D input to [1, N] for batch normalization compatibility
         _inputWas1D = input.Shape.Length == 1;
@@ -396,8 +396,8 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
                     newVarData[i] = i < copyLen ? batchVariance.Data.Span[i] : varFillValue;
                 }
 
-                batchMean = new Tensor<T>(_runningMean.Shape.ToArray(), new Vector<T>(newMeanData));
-                batchVariance = new Tensor<T>(_runningVariance.Shape.ToArray(), new Vector<T>(newVarData));
+                batchMean = new Tensor<T>(_runningMean._shape, new Vector<T>(newMeanData));
+                batchVariance = new Tensor<T>(_runningVariance._shape, new Vector<T>(newVarData));
             }
 
             // Update running statistics using Exponential Moving Average (Vectorized)
@@ -436,7 +436,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             // (recomputing creates new tensor allocations that can cause SIMD alignment differences)
             if (_inferenceScaleDirty || _cachedInferenceScale is null || _cachedInferenceShift is null)
             {
-                var epsilonVec = Tensor<T>.CreateDefault(_runningVariance.Shape.ToArray(), _epsilon);
+                var epsilonVec = Tensor<T>.CreateDefault(_runningVariance._shape, _epsilon);
                 var variancePlusEps = Engine.TensorAdd(_runningVariance, epsilonVec);
                 var stdDev = Engine.TensorSqrt(variancePlusEps);
 

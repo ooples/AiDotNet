@@ -625,7 +625,7 @@ public partial class GRULayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse leading dims into batch for rank > 3
@@ -860,9 +860,9 @@ public partial class GRULayer<T> : LayerBase<T>
             var r = ApplyActivation(Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WrT), Engine.TensorMatMul(currentHiddenState, UrT)), _br), true);
             var h_candidate = ApplyActivation(Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WhT), Engine.TensorMatMul(r.ElementwiseMultiply(currentHiddenState), UhT)), _bh), false);
             // Compute (1 - z) using cached ones tensor — avoids per-timestep allocation
-            if (_cachedOnesForGate == null || !_cachedOnesForGate.Shape.ToArray().SequenceEqual(z.Shape.ToArray()))
+            if (_cachedOnesForGate == null || !_cachedOnesForGate._shape.SequenceEqual(z._shape))
             {
-                _cachedOnesForGate = Tensor<T>.CreateDefault(z.Shape.ToArray(), NumOps.One);
+                _cachedOnesForGate = Tensor<T>.CreateDefault(z._shape, NumOps.One);
             }
             var oneMinusZ = Engine.TensorSubtract(_cachedOnesForGate, z);
 
@@ -961,7 +961,7 @@ public partial class GRULayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        var shape = input.Shape.ToArray();
+        var shape = input._shape;
         int rank = shape.Length;
 
         // Determine sequence length, batch size from shape

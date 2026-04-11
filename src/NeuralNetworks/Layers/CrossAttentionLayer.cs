@@ -584,8 +584,8 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
         Tensor<T> query = inputs[0];
         Tensor<T> context = inputs.Length >= 2 ? inputs[1] : inputs[0];
 
-        int[] queryShape = query.Shape.ToArray();
-        int[] contextShape = context.Shape.ToArray();
+        int[] queryShape = query._shape;
+        int[] contextShape = context._shape;
         int queryRank = queryShape.Length;
 
         // Store original shape for output

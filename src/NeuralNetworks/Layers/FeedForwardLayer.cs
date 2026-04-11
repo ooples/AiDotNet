@@ -437,7 +437,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
             // Cache GPU tensors for GPU-resident backward pass
             _gpuInput = input;
             _gpuOutput = output;
-            _gpuInputShape = input.Shape.ToArray();
+            _gpuInputShape = input._shape;
 
             // Also cache CPU tensors for fallback backward pass
             Input = input;

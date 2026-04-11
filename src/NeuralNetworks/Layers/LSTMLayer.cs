@@ -1058,7 +1058,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse leading dims into batch for rank > 3
@@ -1232,7 +1232,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
             batchSize = 1;
             timeSteps = input.Shape[0];
             reshaped2D = true;
-            originalShape = input.Shape.ToArray();
+            originalShape = input._shape;
         }
         else if (rank == 3)
         {
@@ -1243,7 +1243,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
         else
         {
             // Higher-rank tensor: collapse leading dims into batch
-            originalShape = input.Shape.ToArray();
+            originalShape = input._shape;
             reshapedHigherRank = true;
             timeSteps = input.Shape[rank - 2];
             batchSize = 1;

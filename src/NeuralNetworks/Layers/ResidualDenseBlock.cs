@@ -341,7 +341,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        var originalShape = input.Shape.ToArray();
+        var originalShape = input._shape;
 
         // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
         if (originalShape.Length < 3)

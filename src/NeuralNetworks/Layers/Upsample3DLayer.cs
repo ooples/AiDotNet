@@ -240,7 +240,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Rank;
 
         Tensor<T> batchedInput;
@@ -310,7 +310,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
 
         Tensor<T> input5D;
         bool addedBatch = false;
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         if (rank == 4)
@@ -331,7 +331,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
             input5D = input.Reshape(new[] { flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
-        _gpuInputShape = input5D.Shape.ToArray();
+        _gpuInputShape = input5D._shape;
         _addedBatchDimension = addedBatch;
 
         // Store _lastInput for backward pass

@@ -453,7 +453,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Handle any rank >= 2: last 2 dims are [seq, embed], earlier dims are batch-like
         int rank = input.Shape.Length;
         _inputWas2D = rank == 2;
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
 
         Tensor<T> input3D;
         if (rank == 1)
@@ -540,7 +540,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var input = inputs[0];
 
         // Get dimensions from input shape
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int rank = inputShape.Length;
 
         Tensor<T> input3D;

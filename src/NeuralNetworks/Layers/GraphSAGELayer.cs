@@ -224,7 +224,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Graph layer expects 3D: [batchSize, numNodes, features]
@@ -292,7 +292,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _lastDegrees = Engine.ReduceSum(adjForBatch, [2], keepDims: false); // [batch, nodes]
 
         // Clamp degrees to minimum of 1 to avoid division by zero
-        var oneTensor = new Tensor<T>(_lastDegrees.Shape.ToArray());
+        var oneTensor = new Tensor<T>(_lastDegrees._shape);
         oneTensor.Fill(NumOps.One);
         var safeDegrees = Engine.TensorMax(_lastDegrees, oneTensor);
 
@@ -706,7 +706,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
         var input = inputs[0];
-        if (input.Shape.ToArray() == null || input.Shape.Length < 2)
+        if (input._shape == null || input.Shape.Length < 2)
             throw new ArgumentException("Input must be at least 2D [numNodes, inputFeatures].");
 
         if (_adjacencyMatrix == null)

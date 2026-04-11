@@ -525,7 +525,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: need at least 2D for [nodes, features] or 3D for [batch, nodes, features]
@@ -1029,7 +1029,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
         var input = inputs[0];
-        if (input.Shape.ToArray() == null || input.Shape.Length < 2)
+        if (input._shape == null || input.Shape.Length < 2)
             throw new ArgumentException("Input must be at least 2D [numNodes, inputFeatures].");
 
         if (_adjacencyMatrix == null)

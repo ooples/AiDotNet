@@ -488,7 +488,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // CRF expects 3D input: [batchSize, sequenceLength, numClasses]

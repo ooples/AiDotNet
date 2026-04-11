@@ -765,7 +765,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Store the input for backward pass
@@ -852,7 +852,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
         int inputSize = InputShape[0];
 
         // Convert to float array to Tensor<T>
-        var inputTensor = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var inputTensor = TensorAllocator.Rent<T>(input._shape);
         for (int i = 0; i < inputData.Length; i++)
         {
             inputTensor[i] = NumOps.FromDouble(inputData[i]);
@@ -860,7 +860,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
 
         // Store for backward pass
         _lastInput = inputTensor;
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
 
         // Flatten input for processing
         Tensor<T> inputFlat;
@@ -902,7 +902,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
         }
 
         var outputBuffer = backend.AllocateBuffer(outputData);
-        var outputShape = output.Shape.ToArray();
+        var outputShape = output._shape;
 
         return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }

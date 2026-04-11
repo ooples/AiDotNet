@@ -157,7 +157,7 @@ public class PaddingLayer<T> : LayerBase<T>
             backend.Copy2DStrided(permutedInput.Buffer, outputBuffer, (int)outerSize, dimSize, newDimSize, pad);
 
             // Create padded tensor
-            int[] newShape = permutedInput.Shape.ToArray().ToArray();
+            int[] newShape = permutedInput._shape.ToArray();
             newShape[rank - 1] = newDimSize;
             var paddedPermuted = GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, newShape, GpuTensorRole.Activation, ownsBuffer: true);
 
@@ -198,7 +198,7 @@ public class PaddingLayer<T> : LayerBase<T>
         if (IsTrainingMode)
         {
             _lastInput = input;
-            _gpuCachedInputShape = (int[])input.Shape.ToArray().Clone();
+            _gpuCachedInputShape = (int[])input._shape.Clone();
         }
 
         return currentTensor;

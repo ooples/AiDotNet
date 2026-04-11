@@ -301,7 +301,7 @@ public class ReshapeLayer<T> : LayerBase<T>
         // Cache input shape for backward pass
         if (IsTrainingMode)
         {
-            _gpuCachedInputShape = (int[])input.Shape.ToArray().Clone();
+            _gpuCachedInputShape = (int[])input._shape.Clone();
         }
 
         // Calculate full target shape including batch dimension

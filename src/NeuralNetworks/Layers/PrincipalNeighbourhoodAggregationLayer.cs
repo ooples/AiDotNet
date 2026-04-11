@@ -220,7 +220,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // PNA is a graph layer: normalize to 3D [batch, nodes, features]
@@ -272,7 +272,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         _lastDegrees = Engine.ReduceSum(_adjacencyMatrix, [2], keepDims: false); // [batch, nodes]
 
         // Avoid division by zero - clamp degrees to minimum of 1
-        var oneTensor = new Tensor<T>(_lastDegrees.Shape.ToArray());
+        var oneTensor = new Tensor<T>(_lastDegrees._shape);
         oneTensor.Fill(NumOps.One);
         var safeDegrees = Engine.TensorMax(_lastDegrees, oneTensor);
 
@@ -299,7 +299,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         _lastMlpHiddenPreRelu = Engine.TensorAdd(hidden, bias1Broadcast);
 
         // ReLU activation using Engine operations
-        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape.ToArray());
+        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu._shape);
         zeroTensor.Fill(NumOps.Zero);
         _lastMlpHidden = Engine.TensorMax(_lastMlpHiddenPreRelu, zeroTensor);
 
@@ -376,7 +376,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         var input = inputs[0];
 
         // Handle batch dimension
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int batchSize;
         int numNodes;
         int inputFeatures;

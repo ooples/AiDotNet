@@ -378,7 +378,7 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse leading dims for rank > 3
@@ -535,7 +535,7 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         var input = inputs[0];
 
         // Handle batch dimension
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int batchSize;
         int numNodes;
         int inputFeatures;

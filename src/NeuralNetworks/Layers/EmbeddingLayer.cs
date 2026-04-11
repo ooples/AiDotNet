@@ -413,7 +413,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
 
         int embeddingDim = _embeddingTensor.Shape[1];
         int vocabularySize = _embeddingTensor.Shape[0];
@@ -557,7 +557,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         if (IsTrainingMode)
         {
             _lastInput = inputTensor;
-            _originalInputShape = inputTensor.Shape.ToArray();
+            _originalInputShape = inputTensor._shape;
         }
 
         // Detect if input is continuous
@@ -599,7 +599,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             if (IsTrainingMode)
             {
                 _lastInputGpu = gpuEngine.UploadToGpu(input2D, GpuTensorRole.Intermediate);
-                _lastInputGpuShape = inputTensor.Shape.ToArray();
+                _lastInputGpuShape = inputTensor._shape;
             }
 
             // Perform GPU matrix multiplication: [totalSamples, inputFeatures] @ [inputFeatures, embeddingDim]
@@ -634,7 +634,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         if (IsTrainingMode)
         {
             _lastIndicesForGpu = flatIndices;
-            _lastInputGpuShape = inputTensor.Shape.ToArray();
+            _lastInputGpuShape = inputTensor._shape;
         }
 
         // Perform GPU embedding lookup - keeps result on GPU

@@ -362,7 +362,7 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: normalize to 3D [batchSize, numNodes, features] for graph processing
@@ -535,7 +535,7 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
         }
 
         var input = inputs[0];
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
 
         // Handle shape normalization
         int batchSize;

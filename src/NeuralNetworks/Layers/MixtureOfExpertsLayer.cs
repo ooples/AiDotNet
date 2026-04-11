@@ -527,7 +527,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse to 2D for processing
@@ -583,7 +583,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
                 double u2 = rng.NextDouble();
                 noiseData[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
             }
-            var noise = new Tensor<T>(routingLogits.Shape.ToArray(), new Vector<T>(noiseData));
+            var noise = new Tensor<T>(routingLogits._shape, new Vector<T>(noiseData));
             routingLogits = Engine.TensorAdd(routingLogits, Engine.TensorMultiply(noise, noiseScale));
         }
 

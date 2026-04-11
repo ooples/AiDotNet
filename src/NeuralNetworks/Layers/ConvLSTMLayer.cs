@@ -562,7 +562,7 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse leading dims for rank > 5
@@ -683,7 +683,7 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        var shape = input.Shape.ToArray();
+        var shape = input._shape;
         int rank = shape.Length;
 
         // Support any rank >= 4: last 4 dims are [T, H, W, C], earlier dims are batch-like

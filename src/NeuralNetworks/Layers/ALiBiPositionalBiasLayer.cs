@@ -215,7 +215,7 @@ internal partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>
         var bias = ComputeBias(queryLen, keyLen);
 
         // Add bias to scores
-        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input._shape);
 
         if (rank == 4)
         {

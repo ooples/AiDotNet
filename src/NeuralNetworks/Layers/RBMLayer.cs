@@ -394,7 +394,7 @@ public partial class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
         if (rank < 1)
             throw new ArgumentException("Input must have at least one dimension.", nameof(input));
@@ -443,7 +443,7 @@ public partial class RBMLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
 
         int rank = input.Shape.Length;
         if (rank < 1)

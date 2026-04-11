@@ -532,7 +532,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Normalize to 4D NHWC [batch, height, width, channels] for processing
@@ -664,7 +664,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
                 $"LocallyConnected input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
         }
 
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Reshape input to 4D NCHW [B, C, H, W] for locally connected operation
@@ -717,7 +717,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
         {
             _gpuInput = input4D;
             _gpuOutput = result;
-            _gpuInputShape4D = input4D.Shape.ToArray();
+            _gpuInputShape4D = input4D._shape;
             _gpuAddedBatchDimension = rank == 3;
         }
 

@@ -121,7 +121,7 @@ public class MCDropoutLayer<T> : LayerBase<T>
         _dropoutMask.Value = mask;
 
         var outputTensor = Tensor<T>.FromVector(outputVector);
-        return input.Shape.Length > 1 ? outputTensor.Reshape(input.Shape.ToArray()) : outputTensor;
+        return input.Shape.Length > 1 ? Engine.Reshape(outputTensor, input.Shape.ToArray()) : outputTensor;
     }
 
     /// <summary>

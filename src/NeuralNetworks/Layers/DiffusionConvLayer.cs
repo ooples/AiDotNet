@@ -859,7 +859,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
         }
 
         var input = inputs[0];
-        int[] shape = input.Shape.ToArray();
+        int[] shape = input._shape;
 
         // Handle batched vs non-batched input
         int batchSize;

@@ -314,7 +314,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse leading dims for rank > 3
@@ -462,7 +462,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        var shape = input.Shape.ToArray();
+        var shape = input._shape;
         int rank = shape.Length;
         int hiddenSize = _inputWeights.Shape[0];
         int inputSize = _inputWeights.Shape[1];

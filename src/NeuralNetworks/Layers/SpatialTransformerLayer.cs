@@ -557,7 +557,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
         if (rank < 2)
             throw new ArgumentException("SpatialTransformerLayer expects at least 2D input [height, width].", nameof(input));
@@ -1265,7 +1265,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // Step 1: Preprocess input to NHWC format (CPU for shape handling, then upload)
         // Input shape handling requires dynamic shape analysis - do on CPU, upload result
         var inputTensor = inputGpu;
-        _originalInputShape = inputTensor.Shape.ToArray();
+        _originalInputShape = inputTensor._shape;
         int rank = inputTensor.Shape.Length;
 
         if (rank < 2)

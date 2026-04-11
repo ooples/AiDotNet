@@ -150,7 +150,7 @@ public class TransitionLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse leading dims for rank > 4
@@ -240,7 +240,7 @@ public class TransitionLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        var shape = input.Shape.ToArray();
+        var shape = input._shape;
 
         // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
         if (shape.Length < 3)
@@ -294,7 +294,7 @@ public class TransitionLayer<T> : LayerBase<T>
         // Restore original tensor rank
         if (shape.Length > 4)
         {
-            var outShape = poolOutput.Shape.ToArray();
+            var outShape = poolOutput._shape;
             var restoreShape = new int[shape.Length];
             for (int d = 0; d < shape.Length - 3; d++)
                 restoreShape[d] = shape[d];
@@ -305,7 +305,7 @@ public class TransitionLayer<T> : LayerBase<T>
         }
         if (added3DBatch)
         {
-            var outShape = poolOutput.Shape.ToArray();
+            var outShape = poolOutput._shape;
             return gpuEngine.ReshapeGpu(poolOutput, new[] { outShape[1], outShape[2], outShape[3] });
         }
 

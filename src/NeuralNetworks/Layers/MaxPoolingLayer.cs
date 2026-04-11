@@ -156,7 +156,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
 
         Tensor<T> input4D;
         bool addedBatch = false;
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         if (rank == 3)
@@ -177,7 +177,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
             input4D = input.Reshape(new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
-        _gpuInputShape = input4D.Shape.ToArray();
+        _gpuInputShape = input4D._shape;
         _addedBatchDimension = addedBatch;
 
         var poolSizeArr = new[] { PoolSize, PoolSize };
@@ -270,7 +270,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
             throw new ArgumentException($"MaxPooling layer requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
 
         _lastInput = input;
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         Tensor<T> input4D;

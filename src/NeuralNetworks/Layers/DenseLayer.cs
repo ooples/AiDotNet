@@ -785,7 +785,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         EnsureInitialized();
 
         _lastInput = input;
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
 
         // Industry standard: Support any-rank input tensors [..., inputSize]
         // Transformation is applied to the last dimension
@@ -905,7 +905,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var input = inputs[0];
 
         // Store for potential backward pass
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
 
         int actualInputSize = input.Shape[^1]; // Last dimension is always features
         int expectedInputSize = _weights.Shape[0];
@@ -971,7 +971,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             // Store GPU-resident tensors for BackwardGpu (no CPU roundtrip)
             _lastInputGpu = input2D;
-            _gpuOriginalInputShape = input.Shape.ToArray().ToArray();
+            _gpuOriginalInputShape = input._shape.ToArray();
 
             // For fused activations, we need pre-activation for gradient computation
             if (fusedActivation != FusedActivationType.None)

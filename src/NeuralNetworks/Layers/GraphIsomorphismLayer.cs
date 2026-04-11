@@ -233,7 +233,7 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Handle tensor shapes for graph processing:
@@ -309,7 +309,7 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
         var lastMlpHiddenPreRelu = _lastMlpHiddenPreRelu;
 
         // Apply ReLU activation using Engine operations
-        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape.ToArray());
+        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu._shape);
         zeroTensor.Fill(NumOps.Zero);
         _lastMlpHidden = Engine.TensorMax(lastMlpHiddenPreRelu, zeroTensor);
 
@@ -588,7 +588,7 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
         var input = inputs[0];
-        if (input.Shape.ToArray() == null || input.Shape.Length < 2)
+        if (input._shape == null || input.Shape.Length < 2)
             throw new ArgumentException("Input must be at least 2D [numNodes, inputFeatures].");
 
         if (_adjacencyMatrix == null)

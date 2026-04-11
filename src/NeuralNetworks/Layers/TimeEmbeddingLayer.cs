@@ -193,7 +193,7 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
             _lastHidden = hidden;
 
             // Cache GPU tensors for backward pass
-            _gpuInputShape = input.Shape.ToArray();
+            _gpuInputShape = input._shape;
             _gpuTimesteps = timesteps;
             _gpuSinusoidalEmbed = embedding;
             _gpuHidden = hidden;

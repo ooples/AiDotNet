@@ -170,7 +170,7 @@ public partial class QuantumLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse to 2D for processing
@@ -219,12 +219,12 @@ public partial class QuantumLayer<T> : LayerBase<T>
             realState = Engine.TensorSlice(processInput, [0, 0], [batchSize, dimension]);
         }
 
-        var imagState = new Tensor<T>(realState.Shape.ToArray());
+        var imagState = new Tensor<T>(realState._shape);
 
         // Normalize each batch item: divide by sqrt(sum(|state|^2) + eps)
         var magnitudeSquared = Engine.ComplexMagnitudeSquared(realState, imagState);
         var normPerBatch = Engine.ReduceSum(magnitudeSquared, [1], keepDims: true);
-        var epsilonTensor = new Tensor<T>(normPerBatch.Shape.ToArray());
+        var epsilonTensor = new Tensor<T>(normPerBatch._shape);
         epsilonTensor.Fill(NumOps.FromDouble(1e-10));
         var safeDenom = Engine.TensorAdd(normPerBatch, epsilonTensor);
         var denomExpanded = Engine.TensorRepeatElements(safeDenom, dimension, axis: 1);

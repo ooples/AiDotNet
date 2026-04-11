@@ -462,7 +462,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Graph layer expects 3D: [batchSize, numNodes, features]
@@ -596,7 +596,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         var input = inputs[0];
 
         // Handle batch dimension
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int batchSize;
         int numNodes;
         int inputFeatures;

@@ -256,7 +256,7 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // PatchEmbedding expects 4D input [B, C, H, W], normalize to 4D
@@ -524,7 +524,7 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        var shape = input.Shape.ToArray();
+        var shape = input._shape;
 
         // PatchEmbedding expects 4D input [B, C, H, W]
         bool hasBatch = shape.Length == 4;

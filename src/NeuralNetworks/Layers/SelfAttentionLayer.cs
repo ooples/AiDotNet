@@ -489,7 +489,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: need at least 2D [seqLen, embedDim]
@@ -630,7 +630,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         var input = inputs[0];
 
         // Get dimensions from input shape
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int rank = inputShape.Length;
 
         int batchSize;

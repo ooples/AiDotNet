@@ -258,7 +258,7 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Graph layer expects 3D: [batchSize, numNodes, features]
@@ -442,7 +442,7 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
         var input = inputs[0];
 
         // Get input dimensions - expect [batchSize, numNodes, inputFeatures]
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int batchSize = inputShape.Length >= 3 ? inputShape[0] : 1;
         int numNodes = inputShape.Length >= 3 ? inputShape[1] : inputShape[0];
         int inputFeatures = inputShape.Length >= 3 ? inputShape[2] : inputShape[1];

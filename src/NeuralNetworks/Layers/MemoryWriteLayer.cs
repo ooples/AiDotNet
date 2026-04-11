@@ -561,8 +561,8 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         var input = inputs[0];
         var memory = inputs[1];
-        int[] inputShape = input.Shape.ToArray();
-        int[] memoryShape = memory.Shape.ToArray();
+        int[] inputShape = input._shape;
+        int[] memoryShape = memory._shape;
 
         int batchSize = inputShape.Length >= 2 ? inputShape[0] : 1;
         int inputDim = inputShape.Length >= 2 ? inputShape[1] : inputShape[0];

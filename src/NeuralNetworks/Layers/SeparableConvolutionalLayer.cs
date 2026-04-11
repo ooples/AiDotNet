@@ -931,7 +931,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
                 $"SeparableConv2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
         }
 
-        var originalInputShape = input.Shape.ToArray();
+        var originalInputShape = input._shape;
         int rank = input.Shape.Length;
         bool addedBatchDimension = false;
 

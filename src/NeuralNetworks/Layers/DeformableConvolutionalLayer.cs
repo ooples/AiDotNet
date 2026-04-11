@@ -374,7 +374,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
         if (IsTrainingMode)
         {
             _gpuInput = input4D;
-            _gpuInputShape = input4D.Shape.ToArray().ToArray();
+            _gpuInputShape = input4D._shape.ToArray();
             _gpuOffsets = offsetsGpu;
             _gpuMask = maskGpu;
         }

@@ -167,7 +167,7 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
 
         // Instance Norm expects input [batch, channels, ...spatial]
         // We flatten to 4D and use GroupNorm with numGroups = numChannels
@@ -254,7 +254,7 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        var shape = input.Shape.ToArray();
+        var shape = input._shape;
         var backend = gpuEngine.GetBackend();
         if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable.");

@@ -542,7 +542,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
         // Support any rank >= 3: last 3 dims are interpreted as [C, H, W]
@@ -659,7 +659,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
                 $"DilatedConv2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
         }
 
-        var originalInputShape = input.Shape.ToArray();
+        var originalInputShape = input._shape;
         int rank = input.Shape.Length;
         bool addedBatchDimension = false;
 

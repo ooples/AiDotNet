@@ -606,7 +606,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Apply default tanh
             var tanhBuffer = backend.AllocateBuffer(size);
             backend.Tanh(transformPreActivation.Buffer, tanhBuffer, size);
-            transformOutput = GpuTensorHelper.UploadToGpu<T>(backend, tanhBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+            transformOutput = GpuTensorHelper.UploadToGpu<T>(backend, tanhBuffer, input._shape, GpuTensorRole.Activation, ownsBuffer: true);
         }
 
         // Gate path: gateLinear = input @ gateWeights + gateBias
@@ -629,7 +629,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Apply default sigmoid
             var sigmoidBuffer = backend.AllocateBuffer(size);
             backend.Sigmoid(gatePreActivation.Buffer, sigmoidBuffer, size);
-            gateOutput = GpuTensorHelper.UploadToGpu<T>(backend, sigmoidBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+            gateOutput = GpuTensorHelper.UploadToGpu<T>(backend, sigmoidBuffer, input._shape, GpuTensorRole.Activation, ownsBuffer: true);
         }
 
         // Highway output: output = gate * (transform - input) + input
@@ -658,7 +658,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _gpuGateOutput = gateOutput;
             _gpuTransformPreActivation = transformPreActivation;
             _gpuGatePreActivation = gatePreActivation;
-            _gpuInputShape = input.Shape.ToArray();
+            _gpuInputShape = input._shape;
 
             // Also cache CPU tensors for CPU backward compatibility
             _lastInput = input;
@@ -668,7 +668,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _lastGatePreActivation = gatePreActivation;
         }
 
-        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, input._shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

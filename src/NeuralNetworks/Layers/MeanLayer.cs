@@ -252,7 +252,7 @@ public class MeanLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        int[] shape = input.Shape.ToArray();
+        int[] shape = input._shape;
         int inputRank = shape.Length;
 
         // Calculate output shape by removing the axis dimension

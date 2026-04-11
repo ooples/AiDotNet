@@ -257,7 +257,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        int[] shape = input.Shape.ToArray();
+        int[] shape = input._shape;
         int inputRank = shape.Length;
 
         // Validate Axis is within bounds
