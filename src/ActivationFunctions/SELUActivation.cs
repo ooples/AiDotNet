@@ -95,6 +95,18 @@ public class SELUActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies SELU to a tensor via the engine so the gradient tape records the op.
+    /// SELU is λ * ELU(x, α) — decomposes into Engine.ELU + Engine.TensorMultiplyScalar
+    /// so every step is tape-tracked. Overrides the scalar element-by-element default
+    /// which bypasses the tape entirely.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        var elu = Engine.ELU(input, Convert.ToDouble(_alpha));
+        return Engine.TensorMultiplyScalar(elu, _lambda);
+    }
+
+    /// <summary>
     /// Calculates the derivative of the SELU function for a single input value.
     /// </summary>
     /// <param name="input">The input value to calculate the derivative for.</param>

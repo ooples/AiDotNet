@@ -93,6 +93,13 @@ public class ELUActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies ELU to a tensor via the engine so the gradient tape records the op.
+    /// Overrides the scalar element-by-element default which bypasses the tape.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input) =>
+        Engine.ELU(input, Convert.ToDouble(_alpha));
+
+    /// <summary>
     /// Applies the ELU activation function to each element of an input vector.
     /// </summary>
     /// <param name="input">The input vector.</param>

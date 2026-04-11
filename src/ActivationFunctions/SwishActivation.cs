@@ -69,6 +69,12 @@ public class SwishActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies Swish to a tensor via the engine so the gradient tape records the op.
+    /// Overrides the scalar element-by-element default which bypasses the tape.
+    /// </summary>
+    public override Tensor<T> Activate(Tensor<T> input) => Engine.Swish(input);
+
+    /// <summary>
     /// Applies the Swish activation function to each element of an input vector.
     /// </summary>
     /// <param name="input">The input vector.</param>
