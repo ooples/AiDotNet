@@ -317,23 +317,23 @@ public partial class RetNetLayer<T> : LayerBase<T>
 
         // Step 1: Q, K, V projections
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
-        var q = Engine.TensorBroadcastAdd(
+        var q = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _queryWeights),
-            Engine.Reshape(_queryBias, new[] { 1, _modelDimension })).Reshape(batchSize, seqLen, _modelDimension);
-        var k = Engine.TensorBroadcastAdd(
+            Engine.Reshape(_queryBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
+        var k = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _keyWeights),
-            Engine.Reshape(_keyBias, new[] { 1, _modelDimension })).Reshape(batchSize, seqLen, _modelDimension);
-        var v = Engine.TensorBroadcastAdd(
+            Engine.Reshape(_keyBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
+        var v = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _valueWeights),
-            Engine.Reshape(_valueBias, new[] { 1, _modelDimension })).Reshape(batchSize, seqLen, _modelDimension);
+            Engine.Reshape(_valueBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         _lastQuery = q;
         _lastKey = k;
         _lastValue = v;
 
         // Step 2: Compute gate (for gated multi-scale retention)
-        var gateRaw = Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
-            Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })).Reshape(batchSize, seqLen, _modelDimension);
+            Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
         _lastGateRaw = gateRaw;
         _lastGate = gate;

@@ -309,9 +309,9 @@ public partial class LonghornLayer<T> : LayerBase<T>
         _lastValue = v;
 
         // Step 2: Alpha (learning rate / update gate) via sigmoid
-        var alphaRaw = Engine.TensorBroadcastAdd(
+        var alphaRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _alphaWeights),
-            Engine.Reshape(_alphaBias, new[] { 1, _numHeads })).Reshape(batchSize, seqLen, _numHeads);
+            Engine.Reshape(_alphaBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         var alpha = Engine.Sigmoid(alphaRaw);
         _lastAlpha = alpha;
 

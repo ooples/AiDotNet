@@ -326,7 +326,7 @@ public partial class ReservoirLayer<T> : LayerBase<T>
 
             var reservoirInput = Engine.TensorAdd(weightedState, inputContribution);
 
-            var newState = ApplyActivation(Engine.Reshape(reservoirInput, [1, _reservoirSize])).Reshape([_reservoirSize]);
+            var newState = Engine.Reshape(ApplyActivation(Engine.Reshape(reservoirInput, [1, _reservoirSize])), [_reservoirSize]);
             var oldComponent = Engine.TensorMultiplyScalar(_reservoirState, NumOps.FromDouble(1 - _leakingRate));
             var newComponent = Engine.TensorMultiplyScalar(newState, NumOps.FromDouble(_leakingRate));
             _reservoirState = Engine.TensorAdd(oldComponent, newComponent);

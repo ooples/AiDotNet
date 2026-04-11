@@ -332,36 +332,36 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>
         // Step 1: Q, K, V projections
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
 
-        var q = Engine.TensorBroadcastAdd(
+        var q = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _queryWeights),
-            Engine.Reshape(_queryBias, new[] { 1, _modelDimension })).Reshape(batchSize, seqLen, _modelDimension);
+            Engine.Reshape(_queryBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
 
-        var k = Engine.TensorBroadcastAdd(
+        var k = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _keyWeights),
-            Engine.Reshape(_keyBias, new[] { 1, _modelDimension })).Reshape(batchSize, seqLen, _modelDimension);
+            Engine.Reshape(_keyBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
 
-        var v = Engine.TensorBroadcastAdd(
+        var v = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _valueWeights),
-            Engine.Reshape(_valueBias, new[] { 1, _modelDimension })).Reshape(batchSize, seqLen, _modelDimension);
+            Engine.Reshape(_valueBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
 
         _lastQuery = q;
         _lastKey = k;
         _lastValue = v;
 
         // Step 2: Router computations
-        var writeLogits = Engine.TensorBroadcastAdd(
+        var writeLogits = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _writeRouterWeights),
-            Engine.Reshape(_writeRouterBias, new[] { 1, _numMemories })).Reshape(batchSize, seqLen, _numMemories);
+            Engine.Reshape(_writeRouterBias, new[] { 1, _numMemories })), new[] { batchSize, seqLen, _numMemories });
         var writeWeights = SoftmaxLastDim(writeLogits, batchSize, seqLen, _numMemories);
 
-        var readLogits = Engine.TensorBroadcastAdd(
+        var readLogits = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _readRouterWeights),
-            Engine.Reshape(_readRouterBias, new[] { 1, _numMemories })).Reshape(batchSize, seqLen, _numMemories);
+            Engine.Reshape(_readRouterBias, new[] { 1, _numMemories })), new[] { batchSize, seqLen, _numMemories });
         var readWeights = SoftmaxLastDim(readLogits, batchSize, seqLen, _numMemories);
 
-        var forgetGatesRaw = Engine.TensorBroadcastAdd(
+        var forgetGatesRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _gateRouterWeights),
-            Engine.Reshape(_gateRouterBias, new[] { 1, _numMemories })).Reshape(batchSize, seqLen, _numMemories);
+            Engine.Reshape(_gateRouterBias, new[] { 1, _numMemories })), new[] { batchSize, seqLen, _numMemories });
         var forgetGates = Engine.Sigmoid(forgetGatesRaw);
 
         _lastWriteWeights = writeWeights;
@@ -370,9 +370,9 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>
         _lastForgetGatesRaw = forgetGatesRaw;
 
         // Step 3: Output gate
-        var gateRaw = Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
-            Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })).Reshape(batchSize, seqLen, _modelDimension);
+            Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
         _lastGate = gate;
         _lastGateRaw = gateRaw;

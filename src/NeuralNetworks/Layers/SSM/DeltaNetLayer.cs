@@ -287,9 +287,9 @@ public partial class DeltaNetLayer<T> : LayerBase<T>
         _lastValue = v;
 
         // Step 2: Beta (write strength) via sigmoid
-        var betaRaw = Engine.TensorBroadcastAdd(
+        var betaRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _betaWeights),
-            Engine.Reshape(_betaBias, new[] { 1, _numHeads })).Reshape(batchSize, seqLen, _numHeads);
+            Engine.Reshape(_betaBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         var beta = Engine.Sigmoid(betaRaw);
         _lastBeta = beta;
 

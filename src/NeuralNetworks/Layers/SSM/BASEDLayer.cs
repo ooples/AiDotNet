@@ -324,25 +324,25 @@ public partial class BASEDLayer<T> : LayerBase<T>
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
 
         // Linear attention Q, K, V
-        var linQ = Engine.TensorMatMul(inputFlat, _linearQueryWeights).Reshape(batchSize, seqLen, _modelDimension);
-        var linK = Engine.TensorMatMul(inputFlat, _linearKeyWeights).Reshape(batchSize, seqLen, _modelDimension);
-        var linV = Engine.TensorMatMul(inputFlat, _linearValueWeights).Reshape(batchSize, seqLen, _modelDimension);
+        var linQ = Engine.Reshape(Engine.TensorMatMul(inputFlat, _linearQueryWeights), new[] { batchSize, seqLen, _modelDimension });
+        var linK = Engine.Reshape(Engine.TensorMatMul(inputFlat, _linearKeyWeights), new[] { batchSize, seqLen, _modelDimension });
+        var linV = Engine.Reshape(Engine.TensorMatMul(inputFlat, _linearValueWeights), new[] { batchSize, seqLen, _modelDimension });
         _lastLinearQuery = linQ;
         _lastLinearKey = linK;
         _lastLinearValue = linV;
 
         // Window attention Q, K, V
-        var winQ = Engine.TensorMatMul(inputFlat, _windowQueryWeights).Reshape(batchSize, seqLen, _modelDimension);
-        var winK = Engine.TensorMatMul(inputFlat, _windowKeyWeights).Reshape(batchSize, seqLen, _modelDimension);
-        var winV = Engine.TensorMatMul(inputFlat, _windowValueWeights).Reshape(batchSize, seqLen, _modelDimension);
+        var winQ = Engine.Reshape(Engine.TensorMatMul(inputFlat, _windowQueryWeights), new[] { batchSize, seqLen, _modelDimension });
+        var winK = Engine.Reshape(Engine.TensorMatMul(inputFlat, _windowKeyWeights), new[] { batchSize, seqLen, _modelDimension });
+        var winV = Engine.Reshape(Engine.TensorMatMul(inputFlat, _windowValueWeights), new[] { batchSize, seqLen, _modelDimension });
         _lastWindowQuery = winQ;
         _lastWindowKey = winK;
         _lastWindowValue = winV;
 
         // Step 2: Compute mixing gate alpha
-        var alphaRaw = Engine.TensorBroadcastAdd(
+        var alphaRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _mixingGateWeights),
-            Engine.Reshape(_mixingGateBias, new[] { 1, _numHeads })).Reshape(batchSize, seqLen, _numHeads);
+            Engine.Reshape(_mixingGateBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         var alpha = Engine.Sigmoid(alphaRaw);
         _lastMixingAlphaRaw = alphaRaw;
         _lastMixingAlpha = alpha;

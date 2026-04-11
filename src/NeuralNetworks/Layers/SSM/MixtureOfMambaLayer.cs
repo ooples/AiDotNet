@@ -384,9 +384,9 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>
         _lastMoEOutput = moeOutput;
 
         // Step 4: Output gate
-        var gateRaw = Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
-            Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })).Reshape(batchSize, seqLen, _modelDimension);
+            Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
         _lastGate = gate;
         _lastGateRaw = gateRaw;

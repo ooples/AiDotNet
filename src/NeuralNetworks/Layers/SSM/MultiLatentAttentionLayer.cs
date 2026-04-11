@@ -280,13 +280,13 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>
         _lastValue = v;
 
         // Step 3: Q projection (full rank)
-        var q = Engine.TensorMatMul(inputFlat, _queryWeights).Reshape(batchSize, seqLen, _modelDimension);
+        var q = Engine.Reshape(Engine.TensorMatMul(inputFlat, _queryWeights), new[] { batchSize, seqLen, _modelDimension });
         _lastQuery = q;
 
         // Step 4: Output gate
-        var gateRaw = Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
-            Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })).Reshape(batchSize, seqLen, _modelDimension);
+            Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
         _lastOutputGate = gate;
         _lastOutputGateRaw = gateRaw;

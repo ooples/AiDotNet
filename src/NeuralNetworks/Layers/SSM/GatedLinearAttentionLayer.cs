@@ -228,9 +228,9 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
 
         // Project Q, K, V, G
         var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, modelDim });
-        var q = Engine.TensorMatMul(input2D, _queryWeights).Reshape(batchSize, seqLen, totalDim);
-        var k = Engine.TensorMatMul(input2D, _keyWeights).Reshape(batchSize, seqLen, totalDim);
-        var v = Engine.TensorMatMul(input2D, _valueWeights).Reshape(batchSize, seqLen, totalDim);
+        var q = Engine.Reshape(Engine.TensorMatMul(input2D, _queryWeights), new[] { batchSize, seqLen, totalDim });
+        var k = Engine.Reshape(Engine.TensorMatMul(input2D, _keyWeights), new[] { batchSize, seqLen, totalDim });
+        var v = Engine.Reshape(Engine.TensorMatMul(input2D, _valueWeights), new[] { batchSize, seqLen, totalDim });
 
         var gFlat = Engine.TensorMatMul(input2D, _gateWeights);
         var gBias = Engine.Reshape(_gateBias, new[] { 1, totalDim });

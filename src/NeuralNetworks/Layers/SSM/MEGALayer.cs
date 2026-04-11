@@ -326,9 +326,9 @@ public partial class MEGALayer<T> : LayerBase<T>
 
         // Step 1: Project input to EMA space
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
-        var emaInput = Engine.TensorBroadcastAdd(
+        var emaInput = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _emaProjectInWeights),
-            Engine.Reshape(_emaProjectInBias, new[] { 1, _emaDimension })).Reshape(batchSize, seqLen, _emaDimension);
+            Engine.Reshape(_emaProjectInBias, new[] { 1, _emaDimension })), new[] { batchSize, seqLen, _emaDimension });
         _lastEmaInput = emaInput;
 
         // Step 2: Apply multi-dimensional EMA: h_t = alpha * h_{t-1} + (1 - alpha) * x_t
@@ -336,30 +336,30 @@ public partial class MEGALayer<T> : LayerBase<T>
 
         // Step 3: Project EMA output back to model dimension
         var emaFlat = Engine.Reshape(emaOutput, new[] { batchSize * seqLen, _emaDimension });
-        var emaProjected = Engine.TensorBroadcastAdd(
+        var emaProjected = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(emaFlat, _emaProjectOutWeights),
-            Engine.Reshape(_emaProjectOutBias, new[] { 1, _modelDimension })).Reshape(batchSize, seqLen, _modelDimension);
+            Engine.Reshape(_emaProjectOutBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         _lastEmaProjected = emaProjected;
 
         // Step 4: Compute Q, K from EMA output, V from original input
         var emaFlatFull = Engine.Reshape(emaProjected, new[] { batchSize * seqLen, _modelDimension });
-        var q = Engine.TensorBroadcastAdd(
+        var q = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(emaFlatFull, _queryWeights),
-            Engine.Reshape(_queryBias, new[] { 1, _modelDimension })).Reshape(batchSize, seqLen, _modelDimension);
-        var k = Engine.TensorBroadcastAdd(
+            Engine.Reshape(_queryBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
+        var k = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(emaFlatFull, _keyWeights),
-            Engine.Reshape(_keyBias, new[] { 1, _modelDimension })).Reshape(batchSize, seqLen, _modelDimension);
-        var v = Engine.TensorBroadcastAdd(
+            Engine.Reshape(_keyBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
+        var v = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _valueWeights),
-            Engine.Reshape(_valueBias, new[] { 1, _modelDimension })).Reshape(batchSize, seqLen, _modelDimension);
+            Engine.Reshape(_valueBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         _lastQuery = q;
         _lastKey = k;
         _lastValue = v;
 
         // Step 5: Compute gated attention
-        var gateRaw = Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
-            Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })).Reshape(batchSize, seqLen, _modelDimension);
+            Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Sigmoid(gateRaw);
         _lastGateRaw = gateRaw;
         _lastGate = gate;
