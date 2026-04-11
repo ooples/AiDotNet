@@ -15,6 +15,7 @@ public abstract class FinancialNLPTestBase : FinancialModelTestBase
     [Fact(Timeout = 60000)]
     public async Task DifferentText_DifferentSentiment()
     {
+        await Task.Yield();
         var network = CreateNetwork();
         var positive = CreateConstantTensor(InputShape, 0.9);
         var negative = CreateConstantTensor(InputShape, 0.1);
@@ -39,6 +40,7 @@ public abstract class FinancialNLPTestBase : FinancialModelTestBase
     [Fact(Timeout = 60000)]
     public async Task SentimentScores_ShouldBeBounded()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

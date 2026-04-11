@@ -15,6 +15,7 @@ public abstract class AudioClassifierTestBase : AudioNNModelTestBase
     [Fact(Timeout = 60000)]
     public async Task ClassOutput_ShouldBeNonNegative()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -30,6 +31,7 @@ public abstract class AudioClassifierTestBase : AudioNNModelTestBase
     [Fact(Timeout = 60000)]
     public async Task SilenceClassification_ShouldNotCrash()
     {
+        await Task.Yield();
         var network = CreateNetwork();
         var silence = CreateConstantTensor(InputShape, 0.0);
         var output = network.Predict(silence);

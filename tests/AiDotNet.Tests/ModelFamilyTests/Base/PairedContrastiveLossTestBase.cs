@@ -21,6 +21,7 @@ public abstract class PairedContrastiveLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_SimilarPair_ShouldBeFinite()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var v1 = new Vector<double>(new[] { 0.5, 1.0, -0.3 });
         var v2 = new Vector<double>(new[] { 0.6, 0.9, -0.2 });
@@ -38,6 +39,7 @@ public abstract class PairedContrastiveLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_DissimilarPair_ShouldBeFinite()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var v1 = new Vector<double>(new[] { 0.5, 1.0, -0.3 });
         var v2 = new Vector<double>(new[] { -1.0, 0.0, 2.0 });
@@ -55,6 +57,7 @@ public abstract class PairedContrastiveLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_ShouldBeNonNegative()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var v1 = new Vector<double>(new[] { 0.5, 1.0, -0.3 });
         var v2 = new Vector<double>(new[] { 0.6, 0.9, -0.2 });
@@ -70,6 +73,7 @@ public abstract class PairedContrastiveLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_IdenticalVectors_SimilarLabel_ShouldBeZero()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var v = new Vector<double>(new[] { 0.5, 1.0, -0.3 });
 
@@ -85,6 +89,7 @@ public abstract class PairedContrastiveLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_CloserSimilarPair_ShouldProduceLowerLoss()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var anchor = new Vector<double>(new[] { 0.0, 0.0, 0.0 });
         var close = new Vector<double>(new[] { 0.1, 0.1, 0.1 });
@@ -104,6 +109,7 @@ public abstract class PairedContrastiveLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_WellSeparatedDissimilarPair_ShouldBeZero()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var v1 = new Vector<double>(new[] { 0.0, 0.0, 0.0 });
         var v2 = new Vector<double>(new[] { 10.0, 10.0, 10.0 }); // far apart
@@ -120,6 +126,7 @@ public abstract class PairedContrastiveLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateDerivative_ShouldBeFinite()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var v1 = new Vector<double>(new[] { 0.5, 1.0, -0.3 });
         var v2 = new Vector<double>(new[] { 0.6, 0.9, -0.2 });

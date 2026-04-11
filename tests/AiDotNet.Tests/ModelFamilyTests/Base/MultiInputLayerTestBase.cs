@@ -69,6 +69,7 @@ public abstract class MultiInputLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task Forward_ShouldProduceFiniteOutput()
     {
+        await Task.Yield();
         var layer = CreateLayer();
         var inputs = CreateInputs();
 
@@ -89,6 +90,7 @@ public abstract class MultiInputLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task Forward_ShouldBeDeterministic()
     {
+        await Task.Yield();
         var layer = CreateLayer();
         layer.SetTrainingMode(false);
         var inputs = CreateInputs();
@@ -109,6 +111,7 @@ public abstract class MultiInputLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task Forward_DifferentInputs_ShouldProduceDifferentOutputs()
     {
+        await Task.Yield();
         var layer = CreateLayer();
         layer.SetTrainingMode(false);
 
@@ -145,6 +148,7 @@ public abstract class MultiInputLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task Parameters_CountShouldMatchVector()
     {
+        await Task.Yield();
         var layer = CreateLayer();
         int count = layer.ParameterCount;
         var parameters = layer.GetParameters();
@@ -160,6 +164,7 @@ public abstract class MultiInputLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task ResetState_ShouldNotBreakForward()
     {
+        await Task.Yield();
         var layer = CreateLayer();
         var inputs = CreateInputs();
 
@@ -179,6 +184,7 @@ public abstract class MultiInputLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task Serialize_Deserialize_ShouldPreserveBehavior()
     {
+        await Task.Yield();
         var layer = CreateLayer();
         layer.SetTrainingMode(false);
         var inputs = CreateInputs();
@@ -213,6 +219,7 @@ public abstract class MultiInputLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task Forward_OutputShouldDependOnAllInputs()
     {
+        await Task.Yield();
         var layer = CreateLayer();
         var inputs = CreateInputs(42);
 

@@ -22,6 +22,7 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 60000)]
     public async Task FinancialPredictions_ShouldBeFinite()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -45,6 +46,7 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 60000)]
     public async Task DifferentMarketData_DifferentPredictions()
     {
+        await Task.Yield();
         var network = CreateNetwork();
 
         var bullish = CreateConstantTensor(InputShape, 0.8);  // simulating upward data
@@ -77,6 +79,7 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Output_ShouldBeBounded()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -98,6 +101,7 @@ public abstract class FinancialModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 60000)]
     public async Task ZeroInput_ShouldNotCrash()
     {
+        await Task.Yield();
         var network = CreateNetwork();
         var zeroInput = CreateConstantTensor(InputShape, 0.0);
 

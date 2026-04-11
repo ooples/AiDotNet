@@ -87,6 +87,7 @@ public abstract class DualInputLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task Forward_ShouldProduceFiniteOutput()
     {
+        await Task.Yield();
         var layer = CreateLayer();
         var primary = CreateRandomTensor(PrimaryInputShape);
         var secondary = CreateRandomTensor(SecondaryInputShape, seed: 77);
@@ -110,6 +111,7 @@ public abstract class DualInputLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task Forward_ShouldBeDeterministic()
     {
+        await Task.Yield();
         var layer = CreateLayer();
         layer.SetTrainingMode(false);
         var primary = CreateRandomTensor(PrimaryInputShape);
@@ -131,6 +133,7 @@ public abstract class DualInputLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task Forward_DifferentPrimaryInputs_ShouldProduceDifferentOutputs()
     {
+        await Task.Yield();
         if (!ExpectsDifferentOutputForDifferentInputs) return;
 
         var layer = CreateLayer();
@@ -168,6 +171,7 @@ public abstract class DualInputLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task Parameters_CountShouldMatchVector()
     {
+        await Task.Yield();
         var layer = CreateLayer();
         int count = layer.ParameterCount;
         var parameters = layer.GetParameters();
@@ -186,6 +190,7 @@ public abstract class DualInputLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task Parameters_SetGet_Roundtrip()
     {
+        await Task.Yield();
         var layer = CreateLayer();
         if (layer.ParameterCount == 0) return;
 
@@ -211,6 +216,7 @@ public abstract class DualInputLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task ResetState_ShouldNotBreakForward()
     {
+        await Task.Yield();
         var layer = CreateLayer();
         var primary = CreateRandomTensor(PrimaryInputShape);
         var secondary = CreateRandomTensor(SecondaryInputShape, seed: 77);

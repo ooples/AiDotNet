@@ -21,6 +21,7 @@ public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task OutputSpatialDims_MatchInput()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -51,6 +52,7 @@ public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task MaskValues_AreNonNegative()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -75,6 +77,7 @@ public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task UniformInput_UniformMask()
     {
+        await Task.Yield();
         var network = CreateNetwork();
         var uniformInput = CreateConstantTensor(InputShape, 0.5);
 
@@ -100,6 +103,7 @@ public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task OutputSum_IsFinite()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

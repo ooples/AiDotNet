@@ -38,6 +38,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact(Timeout = 60000)]
     public async Task TrendRecovery_LaterTimeShouldHaveHigherPrediction()
     {
+        await Task.Yield();
         if (!IsForecastingModel) return;
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -80,6 +81,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact(Timeout = 60000)]
     public async Task TranslationEquivariance_ShiftingTargets_ShiftsPredictions()
     {
+        await Task.Yield();
         if (!IsForecastingModel) return;
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
@@ -118,6 +120,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact(Timeout = 60000)]
     public async Task R2_ShouldBePositive_OnTrendData()
     {
+        await Task.Yield();
         // Stationary models (MA) cannot capture trends — skip this test for them
         if (!CanCaptureTrend) return;
 
@@ -167,6 +170,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact(Timeout = 60000)]
     public async Task TrainingError_ShouldNotExceedTestError()
     {
+        await Task.Yield();
         if (!IsForecastingModel) return;
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -197,6 +201,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact(Timeout = 60000)]
     public async Task ResidualMean_ShouldBeNearZero()
     {
+        await Task.Yield();
         if (!IsForecastingModel) return;
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -225,6 +230,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact(Timeout = 60000)]
     public async Task ScalingEquivariance_ScalingTargets_ScalesPredictions()
     {
+        await Task.Yield();
         if (!IsForecastingModel) return;
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
@@ -264,6 +270,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact(Timeout = 60000)]
     public async Task MoreData_ShouldNotDegrade_R2()
     {
+        await Task.Yield();
         if (!CanCaptureTrend) return;
         if (!IsForecastingModel) return;
 
@@ -301,6 +308,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Predictions_ShouldBeFinite()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
@@ -319,6 +327,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Predict_ShouldBeDeterministic()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
@@ -335,6 +344,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact(Timeout = 60000)]
     public async Task OutputDimension_ShouldMatchInputRows()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
@@ -347,6 +357,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Clone_ShouldProduceIdenticalPredictions()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
@@ -364,6 +375,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Metadata_ShouldExistAfterTraining()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
@@ -375,6 +387,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Parameters_ShouldBeNonEmpty_AfterTraining()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
@@ -405,6 +418,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Builder_ShouldProduceResult()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
         var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);
@@ -422,6 +436,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Builder_R2ShouldBePositive()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
         var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);

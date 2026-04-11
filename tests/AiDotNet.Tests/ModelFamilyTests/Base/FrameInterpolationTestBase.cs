@@ -14,6 +14,7 @@ public abstract class FrameInterpolationTestBase : VideoNNModelTestBase
     [Fact(Timeout = 120000)]
     public async Task InterpolatedFrame_ShouldBeBetweenInputs()
     {
+        await Task.Yield();
         var network = CreateNetwork();
 
         var frame1 = CreateConstantTensor(InputShape, 0.2);
@@ -34,6 +35,7 @@ public abstract class FrameInterpolationTestBase : VideoNNModelTestBase
     [Fact(Timeout = 120000)]
     public async Task Interpolation_OutputNonEmpty()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

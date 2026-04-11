@@ -15,6 +15,7 @@ public abstract class MetaClassifierTestBase : ClassificationModelTestBase
     [Fact(Timeout = 60000)]
     public async Task MetaPredictions_ShouldBeValidLabels()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
@@ -32,6 +33,7 @@ public abstract class MetaClassifierTestBase : ClassificationModelTestBase
     [Fact(Timeout = 60000)]
     public async Task MetaClassifier_ShouldBeDeterministic()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);

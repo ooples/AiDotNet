@@ -15,6 +15,7 @@ public abstract class SequenceLabelingNERTestBase : NERModelTestBase
     [Fact(Timeout = 120000)]
     public async Task SequenceLabels_ShouldMatchInputLength()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -27,6 +28,7 @@ public abstract class SequenceLabelingNERTestBase : NERModelTestBase
     [Fact(Timeout = 120000)]
     public async Task SequenceLabeling_ShouldBeDeterministic()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

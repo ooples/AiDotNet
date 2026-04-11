@@ -85,6 +85,7 @@ public abstract class LossFunctionTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_ShouldBeFinite()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var predicted = new Vector<double>(TestPredicted);
         var actual = new Vector<double>(TestActual);
@@ -102,6 +103,7 @@ public abstract class LossFunctionTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_ShouldBeNonNegative()
     {
+        await Task.Yield();
         if (!IsNonNegative) return;
 
         var loss = CreateLoss();
@@ -119,6 +121,7 @@ public abstract class LossFunctionTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_IdenticalInputs_ShouldBeZero()
     {
+        await Task.Yield();
         if (!ZeroLossForIdentical) return;
 
         var loss = CreateLoss();
@@ -136,6 +139,7 @@ public abstract class LossFunctionTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_LargerError_ShouldProduceLargerLoss()
     {
+        await Task.Yield();
         // Skip for losses that can go negative (MBE, Wasserstein) — larger error
         // doesn't necessarily mean larger loss value when loss can be negative
         if (!IsNonNegative) return;
@@ -159,6 +163,7 @@ public abstract class LossFunctionTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateDerivative_ShouldBeFinite()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var predicted = new Vector<double>(TestPredicted);
         var actual = new Vector<double>(TestActual);
@@ -182,6 +187,7 @@ public abstract class LossFunctionTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateDerivative_IdenticalInputs_ShouldBeZero()
     {
+        await Task.Yield();
         if (!ZeroDerivativeForIdentical) return;
 
         var loss = CreateLoss();
@@ -205,6 +211,7 @@ public abstract class LossFunctionTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateDerivative_ShouldMatchNumericalGradient()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var predicted = new Vector<double>(TestPredicted);
         var actual = new Vector<double>(TestActual);
@@ -243,6 +250,7 @@ public abstract class LossFunctionTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateDerivative_SignShouldMatchErrorDirection()
     {
+        await Task.Yield();
         if (!HasStandardGradientSign) return;
 
         var loss = CreateLoss();
@@ -264,6 +272,7 @@ public abstract class LossFunctionTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_ShouldBeSymmetricInErrorMagnitude()
     {
+        await Task.Yield();
         // Only test symmetry for standard regression-style losses.
         // Classification losses (Focal, CE) and signed-label losses (Hinge) are
         // intentionally asymmetric by design.

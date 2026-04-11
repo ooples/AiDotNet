@@ -22,6 +22,7 @@ public abstract class VideoNNModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task TemporalDim_Preserved()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -43,6 +44,7 @@ public abstract class VideoNNModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task SingleFrame_ShouldNotCrash()
     {
+        await Task.Yield();
         var network = CreateNetwork();
 
         // Create minimal input (use InputShape but reduce if possible)
@@ -69,6 +71,7 @@ public abstract class VideoNNModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task ConsecutiveFrames_SmoothOutput()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
 

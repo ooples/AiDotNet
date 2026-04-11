@@ -76,6 +76,7 @@ public abstract class SafetyModuleTestBase
     [Fact(Timeout = 60000)]
     public async Task ModuleName_IsNotNullOrEmpty()
     {
+        await Task.Yield();
         var module = CreateModule();
         Assert.False(string.IsNullOrWhiteSpace(module.ModuleName));
     }
@@ -84,6 +85,7 @@ public abstract class SafetyModuleTestBase
     [Fact(Timeout = 60000)]
     public async Task Evaluate_ReturnsNonNullList()
     {
+        await Task.Yield();
         var module = CreateAndAssertReady();
 
         var findings = module.Evaluate(CreateSafeContent());
@@ -99,6 +101,7 @@ public abstract class SafetyModuleTestBase
     [Fact(Timeout = 60000)]
     public async Task Evaluate_ConfidencesAreInUnitInterval()
     {
+        await Task.Yield();
         var module = CreateAndAssertReady();
 
         var findings = module.Evaluate(CreateRandomContent());
@@ -124,6 +127,7 @@ public abstract class SafetyModuleTestBase
     [Fact(Timeout = 60000)]
     public async Task Evaluate_FindingDescriptionsAreNonNull()
     {
+        await Task.Yield();
         var module = CreateAndAssertReady();
 
         var findings = module.Evaluate(CreateRandomContent());
@@ -136,6 +140,7 @@ public abstract class SafetyModuleTestBase
     [Fact(Timeout = 60000)]
     public async Task Evaluate_FindingsReferenceSourceModule()
     {
+        await Task.Yield();
         var module = CreateAndAssertReady();
 
         foreach (var finding in module.Evaluate(CreateRandomContent()))
@@ -154,6 +159,7 @@ public abstract class SafetyModuleTestBase
     [Fact(Timeout = 60000)]
     public async Task Evaluate_HighConfidenceFindings_HaveAppropiateSeverity()
     {
+        await Task.Yield();
         var module = CreateAndAssertReady();
 
         var findings = module.Evaluate(CreateRandomContent());
@@ -184,6 +190,7 @@ public abstract class SafetyModuleTestBase
     [Fact(Timeout = 60000)]
     public async Task Evaluate_IsDeterministic()
     {
+        await Task.Yield();
         var module = CreateAndAssertReady();
 
         var content = CreateSafeContent();
@@ -207,6 +214,7 @@ public abstract class SafetyModuleTestBase
     [Fact(Timeout = 60000)]
     public async Task Evaluate_IsSensitiveToContent()
     {
+        await Task.Yield();
         var module = CreateAndAssertReady();
         if (!ProducesFindings) return;
 
@@ -251,6 +259,7 @@ public abstract class SafetyModuleTestBase
     [Fact(Timeout = 60000)]
     public async Task Evaluate_NullInput_Throws()
     {
+        await Task.Yield();
         var module = CreateModule();
         Assert.ThrowsAny<ArgumentException>(() => module.Evaluate(null!));
     }
@@ -259,6 +268,7 @@ public abstract class SafetyModuleTestBase
     [Fact(Timeout = 60000)]
     public async Task Evaluate_EmptyContent_DoesNotCrash()
     {
+        await Task.Yield();
         var module = CreateAndAssertReady();
 
         try
@@ -276,6 +286,7 @@ public abstract class SafetyModuleTestBase
     [Fact(Timeout = 60000)]
     public async Task Evaluate_LargeContent_ProducesValidResults()
     {
+        await Task.Yield();
         var module = CreateAndAssertReady();
 
         var largeContent = new Vector<double>(1000);
@@ -297,6 +308,7 @@ public abstract class SafetyModuleTestBase
     [Fact(Timeout = 60000)]
     public async Task Evaluate_ConstantContent_DoesNotProduceNaN()
     {
+        await Task.Yield();
         var module = CreateAndAssertReady();
 
         var constant = new Vector<double>(ContentSize);

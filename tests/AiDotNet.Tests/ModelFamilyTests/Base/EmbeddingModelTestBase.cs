@@ -21,6 +21,7 @@ public abstract class EmbeddingModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 60000)]
     public async Task SimilarInputs_ProduceSimilarEmbeddings()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
 
@@ -61,6 +62,7 @@ public abstract class EmbeddingModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Embeddings_ShouldBeFiniteAndBounded()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -87,6 +89,7 @@ public abstract class EmbeddingModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 60000)]
     public async Task OutputDimensionality_MatchesEmbeddingDim()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

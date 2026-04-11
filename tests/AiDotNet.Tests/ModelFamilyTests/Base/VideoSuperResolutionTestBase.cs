@@ -14,6 +14,7 @@ public abstract class VideoSuperResolutionTestBase : VideoNNModelTestBase
     [Fact(Timeout = 120000)]
     public async Task Output_AtLeastAsLargeAsInput()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -26,6 +27,7 @@ public abstract class VideoSuperResolutionTestBase : VideoNNModelTestBase
     [Fact(Timeout = 120000)]
     public async Task SuperResolved_ValuesShouldBeFinite()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

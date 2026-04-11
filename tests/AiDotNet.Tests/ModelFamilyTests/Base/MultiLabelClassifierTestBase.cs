@@ -25,6 +25,7 @@ public abstract class MultiLabelClassifierTestBase
     [Fact(Timeout = 60000)]
     public async Task Predictions_ShouldBeFinite()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
 
@@ -52,6 +53,7 @@ public abstract class MultiLabelClassifierTestBase
     [Fact(Timeout = 60000)]
     public async Task Predict_ShouldBeDeterministic()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
 
@@ -79,6 +81,7 @@ public abstract class MultiLabelClassifierTestBase
     [Fact(Timeout = 60000)]
     public async Task OutputDimension_ShouldMatchLabels()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
 

@@ -14,6 +14,7 @@ public abstract class OpticalFlowTestBase : VideoNNModelTestBase
     [Fact(Timeout = 120000)]
     public async Task IdenticalFrames_NearZeroFlow()
     {
+        await Task.Yield();
         var network = CreateNetwork();
         var frame = CreateConstantTensor(InputShape, 0.5);
         var output = network.Predict(frame);
@@ -31,6 +32,7 @@ public abstract class OpticalFlowTestBase : VideoNNModelTestBase
     [Fact(Timeout = 120000)]
     public async Task FlowVectors_ShouldBeBounded()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

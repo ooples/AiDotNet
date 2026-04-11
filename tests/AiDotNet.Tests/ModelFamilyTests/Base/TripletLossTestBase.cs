@@ -38,6 +38,7 @@ public abstract class TripletLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_ShouldBeFinite()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var anchor = CreateMatrix(2, 3, 0.1);
         var positive = CreateMatrix(2, 3, 0.15);
@@ -56,6 +57,7 @@ public abstract class TripletLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_ShouldBeNonNegative()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var anchor = CreateMatrix(2, 3, 0.1);
         var positive = CreateMatrix(2, 3, 0.15);
@@ -72,6 +74,7 @@ public abstract class TripletLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_WellSeparated_ShouldBeZero()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var anchor = CreateConstantMatrix(1, 3, 0.5);
         var positive = CreateConstantMatrix(1, 3, 0.5);
@@ -89,6 +92,7 @@ public abstract class TripletLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_CloserPositive_ShouldProduceSmallerLoss()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var anchor = CreateConstantMatrix(1, 3, 0.0);
         var negative = CreateConstantMatrix(1, 3, 2.0);
@@ -109,6 +113,7 @@ public abstract class TripletLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateDerivative_ShouldBeFinite()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var anchor = CreateMatrix(2, 3, 0.1);
         var positive = CreateMatrix(2, 3, 0.15);
@@ -137,6 +142,7 @@ public abstract class TripletLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_MismatchedDimensions_ShouldThrow()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var anchor = CreateMatrix(2, 3, 0.1);
         var positive = CreateMatrix(1, 3, 0.1); // wrong rows

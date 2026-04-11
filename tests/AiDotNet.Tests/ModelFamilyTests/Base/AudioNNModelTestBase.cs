@@ -21,6 +21,7 @@ public abstract class AudioNNModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task FiniteSpectralEnergy()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -45,6 +46,7 @@ public abstract class AudioNNModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task SilenceIn_NearSilenceOut()
     {
+        await Task.Yield();
         var network = CreateNetwork();
         var silence = CreateConstantTensor(InputShape, 0.0);
 
@@ -69,6 +71,7 @@ public abstract class AudioNNModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task DifferentInputLengths_ShouldNotCrash()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
 
@@ -94,6 +97,7 @@ public abstract class AudioNNModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task OutputLength_ShouldBePositive()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

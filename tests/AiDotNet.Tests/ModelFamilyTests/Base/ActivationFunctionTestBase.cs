@@ -150,6 +150,7 @@ public abstract class ActivationFunctionTestBase
     [Fact(Timeout = 30000)]
     public async Task Activate_ZeroInput()
     {
+        await Task.Yield();
         if (!ZeroMapsToZero) return;
 
         var fn = CreateActivation();
@@ -165,6 +166,7 @@ public abstract class ActivationFunctionTestBase
     [Fact(Timeout = 30000)]
     public async Task Activate_ShouldBeMonotonic()
     {
+        await Task.Yield();
         if (!IsMonotonic) return;
 
         var fn = CreateTestActivation();
@@ -185,6 +187,7 @@ public abstract class ActivationFunctionTestBase
     [Fact(Timeout = 30000)]
     public async Task Activate_ShouldRespectBounds()
     {
+        await Task.Yield();
         if (!IsBounded) return;
 
         var fn = CreateTestActivation();
@@ -223,6 +226,7 @@ public abstract class ActivationFunctionTestBase
     [Fact(Timeout = 30000)]
     public async Task TensorActivate_ShouldMatchScalarActivate()
     {
+        await Task.Yield();
         var fn = CreateTestActivation();
         var input = new Tensor<double>([5]);
         var rng = new Random(42);
@@ -247,6 +251,7 @@ public abstract class ActivationFunctionTestBase
     [Fact(Timeout = 30000)]
     public async Task Derivative_ShouldBeNonNegativeForMonotonicActivation()
     {
+        await Task.Yield();
         if (!IsMonotonic) return;
 
         var fn = CreateActivation();

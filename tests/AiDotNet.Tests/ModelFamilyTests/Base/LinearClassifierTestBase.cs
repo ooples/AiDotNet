@@ -15,6 +15,7 @@ public abstract class LinearClassifierTestBase : ProbabilisticClassifierTestBase
     [Fact(Timeout = 60000)]
     public async Task LinearSeparable_HighAccuracy()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
 
@@ -49,6 +50,7 @@ public abstract class LinearClassifierTestBase : ProbabilisticClassifierTestBase
     [Fact(Timeout = 60000)]
     public async Task Predictions_ShouldBeValidLabels()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);

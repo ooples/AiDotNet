@@ -14,6 +14,7 @@ public abstract class AudioDiffusionTestBase : LatentDiffusionTestBase
     [Fact(Timeout = 120000)]
     public async Task AudioLength_ShouldBeReasonable()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
@@ -26,6 +27,7 @@ public abstract class AudioDiffusionTestBase : LatentDiffusionTestBase
     [Fact(Timeout = 120000)]
     public async Task SpectralEnergy_ShouldBeFinite()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);

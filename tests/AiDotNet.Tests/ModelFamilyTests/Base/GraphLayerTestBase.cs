@@ -50,6 +50,7 @@ public abstract class GraphLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task Forward_ShouldProduceFiniteOutput()
     {
+        await Task.Yield();
         var layer = CreateAndSetup();
         var input = CreateRandomTensor(InputShape);
 
@@ -70,6 +71,7 @@ public abstract class GraphLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task Forward_ShouldBeDeterministic()
     {
+        await Task.Yield();
         var layer = CreateAndSetup();
         layer.SetTrainingMode(false);
         var input = CreateRandomTensor(InputShape);
@@ -90,6 +92,7 @@ public abstract class GraphLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task Forward_DifferentInputs_ShouldProduceDifferentOutputs()
     {
+        await Task.Yield();
         var layer = CreateAndSetup();
         layer.SetTrainingMode(false);
 
@@ -126,6 +129,7 @@ public abstract class GraphLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task Parameters_CountShouldMatchVector()
     {
+        await Task.Yield();
         var layer = CreateAndSetup();
         int count = layer.ParameterCount;
         var parameters = layer.GetParameters();
@@ -144,6 +148,7 @@ public abstract class GraphLayerTestBase
     [Fact(Timeout = 30000)]
     public async Task ResetState_ShouldNotBreakForward()
     {
+        await Task.Yield();
         var layer = CreateAndSetup();
         var input = CreateRandomTensor(InputShape);
 

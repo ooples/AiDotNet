@@ -21,6 +21,7 @@ public abstract class SparseCategoricalLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_ShouldBeFinite()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         // 4-class problem, single sample with class index 2
         var predicted = new Vector<double>(new[] { 0.1, 0.2, 0.6, 0.1 });
@@ -39,6 +40,7 @@ public abstract class SparseCategoricalLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_ShouldBeNonNegative()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var predicted = new Vector<double>(new[] { 0.1, 0.2, 0.6, 0.1 });
         var actual = new Vector<double>(new[] { 2.0 });
@@ -55,6 +57,7 @@ public abstract class SparseCategoricalLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_HigherConfidence_ShouldReduceLoss()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var actual = new Vector<double>(new[] { 1.0 }); // class 1
 
@@ -75,6 +78,7 @@ public abstract class SparseCategoricalLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_PerfectPrediction_ShouldBeNearZero()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         // Near-perfect prediction (can't use exactly 1.0 due to log)
         var predicted = new Vector<double>(new[] { 0.001, 0.998, 0.001 });
@@ -92,6 +96,7 @@ public abstract class SparseCategoricalLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateDerivative_ShouldBeFinite()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var predicted = new Vector<double>(new[] { 0.1, 0.2, 0.6, 0.1 });
         var actual = new Vector<double>(new[] { 2.0 });
@@ -113,6 +118,7 @@ public abstract class SparseCategoricalLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateDerivative_CorrectClass_ShouldBeNegative()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var predicted = new Vector<double>(new[] { 0.3, 0.4, 0.3 });
         var actual = new Vector<double>(new[] { 1.0 }); // class 1
@@ -131,6 +137,7 @@ public abstract class SparseCategoricalLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_InvalidClassIndex_ShouldThrow()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var predicted = new Vector<double>(new[] { 0.5, 0.5 });
         var actual = new Vector<double>(new[] { 5.0 }); // out of bounds
@@ -145,6 +152,7 @@ public abstract class SparseCategoricalLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateLoss_BatchInput_ShouldBeFinite()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var predicted = new Vector<double>(new[] { 0.2, 0.3, 0.5 });
         var actual = new Vector<double>(new[] { 0.0, 2.0, 1.0 }); // batch of 3 samples

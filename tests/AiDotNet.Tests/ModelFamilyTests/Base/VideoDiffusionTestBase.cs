@@ -14,6 +14,7 @@ public abstract class VideoDiffusionTestBase : LatentDiffusionTestBase
     [Fact(Timeout = 120000)]
     public async Task TemporalCoherence_AdjacentFrames()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
@@ -34,6 +35,7 @@ public abstract class VideoDiffusionTestBase : LatentDiffusionTestBase
     [Fact(Timeout = 120000)]
     public async Task FrameCount_ShouldBePositive()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);

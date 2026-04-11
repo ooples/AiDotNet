@@ -14,6 +14,7 @@ public abstract class PortfolioOptimizerTestBase : FinancialModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Allocations_ShouldBeFinite()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -30,6 +31,7 @@ public abstract class PortfolioOptimizerTestBase : FinancialModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Portfolio_ShouldBeNonEmpty()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

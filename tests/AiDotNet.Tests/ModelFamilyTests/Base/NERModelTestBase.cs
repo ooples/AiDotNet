@@ -22,6 +22,7 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task OutputLength_RelatedToInput()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -43,6 +44,7 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task LabelValues_ShouldBeNonNegative()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -65,6 +67,7 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task EmptyInput_ShouldNotCrash()
     {
+        await Task.Yield();
         var network = CreateNetwork();
         var emptyInput = CreateConstantTensor(InputShape, 0.0);
 
@@ -87,6 +90,7 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task DifferentInputs_DifferentLabels()
     {
+        await Task.Yield();
         var network = CreateNetwork();
 
         var input1 = CreateConstantTensor(InputShape, 0.1);

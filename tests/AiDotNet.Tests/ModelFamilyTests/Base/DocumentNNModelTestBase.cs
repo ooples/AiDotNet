@@ -21,6 +21,7 @@ public abstract class DocumentNNModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task EmptyInput_ShouldNotCrash()
     {
+        await Task.Yield();
         var network = CreateNetwork();
         var emptyInput = CreateConstantTensor(InputShape, 0.0);
 
@@ -43,6 +44,7 @@ public abstract class DocumentNNModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task OutputDimensionality_Consistent()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input1 = CreateRandomTensor(InputShape, rng);
@@ -63,6 +65,7 @@ public abstract class DocumentNNModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task DifferentDocuments_DifferentOutputs()
     {
+        await Task.Yield();
         var network = CreateNetwork();
 
         var doc1 = CreateConstantTensor(InputShape, 0.2);
@@ -93,6 +96,7 @@ public abstract class DocumentNNModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task LargerInput_ShouldNotExplode()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
 

@@ -15,6 +15,7 @@ public abstract class RiskModelTestBase : FinancialModelTestBase
     [Fact(Timeout = 60000)]
     public async Task RiskEstimate_ShouldBeFinite()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -30,6 +31,7 @@ public abstract class RiskModelTestBase : FinancialModelTestBase
     [Fact(Timeout = 60000)]
     public async Task DifferentConditions_DifferentRisk()
     {
+        await Task.Yield();
         var network = CreateNetwork();
         var calm = CreateConstantTensor(InputShape, 0.1);
         var volatile_ = CreateConstantTensor(InputShape, 0.9);

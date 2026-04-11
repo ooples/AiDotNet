@@ -20,6 +20,7 @@ public abstract class VisionLanguageTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task ImageOnly_ShouldProduceOutput()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -42,6 +43,7 @@ public abstract class VisionLanguageTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task DifferentImages_DifferentEmbeddings()
     {
+        await Task.Yield();
         var network = CreateNetwork();
 
         var img1 = CreateConstantTensor(InputShape, 0.1);
@@ -73,6 +75,7 @@ public abstract class VisionLanguageTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task OutputNorm_ShouldBeBounded()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -97,6 +100,7 @@ public abstract class VisionLanguageTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task ZeroImage_ShouldNotCrash()
     {
+        await Task.Yield();
         var network = CreateNetwork();
         var blackImage = CreateConstantTensor(InputShape, 0.0);
 

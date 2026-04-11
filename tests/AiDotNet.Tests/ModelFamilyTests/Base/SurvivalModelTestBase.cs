@@ -34,6 +34,7 @@ public abstract class SurvivalModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Predictions_ShouldBeFinite()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateSurvivalData(rng);
@@ -50,6 +51,7 @@ public abstract class SurvivalModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Predict_ShouldBeDeterministic()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateSurvivalData(rng);
@@ -63,6 +65,7 @@ public abstract class SurvivalModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Clone_ShouldProduceSamePredictions()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateSurvivalData(rng);
@@ -77,6 +80,7 @@ public abstract class SurvivalModelTestBase
     [Fact(Timeout = 60000)]
     public async Task OutputDimension_ShouldMatchInputRows()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateSurvivalData(rng);
@@ -87,6 +91,7 @@ public abstract class SurvivalModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Metadata_ShouldExistAfterTraining()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateSurvivalData(rng);
@@ -97,6 +102,7 @@ public abstract class SurvivalModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Parameters_ShouldBeNonEmpty()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateSurvivalData(rng);

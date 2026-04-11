@@ -21,6 +21,7 @@ public abstract class NonLinearRegressionTestBase : RegressionModelTestBase
     [Fact(Timeout = 60000)]
     public async Task CanFitQuadratic()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         int n = TrainSamples;
         var x = new Matrix<double>(n, 1);
@@ -54,6 +55,7 @@ public abstract class NonLinearRegressionTestBase : RegressionModelTestBase
     [Fact(Timeout = 60000)]
     public async Task NonLinearResiduals_ShouldBeSmaller()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         int n = TrainSamples;
         var x = new Matrix<double>(n, 1);
@@ -98,6 +100,7 @@ public abstract class NonLinearRegressionTestBase : RegressionModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Extrapolation_ShouldBeFinite()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, 1, rng);
 

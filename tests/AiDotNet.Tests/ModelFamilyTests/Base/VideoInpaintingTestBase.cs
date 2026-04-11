@@ -14,6 +14,7 @@ public abstract class VideoInpaintingTestBase : VideoNNModelTestBase
     [Fact(Timeout = 120000)]
     public async Task InpaintedOutput_SameSizeAsInput()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -24,6 +25,7 @@ public abstract class VideoInpaintingTestBase : VideoNNModelTestBase
     [Fact(Timeout = 120000)]
     public async Task InpaintedValues_ShouldBeBounded()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

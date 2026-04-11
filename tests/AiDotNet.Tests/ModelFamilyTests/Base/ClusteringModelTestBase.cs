@@ -42,6 +42,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task AdjustedRandIndex_ShouldBePositive()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
@@ -67,6 +68,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task IntraClusterPurity_ShouldBeHigh_OnSeparableData()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
@@ -115,6 +117,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task MoreData_ShouldNotDegrade_ClusterQuality()
     {
+        await Task.Yield();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var model1 = CreateModel();
         var (trainX1, trainY1) = GenerateData(30, NumClusters, Features, rng1);
@@ -148,6 +151,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task IrrelevantFeature_ShouldNotDegrade_ClusterQuality()
     {
+        await Task.Yield();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
         var model1 = CreateModel();
@@ -191,6 +195,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task TranslationEquivariance_ShiftingPoints_PreservesAssignments()
     {
+        await Task.Yield();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
         var model1 = CreateModel();
@@ -228,6 +233,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task UniformScaling_ShouldPreserveAssignments()
     {
+        await Task.Yield();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
         var model1 = CreateModel();
@@ -264,6 +270,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task ClusterMeans_ShouldBeNearGenerationCenters()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
@@ -321,6 +328,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task DistinctClusters_ShouldBeReasonable()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
@@ -346,6 +354,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task IdenticalPoints_ShouldGetSameCluster()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
@@ -370,6 +379,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Predictions_ShouldBeFinite()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
@@ -391,6 +401,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Predict_ShouldBeDeterministic()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
@@ -406,6 +417,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task OutputDimension_ShouldMatchInputRows()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
@@ -418,6 +430,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Clone_ShouldProduceIdenticalAssignments()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
@@ -434,6 +447,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Metadata_ShouldExistAfterTraining()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
@@ -445,6 +459,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Parameters_ShouldBeNonEmpty_AfterTraining()
     {
+        await Task.Yield();
         if (!HasFlatParameters) return;
 
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -473,6 +488,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task SingleClusterData_ShouldAssignSameCluster()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateSingleClusterModel();
 
@@ -510,6 +526,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task PermutationInvariance_ShuffledRows_SameAssignments()
     {
+        await Task.Yield();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
         var model1 = CreateModel();
@@ -541,6 +558,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Builder_ShouldProduceResult()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
         var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);
@@ -558,6 +576,7 @@ public abstract class ClusteringModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Builder_ClusteringShouldBeatRandom()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
         var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);

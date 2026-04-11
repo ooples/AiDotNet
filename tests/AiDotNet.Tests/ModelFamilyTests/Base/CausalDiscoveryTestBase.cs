@@ -88,6 +88,7 @@ public abstract class CausalDiscoveryTestBase
     [Fact(Timeout = 60000)]
     public async Task DiscoverStructure_OutputIsSquare()
     {
+        await Task.Yield();
         var algo = CreateAlgorithm();
         var data = CreateKnownStructureData();
         var graph = algo.DiscoverStructure(data);
@@ -100,6 +101,7 @@ public abstract class CausalDiscoveryTestBase
     [Fact(Timeout = 60000)]
     public async Task DiscoverStructure_DiagonalIsZero()
     {
+        await Task.Yield();
         var algo = CreateAlgorithm();
         var graph = algo.DiscoverStructure(CreateKnownStructureData());
         var adj = graph.AdjacencyMatrix;
@@ -122,6 +124,7 @@ public abstract class CausalDiscoveryTestBase
     [Fact(Timeout = 60000)]
     public async Task DiscoverStructure_OutputIsAcyclic()
     {
+        await Task.Yield();
         if (!GuaranteesDAG) return;
 
         var algo = CreateAlgorithm();
@@ -181,6 +184,7 @@ public abstract class CausalDiscoveryTestBase
     [Fact(Timeout = 60000)]
     public async Task DiscoverStructure_OutputIsFinite()
     {
+        await Task.Yield();
         var algo = CreateAlgorithm();
         var adj = algo.DiscoverStructure(CreateKnownStructureData()).AdjacencyMatrix;
 
@@ -205,6 +209,7 @@ public abstract class CausalDiscoveryTestBase
     [Fact(Timeout = 60000)]
     public async Task DiscoverStructure_RootNodeHasNoFalseAdjacencies()
     {
+        await Task.Yield();
         var algo = CreateAlgorithm();
         var graph = algo.DiscoverStructure(CreateKnownStructureData());
         var adj = graph.AdjacencyMatrix;
@@ -235,6 +240,7 @@ public abstract class CausalDiscoveryTestBase
     [Fact(Timeout = 60000)]
     public async Task DiscoverStructure_RecoversTrueEdges()
     {
+        await Task.Yield();
         if (!CanRecoverLinearStructure) return;
 
         var algo = CreateAlgorithm();
@@ -264,6 +270,7 @@ public abstract class CausalDiscoveryTestBase
     [Fact(Timeout = 60000)]
     public async Task DiscoverStructure_IndependentVariablesHaveWeakEdges()
     {
+        await Task.Yield();
         if (!CanRecoverLinearStructure || NumVariables < 4) return;
 
         var algo = CreateAlgorithm();
@@ -295,6 +302,7 @@ public abstract class CausalDiscoveryTestBase
     [Fact(Timeout = 60000)]
     public async Task DiscoverStructure_IndependentDataProducesSparseGraph()
     {
+        await Task.Yield();
         var algo = CreateAlgorithm();
         CausalGraph<double>? graph;
         try
@@ -334,6 +342,7 @@ public abstract class CausalDiscoveryTestBase
     [Fact(Timeout = 60000)]
     public async Task DiscoverStructure_MoreDataDoesNotDegradeQuality()
     {
+        await Task.Yield();
         if (!CanRecoverLinearStructure) return;
 
         var algo1 = CreateAlgorithm();
@@ -379,6 +388,7 @@ public abstract class CausalDiscoveryTestBase
     [Fact(Timeout = 60000)]
     public async Task DiscoverStructure_IsInvariantToDataScaling()
     {
+        await Task.Yield();
         var algo1 = CreateAlgorithm();
         var algo2 = CreateAlgorithm();
 
@@ -425,6 +435,7 @@ public abstract class CausalDiscoveryTestBase
     [Fact(Timeout = 60000)]
     public async Task DiscoverStructure_TopologicalOrderIsConsistent()
     {
+        await Task.Yield();
         if (!GuaranteesDAG) return;
 
         var algo = CreateAlgorithm();
@@ -463,6 +474,7 @@ public abstract class CausalDiscoveryTestBase
     [Fact(Timeout = 60000)]
     public async Task DiscoverStructure_NoAsymmetricBidirectionalEdges()
     {
+        await Task.Yield();
         var algo = CreateAlgorithm();
         var graph = algo.DiscoverStructure(CreateKnownStructureData());
         var adj = graph.AdjacencyMatrix;
@@ -495,6 +507,7 @@ public abstract class CausalDiscoveryTestBase
     [Fact(Timeout = 60000)]
     public async Task DiscoverStructure_DoesNotMutateInput()
     {
+        await Task.Yield();
         var algo = CreateAlgorithm();
         var data = CreateKnownStructureData();
 
@@ -515,6 +528,7 @@ public abstract class CausalDiscoveryTestBase
     [Fact(Timeout = 60000)]
     public async Task Properties_AreConsistent()
     {
+        await Task.Yield();
         var algo = CreateAlgorithm();
 
         Assert.False(string.IsNullOrWhiteSpace(algo.Name));

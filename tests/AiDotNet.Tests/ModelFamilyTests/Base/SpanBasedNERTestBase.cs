@@ -14,6 +14,7 @@ public abstract class SpanBasedNERTestBase : NERModelTestBase
     [Fact(Timeout = 120000)]
     public async Task SpanScores_ShouldBeBounded()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -29,6 +30,7 @@ public abstract class SpanBasedNERTestBase : NERModelTestBase
     [Fact(Timeout = 120000)]
     public async Task SpanOutput_ShouldBeNonEmpty()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

@@ -14,6 +14,7 @@ public abstract class VideoDenoisingTestBase : VideoNNModelTestBase
     [Fact(Timeout = 120000)]
     public async Task CleanInput_ShouldBePreserved()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var cleanInput = CreateRandomTensor(InputShape, rng);
@@ -38,6 +39,7 @@ public abstract class VideoDenoisingTestBase : VideoNNModelTestBase
     [Fact(Timeout = 120000)]
     public async Task DenoisedOutput_ShouldBeBounded()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

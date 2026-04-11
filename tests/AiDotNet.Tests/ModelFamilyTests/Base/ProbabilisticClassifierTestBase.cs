@@ -21,6 +21,7 @@ public abstract class ProbabilisticClassifierTestBase : ClassificationModelTestB
     [Fact(Timeout = 60000)]
     public async Task Probabilities_SumToOne()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
@@ -52,6 +53,7 @@ public abstract class ProbabilisticClassifierTestBase : ClassificationModelTestB
     [Fact(Timeout = 60000)]
     public async Task HighConfidence_OnSeparableData()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
 
@@ -94,6 +96,7 @@ public abstract class ProbabilisticClassifierTestBase : ClassificationModelTestB
     [Fact(Timeout = 60000)]
     public async Task Predictions_AreValidClassIndices()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);

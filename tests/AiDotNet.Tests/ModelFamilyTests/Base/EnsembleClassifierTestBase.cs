@@ -15,6 +15,7 @@ public abstract class EnsembleClassifierTestBase : ClassificationModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Ensemble_NotWorseThanRandom()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
@@ -35,6 +36,7 @@ public abstract class EnsembleClassifierTestBase : ClassificationModelTestBase
     [Fact(Timeout = 60000)]
     public async Task Ensemble_ShouldProduceValidLabels()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);

@@ -22,6 +22,7 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
     [Fact(Timeout = 120000)]
     public async Task DenoisingProgress_Monotonic()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var target = CreateRandomTensor(InputShape, rng);
@@ -68,6 +69,7 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
     [Fact(Timeout = 120000)]
     public async Task LatentSpace_IsContinuous()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
 
@@ -108,6 +110,7 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
     [Fact(Timeout = 120000)]
     public async Task OutputBounded_AfterDenoising()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);

@@ -14,6 +14,7 @@ public abstract class SpeakerRecognitionTestBase : AudioNNModelTestBase
     [Fact(Timeout = 60000)]
     public async Task SameInput_SameEmbedding()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -29,6 +30,7 @@ public abstract class SpeakerRecognitionTestBase : AudioNNModelTestBase
     [Fact(Timeout = 60000)]
     public async Task SpeakerEmbedding_ShouldBeBounded()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

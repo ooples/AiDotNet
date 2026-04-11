@@ -24,6 +24,7 @@ public abstract class ContrastiveLossTestBase
     [Fact(Timeout = 30000)]
     public async Task Calculate_ShouldBeFinite()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         int batchSize = 3;
         var targetLogits = new Vector<double>(batchSize);
@@ -52,6 +53,7 @@ public abstract class ContrastiveLossTestBase
     [Fact(Timeout = 30000)]
     public async Task Calculate_ShouldBeNonNegative()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         int batchSize = 3;
         var targetLogits = new Vector<double>(batchSize);
@@ -77,6 +79,7 @@ public abstract class ContrastiveLossTestBase
     [Fact(Timeout = 30000)]
     public async Task Calculate_HigherTargetLogits_ShouldReduceLoss()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         int batchSize = 2;
         var noiseLogits = new Matrix<double>(batchSize, NumNoiseSamples);
@@ -101,6 +104,7 @@ public abstract class ContrastiveLossTestBase
     [Fact(Timeout = 30000)]
     public async Task CalculateDerivative_ShouldBeFinite()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         int batchSize = 3;
         var targetLogits = new Vector<double>(batchSize);
@@ -134,6 +138,7 @@ public abstract class ContrastiveLossTestBase
     [Fact(Timeout = 30000)]
     public async Task Calculate_MismatchedDimensions_ShouldThrow()
     {
+        await Task.Yield();
         var loss = CreateLoss();
         var targetLogits = new Vector<double>(3);
         var noiseLogits = new Matrix<double>(2, NumNoiseSamples); // wrong rows

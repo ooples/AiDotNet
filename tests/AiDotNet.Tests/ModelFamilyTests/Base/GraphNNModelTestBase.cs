@@ -21,6 +21,7 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task SelfLoops_ShouldNotCauseNumericalIssues()
     {
+        await Task.Yield();
         var network = CreateNetwork();
 
         // Create a diagonal-heavy input (simulating self-loops in adjacency)
@@ -60,6 +61,7 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task ZeroInput_ShouldNotCrash()
     {
+        await Task.Yield();
         var network = CreateNetwork();
 
         var input = new Tensor<double>(InputShape);
@@ -86,6 +88,7 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task DifferentStructures_ProduceDifferentOutputs()
     {
+        await Task.Yield();
         var network = CreateNetwork();
 
         // Input 1: identity-like structure (strong self-connections)

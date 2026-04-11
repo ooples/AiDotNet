@@ -20,6 +20,7 @@ public abstract class CodeModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 60000)]
     public async Task CodeOutput_ShouldBeFinite()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -43,6 +44,7 @@ public abstract class CodeModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 60000)]
     public async Task DifferentCode_DifferentOutputs()
     {
+        await Task.Yield();
         var network = CreateNetwork();
 
         var code1 = CreateConstantTensor(InputShape, 0.1);
@@ -73,6 +75,7 @@ public abstract class CodeModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 60000)]
     public async Task EmptyInput_ShouldNotCrash()
     {
+        await Task.Yield();
         var network = CreateNetwork();
         var emptyInput = CreateConstantTensor(InputShape, 0.0);
 

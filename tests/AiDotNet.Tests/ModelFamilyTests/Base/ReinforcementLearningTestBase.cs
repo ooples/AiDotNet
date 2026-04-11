@@ -31,6 +31,7 @@ public abstract class ReinforcementLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task ActionSelection_ShouldBeFinite()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var state = CreateRandomState(rng);
@@ -52,6 +53,7 @@ public abstract class ReinforcementLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task Policy_ShouldBeDeterministic()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var state = CreateRandomState(rng);
@@ -67,6 +69,7 @@ public abstract class ReinforcementLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task DifferentStates_DifferentActions()
     {
+        await Task.Yield();
         var model = CreateModel();
 
         var state1 = new Vector<double>(StateDim);
@@ -97,6 +100,7 @@ public abstract class ReinforcementLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task Training_ShouldChangeParameters()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
 
@@ -126,6 +130,7 @@ public abstract class ReinforcementLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task Clone_ShouldProduceSamePolicy()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var state = CreateRandomState(rng);
@@ -140,6 +145,7 @@ public abstract class ReinforcementLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task Metadata_ShouldExistAfterTraining()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var state = CreateRandomState(rng);
@@ -151,6 +157,7 @@ public abstract class ReinforcementLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task Parameters_ShouldBeNonEmpty()
     {
+        await Task.Yield();
         var model = CreateModel();
         Assert.True(((IParameterizable<double, Vector<double>, Vector<double>>)model).GetParameters().Length > 0, "RL agent should have parameters.");
     }

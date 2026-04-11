@@ -14,6 +14,7 @@ public abstract class ThreeDDiffusionTestBase : LatentDiffusionTestBase
     [Fact(Timeout = 120000)]
     public async Task Output_ShouldBeNonEmpty()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
@@ -24,6 +25,7 @@ public abstract class ThreeDDiffusionTestBase : LatentDiffusionTestBase
     [Fact(Timeout = 120000)]
     public async Task VertexPositions_ShouldBeBounded()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);

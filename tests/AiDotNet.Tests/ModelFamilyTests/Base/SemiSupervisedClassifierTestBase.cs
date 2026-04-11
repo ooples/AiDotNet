@@ -15,6 +15,7 @@ public abstract class SemiSupervisedClassifierTestBase : ClassificationModelTest
     [Fact(Timeout = 60000)]
     public async Task SemiSupervisedPredictions_ShouldBeValid()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
@@ -33,6 +34,7 @@ public abstract class SemiSupervisedClassifierTestBase : ClassificationModelTest
     [Fact(Timeout = 60000)]
     public async Task SemiSupervised_OutputDimMatchesInput()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);

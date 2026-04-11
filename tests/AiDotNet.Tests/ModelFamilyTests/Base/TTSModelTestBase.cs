@@ -22,6 +22,7 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task DifferentText_DifferentAudio()
     {
+        await Task.Yield();
         var network = CreateNetwork();
 
         var text1 = CreateConstantTensor(InputShape, 0.2);
@@ -52,6 +53,7 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task Output_ShouldBeNonEmpty()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -70,6 +72,7 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task OutputValues_ShouldBeBounded()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -95,6 +98,7 @@ public abstract class TTSModelTestBase : NeuralNetworkModelTestBase
     [Fact(Timeout = 120000)]
     public async Task SpeakerConsistency()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

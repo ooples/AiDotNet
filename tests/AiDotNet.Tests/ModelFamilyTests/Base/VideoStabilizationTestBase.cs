@@ -14,6 +14,7 @@ public abstract class VideoStabilizationTestBase : VideoNNModelTestBase
     [Fact(Timeout = 120000)]
     public async Task StabilizedOutput_PreservesLength()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -26,6 +27,7 @@ public abstract class VideoStabilizationTestBase : VideoNNModelTestBase
     [Fact(Timeout = 120000)]
     public async Task StabilizedValues_ShouldBeFinite()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

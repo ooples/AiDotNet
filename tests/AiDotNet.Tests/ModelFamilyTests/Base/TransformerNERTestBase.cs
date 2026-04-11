@@ -15,6 +15,7 @@ public abstract class TransformerNERTestBase : NERModelTestBase
     [Fact(Timeout = 120000)]
     public async Task ContextualSensitivity_DifferentContext_DifferentLabels()
     {
+        await Task.Yield();
         var network = CreateNetwork();
         var input1 = CreateConstantTensor(InputShape, 0.3);
         var input2 = CreateConstantTensor(InputShape, 0.7);
@@ -39,6 +40,7 @@ public abstract class TransformerNERTestBase : NERModelTestBase
     [Fact(Timeout = 120000)]
     public async Task Output_ShouldBeFiniteSequence()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);

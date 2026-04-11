@@ -37,6 +37,7 @@ public abstract class AnomalyDetectorTestBase
     [Fact(Timeout = 60000)]
     public async Task Outliers_ShouldHaveHigherScores()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateNormalData(rng);
@@ -75,6 +76,7 @@ public abstract class AnomalyDetectorTestBase
     [Fact(Timeout = 60000)]
     public async Task Scores_ShouldBeFinite()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateNormalData(rng);
@@ -91,6 +93,7 @@ public abstract class AnomalyDetectorTestBase
     [Fact(Timeout = 60000)]
     public async Task Predict_ShouldBeDeterministic()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateNormalData(rng);
@@ -105,6 +108,7 @@ public abstract class AnomalyDetectorTestBase
     [Fact(Timeout = 60000)]
     public async Task Clone_ShouldProduceSameScores()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateNormalData(rng);
@@ -120,6 +124,7 @@ public abstract class AnomalyDetectorTestBase
     [Fact(Timeout = 60000)]
     public async Task OutputDimension_ShouldMatchInputRows()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateNormalData(rng);
@@ -130,6 +135,7 @@ public abstract class AnomalyDetectorTestBase
     [Fact(Timeout = 60000)]
     public async Task Metadata_ShouldExistAfterTraining()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateNormalData(rng);
@@ -140,6 +146,7 @@ public abstract class AnomalyDetectorTestBase
     [Fact(Timeout = 60000)]
     public async Task Parameters_ShouldBeNonEmpty()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateNormalData(rng);

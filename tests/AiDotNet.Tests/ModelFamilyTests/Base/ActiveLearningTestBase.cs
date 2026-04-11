@@ -46,6 +46,7 @@ public abstract class ActiveLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task SelectSamples_ReturnsRequestedCount()
     {
+        await Task.Yield();
         var strategy = CreateStrategy();
         var selected = strategy.SelectSamples(CreateMockModel(), CreateUnlabeledPool(), BatchSize);
         Assert.Equal(BatchSize, selected.Length);
@@ -55,6 +56,7 @@ public abstract class ActiveLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task SelectSamples_IndicesAreUnique()
     {
+        await Task.Yield();
         var strategy = CreateStrategy();
         var selected = strategy.SelectSamples(CreateMockModel(), CreateUnlabeledPool(), BatchSize);
         Assert.Equal(selected.Length, new HashSet<int>(selected).Count);
@@ -64,6 +66,7 @@ public abstract class ActiveLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task SelectSamples_IndicesInRange()
     {
+        await Task.Yield();
         var strategy = CreateStrategy();
         var pool = CreateUnlabeledPool();
         int actualPoolSize = pool.Shape[0];
@@ -84,6 +87,7 @@ public abstract class ActiveLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task SelectSamples_SelectedHaveHigherThanAverageScores()
     {
+        await Task.Yield();
         var strategy = CreateStrategy();
         var model = CreateMockModel();
         var pool = CreateUnlabeledPool();
@@ -113,6 +117,7 @@ public abstract class ActiveLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task ComputeScores_AreNonNegative()
     {
+        await Task.Yield();
         var strategy = CreateStrategy();
         var scores = strategy.ComputeInformativenessScores(CreateMockModel(), CreateUnlabeledPool());
 
@@ -128,6 +133,7 @@ public abstract class ActiveLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task ComputeScores_AreFinite()
     {
+        await Task.Yield();
         var strategy = CreateStrategy();
         var scores = strategy.ComputeInformativenessScores(CreateMockModel(), CreateUnlabeledPool());
 
@@ -143,6 +149,7 @@ public abstract class ActiveLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task ComputeScores_CountMatchesPoolSize()
     {
+        await Task.Yield();
         var strategy = CreateStrategy();
         var scores = strategy.ComputeInformativenessScores(CreateMockModel(), CreateUnlabeledPool());
         Assert.Equal(PoolSize, scores.Length);
@@ -157,6 +164,7 @@ public abstract class ActiveLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task SelectSamples_AreSpreadAcrossInputSpace()
     {
+        await Task.Yield();
         var strategy = CreateStrategy();
         var pool = CreateUnlabeledPool();
         var selected = strategy.SelectSamples(CreateMockModel(), pool, BatchSize);
@@ -190,6 +198,7 @@ public abstract class ActiveLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task SelectSamples_TopKContainsTopOne()
     {
+        await Task.Yield();
         var strategy = CreateStrategy();
         var model = CreateMockModel();
         var pool = CreateUnlabeledPool();
@@ -212,6 +221,7 @@ public abstract class ActiveLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task SelectSamples_RequestMoreThanPool_HandlesGracefully()
     {
+        await Task.Yield();
         var strategy = CreateStrategy();
         int[] selected;
         try
@@ -231,6 +241,7 @@ public abstract class ActiveLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task SelectSamples_BatchSizeOne_ReturnsSingle()
     {
+        await Task.Yield();
         var strategy = CreateStrategy();
         var selected = strategy.SelectSamples(CreateMockModel(), CreateUnlabeledPool(), 1);
         Assert.Single(selected);
@@ -241,6 +252,7 @@ public abstract class ActiveLearningTestBase
     [Fact(Timeout = 60000)]
     public async Task SelectSamples_DoesNotMutatePool()
     {
+        await Task.Yield();
         var strategy = CreateStrategy();
         var pool = CreateUnlabeledPool();
 

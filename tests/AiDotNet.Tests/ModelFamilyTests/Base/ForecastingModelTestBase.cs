@@ -15,6 +15,7 @@ public abstract class ForecastingModelTestBase : FinancialModelTestBase
     [Fact(Timeout = 60000)]
     public async Task ForecastHorizon_ShouldProduceOutput()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
@@ -25,6 +26,7 @@ public abstract class ForecastingModelTestBase : FinancialModelTestBase
     [Fact(Timeout = 60000)]
     public async Task DifferentHistories_DifferentForecasts()
     {
+        await Task.Yield();
         var network = CreateNetwork();
         var history1 = CreateConstantTensor(InputShape, 0.1);
         var history2 = CreateConstantTensor(InputShape, 0.9);

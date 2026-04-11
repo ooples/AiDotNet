@@ -15,6 +15,7 @@ public abstract class OrdinalClassifierTestBase : ClassificationModelTestBase
     [Fact(Timeout = 60000)]
     public async Task OrdinalPredictions_ShouldBeValidIndices()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
@@ -32,6 +33,7 @@ public abstract class OrdinalClassifierTestBase : ClassificationModelTestBase
     [Fact(Timeout = 60000)]
     public async Task OrdinalPredictions_ShouldBeFinite()
     {
+        await Task.Yield();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
