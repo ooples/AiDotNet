@@ -143,28 +143,29 @@ public static class DataSplitter
             indices = [.. indices.OrderBy(_ => random.Next())];
         }
 
-        // Create output tensors
-        int[] xTrainShape = (int[])X._shape;
+        // Create output tensors — MUST clone shape arrays because modifying
+        // the first element would mutate the source tensor's internal _shape.
+        int[] xTrainShape = X.Shape.ToArray();
         xTrainShape[0] = trainSize;
         var XTrain = new Tensor<T>(xTrainShape);
 
-        int[] xValShape = (int[])X._shape;
+        int[] xValShape = X.Shape.ToArray();
         xValShape[0] = validationSize;
         var XVal = new Tensor<T>(xValShape);
 
-        int[] xTestShape = (int[])X._shape;
+        int[] xTestShape = X.Shape.ToArray();
         xTestShape[0] = testSize;
         var XTest = new Tensor<T>(xTestShape);
 
-        int[] yTrainShape = (int[])y._shape;
+        int[] yTrainShape = y.Shape.ToArray();
         yTrainShape[0] = trainSize;
         var yTrain = new Tensor<T>(yTrainShape);
 
-        int[] yValShape = (int[])y._shape;
+        int[] yValShape = y.Shape.ToArray();
         yValShape[0] = validationSize;
         var yVal = new Tensor<T>(yValShape);
 
-        int[] yTestShape = (int[])y._shape;
+        int[] yTestShape = y.Shape.ToArray();
         yTestShape[0] = testSize;
         var yTest = new Tensor<T>(yTestShape);
 
