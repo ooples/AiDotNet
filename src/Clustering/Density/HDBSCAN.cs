@@ -267,16 +267,16 @@ public class HDBSCAN<T> : ClusteringBase<T>
     /// <summary>
     /// BFS deselect all descendants of a cluster per scikit-learn reference.
     /// </summary>
-    private static void DeselctAllDescendants(int cluster, Dictionary<int, List<int>> children,
-        HashSet<int> clusterNodes, HashSet<int> selectedClusters)
+    private static void MarkDescendantsNotCluster(int cluster, Dictionary<int, List<int>> children,
+        HashSet<int> clusterNodes, Dictionary<int, bool> isCluster)
     {
         if (!children.TryGetValue(cluster, out var kids)) return;
         foreach (int child in kids)
         {
             if (clusterNodes.Contains(child))
             {
-                selectedClusters.Remove(child);
-                DeselctAllDescendants(child, children, clusterNodes, selectedClusters);
+                isCluster[child] = false;
+                MarkDescendantsNotCluster(child, children, clusterNodes, isCluster);
             }
         }
     }
@@ -386,21 +386,36 @@ public class HDBSCAN<T> : ClusteringBase<T>
 
     private (List<CondensedTreeNode> tree, int[] finalParent) BuildCondensedTree(List<MSTEdge> mst, int n, int minClusterSize)
     {
+        // Per Campello et al. 2013 and the scikit-learn reference implementation:
+        // Build the condensed tree by processing MST edges (bottom-up).
+        // Track which union-find roots are "active clusters" (have a cluster ID >= n).
+        // Only record entries in the condensed tree for:
+        //   1. Point noise: when a small group merges into an active cluster
+        //   2. Cluster split: when two active clusters merge → new parent
+        //   3. Cluster birth: when a group first reaches minClusterSize
+
         var condensedTree = new List<CondensedTreeNode>();
 
-        // Use Union-Find to track cluster membership
-        var parent = new int[n];
-        var size = new int[n];
+        int maxId = n + mst.Count + 1;
+        var parent = new int[maxId];
+        var size = new int[maxId];
+        var clusterLabel = new int[maxId]; // Maps UF root → cluster ID (-1 = not yet a cluster)
 
         for (int i = 0; i < n; i++)
         {
             parent[i] = i;
             size[i] = 1;
+            clusterLabel[i] = -1;
+        }
+        for (int i = n; i < maxId; i++)
+        {
+            parent[i] = i;
+            size[i] = 0;
+            clusterLabel[i] = -1;
         }
 
         int nextCluster = n;
 
-        // Process MST edges in order (smallest to largest weight)
         foreach (var edge in mst)
         {
             int root1 = Find(parent, edge.U);
@@ -415,86 +430,78 @@ public class HDBSCAN<T> : ClusteringBase<T>
             int size1 = size[root1];
             int size2 = size[root2];
 
-            bool split1 = size1 < minClusterSize;
-            bool split2 = size2 < minClusterSize;
+            bool isCluster1 = clusterLabel[root1] >= 0;
+            bool isCluster2 = clusterLabel[root2] >= 0;
+            bool big1 = size1 >= minClusterSize;
+            bool big2 = size2 >= minClusterSize;
 
-            if (split1 && split2)
+            if (!big1 && !big2)
             {
-                // Both too small, just merge
+                // Both too small — just merge, no condensed tree entry
                 Union(parent, size, root1, root2);
+                int newRoot = Find(parent, root1);
+                // Propagate cluster label if either had one
+                if (isCluster1) clusterLabel[newRoot] = clusterLabel[root1];
+                else if (isCluster2) clusterLabel[newRoot] = clusterLabel[root2];
             }
-            else if (split1 || split2)
+            else if (big1 && big2 && isCluster1 && isCluster2)
             {
-                // One is too small - it falls out as noise
-                int smallRoot = split1 ? root1 : root2;
-                int bigRoot = split1 ? root2 : root1;
+                // Two active clusters merge → real split point
+                int newClusterId = nextCluster++;
+                int cid1 = clusterLabel[root1];
+                int cid2 = clusterLabel[root2];
 
-                // Ensure the surviving cluster has a proper ID >= n.
-                // Union-find roots can be < n (point indices), but condensed tree
-                // clusters must have IDs >= n for correct EOM stability computation.
-                int clusterId;
-                if (bigRoot >= n)
+                condensedTree.Add(new CondensedTreeNode(newClusterId, cid1, edgeLambda, size1));
+                condensedTree.Add(new CondensedTreeNode(newClusterId, cid2, edgeLambda, size2));
+
+                Union(parent, size, root1, root2);
+                int newRoot = Find(parent, root1);
+                if (newRoot >= parent.Length)
                 {
-                    clusterId = bigRoot;
+                    Array.Resize(ref parent, newRoot + 2);
+                    Array.Resize(ref size, newRoot + 2);
+                    Array.Resize(ref clusterLabel, newRoot + 2);
+                    parent[newRoot] = newRoot;
+                }
+                clusterLabel[newRoot] = newClusterId;
+            }
+            else
+            {
+                // At least one side is big enough. Determine the surviving cluster
+                // and the "runt" side. If the big side doesn't have a cluster ID yet,
+                // assign one (first time this group reached minClusterSize).
+                int bigRoot, smallRoot;
+                if (big1 && (!big2 || size1 >= size2))
+                {
+                    bigRoot = root1;
+                    smallRoot = root2;
                 }
                 else
                 {
-                    clusterId = nextCluster++;
-                    // Extend arrays if needed
-                    if (clusterId >= parent.Length)
-                    {
-                        var newParent = new int[clusterId + 2];
-                        var newSize = new int[clusterId + 2];
-                        Array.Copy(parent, newParent, parent.Length);
-                        Array.Copy(size, newSize, size.Length);
-                        parent = newParent;
-                        size = newSize;
-                    }
-                    // Re-root the surviving cluster under the new cluster ID
-                    parent[bigRoot] = clusterId;
-                    parent[clusterId] = clusterId;
-                    size[clusterId] = size[bigRoot];
+                    bigRoot = root2;
+                    smallRoot = root1;
                 }
 
-                // Add noise points (from the too-small group) to tree
+                // Ensure the surviving side has a cluster ID
+                if (clusterLabel[bigRoot] < 0)
+                {
+                    clusterLabel[bigRoot] = nextCluster++;
+                }
+                int clusterId = clusterLabel[bigRoot];
+
+                // Runt side: add individual points as noise under the surviving cluster
                 for (int i = 0; i < n; i++)
                 {
                     if (Find(parent, i) == smallRoot)
                     {
                         condensedTree.Add(new CondensedTreeNode(
-                            clusterId,
-                            i,
-                            edgeLambda,
-                            1));
+                            clusterId, i, edgeLambda, 1));
                     }
                 }
 
-                Union(parent, size, smallRoot, clusterId);
-            }
-            else
-            {
-                // Both are large enough - create new parent cluster
-                int newCluster = nextCluster++;
-
-                // Add children to condensed tree
-                condensedTree.Add(new CondensedTreeNode(newCluster, root1, edgeLambda, size1));
-                condensedTree.Add(new CondensedTreeNode(newCluster, root2, edgeLambda, size2));
-
-                // Union under new cluster ID
-                parent[root1] = newCluster;
-                parent[root2] = newCluster;
-                if (nextCluster > parent.Length)
-                {
-                    // Extend parent array
-                    var newParent = new int[nextCluster + 1];
-                    var newSize = new int[nextCluster + 1];
-                    Array.Copy(parent, newParent, parent.Length);
-                    Array.Copy(size, newSize, size.Length);
-                    parent = newParent;
-                    size = newSize;
-                }
-                parent[newCluster] = newCluster;
-                size[newCluster] = size1 + size2;
+                Union(parent, size, smallRoot, bigRoot);
+                int mergedRoot = Find(parent, bigRoot);
+                clusterLabel[mergedRoot] = clusterId;
             }
         }
 
@@ -620,44 +627,60 @@ public class HDBSCAN<T> : ClusteringBase<T>
 
             // Select clusters with max stability
             var selectedClusters = new HashSet<int>();
-            // Process clusters from leaves to root (descending order).
-            // Include all cluster nodes, not just those with ID >= n, because
-            // union-find root IDs can represent clusters even when < n.
             var clusterList = clusterNodes.OrderByDescending(c => c).ToList();
+
+
+            // Per scikit-learn reference: use isCluster flags.
+            // Start with all clusters selected, then sweep bottom-up.
+            // When parent stability > sum of children stability: keep parent, deselect children.
+            // When children stability >= parent: propagate children stability to parent.
+            var isCluster = new Dictionary<int, bool>();
+            foreach (int c in clusterList)
+                isCluster[c] = true;
 
             foreach (int cluster in clusterList)
             {
                 T childStability = NumOps.Zero;
+                bool hasClusterChildren = false;
                 if (children.ContainsKey(cluster))
                 {
                     foreach (int c in children[cluster].Where(c => clusterNodes.Contains(c)))
                     {
-                        if (stability.ContainsKey(c))
-                            childStability = NumOps.Add(childStability, stability[c]);
+                        hasClusterChildren = true;
+                        childStability = NumOps.Add(childStability, stability[c]);
                     }
                 }
 
-                if (stability.ContainsKey(cluster) && NumOps.GreaterThan(stability[cluster], childStability))
+                if (!hasClusterChildren)
+                    continue; // leaf cluster — stays selected
+
+                if (NumOps.GreaterThan(stability[cluster], childStability))
                 {
-                    selectedClusters.Add(cluster);
-                    // Per scikit-learn: BFS deselect ALL descendants, not just direct children
-                    DeselctAllDescendants(cluster, children, clusterNodes, selectedClusters);
+                    // Parent wins — deselect ALL descendants
+                    isCluster[cluster] = true;
+                    MarkDescendantsNotCluster(cluster, children, clusterNodes, isCluster);
                 }
-                else if (NumOps.GreaterThan(childStability, NumOps.Zero))
+                else
                 {
-                    // Propagate child stability
+                    // Children win — propagate their stability up, deselect parent
                     stability[cluster] = childStability;
+                    isCluster[cluster] = false;
                 }
+            }
+
+            foreach (var kv in isCluster)
+            {
+                if (kv.Value)
+                    selectedClusters.Add(kv.Key);
             }
 
             // Per scikit-learn: when allowSingleCluster and the result is 0 clusters,
             // select the root as a valid single-cluster result
             if (allowSingleCluster && selectedClusters.Count == 0 && clusterList.Count > 0)
             {
-                selectedClusters.Add(clusterList[^1]); // root = last in descending order
+                selectedClusters.Add(clusterList[^1]);
             }
 
-            // Assign labels based on selected clusters
             int labelNum = 0;
             var clusterToLabel = new Dictionary<int, int>();
 
