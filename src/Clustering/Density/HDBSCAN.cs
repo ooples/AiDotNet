@@ -589,19 +589,30 @@ public class HDBSCAN<T> : ClusteringBase<T>
                 }
             }
 
-            // Pass 2: Compute stability per scikit-learn reference implementation.
-            // Stability of cluster C = Σ (lambda_child - lambda_birth(C)) * child_size
-            // for ALL children (both individual points and sub-clusters).
+            // Per scikit-learn reference: clusters that never appeared as a child
+            // (i.e., the root cluster) have birth lambda = 0. Without this, the root's
+            // stability is always 0, causing systematic over-segmentation.
+            foreach (int cluster in clusterNodes)
+            {
+                if (NumOps.Equals(birthLambda[cluster], NumOps.MaxValue))
+                    birthLambda[cluster] = NumOps.Zero;
+            }
+
+            // Pass 2: Compute stability per Campello et al. 2013 / scikit-learn.
+            // Stability of cluster C = Σ (lambda_p - lambda_birth(C)) * size_p
+            // for ALL entries in the condensed tree under parent C.
             foreach (var node in condensedTree)
             {
                 if (stability.ContainsKey(node.Parent))
                 {
-                    T deathLambda = node.Lambda;
-                    T birth = birthLambda.ContainsKey(node.Parent) ? birthLambda[node.Parent] : NumOps.Zero;
-                    if (NumOps.GreaterThan(birth, deathLambda))
-                        birth = deathLambda;
+                    T birth = birthLambda[node.Parent];
+                    T lambda = node.Lambda;
+                    // Clamp: if birth > lambda (shouldn't happen with correct tree),
+                    // treat as zero contribution rather than negative
+                    if (NumOps.GreaterThan(birth, lambda))
+                        lambda = birth;
                     T contribution = NumOps.Multiply(
-                        NumOps.Subtract(deathLambda, birth),
+                        NumOps.Subtract(lambda, birth),
                         NumOps.FromDouble(node.Size));
                     stability[node.Parent] = NumOps.Add(stability[node.Parent], contribution);
                 }
