@@ -2420,7 +2420,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             var loss = LossFunction as LossFunctions.LossFunctionBase<T>
                 ?? throw new InvalidOperationException("LossFunction must derive from LossFunctionBase<T> for tape-based training.");
-            // Forward + loss under tape — uses the buffer-backed view tensors
+
+            // Activate a TensorArena for the forward/backward/update scope.
+            // After the first iteration warms the arena, ALL subsequent TensorAllocator.Rent
+            // calls reuse pooled arrays — zero GC allocation in the training hot loop.
+            // The arena is thread-static and resets on Dispose, so intermediate tensors
+            // (conv outputs, attention scores, gradient buffers) are recycled every iteration.
+            using var arena = TensorArena.Create();
             using var tape = new GradientTape<T>();
             var output = ForwardForTraining(input);
 
@@ -2729,10 +2735,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                 for (int i = 0; i < originals.Count; i++)
                 {
-                    var view = currentViews[i];
-                    var orig = originals[i];
-                    for (int j = 0; j < view.Length; j++)
-                        orig.SetFlat(j, view.GetFlat(j));
+                    // Bulk copy via Engine — zero-alloc, SIMD-accelerated
+                    Engine.TensorCopy(currentViews[i], originals[i]);
                 }
 
                 trainable.SetTrainableParameters(originals);

@@ -315,7 +315,7 @@ public class DenseNetTests
 
     #region Training Tests (Skipped for performance)
 
-    [Fact(Skip = "Training test - slow")]
+    [Fact(Timeout = 120000)]
     public void DenseNet121_Train_CompletesWithoutError()
     {
         // Arrange

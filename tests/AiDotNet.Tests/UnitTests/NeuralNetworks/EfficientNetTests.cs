@@ -386,7 +386,7 @@ public class EfficientNetTests
 
     #region Training Tests (Skipped for performance)
 
-    [Fact(Skip = "Training test - slow")]
+    [Fact(Timeout = 120000)]
     public void EfficientNetB0_Train_CompletesWithoutError()
     {
         // Arrange

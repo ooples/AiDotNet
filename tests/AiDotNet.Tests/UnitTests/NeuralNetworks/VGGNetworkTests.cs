@@ -364,7 +364,7 @@ public class VGGNetworkTests
 
     #region VGGNetwork Training Tests
 
-    [Fact(Skip = "Gradient computation issue during optimizer update - requires separate investigation")]
+    [Fact(Timeout = 120000)]
     public void VGGNetwork_Train_CompletesWithoutError()
     {
         // Arrange
@@ -389,7 +389,7 @@ public class VGGNetworkTests
         network.Train(input, target);
     }
 
-    [Fact(Skip = "Gradient computation issue during optimizer update - requires separate investigation")]
+    [Fact(Timeout = 120000)]
     public void VGGNetwork_Train_LossDecreases()
     {
         // Arrange

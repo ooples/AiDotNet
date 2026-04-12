@@ -402,7 +402,7 @@ public class ResNetNetworkTests
 
     #region ResNetNetwork Training Tests
 
-    [Fact(Skip = "Gradient computation issue during optimizer update - requires separate investigation")]
+    [Fact(Timeout = 120000)]
     public void ResNetNetwork_Train_CompletesWithoutError()
     {
         // Arrange
@@ -427,7 +427,7 @@ public class ResNetNetworkTests
         network.Train(input, target);
     }
 
-    [Fact(Skip = "Gradient computation issue during optimizer update - requires separate investigation")]
+    [Fact(Timeout = 120000)]
     public void ResNetNetwork_Train_LossDecreases()
     {
         // Arrange

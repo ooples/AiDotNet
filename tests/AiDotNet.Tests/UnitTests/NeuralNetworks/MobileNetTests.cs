@@ -620,7 +620,7 @@ public class MobileNetTests
 
     #region Training Tests (Skipped for CI)
 
-    [Fact(Skip = "Training tests require significant compute resources")]
+    [Fact(Timeout = 120000)]
     public void MobileNetV2_Train_CompletesWithoutError()
     {
         // Arrange - Use factory method
@@ -635,7 +635,7 @@ public class MobileNetTests
         network.Train(input, target);
     }
 
-    [Fact(Skip = "Training tests require significant compute resources")]
+    [Fact(Timeout = 120000)]
     public void MobileNetV3_Train_CompletesWithoutError()
     {
         // Arrange - Use factory method
