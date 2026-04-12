@@ -208,6 +208,7 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
+        target = EnsureTargetMatchesPredicted(predicted, target);
         // Contrastive = mean(y * d² + (1-y) * max(0, margin - d)²)
         var squared = Engine.TensorMultiply(predicted, predicted);
         var oneMinusY = Engine.ScalarMinusTensor(NumOps.One, target);

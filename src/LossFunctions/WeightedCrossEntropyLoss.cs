@@ -139,6 +139,7 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
+        target = EnsureTargetMatchesPredicted(predicted, target);
         // Weighted CE = -mean(weights * target * log(predicted))
         var safePred = Engine.TensorAddScalar(predicted, NumOps.FromDouble(1e-7));
         var logP = Engine.TensorLog(safePred);

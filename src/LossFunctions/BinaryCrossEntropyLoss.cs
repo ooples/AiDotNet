@@ -132,6 +132,7 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
+        target = EnsureTargetMatchesPredicted(predicted, target);
         // BCE = -mean(target * log(p) + (1 - target) * log(1 - p))
         var eps = NumOps.FromDouble(1e-7);
         var oneMinusEps = NumOps.FromDouble(1.0 - 1e-7);

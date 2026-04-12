@@ -170,6 +170,7 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
+        target = EnsureTargetMatchesPredicted(predicted, target);
         // Sparse CCE with softmax: -mean(target * log(softmax(predicted)))
         var softmaxed = Engine.Softmax(predicted);
         var safeSoftmax = Engine.TensorAddScalar(softmaxed, NumOps.FromDouble(1e-7));

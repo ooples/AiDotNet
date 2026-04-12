@@ -146,6 +146,7 @@ public class ModifiedHuberLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
+        target = EnsureTargetMatchesPredicted(predicted, target);
         // Modified Huber: max(0, 1-y*f)² if y*f >= -1, else -4*y*f
         var product = Engine.TensorMultiply(target, predicted);
         var margin = Engine.ScalarMinusTensor(NumOps.One, product);

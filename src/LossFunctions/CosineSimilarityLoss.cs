@@ -112,6 +112,7 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
+        target = EnsureTargetMatchesPredicted(predicted, target);
         // CosineSimilarity = 1 - dot(p,t) / (||p|| * ||t|| + eps)
         var dotProduct = Engine.TensorMultiply(predicted, target);
         var allAxes = Enumerable.Range(0, dotProduct.Shape.Length).ToArray();

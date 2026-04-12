@@ -91,4 +91,31 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
             throw new ArgumentException("Predicted and actual vectors must have the same length.");
         }
     }
+
+    /// <summary>
+    /// When the target has fewer dimensions than the prediction (e.g., integer
+    /// class indices <c>[B, S]</c> vs logits <c>[B, S, V]</c>), auto-converts
+    /// to one-hot encoding so pointwise loss operations (multiply, subtract)
+    /// work without shape mismatch. Returns the target unchanged when shapes
+    /// already match. Fixes #1114 — affects all loss functions that use
+    /// <c>TensorMultiply(target, ...)</c> in <c>ComputeTapeLoss</c>.
+    /// </summary>
+    protected Tensor<T> EnsureTargetMatchesPredicted(Tensor<T> predicted, Tensor<T> target)
+    {
+        if (target.Shape.Length >= predicted.Shape.Length)
+            return target;
+
+        int numClasses = predicted.Shape[predicted.Shape.Length - 1];
+        var oneHot = new Tensor<T>(predicted.Shape.ToArray());
+        int batchElements = target.Length;
+
+        for (int i = 0; i < batchElements; i++)
+        {
+            int classIdx = (int)NumOps.ToDouble(target[i]);
+            if (classIdx >= 0 && classIdx < numClasses)
+                oneHot[i * numClasses + classIdx] = NumOps.One;
+        }
+
+        return oneHot;
+    }
 }
