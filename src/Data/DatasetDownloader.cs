@@ -17,7 +17,18 @@ internal static class DatasetDownloader
 
     private static HttpClient CreateHttpClient()
     {
-        var client = new HttpClient();
+        // Explicitly configure redirect following + max redirects.
+        // The default HttpClient() constructor uses HttpClientHandler with
+        // AllowAutoRedirect=true, but some CDNs (S3 cross-region) return
+        // 301 without a Location header, which HttpClient surfaces as a
+        // non-success status. The explicit handler ensures standard
+        // redirects (302, 307, 308) are followed. Fixes #1117.
+        var handler = new HttpClientHandler
+        {
+            AllowAutoRedirect = true,
+            MaxAutomaticRedirections = 10,
+        };
+        var client = new HttpClient(handler);
         client.Timeout = TimeSpan.FromMinutes(30);
         return client;
     }

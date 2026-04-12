@@ -45,7 +45,7 @@ public class WikiText103DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
     }
 
     private static readonly string DownloadUrl =
-        "https://s3.amazonaws.com/research.metamind.io/wikitext/wikitext-103-v1.zip";
+        "https://s3.us-west-2.amazonaws.com/research.metamind.io/wikitext/wikitext-103-v1.zip";
 
     /// <inheritdoc/>
     protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
