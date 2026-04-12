@@ -2695,6 +2695,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         // For each layer, copy updated data from the current (view) tensors
         // back to the saved original tensors, then restore the originals.
+        bool anyStructureChanged = false;
         foreach (var (layer, originals) in _savedOriginalParameters)
         {
             if (layer is ITrainableLayer<T> trainable)
@@ -2706,7 +2707,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // layer — the pre-init parameters are meaningless and the layer now has the
                 // correct shape for the actual input data.
                 if (currentViews.Count != originals.Count)
+                {
+                    anyStructureChanged = true;
                     continue;
+                }
 
                 bool sizeChanged = false;
                 for (int i = 0; i < originals.Count; i++)
@@ -2718,7 +2722,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     }
                 }
                 if (sizeChanged)
+                {
+                    anyStructureChanged = true;
                     continue;
+                }
 
                 for (int i = 0; i < originals.Count; i++)
                 {
@@ -2733,10 +2740,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         _savedOriginalParameters = null;
-        // Clear buffer so next training step creates fresh views
-        _parameterBuffer = null;
-        // Invalidate the tape parameter cache so next CollectParameters re-walks
-        _layerStructureVersion++;
+
+        // Only invalidate the parameter buffer when layer structure actually changed
+        // (e.g., lazy initialization resized a layer). When structure is stable
+        // (normal training iterations), keep the buffer to avoid O(total_params)
+        // rebuild cost every iteration — critical for large models like VideoCLIP.
+        if (anyStructureChanged)
+        {
+            _parameterBuffer = null;
+            _layerStructureVersion++;
+        }
     }
 
     /// <summary>
