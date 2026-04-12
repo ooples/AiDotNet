@@ -4187,21 +4187,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
         }
 
-        // Compute loss via the actual loss function (not hardcoded MSE)
-        Tensor<T> lossTensor;
-        if (lossFunction is LossFunctions.LossFunctionBase<T> tapeLoss)
+        // Compute loss via the user's configured loss function
+        var resolvedLoss = lossFunction ?? DefaultLossFunction;
+        if (resolvedLoss is not LossFunctions.LossFunctionBase<T> tapeLoss)
         {
-            lossTensor = tapeLoss.ComputeTapeLoss(prediction, matchedTarget);
+            throw new InvalidOperationException(
+                $"Loss function {resolvedLoss.GetType().Name} must derive from LossFunctionBase<T> " +
+                "to support tape-based gradient computation.");
         }
-        else
-        {
-            // Fallback: MSE via tape-recorded ops for non-tape loss functions
-            var loss = lossFunction ?? DefaultLossFunction;
-            var diff = engine.TensorSubtract(prediction, matchedTarget);
-            var squared = engine.TensorMultiply(diff, diff);
-            var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
-            lossTensor = engine.ReduceMean(squared, allAxes, keepDims: false);
-        }
+        var lossTensor = tapeLoss.ComputeTapeLoss(prediction, matchedTarget);
 
         // Reverse-mode AD: compute gradients for all trainable parameters
         var grads = tape.ComputeGradients(lossTensor, trainableParams);
