@@ -58,7 +58,8 @@ public partial class RBFLayer<T> : LayerBase<T>
     /// width values mean the neuron responds more broadly, while smaller values make the response
     /// more focused around the center.
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    // TODO: Change to PersistentTensorRole.ScaleParameters once Tensors NuGet ships PR #152
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T> _widths;
 
     /// <summary>
@@ -273,15 +274,14 @@ public partial class RBFLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ComputeEpsilonsFromWidths()
     {
-        var epsilons = new Tensor<T>(_widths._shape);
-        var two = NumOps.FromDouble(2.0);
-        for (int i = 0; i < _numCenters; i++)
-        {
-            var widthSquared = NumOps.Multiply(_widths[i], _widths[i]);
-            var twoWidthSquared = NumOps.Multiply(two, widthSquared);
-            epsilons[i] = NumOps.Divide(NumOps.One, twoWidthSquared);
-        }
-        return epsilons;
+        // Compute epsilon = 1 / (2 * width²) using Engine ops so the tape can
+        // differentiate through _widths → epsilons → RBFKernel. Without this,
+        // the tape sees epsilons as an opaque input with no connection to _widths,
+        // causing parameter count mismatches during RestoreOriginalParameters.
+        var widthSquared = Engine.TensorMultiply(_widths, _widths);
+        var twoWidthSquared = Engine.TensorMultiplyScalar(widthSquared, NumOps.FromDouble(2.0));
+        var ones = Tensor<T>.CreateDefault(_widths._shape, NumOps.One);
+        return Engine.TensorDivide(ones, twoWidthSquared);
     }
 
     /// <summary>
@@ -514,7 +514,7 @@ public partial class RBFLayer<T> : LayerBase<T>
 
         // Register after initialization so tensor references are final
         RegisterTrainableParameter(_centers, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_widths, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_widths, PersistentTensorRole.Biases);
     }
 
 }
