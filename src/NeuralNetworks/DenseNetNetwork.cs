@@ -335,7 +335,8 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
             _configuration.InputWidth,
             _configuration.InputChannels,
             _configuration.GrowthRate,
-            _configuration.CompressionFactor);
+            _configuration.CompressionFactor,
+            _configuration.CustomBlockLayers);
 
         return new DenseNetNetwork<T>(Architecture, config, _optimizer, _lossFunction);
     }
