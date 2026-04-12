@@ -362,9 +362,10 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
         else
         {
-            // Eager initialization - allocate and initialize immediately
-            _weights = new Tensor<T>([inputSize, outputSize]);
-            _biases = new Tensor<T>([outputSize]);
+            // Eager initialization — use TensorAllocator for pooled/arena allocation
+            // to reduce GC pressure on large weight tensors (e.g., VGG FC: 25088×4096)
+            _weights = TensorAllocator.Rent<T>([inputSize, outputSize]);
+            _biases = TensorAllocator.Rent<T>([outputSize]);
 
             // Use strategy if provided, otherwise use default Xavier initialization
             if (initializationStrategy is not null)
@@ -446,9 +447,10 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
         else
         {
-            // Eager initialization - allocate and initialize immediately
-            _weights = new Tensor<T>([inputSize, outputSize]);
-            _biases = new Tensor<T>([outputSize]);
+            // Eager initialization — use TensorAllocator for pooled/arena allocation
+            // to reduce GC pressure on large weight tensors (e.g., VGG FC: 25088×4096)
+            _weights = TensorAllocator.Rent<T>([inputSize, outputSize]);
+            _biases = TensorAllocator.Rent<T>([outputSize]);
 
             if (initializationStrategy is not null)
             {
@@ -480,9 +482,8 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             int inputSize = InputShape[0];
             int outputSize = OutputShape[0];
 
-            // Allocate weights and biases
-            _weights = new Tensor<T>([inputSize, outputSize]);
-            _biases = new Tensor<T>([outputSize]);
+            _weights = TensorAllocator.Rent<T>([inputSize, outputSize]);
+            _biases = TensorAllocator.Rent<T>([outputSize]);
 
             // Initialize using strategy or default
             if (InitializationStrategy is not null)
@@ -1044,7 +1045,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int existingInputSize = _weights.Shape[0];
         int outputSize = _weights.Shape[1];
-        var resizedWeights = new Tensor<T>([actualInputSize, outputSize]);
+        var resizedWeights = TensorAllocator.Rent<T>([actualInputSize, outputSize]);
 
         int sharedInputSize = Math.Min(existingInputSize, actualInputSize);
         for (int i = 0; i < sharedInputSize; i++)

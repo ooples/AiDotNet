@@ -296,7 +296,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         AuxiliaryLossWeight = NumOps.FromDouble(0.0001);
         _lastEmbeddingRegularizationLoss = NumOps.Zero;
 
-        _embeddingTensor = new Tensor<T>([vocabularySize, embeddingDimension]);
+        _embeddingTensor = TensorAllocator.Rent<T>([vocabularySize, embeddingDimension]);
         InitializeParameters();
 
         // Register trainable parameters for GPU memory optimization
@@ -365,12 +365,14 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // Initialize embedding tensor with small random values using Engine operations
         T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(1.0), NumOps.FromDouble(embeddingDim)));
 
-        // Create random tensor [0, 1], shift to [-0.5, 0.5], then scale
-        var randomTensor = Tensor<T>.CreateRandom(vocabSize, embeddingDim);
-        var halfTensor = new Tensor<T>([vocabSize, embeddingDim]);
+        // Initialize in-place: random [0,1] → shift to [-0.5, 0.5] → scale
+        // Uses in-place ops to avoid 3 temporary full-size tensor allocations
+        _embeddingTensor = Tensor<T>.CreateRandom(vocabSize, embeddingDim);
+        var halfTensor = TensorAllocator.Rent<T>([vocabSize, embeddingDim]);
         halfTensor.Fill(NumOps.FromDouble(0.5));
-        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
-        _embeddingTensor = Engine.TensorMultiplyScalar(shifted, scale);
+        Engine.TensorSubtractInPlace(_embeddingTensor, halfTensor);
+        TensorAllocator.Return(halfTensor);
+        Engine.TensorMultiplyScalarInPlace(_embeddingTensor, scale);
     }
 
     /// <summary>
@@ -444,7 +446,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             // Create projection weights if needed (lazy initialization)
             if (_projectionWeights == null || _projectionWeights.Shape[0] != inputFeatures)
             {
-                _projectionWeights = new Tensor<T>([inputFeatures, embeddingDim]);
+                _projectionWeights = TensorAllocator.Rent<T>([inputFeatures, embeddingDim]);
                 // Xavier initialization
                 T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));
                 var random = RandomHelper.CreateSecureRandom();
@@ -581,7 +583,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             // Create projection weights if needed (lazy initialization)
             if (_projectionWeights == null || _projectionWeights.Shape[0] != inputFeatures)
             {
-                _projectionWeights = new Tensor<T>([inputFeatures, embeddingDim]);
+                _projectionWeights = TensorAllocator.Rent<T>([inputFeatures, embeddingDim]);
                 // Xavier initialization
                 T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));
                 var random = RandomHelper.CreateSecureRandom();
