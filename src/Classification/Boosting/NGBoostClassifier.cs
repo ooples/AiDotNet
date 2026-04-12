@@ -177,16 +177,9 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
             _initialLogOdds[c] = NumOps.FromDouble(Math.Log(p));
         }
 
-        // Initialize current log-odds for all samples
         var currentLogOdds = new Vector<T>[_numClasses];
         for (int c = 0; c < _numClasses; c++)
-        {
-            currentLogOdds[c] = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                currentLogOdds[c][i] = _initialLogOdds[c];
-            }
-        }
+            currentLogOdds[c] = Vector<T>.CreateDefault(n, _initialLogOdds[c]);
 
         _trees.Clear();
         Estimators.Clear();
@@ -230,19 +223,14 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
             // Build trees for each class
             var iterTrees = new DecisionTreeRegression<T>[_numClasses];
 
+            var xSample = x.GetRows(sampleIndices);
+            T lr = NumOps.FromDouble(_options.LearningRate);
+
             for (int c = 0; c < _numClasses; c++)
             {
-                // Create pseudo-residuals (negative natural gradients)
-                var residuals = new Vector<T>(sampleSize);
-                for (int i = 0; i < sampleSize; i++)
-                {
-                    residuals[i] = NumOps.Negate(naturalGradients[c][i]);
-                }
+                var residuals = new Vector<T>(naturalGradients[c]);
+                residuals.MultiplyInPlace(NumOps.Negate(NumOps.One));
 
-                // Build subsample matrix
-                var xSample = x.GetRows(sampleIndices);
-
-                // Train tree on pseudo-residuals
                 var tree = new DecisionTreeRegression<T>(new DecisionTreeOptions
                 {
                     MaxDepth = _options.MaxDepth,
@@ -255,14 +243,10 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
                 tree.Train(xSample, residuals);
                 iterTrees[c] = tree;
 
-                // Update log-odds for all samples
                 var treePredictions = tree.Predict(x);
-                for (int i = 0; i < n; i++)
-                {
-                    currentLogOdds[c][i] = NumOps.Add(
-                        currentLogOdds[c][i],
-                        NumOps.Multiply(NumOps.FromDouble(_options.LearningRate), treePredictions[i]));
-                }
+                var scaled = new Vector<T>(treePredictions);
+                scaled.MultiplyInPlace(lr);
+                currentLogOdds[c].AddInPlace(scaled);
             }
 
             _trees.Add(iterTrees);
@@ -339,29 +323,19 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
         int n = input.Rows;
         var probs = new Matrix<T>(n, _numClasses);
 
-        // Initialize log-odds
         var currentLogOdds = new Vector<T>[_numClasses];
         for (int c = 0; c < _numClasses; c++)
-        {
-            currentLogOdds[c] = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                currentLogOdds[c][i] = _initialLogOdds[c];
-            }
-        }
+            currentLogOdds[c] = Vector<T>.CreateDefault(n, _initialLogOdds[c]);
 
-        // Accumulate tree predictions
+        T lr = NumOps.FromDouble(_options.LearningRate);
         foreach (var iterTrees in _trees)
         {
             for (int c = 0; c < _numClasses; c++)
             {
                 var treePreds = iterTrees[c].Predict(input);
-                for (int i = 0; i < n; i++)
-                {
-                    currentLogOdds[c][i] = NumOps.Add(
-                        currentLogOdds[c][i],
-                        NumOps.Multiply(NumOps.FromDouble(_options.LearningRate), treePreds[i]));
-                }
+                var scaledPreds = new Vector<T>(treePreds);
+                scaledPreds.MultiplyInPlace(lr);
+                currentLogOdds[c].AddInPlace(scaledPreds);
             }
         }
 
@@ -542,19 +516,9 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
             }
         }
 
-        // Normalize
-        T sum = NumOps.Zero;
-        for (int i = 0; i < featureCount; i++)
-        {
-            sum = NumOps.Add(sum, importances[i]);
-        }
+        T sum = importances.Sum();
         if (NumOps.GreaterThan(sum, NumOps.Zero))
-        {
-            for (int i = 0; i < featureCount; i++)
-            {
-                importances[i] = NumOps.Divide(importances[i], sum);
-            }
-        }
+            importances.MultiplyInPlace(NumOps.Divide(NumOps.One, sum));
 
         FeatureImportances = importances;
     }

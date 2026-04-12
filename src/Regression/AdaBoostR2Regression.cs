@@ -177,45 +177,52 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         _ensemble.Clear();
         var sampleWeights = Vector<T>.CreateDefault(y.Length, NumOps.One);
-        var numSamples = x.Rows;
+        int n = x.Rows;
+
+        var treeOptions = new DecisionTreeOptions
+        {
+            MaxDepth = _options.MaxDepth,
+            MinSamplesSplit = _options.MinSamplesSplit,
+            MaxFeatures = _options.MaxFeatures,
+            SplitCriterion = _options.SplitCriterion
+        };
+
+        // Pre-allocate reusable buffers
+        var errors = new Vector<T>(n);
+        var normalizedErrors = new Vector<T>(n);
+        var exponents = new Vector<T>(n);
 
         for (int i = 0; i < _options.NumberOfEstimators; i++)
         {
-            var treeOptions = new DecisionTreeOptions
-            {
-                MaxDepth = _options.MaxDepth,
-                MinSamplesSplit = _options.MinSamplesSplit,
-                MaxFeatures = _options.MaxFeatures,
-                Seed = _random.Next(),
-                SplitCriterion = _options.SplitCriterion
-            };
+            treeOptions.Seed = _random.Next();
 
             var tree = new DecisionTreeRegression<T>(treeOptions, Regularization);
             tree.TrainWithWeights(x, y, sampleWeights);
 
             var predictions = tree.Predict(x);
-            var errors = CalculateErrors(y, predictions);
-            var averageError = CalculateAverageError(errors, sampleWeights);
+
+            // Engine-accelerated: errors = |y - predictions|
+            var diff = (Vector<T>)Engine.Subtract(y, predictions);
+            for (int j = 0; j < n; j++)
+                errors[j] = NumOps.Abs(diff[j]);
+
+            T maxError = errors.Max();
+            T averageError = CalculateAverageError(errors, sampleWeights, maxError, normalizedErrors);
 
             if (NumOps.GreaterThanOrEquals(averageError, NumOps.FromDouble(0.5)))
-            {
-                break; // Stop if the error is too high
-            }
+                break;
 
-            // Handle edge case: if averageError is 0, set a small value to avoid division by 0
             T effectiveError = NumOps.LessThan(averageError, NumOps.FromDouble(1e-10))
                 ? NumOps.FromDouble(1e-10)
                 : averageError;
 
             var beta = NumOps.Divide(effectiveError, NumOps.Subtract(NumOps.One, effectiveError));
-            // Clamp beta to avoid Log(0) or Log(infinity)
             beta = MathHelper.Max(beta, NumOps.FromDouble(1e-10));
             var weight = NumOps.Log(NumOps.Divide(NumOps.One, beta));
 
             _ensemble.Add((tree, weight));
 
-            // Update sample weights
-            sampleWeights = UpdateSampleWeights(sampleWeights, errors, beta);
+            UpdateSampleWeightsInPlace(sampleWeights, errors, beta, maxError, normalizedErrors, exponents);
         }
 
         await CalculateFeatureImportancesAsync(x.Columns);
@@ -327,9 +334,45 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     /// attention in the next round of training.
     /// </para>
     /// </remarks>
-    private Vector<T> CalculateErrors(Vector<T> y, Vector<T> predictions)
+    private T CalculateAverageError(Vector<T> errors, Vector<T> sampleWeights, T maxError,
+        Vector<T> normalizedErrors)
     {
-        return new Vector<T>(y.Select((yi, i) => NumOps.Abs(NumOps.Subtract(yi, predictions[i]))));
+        if (NumOps.Equals(maxError, NumOps.Zero))
+            return NumOps.Zero;
+
+        int n = errors.Length;
+        for (int i = 0; i < n; i++)
+            normalizedErrors[i] = NumOps.Divide(errors[i], maxError);
+
+        T weightedSum = Engine.DotProduct(normalizedErrors, sampleWeights);
+        T totalWeight = sampleWeights.Sum();
+        return NumOps.Divide(weightedSum, totalWeight);
+    }
+
+    private void UpdateSampleWeightsInPlace(Vector<T> sampleWeights, Vector<T> errors, T beta, T maxError,
+        Vector<T> normalizedErrors, Vector<T> exponents)
+    {
+        if (NumOps.Equals(maxError, NumOps.Zero))
+            return;
+
+        int n = errors.Length;
+        for (int i = 0; i < n; i++)
+        {
+            normalizedErrors[i] = NumOps.Divide(errors[i], maxError);
+            exponents[i] = NumOps.Subtract(NumOps.One, normalizedErrors[i]);
+        }
+
+        T sumWeights = NumOps.Zero;
+        for (int i = 0; i < n; i++)
+        {
+            sampleWeights[i] = NumOps.Multiply(sampleWeights[i], NumOps.Power(beta, exponents[i]));
+            sumWeights = NumOps.Add(sumWeights, sampleWeights[i]);
+        }
+
+        if (NumOps.Equals(sumWeights, NumOps.Zero))
+            return;
+
+        sampleWeights.MultiplyInPlace(NumOps.Divide(NumOps.One, sumWeights));
     }
 
     /// <summary>
@@ -358,21 +401,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     /// - If it's too high (â‰¥ 0.5), the tree is considered too weak and training stops
     /// </para>
     /// </remarks>
-    private T CalculateAverageError(Vector<T> errors, Vector<T> sampleWeights)
-    {
-        var maxError = errors.Max();
-
-        // If all predictions are perfect, return 0 (no error)
-        if (NumOps.Equals(maxError, NumOps.Zero))
-        {
-            return NumOps.Zero;
-        }
-
-        var weightedErrors = errors.Select((e, i) =>
-            NumOps.Multiply(NumOps.Divide(e, maxError), sampleWeights[i]));
-
-        return NumOps.Divide(weightedErrors.Aggregate(NumOps.Zero, NumOps.Add), sampleWeights.Sum());
-    }
+    // Old methods replaced by CalculateAverageError(4-arg) and UpdateSampleWeightsInPlace above
 
     /// <summary>
     /// Updates the sample weights for the next iteration of AdaBoost.R2.
@@ -404,28 +433,6 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     /// - It helps the overall model learn from its mistakes and continuously improve
     /// </para>
     /// </remarks>
-    private Vector<T> UpdateSampleWeights(Vector<T> sampleWeights, Vector<T> errors, T beta)
-    {
-        var maxError = errors.Max();
-
-        // If all errors are 0, keep weights unchanged
-        if (NumOps.Equals(maxError, NumOps.Zero))
-        {
-            return sampleWeights;
-        }
-
-        var updatedWeights = sampleWeights.Select((w, i) =>
-            NumOps.Multiply(w, NumOps.Power(beta, NumOps.Subtract(NumOps.One, NumOps.Divide(errors[i], maxError)))));
-        var sumWeights = updatedWeights.Aggregate(NumOps.Zero, NumOps.Add);
-
-        // Avoid division by 0 when normalizing
-        if (NumOps.Equals(sumWeights, NumOps.Zero))
-        {
-            return sampleWeights;
-        }
-
-        return new Vector<T>(updatedWeights.Select(w => NumOps.Divide(w, sumWeights)));
-    }
 
     /// <summary>
     /// Calculates the feature importances across all trees in the ensemble asynchronously.

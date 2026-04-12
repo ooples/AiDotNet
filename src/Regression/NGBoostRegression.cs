@@ -146,7 +146,8 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         // Standardize y for scale-invariant training (SIMD-accelerated via Engine)
         T yMeanT = Engine.Mean(y);
-        var centered = (Vector<T>)Engine.Subtract(y, Vector<T>.CreateDefault(n, yMeanT));
+        var centered = new Vector<T>(y);
+        centered.SubtractInPlace(Vector<T>.CreateDefault(n, yMeanT));
         T yVarT = Engine.DotProduct(centered, centered);
         T yStdT = NumOps.Sqrt(NumOps.Divide(yVarT, NumOps.FromDouble(n)));
         T eps = NumOps.FromDouble(1e-10);
@@ -154,7 +155,8 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _yMean = yMeanT;
         _yStd = yStdT;
 
-        var yStandardized = (Vector<T>)Engine.Divide(centered, Vector<T>.CreateDefault(n, yStdT));
+        var yStandardized = new Vector<T>(centered);
+        yStandardized.MultiplyInPlace(NumOps.Divide(NumOps.One, yStdT));
         y = yStandardized;
 
         // Initialize distribution and get number of parameters
@@ -162,26 +164,19 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _numParams = initialDist.NumParameters;
         _initialParameters = initialDist.Parameters;
 
-        // Initialize current parameter predictions for all samples
         var currentParams = new Vector<T>[_numParams];
         for (int p = 0; p < _numParams; p++)
-        {
-            currentParams[p] = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                currentParams[p][i] = _initialParameters[p];
-            }
-        }
+            currentParams[p] = Vector<T>.CreateDefault(n, _initialParameters[p]);
 
         _trees = [];
         FeatureImportances = new Vector<T>(x.Columns);
 
         T bestScore = NumOps.MaxValue;
         int roundsWithoutImprovement = 0;
+        T lr = NumOps.FromDouble(_options.LearningRate);
 
         for (int iter = 0; iter < _options.NumberOfIterations; iter++)
         {
-            // Subsample if needed
             int[] sampleIndices = GetSampleIndices(n);
             int sampleSize = sampleIndices.Length;
 
@@ -235,19 +230,13 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
             // Build trees for each parameter
             var iterTrees = new DecisionTreeRegression<T>[_numParams];
 
+            var xSample = x.GetRows(sampleIndices);
+
             for (int p = 0; p < _numParams; p++)
             {
-                // Create pseudo-residuals (natural gradients)
-                var residuals = new Vector<T>(sampleSize);
-                for (int i = 0; i < sampleSize; i++)
-                {
-                    residuals[i] = NumOps.Negate(naturalGradients[p][i]);
-                }
+                var residuals = new Vector<T>(naturalGradients[p]);
+                residuals.MultiplyInPlace(NumOps.Negate(NumOps.One));
 
-                // Build subsample matrix
-                var xSample = x.GetRows(sampleIndices);
-
-                // Train tree on pseudo-residuals
                 var tree = new DecisionTreeRegression<T>(new DecisionTreeOptions
                 {
                     MaxDepth = _options.MaxDepth,
@@ -260,14 +249,11 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 tree.Train(xSample, residuals);
                 iterTrees[p] = tree;
 
-                // Update parameters for all samples (not just the subsample)
+                // Copy before mutating — tree may cache prediction vector
                 var treePredictions = tree.Predict(x);
-                for (int i = 0; i < n; i++)
-                {
-                    currentParams[p][i] = NumOps.Add(
-                        currentParams[p][i],
-                        NumOps.Multiply(NumOps.FromDouble(_options.LearningRate), treePredictions[i]));
-                }
+                var scaled = new Vector<T>(treePredictions);
+                scaled.MultiplyInPlace(lr);
+                currentParams[p].AddInPlace(scaled);
             }
 
             _trees.Add(iterTrees);
@@ -337,41 +323,29 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         int n = input.Rows;
         var distributions = new IParametricDistribution<T>[n];
 
-        // Initialize parameters
         var currentParams = new Vector<T>[_numParams];
         for (int p = 0; p < _numParams; p++)
-        {
-            currentParams[p] = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                currentParams[p][i] = _initialParameters[p];
-            }
-        }
+            currentParams[p] = Vector<T>.CreateDefault(n, _initialParameters[p]);
 
-        // Accumulate tree predictions
         var treePredictionTasks = _trees.Select(iterTrees =>
             Task.Run(() =>
             {
                 var treePreds = new Vector<T>[_numParams];
                 for (int p = 0; p < _numParams; p++)
-                {
                     treePreds[p] = iterTrees[p].Predict(input);
-                }
                 return treePreds;
             }));
 
         var allTreePredictions = await ParallelProcessingHelper.ProcessTasksInParallel(treePredictionTasks);
 
+        T lr = NumOps.FromDouble(_options.LearningRate);
         foreach (var treePreds in allTreePredictions)
         {
             for (int p = 0; p < _numParams; p++)
             {
-                for (int i = 0; i < n; i++)
-                {
-                    currentParams[p][i] = NumOps.Add(
-                        currentParams[p][i],
-                        NumOps.Multiply(NumOps.FromDouble(_options.LearningRate), treePreds[p][i]));
-                }
+                var scaled = new Vector<T>(treePreds[p]);
+                scaled.MultiplyInPlace(lr);
+                currentParams[p].AddInPlace(scaled);
             }
         }
 
@@ -436,20 +410,11 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private IParametricDistribution<T> CreateDistribution(Vector<T> y)
     {
-        T mean = NumOps.Zero;
-        for (int i = 0; i < y.Length; i++)
-        {
-            mean = NumOps.Add(mean, y[i]);
-        }
-        mean = NumOps.Divide(mean, NumOps.FromDouble(y.Length));
+        T mean = Engine.Mean(y);
 
-        T variance = NumOps.Zero;
-        for (int i = 0; i < y.Length; i++)
-        {
-            T diff = NumOps.Subtract(y[i], mean);
-            variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-        }
-        variance = NumOps.Divide(variance, NumOps.FromDouble(y.Length));
+        var centered = new Vector<T>(y);
+        centered.SubtractInPlace(Vector<T>.CreateDefault(y.Length, mean));
+        T variance = NumOps.Divide(Engine.DotProduct(centered, centered), NumOps.FromDouble(y.Length));
         T minVariance = NumOps.FromDouble(MinVariance);
         if (NumOps.LessThan(variance, minVariance))
         {

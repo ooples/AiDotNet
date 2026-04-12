@@ -353,9 +353,22 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     {
         int n = x.Rows;
         var weights = new double[n];
+        double initWeight = 1.0 / n;
         for (int i = 0; i < n; i++)
+            weights[i] = initWeight;
+
+        // Precompute class indices + feature columns to avoid repeated NumOps.ToDouble / GetClassIndexFromLabel
+        var classIndices = new int[n];
+        for (int i = 0; i < n; i++)
+            classIndices[i] = GetClassIndexFromLabel(y[i]);
+
+        var featureColumns = new double[NumFeatures][];
+        for (int j = 0; j < NumFeatures; j++)
         {
-            weights[i] = 1.0 / n;
+            featureColumns[j] = new double[n];
+            var col = x.GetColumn(j);
+            for (int i = 0; i < n; i++)
+                featureColumns[j][i] = NumOps.ToDouble(col[i]);
         }
 
         var weakLearners = new List<WeakLearner>();
@@ -363,43 +376,30 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
 
         for (int t = 0; t < _nEstimatorsPerSubset; t++)
         {
-            // Train weak learner (decision stump or shallow tree)
-            var learner = TrainWeakLearner(x, y, weights);
+            var learner = TrainWeakLearnerFast(featureColumns, classIndices, weights, n);
 
-            // Compute weighted error
             double weightedError = 0;
             var predictions = new int[n];
             for (int i = 0; i < n; i++)
             {
-                predictions[i] = PredictWeakLearner(learner, x, i);
-                int actual = GetClassIndexFromLabel(y[i]);
-                if (predictions[i] != actual)
-                {
+                predictions[i] = (learner.Polarity * (featureColumns[learner.FeatureIndex][i] - learner.Threshold) > 0) ? 1 : 0;
+                if (predictions[i] != classIndices[i])
                     weightedError += weights[i];
-                }
             }
 
-            // Avoid edge cases
             weightedError = Math.Max(1e-10, Math.Min(1 - 1e-10, weightedError));
-
-            // Compute alpha (classifier weight)
             double alpha = _learningRate * 0.5 * Math.Log((1 - weightedError) / weightedError);
 
-            // Update sample weights
             double weightSum = 0;
             for (int i = 0; i < n; i++)
             {
-                int actual = GetClassIndexFromLabel(y[i]);
-                double sign = predictions[i] == actual ? -1 : 1;
+                double sign = predictions[i] == classIndices[i] ? -1 : 1;
                 weights[i] *= Math.Exp(alpha * sign);
                 weightSum += weights[i];
             }
 
-            // Normalize weights
             for (int i = 0; i < n; i++)
-            {
                 weights[i] /= weightSum;
-            }
 
             weakLearners.Add(learner);
             alphas.Add(alpha);
@@ -424,6 +424,56 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     /// better than random guessing. Decision stumps (depth-1 trees) are common because they're
     /// fast and work well with boosting.</para>
     /// </remarks>
+    private WeakLearner TrainWeakLearnerFast(double[][] featureColumns, int[] classIndices, double[] weights, int n)
+    {
+        var bestLearner = new WeakLearner();
+        double bestWeightedError = double.MaxValue;
+
+        for (int j = 0; j < NumFeatures; j++)
+        {
+            var col = featureColumns[j];
+            var values = new SortedSet<double>();
+            for (int i = 0; i < n; i++)
+                values.Add(col[i]);
+
+            if (values.Count < 2) continue;
+
+            var valueList = values.ToList();
+            for (int v = 0; v < valueList.Count - 1; v++)
+            {
+                double threshold = (valueList[v] + valueList[v + 1]) / 2.0;
+
+                for (int polarity = -1; polarity <= 1; polarity += 2)
+                {
+                    double weightedError = 0;
+                    for (int i = 0; i < n; i++)
+                    {
+                        int pred = (polarity * (col[i] - threshold) > 0) ? 1 : 0;
+                        if (pred != classIndices[i])
+                            weightedError += weights[i];
+                    }
+
+                    if (weightedError < bestWeightedError)
+                    {
+                        bestWeightedError = weightedError;
+                        bestLearner = new WeakLearner
+                        {
+                            FeatureIndex = j,
+                            Threshold = threshold,
+                            Polarity = polarity
+                        };
+                    }
+                }
+            }
+        }
+
+        if (bestWeightedError == double.MaxValue)
+            throw new InvalidOperationException(
+                "No valid split found: all features appear to be constant.");
+
+        return bestLearner;
+    }
+
     private WeakLearner TrainWeakLearner(Matrix<T> x, Vector<T> y, double[] weights)
     {
         int n = x.Rows;

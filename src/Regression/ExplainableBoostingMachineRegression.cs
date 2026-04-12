@@ -148,73 +148,49 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
         _numFeatures = x.Columns;
         int n = x.Rows;
 
-        // Initialize intercept as mean of y
-        T mean = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            mean = NumOps.Add(mean, y[i]);
-        }
-        _intercept = NumOps.Divide(mean, NumOps.FromDouble(n));
+        _intercept = Engine.Mean(y);
 
-        // Create bins for each feature
         CreateBins(x);
 
-        // Initialize shape functions to zero
+        // Precompute bin indices into Matrix<int> — O(1) lookup in hot loop
+        var binIndices = new Matrix<int>(n, _numFeatures);
+        for (int f = 0; f < _numFeatures; f++)
+            for (int i = 0; i < n; i++)
+                binIndices[i, f] = GetBinIndex(x[i, f], f);
+
         _shapeFunctions = new List<Vector<T>>(_numFeatures);
         for (int f = 0; f < _numFeatures; f++)
-        {
-            var sf = new Vector<T>(_binEdges[f].Length + 1);
-            for (int b = 0; b <= _binEdges[f].Length; b++)
-            {
-                sf[b] = NumOps.Zero;
-            }
-            _shapeFunctions.Add(sf);
-        }
+            _shapeFunctions.Add(Vector<T>.CreateDefault(_binEdges[f].Length + 1, NumOps.Zero));
 
-        // Initialize residuals
-        var residuals = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            residuals[i] = NumOps.Subtract(y[i], _intercept);
-        }
+        var residuals = new Vector<T>(y);
+        residuals.SubtractInPlace(Vector<T>.CreateDefault(n, _intercept));
 
-        // Train using cyclic coordinate descent with boosting
+        // Pre-allocate gather buffer — reused every UpdateShapeFunction call, zero GC
+        var gatherUpdates = new Vector<T>(n);
+
         int[] featureOrder = Enumerable.Range(0, _numFeatures).ToArray();
+        T lr = NumOps.FromDouble(_options.LearningRate);
 
         for (int outer = 0; outer < _options.NumberOfOuterIterations; outer++)
         {
-            // Shuffle feature order if not cyclic
             if (!_options.CyclicTraining)
-            {
                 ShuffleArray(featureOrder);
-            }
 
-            // Subsample
             int[] sampleIndices = GetSampleIndices(n);
 
             foreach (int f in featureOrder)
             {
                 for (int inner = 0; inner < _options.NumberOfInnerIterations; inner++)
-                {
-                    // Fit a simple model to residuals for this feature
-                    UpdateShapeFunction(x, residuals, f, sampleIndices);
-                }
+                    UpdateShapeFunction(residuals, f, sampleIndices, binIndices, lr, gatherUpdates);
             }
         }
 
-        // Detect and add interactions if enabled
         if (_options.DetectInteractions)
-        {
-            DetectAndAddInteractions(x, y, residuals);
-        }
+            DetectAndAddInteractions(residuals, binIndices);
 
-        // Apply smoothing regularization
         if (_options.RegularizationStrength > 0)
-        {
             SmoothShapeFunctions();
-        }
 
-        // Calculate feature importances
         await CalculateFeatureImportancesAsync(x.Columns);
     }
 
@@ -366,7 +342,11 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
 
             // Determine number of bins: limit by unique values AND data size
             // to ensure each bin has enough samples for reliable gradient estimates
-            int numUnique = values.Distinct().Count();
+            int numUnique = values.Count > 0 ? 1 : 0;
+            for (int i = 1; i < values.Count; i++)
+            {
+                if (values[i] != values[i - 1]) numUnique++;
+            }
             int maxBinsForData = Math.Max(2, values.Count / Math.Max(1, _options.MinSamplesPerBin));
             int numBins = Math.Min(_options.MaxBins, Math.Min(numUnique, maxBinsForData));
 
@@ -401,193 +381,144 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
     private int GetBinIndex(T value, int featureIndex)
     {
         var edges = _binEdges[featureIndex];
-        if (edges.Length == 0) return 0;
+        int len = edges.Length;
+        if (len == 0) return 0;
 
-        for (int b = 0; b < edges.Length; b++)
+        int lo = 0, hi = len;
+        while (lo < hi)
         {
-            if (NumOps.LessThan(value, edges[b]))
-            {
-                return b;
-            }
+            int mid = (lo + hi) >> 1;
+            if (NumOps.LessThan(value, edges[mid]))
+                hi = mid;
+            else
+                lo = mid + 1;
         }
-
-        return edges.Length;  // Last bin
+        return lo;
     }
 
-    /// <summary>
-    /// Updates the shape function for a single feature.
-    /// </summary>
-    private void UpdateShapeFunction(Matrix<T> x, Vector<T> residuals, int featureIndex, int[] sampleIndices)
+    private void UpdateShapeFunction(Vector<T> residuals, int featureIndex,
+        int[] sampleIndices, Matrix<int> binIndices, T lr, Vector<T> gatherUpdates)
     {
         int numBins = _shapeFunctions[featureIndex].Length;
-        T lr = NumOps.FromDouble(_options.LearningRate);
 
-        // Accumulate gradients per bin
-        var binSums = new T[numBins];
+        var binSums = Vector<T>.CreateDefault(numBins, NumOps.Zero);
         var binCounts = new int[numBins];
-        for (int b = 0; b < numBins; b++)
-        {
-            binSums[b] = NumOps.Zero;
-        }
-
         foreach (int i in sampleIndices)
         {
-            int bin = GetBinIndex(x[i, featureIndex], featureIndex);
+            int bin = binIndices[i, featureIndex];
             binSums[bin] = NumOps.Add(binSums[bin], residuals[i]);
             binCounts[bin]++;
         }
 
-        // Precompute updates per bin
-        var binUpdates = new T[numBins];
+        var binUpdates = Vector<T>.CreateDefault(numBins, NumOps.Zero);
+        int minSamples = _options.MinSamplesPerBin;
         for (int b = 0; b < numBins; b++)
         {
-            if (binCounts[b] >= _options.MinSamplesPerBin)
+            if (binCounts[b] >= minSamples)
             {
-                binUpdates[b] = NumOps.Multiply(lr, NumOps.Divide(binSums[b], NumOps.FromDouble(binCounts[b])));
-                _shapeFunctions[featureIndex][b] = NumOps.Add(_shapeFunctions[featureIndex][b], binUpdates[b]);
-            }
-            else
-            {
-                binUpdates[b] = NumOps.Zero;
+                binUpdates[b] = NumOps.Multiply(lr,
+                    NumOps.Divide(binSums[b], NumOps.FromDouble(binCounts[b])));
+                _shapeFunctions[featureIndex][b] = NumOps.Add(
+                    _shapeFunctions[featureIndex][b], binUpdates[b]);
             }
         }
 
-        // Update residuals for all samples
-        for (int i = 0; i < residuals.Length; i++)
-        {
-            int bin = GetBinIndex(x[i, featureIndex], featureIndex);
-            if (binCounts[bin] >= _options.MinSamplesPerBin)
-            {
-                residuals[i] = NumOps.Subtract(residuals[i], binUpdates[bin]);
-            }
-        }
+        // Gather then AVX SIMD in-place subtract — zero allocation
+        int n = residuals.Length;
+        for (int i = 0; i < n; i++)
+            gatherUpdates[i] = binUpdates[binIndices[i, featureIndex]];
+
+        residuals.SubtractInPlace(gatherUpdates);
     }
 
     /// <summary>
     /// Detects and adds important pairwise interactions.
     /// </summary>
-    private void DetectAndAddInteractions(Matrix<T> x, Vector<T> y, Vector<T> residuals)
+    private void DetectAndAddInteractions(Vector<T> residuals, Matrix<int> binIndices)
     {
         _interactionTerms = new Dictionary<(int, int), Matrix<T>>();
 
-        // Use FAST algorithm to detect interactions
         var interactionScores = new List<((int, int) pair, double score)>();
 
-        // Compute interaction importance for all pairs
         for (int f1 = 0; f1 < _numFeatures; f1++)
-        {
             for (int f2 = f1 + 1; f2 < _numFeatures; f2++)
-            {
-                double score = ComputeInteractionScore(x, residuals, f1, f2);
-                interactionScores.Add(((f1, f2), score));
-            }
-        }
+                interactionScores.Add(((f1, f2), ComputeInteractionScore(residuals, f1, f2, binIndices)));
 
-        // Sort by score and take top interactions
         interactionScores.Sort((a, b) => b.score.CompareTo(a.score));
         int numInteractions = Math.Min(_options.MaxInteractionBins, interactionScores.Count);
 
         for (int i = 0; i < numInteractions; i++)
         {
             var (pair, _) = interactionScores[i];
-            FitInteraction(x, residuals, pair.Item1, pair.Item2);
+            FitInteraction(residuals, pair.Item1, pair.Item2, binIndices);
         }
     }
 
-    /// <summary>
-    /// Computes the interaction score for a pair of features.
-    /// </summary>
-    private double ComputeInteractionScore(Matrix<T> x, Vector<T> residuals, int f1, int f2)
+    private double ComputeInteractionScore(Vector<T> residuals, int f1, int f2, Matrix<int> binIndices)
     {
-        // Simple variance-based score for interaction detection
         int numBins1 = Math.Min(5, _shapeFunctions[f1].Length);
         int numBins2 = Math.Min(5, _shapeFunctions[f2].Length);
 
-        var binMeans = new double[numBins1, numBins2];
-        var binCounts = new int[numBins1, numBins2];
+        var binMeans = new Matrix<T>(numBins1, numBins2);
+        var binCounts = new Matrix<int>(numBins1, numBins2);
 
-        for (int i = 0; i < residuals.Length; i++)
+        int rows = residuals.Length;
+        for (int i = 0; i < rows; i++)
         {
-            int b1 = GetBinIndex(x[i, f1], f1) % numBins1;
-            int b2 = GetBinIndex(x[i, f2], f2) % numBins2;
-            binMeans[b1, b2] += NumOps.ToDouble(residuals[i]);
+            int b1 = binIndices[i, f1] % numBins1;
+            int b2 = binIndices[i, f2] % numBins2;
+            binMeans[b1, b2] = NumOps.Add(binMeans[b1, b2], residuals[i]);
             binCounts[b1, b2]++;
         }
 
-        // Compute variance explained
         double totalVar = 0;
         for (int b1 = 0; b1 < numBins1; b1++)
-        {
             for (int b2 = 0; b2 < numBins2; b2++)
-            {
                 if (binCounts[b1, b2] > 0)
                 {
-                    binMeans[b1, b2] /= binCounts[b1, b2];
-                    totalVar += binCounts[b1, b2] * binMeans[b1, b2] * binMeans[b1, b2];
+                    double mean = NumOps.ToDouble(binMeans[b1, b2]) / binCounts[b1, b2];
+                    totalVar += binCounts[b1, b2] * mean * mean;
                 }
-            }
-        }
 
         return totalVar;
     }
 
-    /// <summary>
-    /// Fits an interaction term for a pair of features.
-    /// </summary>
-    private void FitInteraction(Matrix<T> x, Vector<T> residuals, int f1, int f2)
+    private void FitInteraction(Vector<T> residuals, int f1, int f2, Matrix<int> binIndices)
     {
-        int numBins1 = _shapeFunctions[f1].Length;
-        int numBins2 = _shapeFunctions[f2].Length;
-
-        // Limit interaction resolution
-        numBins1 = Math.Min(numBins1, 32);
-        numBins2 = Math.Min(numBins2, 32);
+        int numBins1 = Math.Min(_shapeFunctions[f1].Length, 32);
+        int numBins2 = Math.Min(_shapeFunctions[f2].Length, 32);
 
         var interactionMatrix = new Matrix<T>(numBins1, numBins2);
-        var binSums = new T[numBins1, numBins2];
-        var binCounts = new int[numBins1, numBins2];
-        for (int i1 = 0; i1 < numBins1; i1++)
-        {
-            for (int i2 = 0; i2 < numBins2; i2++)
-            {
-                binSums[i1, i2] = NumOps.Zero;
-            }
-        }
+        var binSums = new Matrix<T>(numBins1, numBins2);
+        var binCounts = new Matrix<int>(numBins1, numBins2);
 
-        // Accumulate residuals
-        for (int i = 0; i < residuals.Length; i++)
+        int rows = residuals.Length;
+        for (int i = 0; i < rows; i++)
         {
-            int b1 = GetBinIndex(x[i, f1], f1) % numBins1;
-            int b2 = GetBinIndex(x[i, f2], f2) % numBins2;
+            int b1 = binIndices[i, f1] % numBins1;
+            int b2 = binIndices[i, f2] % numBins2;
             binSums[b1, b2] = NumOps.Add(binSums[b1, b2], residuals[i]);
             binCounts[b1, b2]++;
         }
 
-        // Compute interaction effects
+        int minSamples = _options.MinSamplesPerBin;
         for (int b1 = 0; b1 < numBins1; b1++)
-        {
             for (int b2 = 0; b2 < numBins2; b2++)
-            {
-                if (binCounts[b1, b2] >= _options.MinSamplesPerBin)
-                {
-                    interactionMatrix[b1, b2] = NumOps.Divide(binSums[b1, b2], NumOps.FromDouble(binCounts[b1, b2]));
-                }
-                else
-                {
-                    interactionMatrix[b1, b2] = NumOps.Zero;
-                }
-            }
-        }
+                if (binCounts[b1, b2] >= minSamples)
+                    interactionMatrix[b1, b2] = NumOps.Divide(binSums[b1, b2],
+                        NumOps.FromDouble(binCounts[b1, b2]));
 
         _interactionTerms[(f1, f2)] = interactionMatrix;
 
-        // Update residuals
-        for (int i = 0; i < residuals.Length; i++)
+        // Gather then AVX SIMD in-place subtract
+        var gatherUpdates = new Vector<T>(rows);
+        for (int i = 0; i < rows; i++)
         {
-            int b1 = GetBinIndex(x[i, f1], f1) % numBins1;
-            int b2 = GetBinIndex(x[i, f2], f2) % numBins2;
-            residuals[i] = NumOps.Subtract(residuals[i], interactionMatrix[b1, b2]);
+            int b1 = binIndices[i, f1] % numBins1;
+            int b2 = binIndices[i, f2] % numBins2;
+            gatherUpdates[i] = interactionMatrix[b1, b2];
         }
+        residuals.SubtractInPlace(gatherUpdates);
     }
 
     /// <summary>
@@ -600,25 +531,26 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
 
         for (int f = 0; f < _numFeatures; f++)
         {
-            if (_shapeFunctions[f].Length <= 2) continue;
+            var sf = _shapeFunctions[f];
+            int len = sf.Length;
+            if (len <= 2) continue;
 
-            // Apply simple moving average smoothing
-            var smoothed = new Vector<T>(_shapeFunctions[f].Length);
-            for (int b = 0; b < _shapeFunctions[f].Length; b++)
-            {
-                T sum = _shapeFunctions[f][b];
+            var leftNeighbor = new Vector<T>(len);
+            var rightNeighbor = new Vector<T>(len);
+            leftNeighbor[0] = sf[0];
+            rightNeighbor[len - 1] = sf[len - 1];
+            for (int b = 1; b < len; b++)
+                leftNeighbor[b] = sf[b - 1];
+            for (int b = 0; b < len - 1; b++)
+                rightNeighbor[b] = sf[b + 1];
 
-                if (b > 0)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(lambda, _shapeFunctions[f][b - 1]));
-                }
-                if (b < _shapeFunctions[f].Length - 1)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(lambda, _shapeFunctions[f][b + 1]));
-                }
-
-                smoothed[b] = NumOps.Divide(sum, divisor);
-            }
+            // In-place: left *= lambda, right *= lambda, left += right, left += sf
+            leftNeighbor.MultiplyInPlace(lambda);
+            rightNeighbor.MultiplyInPlace(lambda);
+            leftNeighbor.AddInPlace(rightNeighbor);
+            leftNeighbor.AddInPlace(sf);
+            leftNeighbor.MultiplyInPlace(NumOps.Divide(NumOps.One, divisor));
+            var smoothed = leftNeighbor;
 
             _shapeFunctions[f] = smoothed;
         }
@@ -630,34 +562,11 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
         var importances = new Vector<T>(_numFeatures);
 
         for (int f = 0; f < _numFeatures; f++)
-        {
-            // Importance = range of shape function values
-            T min = NumOps.MaxValue;
-            T max = NumOps.MinValue;
+            importances[f] = NumOps.Subtract(_shapeFunctions[f].Max(), _shapeFunctions[f].Min());
 
-            for (int b = 0; b < _shapeFunctions[f].Length; b++)
-            {
-                T v = _shapeFunctions[f][b];
-                if (NumOps.LessThan(v, min)) min = v;
-                if (NumOps.GreaterThan(v, max)) max = v;
-            }
-
-            importances[f] = NumOps.Subtract(max, min);
-        }
-
-        // Normalize
-        T sum = NumOps.Zero;
-        for (int f = 0; f < _numFeatures; f++)
-        {
-            sum = NumOps.Add(sum, importances[f]);
-        }
+        T sum = importances.Sum();
         if (NumOps.GreaterThan(sum, NumOps.Zero))
-        {
-            for (int f = 0; f < _numFeatures; f++)
-            {
-                importances[f] = NumOps.Divide(importances[f], sum);
-            }
-        }
+            importances.MultiplyInPlace(NumOps.Divide(NumOps.One, sum));
 
         FeatureImportances = importances;
         return Task.CompletedTask;
