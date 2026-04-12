@@ -3441,6 +3441,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Fixes #1113.
         if (Layers.Count > 0 && Layers[0] is Layers.EmbeddingLayer<T>)
         {
+            // Clear any stale feature mask so IsFeatureUsed() doesn't
+            // answer from a previous dense-feature configuration.
+            _explicitlySetActiveFeatures?.Clear();
             return;
         }
 
@@ -4146,6 +4149,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
     {
+        var engine = AiDotNetEngine.Current;
+
+        using var tape = new GradientTape<T>();
+
+        // Forward pass under tape recording (NOT Predict which uses NoGradScope).
+        // Must happen BEFORE collecting trainable parameters — layers may
+        // initialize or resize weights on their first forward pass.
+        var prediction = ForwardForTraining(input);
+
+        // Collect parameters AFTER forward so lazy-initialized layers are included
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
         if (trainableParams.Count == 0)
         {
@@ -4153,13 +4166,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 "No trainable parameters found. ComputeGradients requires at least one " +
                 "layer implementing ITrainableLayer<T> with registered parameters.");
         }
-
-        var engine = AiDotNetEngine.Current;
-
-        using var tape = new GradientTape<T>();
-
-        // Forward pass under tape recording (NOT Predict which uses NoGradScope)
-        var prediction = ForwardForTraining(input);
 
         // Match target shape to prediction for classification (integer → one-hot)
         var matchedTarget = target;
