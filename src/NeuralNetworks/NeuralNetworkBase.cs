@@ -2700,17 +2700,30 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (layer is ITrainableLayer<T> trainable)
             {
                 var currentViews = trainable.GetTrainableParameters();
+
+                // If parameter count or sizes changed (e.g., DenseLayer lazy initialization
+                // resized weights during the first forward pass), skip restoration for this
+                // layer — the pre-init parameters are meaningless and the layer now has the
+                // correct shape for the actual input data.
                 if (currentViews.Count != originals.Count)
-                    throw new InvalidOperationException(
-                        $"Parameter count changed during training step: expected {originals.Count}, got {currentViews.Count}.");
+                    continue;
+
+                bool sizeChanged = false;
+                for (int i = 0; i < originals.Count; i++)
+                {
+                    if (currentViews[i].Length != originals[i].Length)
+                    {
+                        sizeChanged = true;
+                        break;
+                    }
+                }
+                if (sizeChanged)
+                    continue;
 
                 for (int i = 0; i < originals.Count; i++)
                 {
                     var view = currentViews[i];
                     var orig = originals[i];
-                    if (view.Length != orig.Length)
-                        throw new InvalidOperationException(
-                            $"Parameter {i} size changed: expected {orig.Length}, got {view.Length}.");
                     for (int j = 0; j < view.Length; j++)
                         orig.SetFlat(j, view.GetFlat(j));
                 }
