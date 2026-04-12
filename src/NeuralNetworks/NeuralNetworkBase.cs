@@ -4146,88 +4146,93 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
     {
-        // Try tape-based gradient computation first (preferred path)
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
-        if (trainableParams.Count > 0)
+        if (trainableParams.Count == 0)
         {
-            try
+            throw new InvalidOperationException(
+                "No trainable parameters found. ComputeGradients requires at least one " +
+                "layer implementing ITrainableLayer<T> with registered parameters.");
+        }
+
+        var engine = AiDotNetEngine.Current;
+
+        using var tape = new GradientTape<T>();
+
+        // Forward pass under tape recording (NOT Predict which uses NoGradScope)
+        var prediction = ForwardForTraining(input);
+
+        // Match target shape to prediction for classification (integer → one-hot)
+        var matchedTarget = target;
+        if (prediction.Shape.Length > target.Shape.Length)
+        {
+            int numClasses = prediction.Shape[prediction.Shape.Length - 1];
+            if (numClasses > 1 && target.Shape.Length == prediction.Shape.Length - 1)
             {
-                var engine = AiDotNetEngine.Current;
-
-                using var tape = new GradientTape<T>();
-
-                // Forward pass under tape recording (NOT using Predict which has NoGradScope)
-                var prediction = ForwardForTraining(input);
-
-                // Compute MSE loss via tape-recorded engine ops
-                var diff = engine.TensorSubtract(prediction, target);
-                var squared = engine.TensorMultiply(diff, diff);
-                var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
-                var lossTensor = engine.ReduceMean(squared, allAxes, keepDims: false);
-
-                // Reverse-mode AD: compute gradients for all trainable parameters
-                var grads = tape.ComputeGradients(lossTensor, trainableParams);
-
-                // Flatten into parameter gradient vector (same ordering as GetParameters)
-                var flatGradients = new List<T>();
-                foreach (var layer in Layers)
+                var oneHot = new Tensor<T>(prediction.Shape.ToArray());
+                for (int i = 0; i < target.Length; i++)
                 {
-                    if (layer is ITrainableLayer<T> trainable)
+                    int classIdx = (int)NumOps.ToDouble(target[i]);
+                    if (classIdx < 0 || classIdx >= numClasses)
                     {
-                        foreach (var param in trainable.GetTrainableParameters())
-                        {
-                            if (grads.TryGetValue(param, out var grad))
-                            {
-                                for (int i = 0; i < grad.Length; i++)
-                                    flatGradients.Add(grad[i]);
-                            }
-                            else
-                            {
-                                // No gradient for this param — add zeros
-                                for (int i = 0; i < param.Length; i++)
-                                    flatGradients.Add(NumOps.Zero);
-                            }
-                        }
+                        throw new ArgumentOutOfRangeException(nameof(target),
+                            $"Class index {classIdx} at position {i} is out of range [0, {numClasses}).");
+                    }
+                    oneHot[i * numClasses + classIdx] = NumOps.One;
+                }
+                matchedTarget = oneHot;
+            }
+            else if (target.Length == prediction.Length)
+            {
+                matchedTarget = engine.Reshape(target, prediction._shape);
+            }
+        }
+
+        // Compute loss via the actual loss function (not hardcoded MSE)
+        Tensor<T> lossTensor;
+        if (lossFunction is LossFunctions.LossFunctionBase<T> tapeLoss)
+        {
+            lossTensor = tapeLoss.ComputeTapeLoss(prediction, matchedTarget);
+        }
+        else
+        {
+            // Fallback: MSE via tape-recorded ops for non-tape loss functions
+            var loss = lossFunction ?? DefaultLossFunction;
+            var diff = engine.TensorSubtract(prediction, matchedTarget);
+            var squared = engine.TensorMultiply(diff, diff);
+            var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+            lossTensor = engine.ReduceMean(squared, allAxes, keepDims: false);
+        }
+
+        // Reverse-mode AD: compute gradients for all trainable parameters
+        var grads = tape.ComputeGradients(lossTensor, trainableParams);
+
+        // Flatten into parameter gradient vector (same ordering as GetParameters)
+        var flatGradients = new List<T>();
+        foreach (var layer in Layers)
+        {
+            if (layer is ITrainableLayer<T> trainable)
+            {
+                foreach (var param in trainable.GetTrainableParameters())
+                {
+                    if (grads.TryGetValue(param, out var grad))
+                    {
+                        for (int i = 0; i < grad.Length; i++)
+                            flatGradients.Add(grad[i]);
                     }
                     else
                     {
-                        // Non-trainable layer: add zeros for its parameter count
-                        for (int i = 0; i < layer.ParameterCount; i++)
+                        for (int i = 0; i < param.Length; i++)
                             flatGradients.Add(NumOps.Zero);
                     }
                 }
-                return new Vector<T>(flatGradients.ToArray());
             }
-            catch
+            else
             {
-                // Fall through to legacy backward path
+                for (int i = 0; i < layer.ParameterCount; i++)
+                    flatGradients.Add(NumOps.Zero);
             }
         }
-
-        // Legacy path: manual backward through layers
-        var loss = lossFunction ?? DefaultLossFunction;
-        var pred = Predict(input);
-
-        // Match target shape to prediction when target is integer indices
-        // (e.g., [B, S] → [B, S, V] one-hot). Same fix as #1115 in the
-        // optimizer gradient path — both call CalculateDerivative with
-        // flattened vectors that must have matching lengths.
-        var matchedTarget = target;
-        if (pred.Shape.Length > target.Shape.Length)
-        {
-            int numClasses = pred.Shape[pred.Shape.Length - 1];
-            var oneHot = new Tensor<T>(pred._shape);
-            for (int i = 0; i < target.Length; i++)
-            {
-                int classIdx = (int)NumOps.ToDouble(target[i]);
-                if (classIdx >= 0 && classIdx < numClasses)
-                    oneHot[i * numClasses + classIdx] = NumOps.One;
-            }
-            matchedTarget = oneHot;
-        }
-        var lossDerivative = loss.CalculateDerivative(pred.ToVector(), matchedTarget.ToVector());
-        var outputGradients = new Tensor<T>(pred._shape, lossDerivative);
-        return GetParameterGradients();
+        return new Vector<T>(flatGradients.ToArray());
     }
 
     /// <summary>

@@ -208,7 +208,14 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        target = EnsureTargetMatchesPredicted(predicted, target);
+        // Contrastive targets are binary similarity labels (0/1), not class indices.
+        // Do NOT one-hot encode — just align singleton dimensions if needed.
+        if (target.Shape.Length < predicted.Shape.Length
+            && predicted.Shape[predicted.Shape.Length - 1] == 1
+            && target.Length == predicted.Length)
+        {
+            target = Engine.Reshape(target, predicted._shape);
+        }
         // Contrastive = mean(y * d² + (1-y) * max(0, margin - d)²)
         var squared = Engine.TensorMultiply(predicted, predicted);
         var oneMinusY = Engine.ScalarMinusTensor(NumOps.One, target);

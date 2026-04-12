@@ -112,7 +112,14 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        target = EnsureTargetMatchesPredicted(predicted, target);
+        // Cosine similarity targets are continuous vectors, not class indices.
+        // Do NOT one-hot encode — just align singleton dimensions if needed.
+        if (target.Shape.Length < predicted.Shape.Length
+            && predicted.Shape[predicted.Shape.Length - 1] == 1
+            && target.Length == predicted.Length)
+        {
+            target = Engine.Reshape(target, predicted._shape);
+        }
         // CosineSimilarity = 1 - dot(p,t) / (||p|| * ||t|| + eps)
         var dotProduct = Engine.TensorMultiply(predicted, target);
         var allAxes = Enumerable.Range(0, dotProduct.Shape.Length).ToArray();

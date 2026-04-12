@@ -691,19 +691,47 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 // flattening to vectors. Without this, ToVector() produces
                 // different-length vectors and CalculateDerivative throws.
                 // Fixes #1115 — affects ALL gradient-based optimizers.
+                //
+                // Only one-hot encode when target rank is exactly 1 less than
+                // predicted rank (classification shape contract). For singleton
+                // dimension mismatches (e.g., [B] vs [B,1]), reshape instead.
                 if (tensorPredictions.Shape.Length > tensorY.Shape.Length)
                 {
-                    var numOps = MathHelper.GetNumericOperations<T>();
                     int numClasses = tensorPredictions.Shape[tensorPredictions.Shape.Length - 1];
-                    var oneHot = new Tensor<T>(tensorPredictions.Shape.ToArray());
-                    int batchElements = tensorY.Length;
-                    for (int i = 0; i < batchElements; i++)
+
+                    if (numClasses > 1 && tensorY.Shape.Length == tensorPredictions.Shape.Length - 1)
                     {
-                        int classIdx = (int)numOps.ToDouble(tensorY[i]);
-                        if (classIdx >= 0 && classIdx < numClasses)
+                        // Validate shape prefix matches
+                        for (int d = 0; d < tensorY.Shape.Length; d++)
+                        {
+                            if (tensorY.Shape[d] != tensorPredictions.Shape[d])
+                            {
+                                throw new ArgumentException(
+                                    $"Target shape dimension {d} ({tensorY.Shape[d]}) does not match " +
+                                    $"predicted shape dimension {d} ({tensorPredictions.Shape[d]}).");
+                            }
+                        }
+
+                        var numOps = MathHelper.GetNumericOperations<T>();
+                        var oneHot = new Tensor<T>(tensorPredictions.Shape.ToArray());
+                        int batchElements = tensorY.Length;
+                        for (int i = 0; i < batchElements; i++)
+                        {
+                            int classIdx = (int)numOps.ToDouble(tensorY[i]);
+                            if (classIdx < 0 || classIdx >= numClasses)
+                            {
+                                throw new ArgumentOutOfRangeException(nameof(y),
+                                    $"Class index {classIdx} at position {i} is out of range [0, {numClasses}).");
+                            }
                             oneHot[i * numClasses + classIdx] = numOps.One;
+                        }
+                        tensorY = oneHot;
                     }
-                    tensorY = oneHot;
+                    else if (tensorY.Length == tensorPredictions.Length)
+                    {
+                        // Singleton dimension alignment (e.g., [B] → [B,1])
+                        tensorY = tensorY.Reshape(tensorPredictions._shape);
+                    }
                 }
                 gradient = LossFunction.CalculateDerivative(tensorPredictions.ToVector(), tensorY.ToVector());
             }

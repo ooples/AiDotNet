@@ -143,7 +143,14 @@ public class WassersteinLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        target = EnsureTargetMatchesPredicted(predicted, target);
+        // Wasserstein targets are signed critic labels (-1/+1), not class indices.
+        // Do NOT one-hot encode — just align singleton dimensions if needed.
+        if (target.Shape.Length < predicted.Shape.Length
+            && predicted.Shape[predicted.Shape.Length - 1] == 1
+            && target.Length == predicted.Length)
+        {
+            target = Engine.Reshape(target, predicted._shape);
+        }
         // Wasserstein = -mean(target * predicted)
         var product = Engine.TensorMultiply(target, predicted);
         var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();

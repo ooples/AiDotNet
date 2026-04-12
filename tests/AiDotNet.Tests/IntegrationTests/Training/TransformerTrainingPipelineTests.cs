@@ -85,9 +85,17 @@ public class TransformerTrainingPipelineTests
 
         var result = await builder.BuildAsync();
 
-        // Assert: training completed and produced a valid result
+        // Assert: training completed, model can predict, and loss was finite
         Assert.NotNull(result);
         Assert.NotNull(result.Model);
+
+        // Verify model actually produces predictions (not a no-op)
+        var testInput = new Tensor<float>([1, seqLen]);
+        for (int s = 0; s < seqLen; s++) testInput[0, s] = rng.Next(vocabSize);
+        var prediction = result.Predict(testInput);
+        Assert.NotNull(prediction);
+        Assert.True(prediction.Length > 0, "Prediction should produce output");
+
         _output.WriteLine("TokenClassification training through AiModelBuilder facade completed.");
     }
 
@@ -148,6 +156,14 @@ public class TransformerTrainingPipelineTests
 
         Assert.NotNull(result);
         Assert.NotNull(result.Model);
+
+        // Verify model actually produces predictions
+        var testInput = new Tensor<float>([1, seqLen]);
+        for (int s = 0; s < seqLen; s++) testInput[0, s] = rng.Next(vocabSize);
+        var prediction = result.Predict(testInput);
+        Assert.NotNull(prediction);
+        Assert.True(prediction.Length > 0, "Prediction should produce output");
+
         _output.WriteLine("SequenceClassification training through AiModelBuilder facade completed.");
     }
 
@@ -245,9 +261,10 @@ public class TransformerTrainingPipelineTests
     /// Verifies that CategoricalCrossEntropyLoss, CrossEntropyLoss, and
     /// FocalLoss all handle integer targets (rank less than predictions)
     /// by auto one-hot encoding via EnsureTargetMatchesPredicted.
+    /// Also verifies that integer-target results match explicit one-hot results.
     /// </summary>
     [Fact]
-    public void CrossEntropyLosses_HandleIntegerTargets()
+    public void CrossEntropyLosses_IntegerTargets_MatchOneHotTargets()
     {
         // predicted: [batch=2, seq=3, vocab=5]
         var predicted = new Tensor<float>([2, 3, 5]);
@@ -255,9 +272,18 @@ public class TransformerTrainingPipelineTests
             predicted[i] = 0.2f;
 
         // target: [batch=2, seq=3] — integer class indices
-        var target = new Tensor<float>([2, 3]);
-        target[0] = 0; target[1] = 1; target[2] = 4;
-        target[3] = 2; target[4] = 3; target[5] = 0;
+        var integerTarget = new Tensor<float>([2, 3]);
+        integerTarget[0] = 0; integerTarget[1] = 1; integerTarget[2] = 4;
+        integerTarget[3] = 2; integerTarget[4] = 3; integerTarget[5] = 0;
+
+        // Manual one-hot: [batch=2, seq=3, vocab=5]
+        var oneHotTarget = new Tensor<float>([2, 3, 5]);
+        oneHotTarget[0 * 5 + 0] = 1f; // class 0
+        oneHotTarget[1 * 5 + 1] = 1f; // class 1
+        oneHotTarget[2 * 5 + 4] = 1f; // class 4
+        oneHotTarget[3 * 5 + 2] = 1f; // class 2
+        oneHotTarget[4 * 5 + 3] = 1f; // class 3
+        oneHotTarget[5 * 5 + 0] = 1f; // class 0
 
         var losses = new LossFunctionBase<float>[]
         {
@@ -268,10 +294,20 @@ public class TransformerTrainingPipelineTests
 
         foreach (var loss in losses)
         {
-            var result = loss.ComputeTapeLoss(predicted, target);
-            Assert.True(result.Length > 0,
+            var intResult = loss.ComputeTapeLoss(predicted, integerTarget);
+            var oneHotResult = loss.ComputeTapeLoss(predicted, oneHotTarget);
+
+            Assert.True(intResult.Length > 0,
                 $"{loss.GetType().Name} should produce a valid loss tensor");
-            _output.WriteLine($"{loss.GetType().Name}: loss computed successfully");
+
+            // Integer-target and one-hot-target should produce identical loss values
+            float intLoss = intResult[0];
+            float oneHotLoss = oneHotResult[0];
+            Assert.True(float.IsFinite(intLoss),
+                $"{loss.GetType().Name}: integer-target loss should be finite, got {intLoss}");
+            Assert.Equal(oneHotLoss, intLoss, 4);
+
+            _output.WriteLine($"{loss.GetType().Name}: int={intLoss:F6}, oneHot={oneHotLoss:F6} — match");
         }
     }
 
@@ -291,6 +327,29 @@ public class TransformerTrainingPipelineTests
         var loss = new CategoricalCrossEntropyLoss<float>();
         var result = loss.ComputeTapeLoss(predicted, target);
         Assert.True(result.Length > 0);
+        Assert.True(float.IsFinite(result[0]),
+            $"Loss should be finite, got {result[0]}");
+    }
+
+    /// <summary>
+    /// Verifies that EnsureTargetMatchesPredicted throws on out-of-range class indices.
+    /// </summary>
+    [Fact]
+    public void EnsureTargetMatchesPredicted_InvalidClassIndex_Throws()
+    {
+        var predicted = new Tensor<float>([2, 5]);
+        for (int i = 0; i < 10; i++) predicted[i] = 0.2f;
+
+        // Class index 5 is out of range for 5 classes [0, 4]
+        var target = new Tensor<float>([2]);
+        target[0] = 0;
+        target[1] = 5; // out of range
+
+        var loss = new CategoricalCrossEntropyLoss<float>();
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            loss.ComputeTapeLoss(predicted, target));
+        Assert.Contains("out of range", ex.Message);
+        _output.WriteLine($"Got expected error: {ex.Message}");
     }
 
     /// <summary>
@@ -321,8 +380,10 @@ public class TransformerTrainingPipelineTests
             "Transformer should have layers after construction");
         Assert.IsType<EmbeddingLayer<float>>(transformer.Layers[0]);
 
-        // Before #1113 fix: crashes with ArgumentOutOfRangeException
-        transformer.SetActiveFeatureIndices(new[] { 0, 1, 2, 3 });
+        // Use an index that exceeds the embedding input dimension (1)
+        // to prove the skip path works. Before #1113 fix, this would throw
+        // ArgumentOutOfRangeException because index 5 > input dimension 1.
+        transformer.SetActiveFeatureIndices(new[] { 0, 1, 2, 3, 5 });
         _output.WriteLine("Feature selection correctly skipped for embedding model.");
     }
 

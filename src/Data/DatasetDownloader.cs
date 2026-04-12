@@ -17,12 +17,12 @@ internal static class DatasetDownloader
 
     private static HttpClient CreateHttpClient()
     {
-        // Explicitly configure redirect following + max redirects.
-        // The default HttpClient() constructor uses HttpClientHandler with
-        // AllowAutoRedirect=true, but some CDNs (S3 cross-region) return
-        // 301 without a Location header, which HttpClient surfaces as a
-        // non-success status. The explicit handler ensures standard
-        // redirects (302, 307, 308) are followed. Fixes #1117.
+        // Explicitly configure redirect following and cap the number of
+        // automatic redirects. This preserves standard redirect handling
+        // for responses that include a valid Location header (302, 307, 308).
+        // Note: S3 cross-region 301 responses lack a Location header, so
+        // HttpClient cannot follow them — the real fix for those is using
+        // region-specific URLs (see WikiText103DataLoader). Fixes #1117.
         var handler = new HttpClientHandler
         {
             AllowAutoRedirect = true,

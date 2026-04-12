@@ -2910,6 +2910,25 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     }
 
     /// <summary>
+    /// Appends a trainable parameter without role-based deduplication.
+    /// Used by source-generated <c>SetTrainableParameters</c> after
+    /// <see cref="ClearRegisteredParameters"/> to rebuild the registration
+    /// list from scratch. Unlike <see cref="RegisterTrainableParameter"/>,
+    /// this does NOT replace existing entries with the same role — layers
+    /// like MultiHeadAttentionLayer that have multiple parameters with
+    /// <see cref="PersistentTensorRole.Weights"/> will retain all of them.
+    /// </summary>
+    protected void AppendTrainableParameter(Tensor<T> tensor, PersistentTensorRole role)
+    {
+        if (tensor is null)
+            throw new ArgumentNullException(nameof(tensor));
+
+        Engine.RegisterPersistentTensor(tensor, role);
+        _registeredTensors.Add(tensor);
+        _registeredTensorRoles.Add(role);
+    }
+
+    /// <summary>
     /// Clears all accumulated gradients. Default implementation is a no-op since
     /// tape-based training computes fresh gradients each step. Layers with explicit
     /// gradient tensor fields should override to zero/null them.

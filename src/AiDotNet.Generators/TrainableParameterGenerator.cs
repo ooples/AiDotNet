@@ -259,11 +259,12 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("        ClearRegisteredParameters();");
             for (int i = 0; i < paramFields.Count; i++)
             {
-                // paramFields[i].Role is already "PersistentTensorRole.Weights" etc.
-                // from the attribute parse at line 97. Emit it directly — the
-                // generated code compiles in the main project's context which has
-                // global usings for PersistentTensorRole.
-                sb.AppendLine($"        RegisterTrainableParameter({paramFields[i].Name}, {paramFields[i].Role});");
+                // Use AppendTrainableParameter (not RegisterTrainableParameter)
+                // after ClearRegisteredParameters to avoid role-based dedup.
+                // Layers like MultiHeadAttentionLayer have multiple parameters
+                // with the same role (e.g., 4 × Weights) — RegisterTrainableParameter
+                // would collapse them back to 1 via replace-by-role logic.
+                sb.AppendLine($"        AppendTrainableParameter({paramFields[i].Name}, {paramFields[i].Role});");
             }
             sb.AppendLine("    }");
             sb.AppendLine();
