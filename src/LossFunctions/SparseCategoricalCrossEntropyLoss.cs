@@ -170,14 +170,39 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        target = EnsureTargetMatchesPredicted(predicted, target);
-        // Sparse CCE with softmax: -mean(target * log(softmax(predicted)))
+        // True sparse implementation: gather log-probabilities at target indices
+        // instead of one-hot encoding (avoids O(batch * numClasses) allocation).
         var softmaxed = Engine.Softmax(predicted);
         var safeSoftmax = Engine.TensorAddScalar(softmaxed, NumOps.FromDouble(1e-7));
         var logP = Engine.TensorLog(safeSoftmax);
-        var product = Engine.TensorMultiply(target, logP);
-        var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();
-        var mean = Engine.ReduceMean(product, allAxes, keepDims: false);
-        return Engine.TensorNegate(mean);
+
+        // If target is already one-hot (same shape as predicted), use dense path
+        if (target.Length == predicted.Length)
+        {
+            target = EnsureTargetMatchesPredicted(predicted, target);
+            var product = Engine.TensorMultiply(target, logP);
+            var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();
+            var mean = Engine.ReduceMean(product, allAxes, keepDims: false);
+            return Engine.TensorNegate(mean);
+        }
+
+        // Sparse path: target contains integer class indices
+        // Gather the log-probability at each target index
+        int batchSize = target.Length;
+        int numClasses = predicted.Shape[^1];
+        var gatheredLogP = new Tensor<T>(target._shape);
+        for (int i = 0; i < batchSize; i++)
+        {
+            int classIdx = Math.Clamp((int)Math.Round(NumOps.ToDouble(target[i])), 0, numClasses - 1);
+            gatheredLogP[i] = predicted.Rank == 1
+                ? logP[classIdx]
+                : logP[i * numClasses + classIdx];
+        }
+
+        // loss = -mean(gathered log-probs)
+        var sum = Engine.ReduceSum(gatheredLogP, null, keepDims: false);
+        var batchT = new Tensor<T>(new[] { 1 });
+        batchT[0] = NumOps.FromDouble(batchSize);
+        return Engine.TensorNegate(Engine.TensorDivide(sum, batchT));
     }
 }

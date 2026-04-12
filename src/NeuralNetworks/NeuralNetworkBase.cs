@@ -4170,11 +4170,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Shape matching (integer → one-hot, singleton reshape) is handled
         // inside each loss function's ComputeTapeLoss via EnsureTargetMatchesPredicted.
         var resolved = lossFunction ?? LossFunction;
-        var tapeLoss = resolved as LossFunctions.LossFunctionBase<T>
-            ?? throw new InvalidOperationException(
-                $"Loss function {resolved.GetType().Name} must derive from LossFunctionBase<T> " +
-                "to support tape-based gradient computation. All built-in loss functions satisfy this.");
-        var lossTensor = tapeLoss.ComputeTapeLoss(prediction, target);
+        Tensor<T> lossTensor;
+        if (resolved is LossFunctions.LossFunctionBase<T> tapeLoss)
+        {
+            lossTensor = tapeLoss.ComputeTapeLoss(prediction, target);
+        }
+        else
+        {
+            // Fallback for custom ILossFunction implementations: compute scalar loss
+            // and wrap in a 1-element tensor so the tape can still differentiate.
+            var predVec = prediction.ToVector();
+            var targetVec = target.ToVector();
+            T scalarLoss = resolved.CalculateLoss(predVec, targetVec);
+            lossTensor = new Tensor<T>(new[] { 1 });
+            lossTensor[0] = scalarLoss;
+        }
 
         // Reverse-mode AD: compute gradients for all trainable parameters
         var grads = tape.ComputeGradients(lossTensor, trainableParams);

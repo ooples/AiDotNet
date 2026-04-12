@@ -395,7 +395,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
 
     // Mirror of PersistentTensorRole enum for mapping attribute integer values
     // to fully-qualified enum names in generated code. MUST be kept in sync with
-    // AiDotNet.Enums.PersistentTensorRole — if you add a new role there, add it here.
+    // AiDotNet.Tensors.Engines.PersistentTensorRole — if you add a new role there, add it here.
     private enum PersistentTensorRoleEnum
     {
         Weights = 0,
