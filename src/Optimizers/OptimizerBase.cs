@@ -413,10 +413,20 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // Models that don't support parameter initialization (NB, decision trees, etc.)
         // learn their structure from ALL features during training. Random feature selection
         // can remove features that are critical for discrimination, causing 50% accuracy.
+        //
+        // Embedding-based models (Transformers, RNNs with token input) also MUST use all
+        // features — their "feature dimension" is the sequence length, and selecting a
+        // random subset of token positions breaks the shape contract between input and
+        // target. Fixes #1113 / #1121 — affects ALL optimizers via OptimizerBase.
         int totalFeatures = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
         List<int> selectedFeaturesIndices;
 
-        if (!InterfaceGuard.Parameterizable(solution).SupportsParameterInitialization)
+        bool isEmbeddingModel = solution is NeuralNetworks.NeuralNetworkBase<T> nnForFeatureCheck
+            && nnForFeatureCheck.Layers.Count > 0
+            && nnForFeatureCheck.Layers[0] is NeuralNetworks.Layers.EmbeddingLayer<T>;
+
+        if (!InterfaceGuard.Parameterizable(solution).SupportsParameterInitialization
+            || isEmbeddingModel)
         {
             selectedFeaturesIndices = Enumerable.Range(0, totalFeatures).ToList();
         }

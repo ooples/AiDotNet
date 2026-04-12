@@ -1754,6 +1754,7 @@ public static class LayerHelper<T>
             case NeuralNetworkTaskType.MultiLabelClassification:
             case NeuralNetworkTaskType.SequenceClassification:
             case NeuralNetworkTaskType.ImageClassification:
+            case NeuralNetworkTaskType.TokenClassification:
                 yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
                 break;
 
