@@ -362,7 +362,7 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// SequenceClassification.
     /// </para>
     /// </remarks>
-    public static NeuralNetworkTaskType InferClassificationTaskType(int[] targetShape, int inputSeqLen)
+    internal static NeuralNetworkTaskType InferClassificationTaskType(int[] targetShape, int inputSeqLen)
     {
         if (targetShape is null || targetShape.Length == 0)
             throw new ArgumentException("Target shape must not be null or empty.", nameof(targetShape));
@@ -390,7 +390,7 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// Thrown when the task type is SequenceClassification but targets have per-position labels,
     /// or when the task type is TokenClassification but targets have per-sequence labels.
     /// </exception>
-    public static void ValidateTaskTypeVsTargetShape(
+    internal static void ValidateTaskTypeVsTargetShape(
         NeuralNetworkTaskType taskType, int[] targetShape, int inputSeqLen)
     {
         if (targetShape is null || targetShape.Length == 0)

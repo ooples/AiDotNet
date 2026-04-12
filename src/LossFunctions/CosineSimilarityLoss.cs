@@ -113,8 +113,8 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
         // Cosine similarity targets are continuous vectors, not class indices.
-        // Do NOT one-hot encode — just align singleton dimensions if needed.
-        if (target.Shape.Length < predicted.Shape.Length
+        // Only align when predicted has a trailing singleton dim (e.g., [B] → [B,1]).
+        if (target.Shape.Length == predicted.Shape.Length - 1
             && predicted.Shape[predicted.Shape.Length - 1] == 1
             && target.Length == predicted.Length)
         {

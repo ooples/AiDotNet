@@ -4136,12 +4136,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     /// <param name="input">The input tensor.</param>
     /// <param name="target">The target tensor.</param>
-    /// <param name="lossFunction">Optional override loss function (defaults to <see cref="DefaultLossFunction"/>).</param>
+    /// <param name="lossFunction">Optional override loss function (defaults to the model's configured loss).</param>
     /// <returns>A vector containing the concatenated gradients for all layer parameters.</returns>
     /// <remarks>
     /// <para>
-    /// This method performs a forward pass, computes the loss derivative, backpropagates gradients, and then
-    /// concatenates the parameter gradients across all layers into a single vector.
+    /// This method performs a forward pass under tape recording, computes the loss via
+    /// <see cref="LossFunctions.LossFunctionBase{T}.ComputeTapeLoss"/>, runs reverse-mode
+    /// autodiff, and concatenates per-parameter gradients into a single vector.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Gradients are the "direction to change weights" so the model makes fewer mistakes.
@@ -4168,13 +4169,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Compute loss via the user's configured loss function.
         // Shape matching (integer → one-hot, singleton reshape) is handled
         // inside each loss function's ComputeTapeLoss via EnsureTargetMatchesPredicted.
-        var resolvedLoss = lossFunction ?? DefaultLossFunction;
-        if (resolvedLoss is not LossFunctions.LossFunctionBase<T> tapeLoss)
-        {
-            throw new InvalidOperationException(
-                $"Loss function {resolvedLoss.GetType().Name} must derive from LossFunctionBase<T> " +
-                "to support tape-based gradient computation.");
-        }
+        var resolved = lossFunction ?? LossFunction;
+        var tapeLoss = resolved as LossFunctions.LossFunctionBase<T>
+            ?? throw new InvalidOperationException(
+                $"Loss function {resolved.GetType().Name} must derive from LossFunctionBase<T> " +
+                "to support tape-based gradient computation. All built-in loss functions satisfy this.");
         var lossTensor = tapeLoss.ComputeTapeLoss(prediction, target);
 
         // Reverse-mode AD: compute gradients for all trainable parameters

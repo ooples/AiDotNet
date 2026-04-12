@@ -64,6 +64,7 @@ public static class NeuralNetworkHelper<T>
             NeuralNetworkTaskType.SpeechRecognition => new CategoricalCrossEntropyLoss<T>(),
             NeuralNetworkTaskType.AudioProcessing => new MeanSquaredErrorLoss<T>(),
             NeuralNetworkTaskType.Translation => new CategoricalCrossEntropyLoss<T>(),
+            NeuralNetworkTaskType.TokenClassification => new CategoricalCrossEntropyLoss<T>(),
             _ => new MeanSquaredErrorLoss<T>() // Default to MSE for Custom or unknown types
         };
     }

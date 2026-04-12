@@ -316,7 +316,7 @@ public class TransformerTrainingPipelineTests
             // Integer-target and one-hot-target should produce identical loss values
             float intLoss = intResult[0];
             float oneHotLoss = oneHotResult[0];
-            Assert.True(float.IsFinite(intLoss),
+            Assert.True(!float.IsNaN(intLoss) && !float.IsInfinity(intLoss),
                 $"{loss.GetType().Name}: integer-target loss should be finite, got {intLoss}");
             Assert.Equal(oneHotLoss, intLoss, 4);
 
@@ -340,7 +340,7 @@ public class TransformerTrainingPipelineTests
         var loss = new CategoricalCrossEntropyLoss<float>();
         var result = loss.ComputeTapeLoss(predicted, target);
         Assert.True(result.Length > 0);
-        Assert.True(float.IsFinite(result[0]),
+        Assert.True(!float.IsNaN(result[0]) && !float.IsInfinity(result[0]),
             $"Loss should be finite, got {result[0]}");
     }
 

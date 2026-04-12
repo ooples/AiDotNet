@@ -145,7 +145,7 @@ public class WassersteinLoss<T> : LossFunctionBase<T>
     {
         // Wasserstein targets are signed critic labels (-1/+1), not class indices.
         // Do NOT one-hot encode — just align singleton dimensions if needed.
-        if (target.Shape.Length < predicted.Shape.Length
+        if (target.Shape.Length == predicted.Shape.Length - 1
             && predicted.Shape[predicted.Shape.Length - 1] == 1
             && target.Length == predicted.Length)
         {
