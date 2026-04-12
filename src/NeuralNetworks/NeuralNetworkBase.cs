@@ -4149,8 +4149,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
     {
-        var engine = AiDotNetEngine.Current;
-
         using var tape = new GradientTape<T>();
 
         // Forward pass under tape recording (NOT Predict which uses NoGradScope).
@@ -4167,50 +4165,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 "layer implementing ITrainableLayer<T> with registered parameters.");
         }
 
-        // Match target shape to prediction for classification (integer → one-hot)
-        var matchedTarget = target;
-        if (prediction.Shape.Length > target.Shape.Length)
-        {
-            int numClasses = prediction.Shape[prediction.Shape.Length - 1];
-            if (numClasses > 1 && target.Shape.Length == prediction.Shape.Length - 1)
-            {
-                // Validate shape prefix: target dims must match prediction dims
-                for (int d = 0; d < target.Shape.Length; d++)
-                {
-                    if (target.Shape[d] != prediction.Shape[d])
-                    {
-                        throw new ArgumentException(
-                            $"Target shape dimension {d} ({target.Shape[d]}) does not match " +
-                            $"predicted shape dimension {d} ({prediction.Shape[d]}).");
-                    }
-                }
-
-                var oneHot = new Tensor<T>(prediction.Shape.ToArray());
-                for (int i = 0; i < target.Length; i++)
-                {
-                    double rawVal = NumOps.ToDouble(target[i]);
-                    int classIdx = (int)rawVal;
-                    if (rawVal != classIdx)
-                    {
-                        throw new ArgumentException(
-                            $"Target value {rawVal} at position {i} is not an integer class index.");
-                    }
-                    if (classIdx < 0 || classIdx >= numClasses)
-                    {
-                        throw new ArgumentOutOfRangeException(nameof(target),
-                            $"Class index {classIdx} at position {i} is out of range [0, {numClasses}).");
-                    }
-                    oneHot[i * numClasses + classIdx] = NumOps.One;
-                }
-                matchedTarget = oneHot;
-            }
-            else if (target.Length == prediction.Length)
-            {
-                matchedTarget = engine.Reshape(target, prediction.Shape.ToArray());
-            }
-        }
-
-        // Compute loss via the user's configured loss function
+        // Compute loss via the user's configured loss function.
+        // Shape matching (integer → one-hot, singleton reshape) is handled
+        // inside each loss function's ComputeTapeLoss via EnsureTargetMatchesPredicted.
         var resolvedLoss = lossFunction ?? DefaultLossFunction;
         if (resolvedLoss is not LossFunctions.LossFunctionBase<T> tapeLoss)
         {
@@ -4218,7 +4175,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 $"Loss function {resolvedLoss.GetType().Name} must derive from LossFunctionBase<T> " +
                 "to support tape-based gradient computation.");
         }
-        var lossTensor = tapeLoss.ComputeTapeLoss(prediction, matchedTarget);
+        var lossTensor = tapeLoss.ComputeTapeLoss(prediction, target);
 
         // Reverse-mode AD: compute gradients for all trainable parameters
         var grads = tape.ComputeGradients(lossTensor, trainableParams);

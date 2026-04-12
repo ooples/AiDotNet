@@ -142,7 +142,13 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
 
         for (int i = 0; i < batchElements; i++)
         {
-            int classIdx = (int)NumOps.ToDouble(target[i]);
+            double rawVal = NumOps.ToDouble(target[i]);
+            int classIdx = (int)rawVal;
+            if (rawVal != classIdx)
+            {
+                throw new ArgumentException(
+                    $"Target value {rawVal} at position {i} is not an integer class index.");
+            }
             if (classIdx < 0 || classIdx >= numClasses)
             {
                 throw new ArgumentOutOfRangeException(nameof(target),
