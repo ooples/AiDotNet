@@ -296,6 +296,72 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
         return output;
     }
 
+    private Tensor<T> BackwardRMSNorm(Tensor<T> dOutput, Tensor<T> input, Tensor<T> gamma,
+        int batchSize, int seqLen, out Tensor<T> dGamma, out Tensor<T> dBeta)
+    {
+        var dInput = TensorAllocator.Rent<T>(input._shape);
+        dGamma = new Tensor<T>(new[] { _modelDimension });
+        dBeta = new Tensor<T>(new[] { _modelDimension });
+        T eps = NumOps.FromDouble(1e-6);
+
+        for (int t = 0; t < seqLen; t++)
+        {
+            var slice = input.GetSliceAlongDimension(t, 1);   // [batch, modelDim]
+            var dOut = dOutput.GetSliceAlongDimension(t, 1);
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                // Compute RMS
+                T sumSq = NumOps.Zero;
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    T val = slice[new[] { b, d }];
+                    sumSq = NumOps.Add(sumSq, NumOps.Multiply(val, val));
+                }
+                T meanSq = NumOps.Divide(sumSq, NumOps.FromDouble(_modelDimension));
+                T rms = NumOps.Sqrt(NumOps.Add(meanSq, eps));
+                T rmsInv = NumOps.Divide(NumOps.One, rms);
+
+                // dBeta accumulation
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    dBeta[d] = NumOps.Add(dBeta[d], dOut[new[] { b, d }]);
+                }
+
+                // dGamma accumulation
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    T normed = NumOps.Multiply(slice[new[] { b, d }], rmsInv);
+                    dGamma[d] = NumOps.Add(dGamma[d], NumOps.Multiply(dOut[new[] { b, d }], normed));
+                }
+
+                // dInput through norm
+                T dotProduct = NumOps.Zero;
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    T g = gamma[d];
+                    dotProduct = NumOps.Add(dotProduct,
+                        NumOps.Multiply(dOut[new[] { b, d }],
+                            NumOps.Multiply(g, NumOps.Multiply(slice[new[] { b, d }], rmsInv))));
+                }
+
+                T rms3Inv = NumOps.Divide(rmsInv, NumOps.Multiply(rms, rms));
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    T g = gamma[d];
+                    T dNormed = NumOps.Multiply(dOut[new[] { b, d }], g);
+                    T grad = NumOps.Multiply(dNormed, rmsInv);
+                    T correction = NumOps.Multiply(
+                        NumOps.Multiply(dotProduct, slice[new[] { b, d }]),
+                        NumOps.Divide(rms3Inv, NumOps.FromDouble(_modelDimension)));
+                    dInput[new[] { b, t, d }] = NumOps.Subtract(grad, correction);
+                }
+            }
+        }
+
+        return dInput;
+    }
+
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {

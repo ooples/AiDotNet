@@ -29,11 +29,7 @@
     <PackageReference Include="BenchmarkDotNet" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="Moq" />
-  </ItemGroup>
-
-  <!-- MathF polyfill for net471 (AiDotNet.Tensors provides it internally but not publicly) -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net471'">
-    <PackageReference Include="Microsoft.Bcl.Numerics" />
+    <PackageReference Include="Xunit.SkippableFact" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,9 +38,7 @@
 
   <!-- Source generator for auto-generating test scaffolds for untested models -->
   <ItemGroup>
-    <ProjectReference Include="..\..\src\AiDotNet.Generators\AiDotNet.Generators.csproj"
-                       OutputItemType="Analyzer"
-                       ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\AiDotNet.Generators\AiDotNet.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">

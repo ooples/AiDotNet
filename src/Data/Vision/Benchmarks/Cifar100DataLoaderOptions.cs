@@ -17,6 +17,11 @@ public sealed class Cifar100DataLoaderOptions
     public bool Normalize { get; set; } = true;
     /// <summary>Whether to use fine labels (100 classes) or coarse labels (20 superclasses). Default is true (fine).</summary>
     public bool UseFineLabels { get; set; } = true;
+    /// <summary>
+    /// Axis ordering for the image tensor. Default is NHWC <c>[B, 32, 32, 3]</c>.
+    /// Set to NCHW for <c>[B, 3, 32, 32]</c>.
+    /// </summary>
+    public ImageTensorLayout Layout { get; set; } = ImageTensorLayout.NHWC;
     /// <summary>Optional maximum number of samples to load.</summary>
     public int? MaxSamples { get; set; }
 }

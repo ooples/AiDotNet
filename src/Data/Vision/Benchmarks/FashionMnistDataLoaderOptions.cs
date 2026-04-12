@@ -15,8 +15,14 @@ public sealed class FashionMnistDataLoaderOptions
     public bool AutoDownload { get; set; } = true;
     /// <summary>Normalize pixel values to [0, 1]. Default is true.</summary>
     public bool Normalize { get; set; } = true;
-    /// <summary>Flatten images to 1D (784) instead of 2D (28x28). Default is false.</summary>
+    /// <summary>Flatten images to 1D (784) instead of 2D (28x28, 1 channel).
+    /// When true, <see cref="Layout"/> is ignored. Default is false.</summary>
     public bool Flatten { get; set; }
+    /// <summary>
+    /// Axis ordering for the image tensor. Default is NHWC <c>[B, 28, 28, 1]</c>.
+    /// Set to NCHW for <c>[B, 1, 28, 28]</c>. Ignored when Flatten is true.
+    /// </summary>
+    public ImageTensorLayout Layout { get; set; } = ImageTensorLayout.NHWC;
     /// <summary>Optional maximum number of samples to load.</summary>
     public int? MaxSamples { get; set; }
 }

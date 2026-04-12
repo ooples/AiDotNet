@@ -485,7 +485,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         var scaleReshaped = Engine.Reshape(scale, broadcastShape);
         var shiftReshaped = Engine.Reshape(shift, broadcastShape);
 
-        // Vectorized: output = input * scale + shift
+        // Engine-accelerated broadcast: tape-tracked + SIMD + GPU-capable
         var scaled = Engine.TensorBroadcastMultiply(input, scaleReshaped);
         return Engine.TensorBroadcastAdd(scaled, shiftReshaped);
     }

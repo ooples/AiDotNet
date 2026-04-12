@@ -94,6 +94,7 @@ public class Cifar10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
         var featuresData = new T[totalSamples * pixelsPerImage];
         var labelsData = new T[totalSamples * 10];
 
+        bool nchw = _options.Layout == ImageTensorLayout.NCHW;
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -101,28 +102,26 @@ public class Cifar10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
             byte[] sample = allData[i];
             int label = sample[0];
 
-            // Convert CHW to HWC format for consistency
             int featureOffset = i * pixelsPerImage;
-            for (int h = 0; h < 32; h++)
-            {
-                for (int w = 0; w < 32; w++)
-                {
-                    for (int c = 0; c < 3; c++)
-                    {
-                        int srcIdx = 1 + c * 1024 + h * 32 + w; // CHW in source
-                        int dstIdx = featureOffset + (h * 32 + w) * 3 + c; // HWC in dest
-                        double value = sample[srcIdx];
-                        if (_options.Normalize) value /= 255.0;
-                        featuresData[dstIdx] = NumOps.FromDouble(value);
-                    }
-                }
-            }
+            // Build CHW tensor from raw bytes, permute to HWC if needed
+            var sampleTensor = new Tensor<T>([3, 32, 32]);
+            double scale = _options.Normalize ? 1.0 / 255.0 : 1.0;
+            for (int p = 0; p < pixelsPerImage; p++)
+                sampleTensor[p] = NumOps.FromDouble(sample[1 + p] * scale);
+
+            if (!nchw)
+                sampleTensor = AiDotNetEngine.Current.TensorPermute(sampleTensor, [1, 2, 0]);
+
+            sampleTensor.AsSpan().CopyTo(featuresData.AsSpan(featureOffset, pixelsPerImage));
 
             if (label >= 0 && label < 10)
                 labelsData[i * 10 + label] = NumOps.One;
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, 32, 32, 3 });
+        int[] shape = nchw
+            ? new[] { totalSamples, 3, 32, 32 }
+            : new[] { totalSamples, 32, 32, 3 };
+        LoadedFeatures = new Tensor<T>(featuresData, shape);
         LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, 10 });
         InitializeIndices(totalSamples);
     }

@@ -179,6 +179,11 @@ public class MnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
             featuresData = new T[samplesToLoad * pixelsPerImage];
             featureShape = new[] { samplesToLoad, pixelsPerImage };
         }
+        else if (_options.Layout == ImageTensorLayout.NCHW)
+        {
+            featuresData = new T[samplesToLoad * 1 * rows * cols];
+            featureShape = new[] { samplesToLoad, 1, rows, cols };
+        }
         else
         {
             featuresData = new T[samplesToLoad * rows * cols * 1];

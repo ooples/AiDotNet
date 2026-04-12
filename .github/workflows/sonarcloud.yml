@@ -99,7 +99,7 @@ jobs:
   build-windows:
     name: Build (Windows)
     runs-on: windows-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     if: github.event.pull_request.draft != true
 
     steps:
@@ -138,7 +138,9 @@ jobs:
         with:
           name: build-output-${{ github.sha }}
           path: |
-            **/bin/Release/
+            src/bin/Release/
+            tests/AiDotNet.Tests/bin/Release/
+            tests/AiDotNet.Serving.Tests/bin/Release/
           retention-days: 1
 
       - name: Build NuGet package

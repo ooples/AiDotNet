@@ -322,6 +322,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// This is the equivalent of PyTorch's <c>nn.Module.parameters()</c> auto-registration.
     /// </summary>
     private readonly List<Tensor<T>> _registeredTensors = new();
+    private readonly List<PersistentTensorRole> _registeredTensorRoles = new();
 
     /// <summary>
     /// Child layers registered via <see cref="RegisterSubLayer"/>. Returned by <see cref="GetSubLayers"/>
@@ -2747,13 +2748,24 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
 
         Engine.RegisterPersistentTensor(tensor, role);
 
-        // Deduplicate by reference identity: constructors and EnsureInitialized may both register
-        for (int i = 0; i < _registeredTensors.Count; i++)
+        // Replace by role: EnsureInitialized creates new tensor objects for the same role
+        // (e.g., _weights gets replaced from [0,0] placeholder to [inputSize, outputSize]).
+        // Without replacement, GetTrainableParameters() returns both old and new, causing
+        // compiled training plans to receive stale placeholder tensors.
+        for (int i = 0; i < _registeredTensorRoles.Count; i++)
         {
-            if (ReferenceEquals(_registeredTensors[i], tensor))
+            if (_registeredTensorRoles[i] == role)
+            {
+                if (ReferenceEquals(_registeredTensors[i], tensor))
+                    return; // Same object, already registered
+                // Unregister old tensor from engine to prevent GPU memory leaks
+                Engine.UnregisterPersistentTensor(_registeredTensors[i]);
+                _registeredTensors[i] = tensor; // Replace with new tensor
                 return;
+            }
         }
         _registeredTensors.Add(tensor);
+        _registeredTensorRoles.Add(role);
     }
 
     /// <summary>

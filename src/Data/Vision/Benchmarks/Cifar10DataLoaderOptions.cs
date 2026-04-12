@@ -15,6 +15,12 @@ public sealed class Cifar10DataLoaderOptions
     public bool AutoDownload { get; set; } = true;
     /// <summary>Normalize pixel values to [0, 1]. Default is true.</summary>
     public bool Normalize { get; set; } = true;
+    /// <summary>
+    /// Axis ordering for the image tensor. Default is <see cref="ImageTensorLayout.NHWC"/>
+    /// (<c>[B, 32, 32, 3]</c>). Set to <see cref="ImageTensorLayout.NCHW"/> for
+    /// <c>[B, 3, 32, 32]</c>.
+    /// </summary>
+    public ImageTensorLayout Layout { get; set; } = ImageTensorLayout.NHWC;
     /// <summary>Optional maximum number of samples to load.</summary>
     public int? MaxSamples { get; set; }
 }

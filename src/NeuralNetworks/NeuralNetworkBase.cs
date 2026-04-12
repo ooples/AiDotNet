@@ -2080,12 +2080,46 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
-    /// Compiles the forward pass into an optimized executable function via JIT compilation.
-    /// After compilation, <see cref="Predict"/> and <see cref="ForwardWithMemory"/> use the
-    /// compiled function for zero-allocation, fused-kernel execution.
+    /// Compiled inference cache — auto-compiles forward pass on first call,
+    /// replays compiled plan on subsequent calls. Per-instance to prevent
+    /// cross-model cache hits (different models produce different graphs).
     /// </summary>
-    /// <param name="sampleInput">A sample input tensor to trace the computation graph shapes.</param>
-    /// <param name="options">Optional JIT compiler options. Null uses defaults (all optimizations enabled).</param>
+    private AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>? _compiledInferenceCache;
+
+    /// <summary>
+    /// Executes the forward pass using a compiled plan for maximum performance.
+    /// First call traces and compiles; subsequent calls replay the compiled plan.
+    /// Falls back to eager execution if compilation fails.
+    /// </summary>
+    protected Tensor<T> PredictCompiled(Tensor<T> input)
+    {
+        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
+            return PredictEager(input);
+
+        try
+        {
+            var cache = _compiledInferenceCache ??= new AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>();
+            var plan = cache.GetOrCompileInference(
+                (int[])input._shape.Clone(),
+                () => PredictEager(input)); // Use same path as eager for consistency
+            return plan.Execute();
+        }
+        catch
+        {
+            return PredictEager(input);
+        }
+    }
+
+    /// <summary>
+    /// Eager forward pass through all layers. Used as fallback when compilation fails.
+    /// </summary>
+    protected virtual Tensor<T> PredictEager(Tensor<T> input)
+    {
+        var current = input;
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
+        return current;
+    }
 
     /// <summary>
     /// Updates the network's parameters with new values.

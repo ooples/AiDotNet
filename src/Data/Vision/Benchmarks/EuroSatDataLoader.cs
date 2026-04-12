@@ -121,14 +121,30 @@ public class EuroSatDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
             var pixels = VisionLoaderHelper.LoadAndResizeImage<T>(imgPath, ImageSize, ImageSize, 3, _options.Normalize);
 
             int featureOffset = i * pixelsPerImage;
-            int copyLen = Math.Min(pixels.Length, pixelsPerImage);
-            Array.Copy(pixels, 0, featuresData, featureOffset, copyLen);
+            int available = Math.Min(pixels.Length, pixelsPerImage);
+            bool nchw = _options.Layout == ImageTensorLayout.NCHW;
+            if (nchw)
+            {
+                // VisionLoaderHelper returns HWC [H,W,3]; permute to CHW [3,H,W]
+                var hwcTensor = new Tensor<T>([ImageSize, ImageSize, 3]);
+                pixels.AsSpan(0, available).CopyTo(hwcTensor.AsWritableSpan());
+                var chwTensor = AiDotNetEngine.Current.TensorPermute(hwcTensor, [2, 0, 1]);
+                chwTensor.AsSpan().CopyTo(featuresData.AsSpan(featureOffset, pixelsPerImage));
+            }
+            else
+            {
+                Array.Copy(pixels, 0, featuresData, featureOffset, available);
+            }
 
             if (label >= 0 && label < NumClasses)
                 labelsData[i * NumClasses + label] = NumOps.One;
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, ImageSize, ImageSize, 3 });
+        bool nchwLayout = _options.Layout == ImageTensorLayout.NCHW;
+        int[] shape = nchwLayout
+            ? new[] { totalSamples, 3, ImageSize, ImageSize }
+            : new[] { totalSamples, ImageSize, ImageSize, 3 };
+        LoadedFeatures = new Tensor<T>(featuresData, shape);
         LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, NumClasses });
         InitializeIndices(totalSamples);
     }

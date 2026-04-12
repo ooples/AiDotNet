@@ -5,7 +5,7 @@
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.35.2" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.36.1" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.28.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.28.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.28.0" />
@@ -47,6 +47,7 @@
     <PackageVersion Include="Google.Protobuf" Version="3.34.1" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageVersion Include="Parquet.Net" Version="5.5.0" />
+    <PackageVersion Include="Xunit.SkippableFact" Version="1.5.61" />
     <PackageVersion Include="YamlDotNet" Version="16.3.0" />
     <!-- Infrastructure -->
     <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.3.4" />

@@ -26,6 +26,12 @@ public sealed class EuroSatDataLoaderOptions
     /// <summary>Normalize pixel values to [0, 1]. Default is true.</summary>
     public bool Normalize { get; set; } = true;
 
+    /// <summary>
+    /// Axis ordering for the image tensor. Default is NHWC <c>[B, 64, 64, 3]</c>.
+    /// Set to NCHW for <c>[B, 3, 64, 64]</c>.
+    /// </summary>
+    public ImageTensorLayout Layout { get; set; } = ImageTensorLayout.NHWC;
+
     /// <summary>Optional maximum number of samples to load.</summary>
     public int? MaxSamples { get; set; }
 }
