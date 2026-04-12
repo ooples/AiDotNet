@@ -2892,6 +2892,24 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     }
 
     /// <summary>
+    /// Clears the registered trainable parameter list. Used by the source-generated
+    /// <c>SetTrainableParameters</c> override to re-sync <c>_registeredTensors</c>
+    /// after assigning new tensor views to the layer's fields. This ensures the
+    /// runtime registration count matches the generator-discovered field count,
+    /// which can differ when multiple parameters share the same
+    /// <see cref="PersistentTensorRole"/> (e.g., MultiHeadAttentionLayer has 4
+    /// Weights tensors that the replace-by-role logic in
+    /// <see cref="RegisterTrainableParameter"/> would otherwise collapse to 1).
+    /// </summary>
+    protected void ClearRegisteredParameters()
+    {
+        foreach (var tensor in _registeredTensors)
+            Engine.UnregisterPersistentTensor(tensor);
+        _registeredTensors.Clear();
+        _registeredTensorRoles.Clear();
+    }
+
+    /// <summary>
     /// Clears all accumulated gradients. Default implementation is a no-op since
     /// tape-based training computes fresh gradients each step. Layers with explicit
     /// gradient tensor fields should override to zero/null them.

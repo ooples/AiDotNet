@@ -3436,6 +3436,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             throw new ArgumentNullException(nameof(featureIndices), "Feature indices cannot be null.");
         }
 
+        // Sequence models with EmbeddingLayer don't support feature selection.
+        // Their input shape is [1] (single token ID), not a feature vector.
+        // Fixes #1113.
+        if (Layers.Count > 0 && Layers[0] is Layers.EmbeddingLayer<T>)
+        {
+            return;
+        }
+
         // Initialize the hash set if it doesn't exist
         _explicitlySetActiveFeatures ??= new HashSet<int>();
 
