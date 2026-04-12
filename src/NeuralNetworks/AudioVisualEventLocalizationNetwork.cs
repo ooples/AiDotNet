@@ -193,7 +193,10 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         else
         {
             Layers.AddRange(LayerHelper<T>.CreateAudioVisualEventLocalizationLayers(
-                _embeddingDimension, _numEncoderLayers, _supportedCategories.Count));
+                inputSize: Architecture.InputSize,
+                embeddingDimension: _embeddingDimension,
+                numEncoderLayers: _numEncoderLayers,
+                numCategories: _supportedCategories.Count));
         }
 
         // Distribute layers to internal fields

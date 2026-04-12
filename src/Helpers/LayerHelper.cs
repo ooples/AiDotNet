@@ -31247,21 +31247,35 @@ public static class LayerHelper<T>
     {
         IActivationFunction<T>? nullActivation = null;
         var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
+        int sequenceLength = 32;
+        int numHeads = 8;
 
-        // Audio feature encoder (paper: VGG features -> LSTM -> 256-D)
+        // Audio encoder: input projection + N attention layers + output projection
         yield return new DenseLayer<T>(inputSize, embeddingDimension, tanhActivation);
+        for (int i = 0; i < numEncoderLayers; i++)
+            yield return new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads);
         yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
 
-        // Visual feature encoder (paper: VGG features -> attention -> LSTM -> 256-D)
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
-
-        // DMRN fusion (paper: dual multimodal residual network)
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
+        // Visual encoder: input projection + N attention layers + output projection
+        yield return new DenseLayer<T>(inputSize, embeddingDimension, tanhActivation);
+        for (int i = 0; i < numEncoderLayers; i++)
+            yield return new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads);
         yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
 
-        // Event classification output (paper: FC -> softmax over categories + binary event)
+        // Temporal modeling: 4 attention layers + proposal head
+        for (int i = 0; i < 4; i++)
+            yield return new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads);
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
+
+        // Cross-modal fusion: 4 attention layers
+        for (int i = 0; i < 4; i++)
+            yield return new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads);
+
+        // Task-specific heads: event classification, temporal boundary, spatial localization, anomaly
         yield return new DenseLayer<T>(embeddingDimension, numCategories, nullActivation);
+        yield return new DenseLayer<T>(embeddingDimension, 2, nullActivation);
+        yield return new DenseLayer<T>(embeddingDimension, 4, nullActivation);
+        yield return new DenseLayer<T>(embeddingDimension, 1, nullActivation);
     }
 
     /// <summary>
