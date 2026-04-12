@@ -214,7 +214,7 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
             && predicted.Shape[predicted.Shape.Length - 1] == 1
             && target.Length == predicted.Length)
         {
-            target = Engine.Reshape(target, predicted._shape);
+            target = Engine.Reshape(target, predicted.Shape.ToArray());
         }
         // Contrastive = mean(y * d² + (1-y) * max(0, margin - d)²)
         var squared = Engine.TensorMultiply(predicted, predicted);

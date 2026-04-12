@@ -118,7 +118,7 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
             && predicted.Shape[predicted.Shape.Length - 1] == 1
             && target.Length == predicted.Length)
         {
-            target = Engine.Reshape(target, predicted._shape);
+            target = Engine.Reshape(target, predicted.Shape.ToArray());
         }
         // CosineSimilarity = 1 - dot(p,t) / (||p|| * ||t|| + eps)
         var dotProduct = Engine.TensorMultiply(predicted, target);

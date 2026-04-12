@@ -149,7 +149,7 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
             }
             else if (target.Length == predicted.Length)
             {
-                target = Engine.Reshape(target, predicted._shape);
+                target = Engine.Reshape(target, predicted.Shape.ToArray());
             }
         }
         // Weighted CE = -mean(weights * target * log(predicted))

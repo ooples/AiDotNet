@@ -4168,10 +4168,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             int numClasses = prediction.Shape[prediction.Shape.Length - 1];
             if (numClasses > 1 && target.Shape.Length == prediction.Shape.Length - 1)
             {
+                // Validate shape prefix: target dims must match prediction dims
+                for (int d = 0; d < target.Shape.Length; d++)
+                {
+                    if (target.Shape[d] != prediction.Shape[d])
+                    {
+                        throw new ArgumentException(
+                            $"Target shape dimension {d} ({target.Shape[d]}) does not match " +
+                            $"predicted shape dimension {d} ({prediction.Shape[d]}).");
+                    }
+                }
+
                 var oneHot = new Tensor<T>(prediction.Shape.ToArray());
                 for (int i = 0; i < target.Length; i++)
                 {
-                    int classIdx = (int)NumOps.ToDouble(target[i]);
+                    double rawVal = NumOps.ToDouble(target[i]);
+                    int classIdx = (int)rawVal;
+                    if (rawVal != classIdx)
+                    {
+                        throw new ArgumentException(
+                            $"Target value {rawVal} at position {i} is not an integer class index.");
+                    }
                     if (classIdx < 0 || classIdx >= numClasses)
                     {
                         throw new ArgumentOutOfRangeException(nameof(target),
@@ -4183,7 +4200,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
             else if (target.Length == prediction.Length)
             {
-                matchedTarget = engine.Reshape(target, prediction._shape);
+                matchedTarget = engine.Reshape(target, prediction.Shape.ToArray());
             }
         }
 

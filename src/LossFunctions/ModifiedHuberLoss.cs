@@ -152,7 +152,7 @@ public class ModifiedHuberLoss<T> : LossFunctionBase<T>
             && predicted.Shape[predicted.Shape.Length - 1] == 1
             && target.Length == predicted.Length)
         {
-            target = Engine.Reshape(target, predicted._shape);
+            target = Engine.Reshape(target, predicted.Shape.ToArray());
         }
         // Modified Huber: max(0, 1-y*f)² if y*f >= -1, else -4*y*f
         var product = Engine.TensorMultiply(target, predicted);

@@ -33,7 +33,7 @@ public class TransformerTrainingPipelineTests
     /// Before #1121 fix, SequenceClassification was used and GlobalPoolingLayer
     /// collapsed the sequence dimension, causing shape mismatch.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task TokenClassification_ThroughFacade_CompletesWithoutCrash()
     {
         // Arrange: small Transformer for token classification (per-position labels)
@@ -103,7 +103,7 @@ public class TransformerTrainingPipelineTests
     /// SequenceClassification: one label per sequence [B] through the facade.
     /// Verifies that GlobalPoolingLayer is present and per-sequence labels work correctly.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 120000)]
     public async Task SequenceClassification_ThroughFacade_CompletesWithoutCrash()
     {
         int vocabSize = 20;
@@ -217,21 +217,34 @@ public class TransformerTrainingPipelineTests
     /// <summary>
     /// Verifies ValidateTaskTypeVsTargetShape throws a clear error when
     /// TokenClassification is configured but targets have per-sequence labels.
+    /// Covers both 1D targets [B] and rank-2 non-matching targets [B, numClasses].
     /// </summary>
     [Fact]
     public void ValidateTaskType_TokenClassification_WithPerSequenceTargets_ThrowsClearError()
     {
         int seqLen = 4;
 
-        var ex = Assert.Throws<InvalidOperationException>(() =>
+        // 1D targets [B] → mismatch
+        var ex1d = Assert.Throws<InvalidOperationException>(() =>
             TransformerArchitecture<float>.ValidateTaskTypeVsTargetShape(
                 NeuralNetworkTaskType.TokenClassification,
                 [16],
                 seqLen));
 
-        Assert.Contains("SequenceClassification", ex.Message);
-        Assert.Contains("InferClassificationTaskType", ex.Message);
-        _output.WriteLine($"Clear error message: {ex.Message}");
+        Assert.Contains("SequenceClassification", ex1d.Message);
+        Assert.Contains("InferClassificationTaskType", ex1d.Message);
+
+        // Rank-2 targets [B, numClasses] where numClasses != seqLen → mismatch
+        var ex2d = Assert.Throws<InvalidOperationException>(() =>
+            TransformerArchitecture<float>.ValidateTaskTypeVsTargetShape(
+                NeuralNetworkTaskType.TokenClassification,
+                [16, 10],
+                seqLen));
+
+        Assert.Contains("SequenceClassification", ex2d.Message);
+
+        _output.WriteLine($"1D error: {ex1d.Message}");
+        _output.WriteLine($"2D error: {ex2d.Message}");
     }
 
     /// <summary>
@@ -388,10 +401,10 @@ public class TransformerTrainingPipelineTests
     }
 
     /// <summary>
-    /// Edge case: TokenClassification with a single class (binary per-position labeling).
+    /// Edge case: TokenClassification with binary (2-class) per-position labeling.
     /// </summary>
     [Fact]
-    public void TokenClassification_SingleClass_BuildsCorrectLayers()
+    public void TokenClassification_BinaryClasses_BuildsCorrectLayers()
     {
         var architecture = new TransformerArchitecture<float>(
             inputType: InputType.TwoDimensional,

@@ -90,25 +90,6 @@ public enum NeuralNetworkTaskType
     SequenceClassification,
 
     /// <summary>
-    /// Token classification task (per-position labeling)
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Token classification assigns a label to each position (token) in a sequence
-    /// independently, rather than assigning a single label to the whole sequence. The output preserves
-    /// the sequence dimension so every token gets its own predicted class. Common examples include
-    /// Named Entity Recognition (NER) — labeling each word as Person, Organization, Location, or Other —
-    /// and Part-of-Speech (POS) tagging — labeling each word as noun, verb, adjective, etc.
-    /// </para>
-    /// <para>
-    /// <b>Key difference from SequenceClassification:</b> SequenceClassification collapses the sequence
-    /// into a single vector via global pooling before the classifier head, producing one label per sequence.
-    /// TokenClassification keeps every position and produces one label per token.
-    /// </para>
-    /// </remarks>
-    TokenClassification,
-
-    /// <summary>
     /// Time series forecasting task
     /// </summary>
     /// <remarks>
@@ -302,12 +283,31 @@ public enum NeuralNetworkTaskType
     Translation,
 
     /// <summary>
+    /// Token classification task (per-position labeling)
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Token classification assigns a label to each position (token) in a sequence
+    /// independently, rather than assigning a single label to the whole sequence. The output preserves
+    /// the sequence dimension so every token gets its own predicted class. Common examples include
+    /// Named Entity Recognition (NER) — labeling each word as Person, Organization, Location, or Other —
+    /// and Part-of-Speech (POS) tagging — labeling each word as noun, verb, adjective, etc.
+    /// </para>
+    /// <para>
+    /// <b>Key difference from SequenceClassification:</b> SequenceClassification collapses the sequence
+    /// into a single vector via global pooling before the classifier head, producing one label per sequence.
+    /// TokenClassification keeps every position and produces one label per token.
+    /// </para>
+    /// </remarks>
+    TokenClassification,
+
+    /// <summary>
     /// Custom task type
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The Custom option allows you to define your own specialized task that doesn't fit neatly 
-    /// into the predefined categories. This gives you flexibility to create neural networks for unique or 
+    /// <b>For Beginners:</b> The Custom option allows you to define your own specialized task that doesn't fit neatly
+    /// into the predefined categories. This gives you flexibility to create neural networks for unique or
     /// experimental purposes that combine aspects of different task types or implement entirely new approaches.
     /// </para>
     /// </remarks>

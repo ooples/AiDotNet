@@ -149,7 +149,7 @@ public class WassersteinLoss<T> : LossFunctionBase<T>
             && predicted.Shape[predicted.Shape.Length - 1] == 1
             && target.Length == predicted.Length)
         {
-            target = Engine.Reshape(target, predicted._shape);
+            target = Engine.Reshape(target, predicted.Shape.ToArray());
         }
         // Wasserstein = -mean(target * predicted)
         var product = Engine.TensorMultiply(target, predicted);

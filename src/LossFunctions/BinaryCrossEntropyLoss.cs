@@ -142,7 +142,7 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
             }
             else if (target.Length == predicted.Length)
             {
-                target = Engine.Reshape(target, predicted._shape);
+                target = Engine.Reshape(target, predicted.Shape.ToArray());
             }
         }
         // BCE = -mean(target * log(p) + (1 - target) * log(1 - p))

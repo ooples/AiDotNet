@@ -364,6 +364,11 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// </remarks>
     public static NeuralNetworkTaskType InferClassificationTaskType(int[] targetShape, int inputSeqLen)
     {
+        if (targetShape is null || targetShape.Length == 0)
+            throw new ArgumentException("Target shape must not be null or empty.", nameof(targetShape));
+        if (inputSeqLen <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputSeqLen), "Input sequence length must be positive.");
+
         if (targetShape.Length >= 2 && targetShape[1] == inputSeqLen)
         {
             // Target has shape [numSamples, seqLen] → per-position labels
@@ -388,6 +393,11 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     public static void ValidateTaskTypeVsTargetShape(
         NeuralNetworkTaskType taskType, int[] targetShape, int inputSeqLen)
     {
+        if (targetShape is null || targetShape.Length == 0)
+            throw new ArgumentException("Target shape must not be null or empty.", nameof(targetShape));
+        if (inputSeqLen <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputSeqLen), "Input sequence length must be positive.");
+
         bool hasPerPositionTargets = targetShape.Length >= 2 && targetShape[1] == inputSeqLen;
 
         if (taskType == NeuralNetworkTaskType.SequenceClassification && hasPerPositionTargets)
@@ -400,12 +410,13 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
                 $"TransformerArchitecture.InferClassificationTaskType() to auto-detect.");
         }
 
-        if (taskType == NeuralNetworkTaskType.TokenClassification && !hasPerPositionTargets
-            && targetShape.Length == 1)
+        if (taskType == NeuralNetworkTaskType.TokenClassification && !hasPerPositionTargets)
         {
             throw new InvalidOperationException(
                 $"Task type mismatch: TokenClassification was configured, but target shape " +
-                $"[{string.Join(", ", targetShape)}] is 1D (one label per sequence). " +
+                $"[{string.Join(", ", targetShape)}] does not have a sequence dimension matching " +
+                $"the input sequence length ({inputSeqLen}). TokenClassification requires " +
+                $"per-position labels with shape [batch, {inputSeqLen}, ...]. " +
                 $"Use NeuralNetworkTaskType.SequenceClassification instead, or use " +
                 $"TransformerArchitecture.InferClassificationTaskType() to auto-detect.");
         }

@@ -717,7 +717,13 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                         int batchElements = tensorY.Length;
                         for (int i = 0; i < batchElements; i++)
                         {
-                            int classIdx = (int)numOps.ToDouble(tensorY[i]);
+                            double rawVal = numOps.ToDouble(tensorY[i]);
+                            int classIdx = (int)rawVal;
+                            if (rawVal != classIdx)
+                            {
+                                throw new ArgumentException(
+                                    $"Target value {rawVal} at position {i} is not an integer class index.");
+                            }
                             if (classIdx < 0 || classIdx >= numClasses)
                             {
                                 throw new ArgumentOutOfRangeException(nameof(y),
@@ -730,7 +736,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                     else if (tensorY.Length == tensorPredictions.Length)
                     {
                         // Singleton dimension alignment (e.g., [B] → [B,1])
-                        tensorY = tensorY.Reshape(tensorPredictions._shape);
+                        tensorY = tensorY.Reshape(tensorPredictions.Shape.ToArray());
                     }
                 }
                 gradient = LossFunction.CalculateDerivative(tensorPredictions.ToVector(), tensorY.ToVector());
