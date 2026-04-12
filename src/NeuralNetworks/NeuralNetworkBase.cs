@@ -4199,7 +4199,25 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Legacy path: manual backward through layers
         var loss = lossFunction ?? DefaultLossFunction;
         var pred = Predict(input);
-        var lossDerivative = loss.CalculateDerivative(pred.ToVector(), target.ToVector());
+
+        // Match target shape to prediction when target is integer indices
+        // (e.g., [B, S] → [B, S, V] one-hot). Same fix as #1115 in the
+        // optimizer gradient path — both call CalculateDerivative with
+        // flattened vectors that must have matching lengths.
+        var matchedTarget = target;
+        if (pred.Shape.Length > target.Shape.Length)
+        {
+            int numClasses = pred.Shape[pred.Shape.Length - 1];
+            var oneHot = new Tensor<T>(pred._shape);
+            for (int i = 0; i < target.Length; i++)
+            {
+                int classIdx = (int)NumOps.ToDouble(target[i]);
+                if (classIdx >= 0 && classIdx < numClasses)
+                    oneHot[i * numClasses + classIdx] = NumOps.One;
+            }
+            matchedTarget = oneHot;
+        }
+        var lossDerivative = loss.CalculateDerivative(pred.ToVector(), matchedTarget.ToVector());
         var outputGradients = new Tensor<T>(pred._shape, lossDerivative);
         return GetParameterGradients();
     }

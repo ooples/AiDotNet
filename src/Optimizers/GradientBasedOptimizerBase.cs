@@ -685,6 +685,26 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
             if (predictions is Tensor<T> tensorPredictions && y is Tensor<T> tensorY)
             {
+                // When prediction and target have different shapes (e.g.,
+                // Transformer output [B, S, V] vs target [B, S] integer
+                // indices), one-hot encode the target to match before
+                // flattening to vectors. Without this, ToVector() produces
+                // different-length vectors and CalculateDerivative throws.
+                // Fixes #1115 — affects ALL gradient-based optimizers.
+                if (tensorPredictions.Shape.Length > tensorY.Shape.Length)
+                {
+                    var numOps = MathHelper.GetNumericOperations<T>();
+                    int numClasses = tensorPredictions.Shape[tensorPredictions.Shape.Length - 1];
+                    var oneHot = new Tensor<T>(tensorPredictions.Shape.ToArray());
+                    int batchElements = tensorY.Length;
+                    for (int i = 0; i < batchElements; i++)
+                    {
+                        int classIdx = (int)numOps.ToDouble(tensorY[i]);
+                        if (classIdx >= 0 && classIdx < numClasses)
+                            oneHot[i * numClasses + classIdx] = numOps.One;
+                    }
+                    tensorY = oneHot;
+                }
                 gradient = LossFunction.CalculateDerivative(tensorPredictions.ToVector(), tensorY.ToVector());
             }
             else if (predictions is Vector<T> vectorPredictions && y is Vector<T> vectorY)
