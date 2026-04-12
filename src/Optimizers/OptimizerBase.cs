@@ -314,6 +314,20 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         if (selectedFeatures == null || selectedFeatures.Count == 0)
             throw new ArgumentException("At least one feature must be selected.", nameof(selectedFeatures));
 
+        // Neural networks whose first layer is an embedding (Transformers, RNNs
+        // with token input, etc.) do not support feature selection. Their "input
+        // dimension" is a single token ID, not a feature vector — the optimizer
+        // sees the sequence length as the feature count, producing indices that
+        // exceed the embedding layer's input shape and crash
+        // SetActiveFeatureIndices. Skip silently for all such models.
+        // Fixes #1113 and affects ALL optimizers that inherit from OptimizerBase.
+        if (model is NeuralNetworks.NeuralNetworkBase<T> nn
+            && nn.Layers.Count > 0
+            && nn.Layers[0] is NeuralNetworks.Layers.EmbeddingLayer<T>)
+        {
+            return;
+        }
+
         // Apply features if model supports it
         if (model is IFeatureAware featureAwareModel)
         {
