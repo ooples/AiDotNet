@@ -1161,29 +1161,6 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// to account for connections across time steps, as earlier inputs influence later outputs.
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Set to training mode
-        SetTrainingMode(true);
-
-        // Forward pass to get predictions
-        var predictions = Predict(input);
-
-        var flattenedPredictions = predictions.ToVector();
-        var flattenedExpected = expectedOutput.ToVector();
-
-        // Calculate loss
-        LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
-
-        // Calculate output gradients
-        var gradientVector = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-        var outputGradients = new Tensor<T>(predictions._shape, gradientVector);
-
-        // Backpropagation through time
-
-        // Update parameters
-        UpdateNetworkParameters();
-    }
 
     /// <summary>
     /// Transforms a hidden state gradient to match the shape of an output gradient.
@@ -1805,22 +1782,6 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Updates the network parameters based on calculated gradients.
     /// </summary>
-    private void UpdateNetworkParameters()
-    {
-        // Simple learning rate for gradient descent
-        T learningRate = NumOps.FromDouble(0.01);
-
-        // Update parameters for each layer
-        foreach (var layer in Layers)
-        {
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
-            {
-                layer.UpdateParameters(learningRate);
-            }
-        }
-    }
-
-
     /// <summary>
     /// Gets metadata about the LSTM model.
     /// </summary>
