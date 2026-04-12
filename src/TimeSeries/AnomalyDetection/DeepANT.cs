@@ -202,13 +202,16 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
             features = conv.Forward(features);
         }
 
-        // Fully connected output: output = sum(weights * features) + bias
-        T output = _fcBias[0];
+        // Engine-accelerated FC: output = dot(weights, features) + bias
         int numFeatures = Math.Min(_fcWeights.Length, features.Length);
+        var weightsVec = new Vector<T>(numFeatures);
+        var featuresVec = new Vector<T>(numFeatures);
         for (int j = 0; j < numFeatures; j++)
         {
-            output = _numOps.Add(output, _numOps.Multiply(_fcWeights[j], features[j]));
+            weightsVec[j] = _fcWeights[j];
+            featuresVec[j] = features[j];
         }
+        T output = _numOps.Add(_fcBias[0], Engine.DotProduct(weightsVec, featuresVec));
 
         return (output, features);
     }
