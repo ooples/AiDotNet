@@ -487,9 +487,11 @@ public class AudioBenchmarkTests
 
             // Pulling a batch goes through the streaming ExtractBatch path:
             // confirms the on-demand WAV decode works and the label shape is correct.
-            var split = loader.Split(trainRatio: 0.6, validationRatio: 0.2, seed: 42);
-            Assert.True(split.Train.TotalCount > 0);
-            Assert.Equal(12, split.Train.OutputDimension);
+            // (Split() is NotSupported on this streaming loader, so we iterate
+            // GetBatches directly to exercise the same codepath.)
+            var first = loader.GetBatches(batchSize: loader.TotalCount, shuffle: false).First();
+            Assert.Equal(new[] { loader.TotalCount, 1600 }, first.Features.Shape.ToArray());
+            Assert.Equal(new[] { loader.TotalCount, 12 }, first.Labels.Shape.ToArray());
         }
         finally
         {
@@ -555,14 +557,10 @@ public class AudioBenchmarkTests
             Assert.Equal(2, loader.TotalCount);
             Assert.Equal(800, loader.FeatureCount);
 
-            // Use a 50/25/25 split (trainRatio must be in (0,1) exclusive). With 2 samples
-            // that yields 1 train sample, which is enough to verify the post-resample shape.
-            var split = loader.Split(trainRatio: 0.5, validationRatio: 0.25, seed: 0);
-            // InMemoryDataLoader still requires LoadAsync before its Features accessor works.
-            await split.Train.LoadAsync();
-            // The Features tensor exposed by the in-memory split should have the resampled
-            // length, proving the resample path produced TargetLength samples per clip.
-            Assert.Equal(800, split.Train.Features.Shape[1]);
+            // Iterate a batch directly — Split() is NotSupported on this streaming
+            // loader, so GetBatches is the way to verify the post-resample shape.
+            var first = loader.GetBatches(batchSize: 2, shuffle: false).First();
+            Assert.Equal(new[] { 2, 800 }, first.Features.Shape.ToArray());
         }
         finally
         {
@@ -588,6 +586,125 @@ public class AudioBenchmarkTests
 
             var loader = new SpeechCommandsDataLoader<float>(options);
             await Assert.ThrowsAsync<InvalidOperationException>(() => loader.LoadAsync());
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpeechCommandsLoader_OfficialSplitLists_RouteSamplesToCorrectSplit()
+    {
+        // Regression test for the testing_list.txt / validation_list.txt parsing
+        // and the IsInRequestedSplit filter. Two test/val entries per word mean
+        // Train should see fewer samples than the full dir count while Validation
+        // and Test each expose their own dedicated entries.
+        string tempDir = CreateTempDirectory();
+        try
+        {
+            CreateSpeechCommandsDir(tempDir, "yes", count: 5);
+            CreateSpeechCommandsDir(tempDir, "no",  count: 5);
+
+            // Split-list format (relative path with forward slashes, matching the
+            // dataset's Unix-style listing files that the loader then normalises).
+            File.WriteAllLines(Path.Combine(tempDir, "validation_list.txt"), new[]
+            {
+                "yes/speaker0_nohash_0.wav",
+                "no/speaker0_nohash_0.wav",
+            });
+            File.WriteAllLines(Path.Combine(tempDir, "testing_list.txt"), new[]
+            {
+                "yes/speaker1_nohash_0.wav",
+                "no/speaker1_nohash_0.wav",
+            });
+
+            // Train split — expect 3 yes + 3 no = 6 (the 2+2 val/test entries dropped).
+            var trainOptions = new SpeechCommandsDataLoaderOptions
+            {
+                DataPath = tempDir, AutoDownload = false, UseCoreSubset = false,
+                SilenceSampleCount = 0, TargetLength = 1600,
+                Split = AiDotNet.Data.Geometry.DatasetSplit.Train,
+            };
+            var trainLoader = new SpeechCommandsDataLoader<float>(trainOptions);
+            await trainLoader.LoadAsync();
+            Assert.Equal(6, trainLoader.TotalCount);
+
+            // Validation split — expect 1 yes + 1 no = 2.
+            var valOptions = new SpeechCommandsDataLoaderOptions
+            {
+                DataPath = tempDir, AutoDownload = false, UseCoreSubset = false,
+                SilenceSampleCount = 0, TargetLength = 1600,
+                Split = AiDotNet.Data.Geometry.DatasetSplit.Validation,
+            };
+            var valLoader = new SpeechCommandsDataLoader<float>(valOptions);
+            await valLoader.LoadAsync();
+            Assert.Equal(2, valLoader.TotalCount);
+
+            // Test split — expect 1 yes + 1 no = 2.
+            var testOptions = new SpeechCommandsDataLoaderOptions
+            {
+                DataPath = tempDir, AutoDownload = false, UseCoreSubset = false,
+                SilenceSampleCount = 0, TargetLength = 1600,
+                Split = AiDotNet.Data.Geometry.DatasetSplit.Test,
+            };
+            var testLoader = new SpeechCommandsDataLoader<float>(testOptions);
+            await testLoader.LoadAsync();
+            Assert.Equal(2, testLoader.TotalCount);
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpeechCommandsLoader_MaxSamplesPerClass_EnforcesCap()
+    {
+        // Regression test for the per-class cap. Each keyword dir has 10 WAVs;
+        // with MaxSamplesPerClass=3 we expect exactly 6 samples (3 yes + 3 no).
+        string tempDir = CreateTempDirectory();
+        try
+        {
+            CreateSpeechCommandsDir(tempDir, "yes", count: 10);
+            CreateSpeechCommandsDir(tempDir, "no",  count: 10);
+
+            var options = new SpeechCommandsDataLoaderOptions
+            {
+                DataPath = tempDir, AutoDownload = false, UseCoreSubset = false,
+                SilenceSampleCount = 0, TargetLength = 1600,
+                MaxSamplesPerClass = 3,
+            };
+            var loader = new SpeechCommandsDataLoader<float>(options);
+            await loader.LoadAsync();
+            Assert.Equal(6, loader.TotalCount);
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpeechCommandsLoader_Split_ThrowsNotSupported()
+    {
+        // The loader is streaming-only; Split() must throw rather than silently
+        // materialising the whole dataset into memory.
+        string tempDir = CreateTempDirectory();
+        try
+        {
+            CreateSpeechCommandsDir(tempDir, "yes", count: 2);
+
+            var options = new SpeechCommandsDataLoaderOptions
+            {
+                DataPath = tempDir, AutoDownload = false, UseCoreSubset = false,
+                SilenceSampleCount = 0, TargetLength = 1600,
+            };
+            var loader = new SpeechCommandsDataLoader<float>(options);
+            await loader.LoadAsync();
+
+            Assert.Throws<NotSupportedException>(() =>
+                loader.Split(trainRatio: 0.5, validationRatio: 0.25, seed: 0));
         }
         finally
         {

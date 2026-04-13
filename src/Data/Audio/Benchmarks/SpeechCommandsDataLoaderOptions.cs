@@ -77,11 +77,17 @@ public sealed class SpeechCommandsDataLoaderOptions
 
     /// <summary>Validates that all option values are within acceptable ranges.</summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    /// <exception cref="ArgumentException">Thrown when <see cref="DataPath"/> is the empty string.</exception>
     public void Validate()
     {
         if (SampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(SampleRate), "Sample rate must be positive.");
         if (TargetLength <= 0) throw new ArgumentOutOfRangeException(nameof(TargetLength), "TargetLength must be positive.");
         if (MaxSamplesPerClass is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamplesPerClass), "MaxSamplesPerClass must be positive when specified.");
         if (SilenceSampleCount < 0) throw new ArgumentOutOfRangeException(nameof(SilenceSampleCount), "SilenceSampleCount must be non-negative.");
+        // null means "use the default cache path" (set up by the loader constructor).
+        // Empty/whitespace would be silently treated as the current working directory,
+        // which is almost never what the caller intended.
+        if (DataPath is not null && string.IsNullOrWhiteSpace(DataPath))
+            throw new ArgumentException("DataPath must be null (for the default cache) or a non-empty, non-whitespace path.", nameof(DataPath));
     }
 }

@@ -54,16 +54,23 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
     public static readonly string DownloadUrl =
         "https://download.tensorflow.org/data/speech_commands_v0.02.tar.gz";
 
-    /// <summary>Core 10 spoken words (the standard benchmark subset).</summary>
-    public static readonly string[] CoreWords =
+    // Internal backing arrays — NEVER expose these directly. The public API exposes
+    // IReadOnlyList<string> views so callers can't mutate (or cast-then-mutate) the
+    // canonical class ordering, which would corrupt directory → class-index mapping
+    // for every loader instance.
+    private static readonly string[] CoreWordsArray =
         ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"];
-
-    /// <summary>All 35 word classes in the full dataset.</summary>
-    public static readonly string[] AllWords =
+    private static readonly string[] AllWordsArray =
         ["backward", "bed", "bird", "cat", "dog", "down", "eight", "five", "follow",
          "forward", "four", "go", "happy", "house", "learn", "left", "marvin", "nine",
          "no", "off", "on", "one", "right", "seven", "sheila", "six", "stop", "three",
          "tree", "two", "up", "visual", "wow", "yes", "zero"];
+
+    /// <summary>Core 10 spoken words (the standard benchmark subset). Read-only view.</summary>
+    public static IReadOnlyList<string> CoreWords { get; } = Array.AsReadOnly(CoreWordsArray);
+
+    /// <summary>All 35 word classes in the full dataset. Read-only view.</summary>
+    public static IReadOnlyList<string> AllWords { get; } = Array.AsReadOnly(AllWordsArray);
 
     /// <summary>Synthetic class label for non-keyword speech in the 12-class subset.</summary>
     public const string UnknownLabel = "_unknown_";
@@ -87,6 +94,23 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
     // memory, which is what makes the full 35-class path safe on commodity hardware.
     private readonly List<SampleEntry> _samples = new();
     private List<string>? _backgroundNoiseFiles; // null until LoadDataCoreAsync runs
+
+    // Lazy cache of fully-decoded background-noise waveforms, keyed by file path.
+    // Each entry holds the full native-rate decoded audio as a T[] so synthetic
+    // silence samples can be sliced at distinct offsets without reloading from disk.
+    private readonly Dictionary<string, T[]> _backgroundNoiseBuffers = new();
+
+    // How many native samples we pre-decode from each background-noise WAV. Speech
+    // Commands background files are ~60 s at 16 kHz; 30 s is more than enough to
+    // give us many distinct 1-second crops per file while keeping the cache small
+    // (~1.8 MB per file for float32).
+    private const int BackgroundNoisePrefetchSamples = 30 * SpeechCommandsDataLoaderOptions.NativeSampleRate;
+
+    // Step between consecutive silence crop offsets, in native-rate samples.
+    // 0.5 s gives plenty of variety (60 unique crops per 30-second buffer) while
+    // still leaving the crops partially overlapping — the benchmark expects
+    // neighboring noise windows to look similar, not i.i.d.
+    private const int SilenceCropHopNativeSamples = SpeechCommandsDataLoaderOptions.NativeSampleRate / 2;
 
     /// <inheritdoc/>
     public override string Name => "SpeechCommands";
@@ -121,16 +145,21 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
         if (_options.UseCoreSubset)
         {
             // Per Warden 2018: 10 keywords + silence + unknown = 12 classes.
-            _wordList = new string[CoreWords.Length + 2];
-            Array.Copy(CoreWords, _wordList, CoreWords.Length);
-            _wordList[CoreWords.Length] = SilenceLabel;
-            _wordList[CoreWords.Length + 1] = UnknownLabel;
-            _silenceClassIndex = CoreWords.Length;
-            _unknownClassIndex = CoreWords.Length + 1;
+            // Use the internal array directly to avoid paying for ReadOnlyCollection
+            // enumerator overhead on a hot path that runs once per loader.
+            int coreLen = CoreWordsArray.Length;
+            _wordList = new string[coreLen + 2];
+            Array.Copy(CoreWordsArray, _wordList, coreLen);
+            _wordList[coreLen] = SilenceLabel;
+            _wordList[coreLen + 1] = UnknownLabel;
+            _silenceClassIndex = coreLen;
+            _unknownClassIndex = coreLen + 1;
         }
         else
         {
-            _wordList = AllWords;
+            // Clone so an external caller can't mutate our internal AllWordsArray via
+            // any side-channel that might cast _wordList back to string[].
+            _wordList = (string[])AllWordsArray.Clone();
             _silenceClassIndex = -1;
             _unknownClassIndex = -1;
         }
@@ -175,7 +204,7 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
         var classCounts = new int[_numClasses];
 
         // 3a) Keyword classes (10 in core mode, 35 in full mode).
-        int keywordEnd = _options.UseCoreSubset ? CoreWords.Length : _wordList.Length;
+        int keywordEnd = _options.UseCoreSubset ? CoreWordsArray.Length : _wordList.Length;
         for (int c = 0; c < keywordEnd; c++)
         {
             string word = _wordList[c];
@@ -190,7 +219,13 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
 
                 if (_options.MaxSamplesPerClass.HasValue &&
                     classCounts[c] >= _options.MaxSamplesPerClass.Value)
-                    continue;
+                {
+                    // Cap reached for this class — stop scanning the rest of the
+                    // directory (tens of thousands of files for some classes).
+                    // `continue` here would keep iterating the full Directory.GetFiles
+                    // result set, wasting IO and startup time for no benefit.
+                    break;
+                }
 
                 _samples.Add(new SampleEntry(wavFile, c, SampleSource.WavFile));
                 classCounts[c]++;
@@ -200,8 +235,8 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
         // 3b) Synthetic _unknown_ class: collapse every non-core word directory.
         if (_options.UseCoreSubset && _unknownClassIndex >= 0)
         {
-            var coreSet = new HashSet<string>(CoreWords, StringComparer.OrdinalIgnoreCase);
-            foreach (string nonCoreWord in AllWords)
+            var coreSet = new HashSet<string>(CoreWordsArray, StringComparer.OrdinalIgnoreCase);
+            foreach (string nonCoreWord in AllWordsArray)
             {
                 if (coreSet.Contains(nonCoreWord)) continue;
                 string wordDir = Path.Combine(_dataPath, nonCoreWord);
@@ -325,7 +360,16 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
         for (int i = 0; i < indices.Length; i++)
         {
             int sampleIdx = indices[i];
-            if (sampleIdx < 0 || sampleIdx >= _samples.Count) continue;
+            if (sampleIdx < 0 || sampleIdx >= _samples.Count)
+            {
+                // Fail loud on an out-of-range index — silently skipping would leave
+                // this batch row zero-filled while the corresponding label row is
+                // whatever random class happens to sit at index i in the label
+                // tensor. That's a data/logic bug we never want to mask.
+                throw new ArgumentOutOfRangeException(
+                    nameof(indices),
+                    $"Index {sampleIdx} at position {i} is outside the valid range [0, {_samples.Count - 1}].");
+            }
 
             var entry = _samples[sampleIdx];
             DecodeSampleInto(entry, featuresData, i * targetLen, targetLen);
@@ -350,40 +394,89 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
 
         if (entry.Source == SampleSource.Silence)
         {
-            // _silence_ class. If background noise files are available, sample a
-            // random crop of one of them; otherwise leave the slot zero-filled
-            // (acceptable degenerate behavior — pure silence is still valid input).
+            // _silence_ class. Slice a distinct crop of one of the background-noise
+            // WAVs using a deterministic per-sample offset (derived from SyntheticIndex)
+            // so that consecutive silence samples are NOT duplicate prefixes of the
+            // same waveform. When no background-noise directory is present, leave the
+            // destination zero-filled — pure silence is still a valid training input.
             if (_backgroundNoiseFiles is { Count: > 0 })
             {
-                // Deterministic per-sample picker so reload + reshuffle yields stable
-                // training data (the dataset class index alone disambiguates samples,
-                // and we want the test fixture to be reproducible).
                 int fileIdx = entry.SyntheticIndex % _backgroundNoiseFiles.Count;
                 string path = _backgroundNoiseFiles[fileIdx];
-                if (File.Exists(path))
+                if (!File.Exists(path))
                 {
-                    DecodeFileWithResample(path, dst, dstOffset, targetLen, nativeRate, targetRate);
+                    // Expected synthesized-silence source file is gone — surface this
+                    // explicitly rather than silently emitting a zero-filled row that
+                    // would pose as a legitimate silence label.
+                    throw new FileNotFoundException(
+                        $"Expected background-noise WAV was not found while decoding a synthetic _silence_ sample: '{path}'.",
+                        path);
                 }
+
+                var noiseBuffer = GetOrLoadBackgroundNoiseBuffer(path);
+
+                // Derive a deterministic native-rate crop offset so each SyntheticIndex
+                // produces a DIFFERENT 1-second window. Using integer division by the
+                // file count means the first `files.Count` silence samples each pick
+                // offset 0 (one per file), the next cohort picks offset
+                // SilenceCropHopNativeSamples, and so on.
+                int nativeWindow = checked((int)Math.Ceiling((double)targetLen * nativeRate / targetRate)) + 1;
+                int cropOffsetNative = 0;
+                if (noiseBuffer.Length > nativeWindow)
+                {
+                    int maxOffset = noiseBuffer.Length - nativeWindow;
+                    int cohort = entry.SyntheticIndex / _backgroundNoiseFiles.Count;
+                    cropOffsetNative = (cohort * SilenceCropHopNativeSamples) % Math.Max(1, maxOffset);
+                }
+
+                ResampleIntoDestination(noiseBuffer, cropOffsetNative, dst, dstOffset, targetLen, nativeRate, targetRate);
             }
             // Else: dst[dstOffset..dstOffset+targetLen] stays at default(T) which is 0.
             return;
         }
 
-        if (!File.Exists(entry.AudioPath)) return;
-        DecodeFileWithResample(entry.AudioPath, dst, dstOffset, targetLen, nativeRate, targetRate);
+        if (!File.Exists(entry.AudioPath))
+        {
+            // Loader scanned this file during LoadAsync but it disappeared before
+            // ExtractBatch reached it. Silent zero-fill would mislabel the row as
+            // "real class + silence waveform" — throw instead so the data issue is
+            // visible to the caller.
+            throw new FileNotFoundException(
+                $"Expected Speech Commands WAV file was not found during batch decoding: '{entry.AudioPath}'. " +
+                "The file may have been removed or renamed after LoadAsync scanned the dataset.",
+                entry.AudioPath);
+        }
+        byte[] audioBytes = File.ReadAllBytes(entry.AudioPath);
+        DecodeBytesWithResample(audioBytes, dst, dstOffset, targetLen, nativeRate, targetRate);
     }
 
     /// <summary>
-    /// Decodes a WAV file and writes <paramref name="targetLen"/> samples into
-    /// <paramref name="dst"/> starting at <paramref name="dstOffset"/>, resampling
-    /// from <paramref name="nativeRate"/> to <paramref name="targetRate"/> via
-    /// linear interpolation when the rates differ.
+    /// Returns a cached fully-decoded waveform for the given background-noise file,
+    /// loading and caching it on first access. All synthetic _silence_ samples for a
+    /// particular background file share this buffer so per-sample crop offsets can be
+    /// sliced without repeated file I/O or WAV decoding.
     /// </summary>
-    private void DecodeFileWithResample(
-        string path, T[] dst, int dstOffset, int targetLen, int nativeRate, int targetRate)
+    private T[] GetOrLoadBackgroundNoiseBuffer(string path)
     {
-        byte[] audioBytes = File.ReadAllBytes(path);
+        if (_backgroundNoiseBuffers.TryGetValue(path, out var cached))
+            return cached;
 
+        byte[] audioBytes = File.ReadAllBytes(path);
+        var buffer = new T[BackgroundNoisePrefetchSamples];
+        AudioLoaderHelper.LoadAudioSamples(audioBytes, buffer, 0, BackgroundNoisePrefetchSamples, NumOps);
+        _backgroundNoiseBuffers[path] = buffer;
+        return buffer;
+    }
+
+    /// <summary>
+    /// Decodes a WAV byte payload, then writes <paramref name="targetLen"/> samples
+    /// into <paramref name="dst"/> starting at <paramref name="dstOffset"/>, resampling
+    /// from <paramref name="nativeRate"/> to <paramref name="targetRate"/> via linear
+    /// interpolation when the rates differ.
+    /// </summary>
+    private void DecodeBytesWithResample(
+        byte[] audioBytes, T[] dst, int dstOffset, int targetLen, int nativeRate, int targetRate)
+    {
         if (nativeRate == targetRate)
         {
             // Fast path: no resampling, decode straight into the destination buffer.
@@ -397,12 +490,35 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
         int neededNative = checked((int)Math.Ceiling((double)targetLen * nativeRate / targetRate)) + 1;
         var nativeBuf = new T[neededNative];
         AudioLoaderHelper.LoadAudioSamples(audioBytes, nativeBuf, 0, neededNative, NumOps);
+        ResampleIntoDestination(nativeBuf, nativeOffset: 0, dst, dstOffset, targetLen, nativeRate, targetRate);
+    }
+
+    /// <summary>
+    /// Linear-interpolation resample of <paramref name="nativeBuf"/> starting at
+    /// <paramref name="nativeOffset"/> into <paramref name="dst"/>[<paramref name="dstOffset"/>..].
+    /// When <paramref name="nativeRate"/> equals <paramref name="targetRate"/> this
+    /// collapses to a plain copy loop (still honors nativeOffset for silence crops).
+    /// </summary>
+    private void ResampleIntoDestination(
+        T[] nativeBuf, int nativeOffset, T[] dst, int dstOffset, int targetLen, int nativeRate, int targetRate)
+    {
+        int lastIdx = nativeBuf.Length - 1;
+        if (nativeRate == targetRate)
+        {
+            // No resampling — still respect the offset (used for silence crops).
+            for (int t = 0; t < targetLen; t++)
+            {
+                int idx = nativeOffset + t;
+                if (idx > lastIdx) idx = lastIdx;
+                dst[dstOffset + t] = nativeBuf[idx];
+            }
+            return;
+        }
 
         double rateRatio = (double)nativeRate / targetRate;
-        int lastIdx = neededNative - 1;
         for (int t = 0; t < targetLen; t++)
         {
-            double srcPos = t * rateRatio;
+            double srcPos = nativeOffset + t * rateRatio;
             int floorIdx = (int)Math.Floor(srcPos);
             int ceilIdx = floorIdx + 1;
             if (floorIdx > lastIdx) floorIdx = lastIdx;
@@ -416,6 +532,18 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Speech Commands is a streaming loader — see class remarks. Splitting the full
+    /// dataset via this base-class API would require eagerly decoding every clip into
+    /// a contiguous <c>Tensor&lt;T&gt;</c>, which is ~4 GB of float32 features for the
+    /// 35-class mode (or ~500 MB for a 70 % train split). That would defeat the whole
+    /// reason the loader went streaming in the first place, and would quietly OOM on
+    /// commodity hardware. Use the dataset's official Train/Validation/Test splits
+    /// via the <c>DatasetSplit</c> option + one loader per split, or iterate
+    /// <see cref="GetBatches"/>/<see cref="GetBatchesAsync"/> directly and partition
+    /// indices yourself.
+    /// </remarks>
+    /// <exception cref="NotSupportedException">Always thrown — see remarks.</exception>
     public override (IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Train,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Validation,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Test) Split(
@@ -423,30 +551,13 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
         double validationRatio = 0.15,
         int? seed = null)
     {
-        EnsureLoaded();
-        ValidateSplitRatios(trainRatio, validationRatio);
-        var (trainSize, valSize, _) = ComputeSplitSizes(_sampleCount, trainRatio, validationRatio);
-        var random = seed.HasValue
-            ? Tensors.Helpers.RandomHelper.CreateSeededRandom(seed.Value)
-            : Tensors.Helpers.RandomHelper.CreateSecureRandom();
-        var shuffled = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
-
-        var trainIdx = shuffled.Take(trainSize).ToArray();
-        var valIdx = shuffled.Skip(trainSize).Take(valSize).ToArray();
-        var testIdx = shuffled.Skip(trainSize + valSize).ToArray();
-
-        // Each split eagerly materializes its own (smaller) batch — this is fine for
-        // typical 70/15/15 splits because the per-split memory is bounded by
-        // splitSize * targetLength, which is much smaller than the full-dataset case.
-        var trainBatch = ExtractBatch(trainIdx);
-        var valBatch = ExtractBatch(valIdx);
-        var testBatch = ExtractBatch(testIdx);
-
-        return (
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(trainBatch.Features, trainBatch.Labels),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(valBatch.Features, valBatch.Labels),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(testBatch.Features, testBatch.Labels)
-        );
+        throw new NotSupportedException(
+            "SpeechCommandsDataLoader is a streaming loader — Split() is not supported because " +
+            "it would eagerly decode and materialize every clip into memory (~4 GB for the full " +
+            "35-class dataset), defeating the point of streaming. " +
+            "Instead: construct separate loaders with SpeechCommandsDataLoaderOptions.Split set to " +
+            "Train / Validation / Test (which honours the official Warden 2018 split lists), or " +
+            "iterate GetBatches()/GetBatchesAsync() and partition indices yourself.");
     }
 
     /// <summary>What kind of source a particular sample entry references.</summary>
