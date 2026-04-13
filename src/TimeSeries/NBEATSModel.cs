@@ -400,20 +400,25 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            // Use training series lookback for in-sample, autoregressive for out-of-sample
-            int seriesIdx = i; // position in the original timeline
+            // Per Oreshkin et al. 2020: predict from the end of the observed series.
+            // For position i, use the last LookbackWindow values ending at trainN + i - 1.
+            int endIdx = trainN + i;
             var lookback = new Vector<T>(_options.LookbackWindow);
 
             for (int j = 0; j < _options.LookbackWindow; j++)
             {
-                int idx = seriesIdx - _options.LookbackWindow + 1 + j;
+                int idx = endIdx - _options.LookbackWindow + j;
                 if (idx >= 0 && idx < series.Count)
                     lookback[j] = series[idx];
                 else
                     lookback[j] = NumOps.Zero;
             }
 
-            predictions[i] = PredictSingle(lookback);
+            T predicted = PredictSingle(lookback);
+            predictions[i] = predicted;
+
+            // Autoregressive: append prediction for subsequent windows
+            series.Add(_trainingSeries.Length > 0 ? predicted : NumOps.Zero);
         }
 
         return predictions;
