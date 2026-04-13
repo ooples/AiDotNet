@@ -41,7 +41,8 @@ public class PredictionStats<T>
     /// Unlike confidence intervals (which are about the average), prediction intervals account for
     /// both the uncertainty in the average prediction and the natural variability of individual values.
     /// </remarks>
-    public (T Lower, T Upper) PredictionInterval { get; private set; }
+    private (T Lower, T Upper) _predictionInterval = default;
+    public (T Lower, T Upper) PredictionInterval { get { EnsureFullStatsComputed(); return _predictionInterval; } private set { _predictionInterval = value; } }
 
     /// <summary>
     /// Confidence Interval - A range that likely contains the true mean of the predictions.
@@ -55,7 +56,8 @@ public class PredictionStats<T>
     /// you can be reasonably confident that the true average is between 48 and 52.
     /// The interval gets narrower with more data, indicating more precise estimates.
     /// </remarks>
-    public (T Lower, T Upper) ConfidenceInterval { get; private set; }
+    private (T Lower, T Upper) _confidenceInterval = default;
+    public (T Lower, T Upper) ConfidenceInterval { get { EnsureFullStatsComputed(); return _confidenceInterval; } private set { _confidenceInterval = value; } }
 
     /// <summary>
     /// Credible Interval - A Bayesian interval that contains the true value with a certain probability.
@@ -71,7 +73,8 @@ public class PredictionStats<T>
     /// Credible intervals incorporate prior knowledge about the parameter being estimated,
     /// which can be beneficial when you have domain expertise or previous data.
     /// </remarks>
-    public (T Lower, T Upper) CredibleInterval { get; private set; }
+    private (T Lower, T Upper) _credibleInterval = default;
+    public (T Lower, T Upper) CredibleInterval { get { EnsureFullStatsComputed(); return _credibleInterval; } private set { _credibleInterval = value; } }
 
     /// <summary>
     /// Tolerance Interval - A range that contains a specified proportion of the population with a certain confidence.
@@ -88,7 +91,8 @@ public class PredictionStats<T>
     /// These are useful when you need to understand the range of almost all possible values,
     /// such as in quality control or setting specification limits.
     /// </remarks>
-    public (T Lower, T Upper) ToleranceInterval { get; private set; }
+    private (T Lower, T Upper) _toleranceInterval = default;
+    public (T Lower, T Upper) ToleranceInterval { get { EnsureFullStatsComputed(); return _toleranceInterval; } private set { _toleranceInterval = value; } }
 
     /// <summary>
     /// Forecast Interval - A prediction interval specifically for time series forecasting.
@@ -103,7 +107,8 @@ public class PredictionStats<T>
     /// 
     /// A wider forecast interval indicates less certainty about future values.
     /// </remarks>
-    public (T Lower, T Upper) ForecastInterval { get; private set; }
+    private (T Lower, T Upper) _forecastInterval = default;
+    public (T Lower, T Upper) ForecastInterval { get { EnsureFullStatsComputed(); return _forecastInterval; } private set { _forecastInterval = value; } }
 
     /// <summary>
     /// Bootstrap Interval - An interval created using resampling techniques.
@@ -119,7 +124,8 @@ public class PredictionStats<T>
     /// Bootstrap intervals are especially useful when you have limited data or when the theoretical
     /// assumptions for other interval types might not be valid.
     /// </remarks>
-    public (T Lower, T Upper) BootstrapInterval { get; private set; }
+    private (T Lower, T Upper) _bootstrapInterval = default;
+    public (T Lower, T Upper) BootstrapInterval { get { EnsureFullStatsComputed(); return _bootstrapInterval; } private set { _bootstrapInterval = value; } }
 
     /// <summary>
     /// Simultaneous Prediction Interval - A prediction interval that accounts for multiple predictions.
@@ -135,7 +141,8 @@ public class PredictionStats<T>
     /// These are important when you need to ensure that all (or most) of your predictions are within
     /// the intervals, not just each one individually.
     /// </remarks>
-    public (T Lower, T Upper) SimultaneousPredictionInterval { get; private set; }
+    private (T Lower, T Upper) _simultaneousPredictionInterval = default;
+    public (T Lower, T Upper) SimultaneousPredictionInterval { get { EnsureFullStatsComputed(); return _simultaneousPredictionInterval; } private set { _simultaneousPredictionInterval = value; } }
 
     /// <summary>
     /// Jackknife Interval - An interval created by systematically leaving out one observation at a time.
@@ -152,7 +159,8 @@ public class PredictionStats<T>
     /// Like bootstrap intervals, jackknife intervals don't make strong assumptions about
     /// the distribution of your data.
     /// </remarks>
-    public (T Lower, T Upper) JackknifeInterval { get; private set; }
+    private (T Lower, T Upper) _jackknifeInterval = default;
+    public (T Lower, T Upper) JackknifeInterval { get { EnsureFullStatsComputed(); return _jackknifeInterval; } private set { _jackknifeInterval = value; } }
 
     /// <summary>
     /// Percentile Interval - An interval based directly on the percentiles of the prediction distribution.
@@ -168,7 +176,8 @@ public class PredictionStats<T>
     /// These intervals are intuitive and don't require many statistical assumptions,
     /// making them useful for quick assessments of your prediction range.
     /// </remarks>
-    public (T Lower, T Upper) PercentileInterval { get; private set; }
+    private (T Lower, T Upper) _percentileInterval = default;
+    public (T Lower, T Upper) PercentileInterval { get { EnsureFullStatsComputed(); return _percentileInterval; } private set { _percentileInterval = value; } }
 
     /// <summary>
     /// Collection of prediction intervals at different quantile levels.
@@ -187,7 +196,8 @@ public class PredictionStats<T>
     /// 
     /// These are useful for understanding the uncertainty at different levels of confidence.
     /// </remarks>
-    public List<(T Quantile, T Lower, T Upper)> QuantileIntervals { get; private set; }
+    private List<(T Quantile, T Lower, T Upper)> _quantileIntervals = new();
+    public List<(T Quantile, T Lower, T Upper)> QuantileIntervals { get { EnsureFullStatsComputed(); return _quantileIntervals; } private set { _quantileIntervals = value; } }
 
     /// <summary>
     /// The proportion of actual values that fall within the prediction interval.
@@ -203,7 +213,8 @@ public class PredictionStats<T>
     /// are too narrow. If it's much higher (like 99% for a 95% interval), your intervals
     /// might be unnecessarily wide.
     /// </remarks>
-    public T PredictionIntervalCoverage { get; private set; }
+    private T _predictionIntervalCoverage = default!;
+    public T PredictionIntervalCoverage { get { EnsureFullStatsComputed(); return _predictionIntervalCoverage; } private set { _predictionIntervalCoverage = value; } }
 
     /// <summary>
     /// The average of all prediction errors (predicted - actual).
@@ -219,7 +230,8 @@ public class PredictionStats<T>
     /// Unlike error metrics that use absolute values (like MAE), this can tell you about the
     /// direction of the error, but positive and negative errors can cancel each other out.
     /// </remarks>
-    public T MeanPredictionError { get; private set; }
+    private T _meanPredictionError = default!;
+    public T MeanPredictionError { get { EnsureFullStatsComputed(); return _meanPredictionError; } private set { _meanPredictionError = value; } }
 
     /// <summary>
     /// The middle value of all prediction errors (predicted - actual).
@@ -234,7 +246,8 @@ public class PredictionStats<T>
     /// 
     /// Like MeanPredictionError, a value close to zero is ideal.
     /// </remarks>
-    public T MedianPredictionError { get; private set; }
+    private T _medianPredictionError = default!;
+    public T MedianPredictionError { get { EnsureFullStatsComputed(); return _medianPredictionError; } private set { _medianPredictionError = value; } }
 
     /// <summary>
     /// Coefficient of determination - The proportion of variance in the dependent variable explained by the model.
@@ -307,7 +320,8 @@ public class PredictionStats<T>
     /// R2 would be lower, but ExplainedVarianceScore would still be high.
     /// R² would be lower, but ExplainedVarianceScore would still be high.
     /// </remarks>
-    public T ExplainedVarianceScore { get; private set; }
+    private T _explainedVarianceScore = default!;
+    public T ExplainedVarianceScore { get { EnsureFullStatsComputed(); return _explainedVarianceScore; } private set { _explainedVarianceScore = value; } }
 
     /// <summary>
     /// A list of performance metrics calculated at different training set sizes.
@@ -324,7 +338,8 @@ public class PredictionStats<T>
     /// 
     /// The list contains performance metrics at different training set sizes.
     /// </remarks>
-    public List<T> LearningCurve { get; private set; }
+    private List<T> _learningCurve = new();
+    public List<T> LearningCurve { get { EnsureFullStatsComputed(); return _learningCurve; } private set { _learningCurve = value; } }
 
     /// <summary>
     /// The proportion of predictions that the model got correct (for classification).
@@ -340,7 +355,8 @@ public class PredictionStats<T>
     /// data belongs to class A, a model that always predicts class A would have 95% accuracy
     /// despite being useless for class B.
     /// </remarks>
-    public T Accuracy { get; private set; }
+    private T _accuracy = default!;
+    public T Accuracy { get { EnsureFullStatsComputed(); return _accuracy; } private set { _accuracy = value; } }
 
     /// <summary>
     /// The proportion of positive predictions that were actually correct (for classification).
@@ -357,7 +373,8 @@ public class PredictionStats<T>
     /// Precision is important when the cost of false positives is high. In the spam example,
     /// high precision means fewer important emails mistakenly marked as spam.
     /// </remarks>
-    public T Precision { get; private set; }
+    private T _precision = default!;
+    public T Precision { get { EnsureFullStatsComputed(); return _precision; } private set { _precision = value; } }
 
     /// <summary>
     /// The proportion of actual positive cases that were correctly identified (for classification).
@@ -374,7 +391,8 @@ public class PredictionStats<T>
     /// Recall is important when the cost of false negatives is high. In a medical context,
     /// high recall means catching most cases of a disease, even if it means some false alarms.
     /// </remarks>
-    public T Recall { get; private set; }
+    private T _recall = default!;
+    public T Recall { get { EnsureFullStatsComputed(); return _recall; } private set { _recall = value; } }
 
     /// <summary>
     /// The harmonic mean of precision and recall (for classification).
@@ -393,7 +411,8 @@ public class PredictionStats<T>
     /// 
     /// It's calculated as 2 * (precision * recall) / (precision + recall).
     /// </remarks>
-    public T F1Score { get; private set; }
+    private T _f1Score = default!;
+    public T F1Score { get { EnsureFullStatsComputed(); return _f1Score; } private set { _f1Score = value; } }
 
     /// <summary>
     /// A measure of linear correlation between actual and predicted values.
@@ -411,7 +430,8 @@ public class PredictionStats<T>
     /// For prediction models, you typically want values close to 1, indicating that your
     /// predictions track well with actual values.
     /// </remarks>
-    public T PearsonCorrelation { get; private set; }
+    private T _pearsonCorrelation = default!;
+    public T PearsonCorrelation { get { EnsureFullStatsComputed(); return _pearsonCorrelation; } private set { _pearsonCorrelation = value; } }
 
     /// <summary>
     /// A measure of monotonic correlation between the ranks of actual and predicted values.
@@ -430,7 +450,8 @@ public class PredictionStats<T>
     /// 
     /// This is useful when you care about the order of predictions more than their exact values.
     /// </remarks>
-    public T SpearmanCorrelation { get; private set; }
+    private T _spearmanCorrelation = default!;
+    public T SpearmanCorrelation { get { EnsureFullStatsComputed(); return _spearmanCorrelation; } private set { _spearmanCorrelation = value; } }
 
     /// <summary>
     /// A measure of concordance between actual and predicted values based on paired rankings.
@@ -449,7 +470,8 @@ public class PredictionStats<T>
     /// 
     /// KendallTau is often more robust to outliers than SpearmanCorrelation.
     /// </remarks>
-    public T KendallTau { get; private set; }
+    private T _kendallTau = default!;
+    public T KendallTau { get { EnsureFullStatsComputed(); return _kendallTau; } private set { _kendallTau = value; } }
 
     /// <summary>
     /// A measure of similarity between two temporal sequences.
@@ -467,7 +489,8 @@ public class PredictionStats<T>
     /// This is especially useful for time series data like speech recognition, gesture recognition,
     /// or any data where timing may vary.
     /// </remarks>
-    public T DynamicTimeWarping { get; private set; }
+    private T _dynamicTimeWarping = default!;
+    public T DynamicTimeWarping { get { EnsureFullStatsComputed(); return _dynamicTimeWarping; } private set { _dynamicTimeWarping = value; } }
 
     /// <summary>
     /// Information about the statistical distribution that best fits the prediction data.
@@ -484,7 +507,8 @@ public class PredictionStats<T>
     /// This object contains information about which distribution type best fits your data
     /// and parameters describing that distribution.
     /// </remarks>
-    public DistributionFitResult<T> BestDistributionFit { get; private set; } = new();
+    private DistributionFitResult<T> _bestDistributionFit = new();
+    public DistributionFitResult<T> BestDistributionFit { get { EnsureFullStatsComputed(); return _bestDistributionFit; } private set { _bestDistributionFit = value; } }
 
     /// <summary>
     /// Creates a new PredictionStats instance and calculates all prediction metrics.
@@ -502,11 +526,14 @@ public class PredictionStats<T>
     /// - NumberOfParameters: How many features your model uses
     /// - Other settings that control specific calculations
     /// </remarks>
+    private PredictionStatsInputs<T>? _deferredInputs;
+    private bool _fullStatsComputed;
+
     internal PredictionStats(PredictionStatsInputs<T> inputs)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
 
-        // Initialize all properties
+        // Initialize all properties to zero
         PredictionInterval = (Lower: _numOps.Zero, Upper: _numOps.Zero);
         ConfidenceInterval = (Lower: _numOps.Zero, Upper: _numOps.Zero);
         CredibleInterval = (Lower: _numOps.Zero, Upper: _numOps.Zero);
@@ -533,17 +560,39 @@ public class PredictionStats<T>
         Recall = _numOps.Zero;
         F1Score = _numOps.Zero;
 
-        // Only calculate prediction stats if we have actual data
         if (inputs.Actual.Length > 0 && inputs.Predicted.Length > 0)
         {
             if (inputs.Actual.Length != inputs.Predicted.Length)
-            {
                 throw new ArgumentException("Actual and predicted vectors must have the same length.", nameof(inputs));
-            }
 
-            CalculatePredictionStats(inputs.Actual, inputs.Predicted, inputs.NumberOfParameters, _numOps.FromDouble(inputs.ConfidenceLevel), inputs.LearningCurveSteps,
-                inputs.PredictionType);
+            // Compute ONLY R² and AdjustedR² eagerly — these are what the optimizer
+            // fitness calculator needs. All other stats are deferred until first access.
+            R2 = StatisticsHelper<T>.CalculateR2(inputs.Actual, inputs.Predicted);
+            AdjustedR2 = StatisticsHelper<T>.CalculateAdjustedR2(R2, inputs.Actual.Length, inputs.NumberOfParameters);
+
+            // Store inputs for lazy computation of the remaining 30+ metrics
+            _deferredInputs = inputs;
         }
+    }
+
+    /// <summary>
+    /// Ensures all stats beyond R²/AdjustedR² are computed. Called lazily on first access
+    /// to any property other than R2/AdjustedR2.
+    /// </summary>
+    private void EnsureFullStatsComputed()
+    {
+        if (_fullStatsComputed || _deferredInputs is null) return;
+
+        // Run the heavy computation BEFORE marking the instance "computed" so that an
+        // exception inside CalculatePredictionStats leaves the lazy state intact —
+        // the next property access will retry instead of silently returning default
+        // values forever (the corruption-on-throw bug noted in PR review).
+        CalculatePredictionStats(_deferredInputs.Actual, _deferredInputs.Predicted,
+            _deferredInputs.NumberOfParameters, _numOps.FromDouble(_deferredInputs.ConfidenceLevel),
+            _deferredInputs.LearningCurveSteps, _deferredInputs.PredictionType);
+
+        _fullStatsComputed = true;
+        _deferredInputs = null; // Release reference
     }
 
     /// <summary>
@@ -559,6 +608,34 @@ public class PredictionStats<T>
     public static PredictionStats<T> Empty()
     {
         return new PredictionStats<T>(new());
+    }
+
+    /// <summary>
+    /// Creates a lightweight PredictionStats with only the R² coefficient populated.
+    /// All other metrics (AdjustedR², MAE, RMSE, learning curves, confidence intervals,
+    /// etc.) remain at their default zero values.
+    /// </summary>
+    /// <param name="r2">Pre-computed coefficient of determination.</param>
+    /// <returns>A PredictionStats instance with R² set, ready to satisfy fit-detection
+    /// checks without paying the cost of a full statistics computation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This factory exists so the optimizer can compute a cheap R² for non-preferred
+    /// datasets (the ones the FitnessCalculator doesn't score against) and still feed
+    /// FitDetector — which reads <c>TrainingSet.PredictionStats.R2</c>, etc. — without
+    /// running the full <c>PredictionStats</c> constructor (learning curves, confidence
+    /// intervals, etc.) for every non-preferred dataset on every epoch.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a "just enough" version of PredictionStats
+    /// for code paths that only need R² (the most common single metric used to detect
+    /// over- and underfitting). It avoids the heavier metric calculations.
+    /// </para>
+    /// </remarks>
+    public static PredictionStats<T> WithR2Only(T r2)
+    {
+        var stats = new PredictionStats<T>(new());
+        stats.R2 = r2;
+        return stats;
     }
 
     /// <summary>

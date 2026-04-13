@@ -1249,16 +1249,9 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");
         }
 
-        // Modify weights and biases IN PLACE to preserve engine's persistent tensor references
-        int index = 0;
-        var wSpan = _weights.Data.Span;
-        for (int i = 0; i < _weights.Length; i++)
-            wSpan[i] = parameters[index + i];
-        index += _weights.Length;
-
-        var bSpan = _biases.Data.Span;
-        for (int i = 0; i < _biases.Length; i++)
-            bSpan[i] = parameters[index + i];
+        // Bulk copy via Span to preserve engine's persistent tensor references
+        parameters.AsSpan().Slice(0, _weights.Length).CopyTo(_weights.Data.Span);
+        parameters.AsSpan().Slice(_weights.Length, _biases.Length).CopyTo(_biases.Data.Span);
 
         // Notify engine that data changed (for GPU re-upload)
         Engine.InvalidatePersistentTensor(_weights);
@@ -1434,6 +1427,17 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Release GPU handles for persistent tensors
             Engine.InvalidatePersistentTensor(_weights);
             Engine.InvalidatePersistentTensor(_biases);
+
+            // Return rented tensors to the TensorAllocator pool so they can be reused
+            // by subsequent layer constructors. Without this the eager-init path leaks
+            // the rented buffers and silently degrades the pooling optimization.
+            // Skip when the layer was lazy-initialized — those zero-sized placeholders
+            // were not rented and SetParameters/EnsureInitialized creates fresh tensors.
+            if (_isInitialized && _weights.Length > 0)
+            {
+                TensorAllocator.Return(_weights);
+                TensorAllocator.Return(_biases);
+            }
 
             // Clear other managed resources (CPU)
             _weightsGradient = null;

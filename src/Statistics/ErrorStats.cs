@@ -37,7 +37,8 @@ public class ErrorStats<T>
     /// MAE measures the average size of errors without considering their direction (positive or negative).
     /// Lower values indicate better accuracy. If MAE = 5, your predictions are off by 5 units on average.</para>
     /// </remarks>
-    public T MAE { get; private set; }
+    private T _mAE = default!;
+    public T MAE { get { EnsureFullStatsComputed(); return _mAE; } private set { _mAE = value; } }
 
     /// <summary>
     /// Mean Squared Error - The average of squared differences between predicted and actual values.
@@ -47,7 +48,8 @@ public class ErrorStats<T>
     /// MSE squares the errors before averaging them, which penalizes large errors more heavily than small ones.
     /// Lower values indicate better accuracy. Because of squaring, the value is not in the same units as your data.</para>
     /// </remarks>
-    public T MSE { get; private set; }
+    private T _mSE = default!;
+    public T MSE { get { EnsureFullStatsComputed(); return _mSE; } private set { _mSE = value; } }
 
     /// <summary>
     /// Root Mean Squared Error - The square root of the Mean Squared Error.
@@ -58,7 +60,8 @@ public class ErrorStats<T>
     /// It's often preferred over MSE for interpretation because it's in the same units as your data.
     /// Like MAE, lower values indicate better accuracy.</para>
     /// </remarks>
-    public T RMSE { get; private set; }
+    private T _rMSE = default!;
+    public T RMSE { get { EnsureFullStatsComputed(); return _rMSE; } private set { _rMSE = value; } }
 
     /// <summary>
     /// Mean Absolute Percentage Error - The average percentage difference between predicted and actual values.
@@ -69,7 +72,8 @@ public class ErrorStats<T>
     /// MAPE = 10 means that, on average, your predictions are off by 10% from the actual values.
     /// Note: MAPE can be problematic when actual values are close to zero.</para>
     /// </remarks>
-    public T MAPE { get; private set; }
+    private T _mAPE = default!;
+    public T MAPE { get { EnsureFullStatsComputed(); return _mAPE; } private set { _mAPE = value; } }
 
     /// <summary>
     /// Mean Bias Error - The average of prediction errors (predicted - actual).
@@ -80,7 +84,8 @@ public class ErrorStats<T>
     /// underestimate (negative value). Ideally, it should be close to zero, indicating no systematic bias.
     /// Unlike MAE, this doesn't take the absolute value, so positive and negative errors can cancel out.</para>
     /// </remarks>
-    public T MeanBiasError { get; private set; }
+    private T _meanBiasError = default!;
+    public T MeanBiasError { get { EnsureFullStatsComputed(); return _meanBiasError; } private set { _meanBiasError = value; } }
 
     /// <summary>
     /// Median Absolute Error - The middle value of all absolute differences between predicted and actual values.
@@ -91,7 +96,8 @@ public class ErrorStats<T>
     /// This makes it less sensitive to outliers (extreme errors) than MAE.
     /// For example, if you have errors of [1, 2, 100], the median is 2, while the mean would be 34.3.</para>
     /// </remarks>
-    public T MedianAbsoluteError { get; private set; }
+    private T _medianAbsoluteError = default!;
+    public T MedianAbsoluteError { get { EnsureFullStatsComputed(); return _medianAbsoluteError; } private set { _medianAbsoluteError = value; } }
 
     /// <summary>
     /// Maximum Error - The largest absolute difference between any predicted and actual value.
@@ -101,7 +107,8 @@ public class ErrorStats<T>
     /// MaxError tells you the worst-case error in your predictions.
     /// It can help you understand the potential maximum impact of prediction errors.</para>
     /// </remarks>
-    public T MaxError { get; private set; }
+    private T _maxError = default!;
+    public T MaxError { get { EnsureFullStatsComputed(); return _maxError; } private set { _maxError = value; } }
 
     /// <summary>
     /// Theil's U Statistic - A measure of forecast accuracy relative to a naive forecasting method.
@@ -116,7 +123,8 @@ public class ErrorStats<T>
     /// </list>
     /// <para>This is especially useful for time series forecasting evaluation.</para>
     /// </remarks>
-    public T TheilUStatistic { get; private set; }
+    private T _theilUStatistic = default!;
+    public T TheilUStatistic { get { EnsureFullStatsComputed(); return _theilUStatistic; } private set { _theilUStatistic = value; } }
 
     /// <summary>
     /// Durbin-Watson Statistic - Detects autocorrelation in prediction errors.
@@ -132,7 +140,8 @@ public class ErrorStats<T>
     /// </list>
     /// <para>Autocorrelation in errors suggests your model might be missing important patterns in the data.</para>
     /// </remarks>
-    public T DurbinWatsonStatistic { get; private set; }
+    private T _durbinWatsonStatistic = default!;
+    public T DurbinWatsonStatistic { get { EnsureFullStatsComputed(); return _durbinWatsonStatistic; } private set { _durbinWatsonStatistic = value; } }
 
     /// <summary>
     /// Sample Standard Error - An estimate of the standard deviation of prediction errors, adjusted for model complexity.
@@ -143,7 +152,8 @@ public class ErrorStats<T>
     /// how many parameters (features) your model uses. It's useful for constructing confidence intervals
     /// around predictions and is adjusted downward based on the number of parameters in your model.</para>
     /// </remarks>
-    public T SampleStandardError { get; private set; }
+    private T _sampleStandardError = default!;
+    public T SampleStandardError { get { EnsureFullStatsComputed(); return _sampleStandardError; } private set { _sampleStandardError = value; } }
 
     /// <summary>
     /// Population Standard Error - The standard deviation of prediction errors without adjustment for model complexity.
@@ -154,7 +164,8 @@ public class ErrorStats<T>
     /// SampleStandardError, it doesn't adjust for model complexity. It gives you an idea of the
     /// typical size of the errors your model makes.</para>
     /// </remarks>
-    public T PopulationStandardError { get; private set; }
+    private T _populationStandardError = default!;
+    public T PopulationStandardError { get { EnsureFullStatsComputed(); return _populationStandardError; } private set { _populationStandardError = value; } }
 
     /// <summary>
     /// Akaike Information Criterion - A measure that balances model accuracy and complexity.
@@ -166,7 +177,8 @@ public class ErrorStats<T>
     /// <para>Think of it like buying a car: You want good performance (accuracy) but don't want to
     /// pay too much (complexity). AIC helps you find the best balance.</para>
     /// </remarks>
-    public T AIC { get; private set; }
+    private T _aIC = default!;
+    public T AIC { get { EnsureFullStatsComputed(); return _aIC; } private set { _aIC = value; } }
 
     /// <summary>
     /// Bayesian Information Criterion - Similar to AIC but penalizes model complexity more strongly.
@@ -178,7 +190,8 @@ public class ErrorStats<T>
     /// general patterns). Lower values are better.</para>
     /// <para>BIC is more cautious about adding complexity than AIC, like a budget-conscious car buyer.</para>
     /// </remarks>
-    public T BIC { get; private set; }
+    private T _bIC = default!;
+    public T BIC { get { EnsureFullStatsComputed(); return _bIC; } private set { _bIC = value; } }
 
     /// <summary>
     /// Alternative Akaike Information Criterion - A variant of AIC with a different penalty term.
@@ -189,7 +202,8 @@ public class ErrorStats<T>
     /// model complexity. It's particularly useful when sample sizes are small.
     /// Like AIC and BIC, lower values are better.</para>
     /// </remarks>
-    public T AICAlt { get; private set; }
+    private T _aICAlt = default!;
+    public T AICAlt { get { EnsureFullStatsComputed(); return _aICAlt; } private set { _aICAlt = value; } }
 
     /// <summary>
     /// Residual Sum of Squares - The sum of squared differences between predicted and actual values.
@@ -200,7 +214,8 @@ public class ErrorStats<T>
     /// (which is just RSS divided by the number of observations).
     /// Lower values indicate a better fit. It's used in calculating metrics like AIC and BIC.</para>
     /// </remarks>
-    public T RSS { get; private set; }
+    private T _rSS = default!;
+    public T RSS { get { EnsureFullStatsComputed(); return _rSS; } private set { _rSS = value; } }
 
     /// <summary>
     /// List of individual prediction errors (residuals).
@@ -211,7 +226,8 @@ public class ErrorStats<T>
     /// This lets you examine individual errors, create visualizations like histograms,
     /// or perform additional analyses beyond summary statistics.</para>
     /// </remarks>
-    public List<T> ErrorList { get; private set; } = new List<T>();
+    private List<T> _errorList = new();
+    public List<T> ErrorList { get { EnsureFullStatsComputed(); return _errorList; } private set { _errorList = value; } }
 
     /// <summary>
     /// Area Under the Precision-Recall Curve - Measures classification accuracy focusing on positive cases.
@@ -224,7 +240,8 @@ public class ErrorStats<T>
     /// Recall measures what fraction of actual positives your model identified.
     /// AUCPR considers how these trade off across different threshold settings.</para>
     /// </remarks>
-    public T AUCPR { get; private set; }
+    private T _aUCPR = default!;
+    public T AUCPR { get { EnsureFullStatsComputed(); return _aUCPR; } private set { _aUCPR = value; } }
 
     /// <summary>
     /// Area Under the Receiver Operating Characteristic Curve - Measures classification accuracy across thresholds.
@@ -239,7 +256,8 @@ public class ErrorStats<T>
     /// </list>
     /// <para>It measures how well your model can distinguish between classes across different threshold settings.</para>
     /// </remarks>
-    public T AUCROC { get; private set; }
+    private T _aUCROC = default!;
+    public T AUCROC { get { EnsureFullStatsComputed(); return _aUCROC; } private set { _aUCROC = value; } }
 
     /// <summary>
     /// Symmetric Mean Absolute Percentage Error - A variant of MAPE that handles zero or near-zero values better.
@@ -251,7 +269,8 @@ public class ErrorStats<T>
     /// <para>SMAPE treats positive and negative errors more symmetrically than MAPE,
     /// which can be important in some forecasting applications.</para>
     /// </remarks>
-    public T SMAPE { get; private set; }
+    private T _sMAPE = default!;
+    public T SMAPE { get { EnsureFullStatsComputed(); return _sMAPE; } private set { _sMAPE = value; } }
 
     /// <summary>
     /// Mean Squared Logarithmic Error - Penalizes underestimates more than overestimates.
@@ -263,7 +282,8 @@ public class ErrorStats<T>
     /// <para>MSLE penalizes underestimation (predicting too low) more heavily than overestimation.
     /// This is useful in scenarios where underestimating would be more problematic, like inventory forecasting.</para>
     /// </remarks>
-    public T MeanSquaredLogError { get; private set; }
+    private T _meanSquaredLogError = default!;
+    public T MeanSquaredLogError { get { EnsureFullStatsComputed(); return _meanSquaredLogError; } private set { _meanSquaredLogError = value; } }
 
     /// <summary>
     /// Continuous Ranked Probability Score - Evaluates probabilistic forecast accuracy.
@@ -278,7 +298,8 @@ public class ErrorStats<T>
     /// <para>CRPS is especially important for evaluating time series models like DeepAR, TFT, and Chronos
     /// that provide uncertainty estimates along with their predictions.</para>
     /// </remarks>
-    public T CRPS { get; private set; }
+    private T _cRPS = default!;
+    public T CRPS { get { EnsureFullStatsComputed(); return _cRPS; } private set { _cRPS = value; } }
 
     /// <summary>
     /// Mean Absolute Error - Alias for MAE property.
@@ -338,7 +359,8 @@ public class ErrorStats<T>
     /// data belongs to class A, a model that always predicts class A would have 95% accuracy
     /// despite being useless for class B.</para>
     /// </remarks>
-    public T Accuracy { get; private set; }
+    private T _accuracy = default!;
+    public T Accuracy { get { EnsureFullStatsComputed(); return _accuracy; } private set { _accuracy = value; } }
 
     /// <summary>
     /// The proportion of positive predictions that were actually correct (for classification).
@@ -352,7 +374,8 @@ public class ErrorStats<T>
     /// <para>Precision is important when the cost of false positives is high. In the spam example,
     /// high precision means fewer important emails mistakenly marked as spam.</para>
     /// </remarks>
-    public T Precision { get; private set; }
+    private T _precision = default!;
+    public T Precision { get { EnsureFullStatsComputed(); return _precision; } private set { _precision = value; } }
 
     /// <summary>
     /// The proportion of actual positive cases that were correctly identified (for classification).
@@ -366,7 +389,8 @@ public class ErrorStats<T>
     /// <para>Recall is important when the cost of false negatives is high. In a medical context,
     /// high recall means catching most cases of a disease, even if it means some false alarms.</para>
     /// </remarks>
-    public T Recall { get; private set; }
+    private T _recall = default!;
+    public T Recall { get { EnsureFullStatsComputed(); return _recall; } private set { _recall = value; } }
 
     /// <summary>
     /// The harmonic mean of precision and recall (for classification).
@@ -384,7 +408,8 @@ public class ErrorStats<T>
     /// </list>
     /// <para>It's calculated as 2 * (precision * recall) / (precision + recall).</para>
     /// </remarks>
-    public T F1Score { get; private set; }
+    private T _f1Score = default!;
+    public T F1Score { get { EnsureFullStatsComputed(); return _f1Score; } private set { _f1Score = value; } }
 
     /// <summary>
     /// Creates a new ErrorStats instance and calculates all error metrics.
@@ -427,11 +452,28 @@ public class ErrorStats<T>
 
         ErrorList = new List<T>();
 
-        // Only calculate error stats if we have actual data
+        // Defer computation — stats are computed lazily on first property access
         if (inputs.Actual.Length > 0 && inputs.Predicted.Length > 0)
         {
-            CalculateErrorStats(inputs.Actual, inputs.Predicted, inputs.FeatureCount, inputs.PredictionType);
+            _deferredInputs = inputs;
         }
+    }
+
+    private ErrorStatsInputs<T>? _deferredInputs;
+    private bool _fullStatsComputed;
+
+    private void EnsureFullStatsComputed()
+    {
+        if (_fullStatsComputed || _deferredInputs is null) return;
+
+        // Run the heavy computation BEFORE marking computed, so a throw inside
+        // CalculateErrorStats lets the next property access retry instead of leaving
+        // the instance permanently stuck with default values.
+        CalculateErrorStats(_deferredInputs.Actual, _deferredInputs.Predicted,
+            _deferredInputs.FeatureCount, _deferredInputs.PredictionType);
+
+        _fullStatsComputed = true;
+        _deferredInputs = null;
     }
 
     /// <summary>

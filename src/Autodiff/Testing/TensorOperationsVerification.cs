@@ -111,13 +111,21 @@ public class TensorOperationsVerification<T>
     {
         // Compute autodiff gradient via ComputationNode backward
         Tensor<T> autodiffGradient;
+        int[] outputShape;
         {
             var inputNode = TensorOperations<T>.Variable(input.Clone(), "input", requiresGradient: true);
 
             var outputNode = operation(inputNode);
+            if (outputNode.Value is null)
+            {
+                throw new InvalidOperationException(
+                    $"Operation '{operationName}' produced a ComputationNode with a null Value. " +
+                    "Cannot verify gradients against an unevaluated node.");
+            }
+            outputShape = outputNode.Value._shape;
 
             // Create output gradient (ones)
-            var outputGradient = CreateOnes(outputNode.Value._shape);
+            var outputGradient = CreateOnes(outputShape);
             outputNode.Gradient = outputGradient;
 
             // Run backward pass
@@ -126,8 +134,8 @@ public class TensorOperationsVerification<T>
             autodiffGradient = inputNode.Gradient ?? new Tensor<T>(input._shape);
         }
 
-        // Compute numerical gradient
-        var outputGrad = CreateOnes(input._shape);
+        // Compute numerical gradient using the operation's output shape for the seed gradient
+        var outputGrad = CreateOnes(outputShape);
         var numericalGradient = NumericalGradient<T>.ComputeForOperation(
             input.Clone(),
             outputGrad,
@@ -182,14 +190,22 @@ public class TensorOperationsVerification<T>
     {
         // Compute autodiff gradients via ComputationNode backward
         Tensor<T> autodiffGrad1, autodiffGrad2;
+        int[] outputShape;
         {
             var node1 = TensorOperations<T>.Variable(input1.Clone(), "input1", requiresGradient: true);
             var node2 = TensorOperations<T>.Variable(input2.Clone(), "input2", requiresGradient: true);
 
             var outputNode = operation(node1, node2);
+            if (outputNode.Value is null)
+            {
+                throw new InvalidOperationException(
+                    $"Operation '{operationName}' produced a ComputationNode with a null Value. " +
+                    "Cannot verify gradients against an unevaluated node.");
+            }
+            outputShape = outputNode.Value._shape;
 
             // Create output gradient (ones)
-            var outputGradient = CreateOnes(outputNode.Value._shape);
+            var outputGradient = CreateOnes(outputShape);
             outputNode.Gradient = outputGradient;
 
             // Run backward pass
@@ -199,8 +215,8 @@ public class TensorOperationsVerification<T>
             autodiffGrad2 = node2.Gradient ?? new Tensor<T>(input2._shape);
         }
 
-        // Compute numerical gradients
-        var outputGrad = CreateOnes(input1._shape);
+        // Compute numerical gradients using the operation's output shape for the seed gradient
+        var outputGrad = CreateOnes(outputShape);
         var (numericalGrad1, numericalGrad2) = NumericalGradient<T>.ComputeForBinaryOperation(
             input1.Clone(),
             input2.Clone(),

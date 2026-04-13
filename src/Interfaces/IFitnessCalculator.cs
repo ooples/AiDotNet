@@ -1,3 +1,5 @@
+using AiDotNet.Enums;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>
@@ -109,4 +111,32 @@ public interface IFitnessCalculator<T, TInput, TOutput>
     /// to keep track of which one is best.
     /// </remarks>
     bool IsBetterFitness(T currentFitness, T bestFitness);
+}
+
+/// <summary>
+/// Optional extension interface for fitness calculators that have a preferred dataset type.
+/// Optimizers can probe for this interface to skip computing stats on datasets the calculator
+/// doesn't actually use, avoiding the dominant cost on the optimizer hot path.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This is intentionally split from <see cref="IFitnessCalculator{T, TInput, TOutput}"/> to
+/// avoid breaking external implementations that predate the optimizer perf work. Calculators
+/// that don't implement this interface fall back to the optimizer's default
+/// (<see cref="DataSetType.Validation"/>) — the historical default, so behavior is preserved
+/// for older callers.
+/// </para>
+/// <para>
+/// All in-repo calculators (<c>FitnessCalculatorBase</c> and friends) implement this interface,
+/// so any user that subclasses our base class gets the optimization for free.
+/// </para>
+/// </remarks>
+public interface IPreferredDataSetFitnessCalculator<T, TInput, TOutput> : IFitnessCalculator<T, TInput, TOutput>
+{
+    /// <summary>
+    /// The dataset type this calculator uses for fitness scoring.
+    /// Optimizers use this to compute stats only for the needed dataset, skipping
+    /// expensive Predict + stats computation for unused datasets.
+    /// </summary>
+    DataSetType PreferredDataSetType { get; }
 }

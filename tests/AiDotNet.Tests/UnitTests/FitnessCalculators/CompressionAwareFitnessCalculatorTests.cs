@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Enums;
 using AiDotNet.FitnessCalculators;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -30,6 +31,9 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
             public bool IsHigherScoreBetter => _isHigherBetter;
 
+            public DataSetType PreferredDataSetType => DataSetType.Validation;
+
+
             public double CalculateFitnessScore(ModelEvaluationData<double, Matrix<double>, Vector<double>> evaluationData)
             {
                 return _returnValue;
@@ -54,6 +58,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
         private class MockFloatFitnessCalculator : IFitnessCalculator<float, Matrix<float>, Vector<float>>
         {
             public bool IsHigherScoreBetter => true;
+
 
             public float CalculateFitnessScore(ModelEvaluationData<float, Matrix<float>, Vector<float>> evaluationData)
             {

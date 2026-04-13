@@ -655,15 +655,22 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         int index = 0;
 
-        _selfWeights = Tensor<T>.FromVector(parameters.SubVector(index, selfCount))
-            .Reshape(_selfWeights._shape);
+        // Write in-place to preserve registered parameter tensor references
+        parameters.SubVector(index, selfCount).AsSpan().CopyTo(_selfWeights.Data.Span);
         index += selfCount;
 
-        _neighborWeights = Tensor<T>.FromVector(parameters.SubVector(index, neighborCount))
-            .Reshape(_neighborWeights._shape);
+        parameters.SubVector(index, neighborCount).AsSpan().CopyTo(_neighborWeights.Data.Span);
         index += neighborCount;
 
-        _bias = Tensor<T>.FromVector(parameters.SubVector(index, biasCount));
+        parameters.SubVector(index, biasCount).AsSpan().CopyTo(_bias.Data.Span);
+
+        // Invalidate the GPU-resident copies of these persistent trainable tensors so
+        // ForwardGpu reuploads the freshly-written CPU values on its next call. Without
+        // this the GPU path would silently use the pre-update weights, mirroring the
+        // pattern in DenseLayer/Conv layers.
+        Engine.InvalidatePersistentTensor(_selfWeights);
+        Engine.InvalidatePersistentTensor(_neighborWeights);
+        Engine.InvalidatePersistentTensor(_bias);
     }
 
     public override void ClearGradients()
@@ -706,6 +713,8 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
         var input = inputs[0];
+        if (input is null)
+            throw new ArgumentException("First input tensor cannot be null.", nameof(inputs));
         if (input._shape == null || input.Shape.Length < 2)
             throw new ArgumentException("Input must be at least 2D [numNodes, inputFeatures].");
 

@@ -105,6 +105,19 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     protected int IterationsWithoutImprovement;
 
     /// <summary>
+    /// When true, TrainAndEvaluateSolution skips model.Train() during evaluation.
+    /// Gradient-based optimizers set this because they already update parameters
+    /// via UpdateSolution() — calling Train() would overwrite those updates.
+    /// </summary>
+    protected virtual bool SkipTrainingInEvaluation => false;
+
+    /// <summary>
+    /// Called after the first TrainAndEvaluateSolution completes successfully.
+    /// Gradient-based optimizers use this to enable SkipTrainingInEvaluation.
+    /// </summary>
+    protected virtual void OnInitialTrainingCompleted() { }
+
+    /// <summary>
     /// Counts the number of consecutive iterations with improvement.
     /// </summary>
     protected int IterationsWithImprovement;
@@ -478,9 +491,15 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             InputData = subsetInputData
         };
 
-        // Step 7: Train and evaluate
+        // Step 7: Train and evaluate.
+        // On the first call, always train (SkipTrainingInEvaluation is false initially).
+        // After the first training, gradient-based optimizers skip Train() because they
+        // update parameters via UpdateSolution() — re-training would overwrite those.
         var (currentFitnessScore, fitDetectionResult, evaluationData) =
-            TrainAndEvaluateSolution(input);
+            TrainAndEvaluateSolution(input, skipTraining: SkipTrainingInEvaluation);
+
+        // After first successful train+evaluate, enable skip for subsequent calls
+        OnInitialTrainingCompleted();
 
         FitnessList.Add(currentFitnessScore);
 
@@ -510,12 +529,18 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <param name="input">The input data for model evaluation.</param>
     /// <returns>A tuple containing the fitness score, fit detection result, and evaluation data.</returns>
     private (T CurrentFitnessScore, FitDetectorResult<T> FitDetectionResult, ModelEvaluationData<T, TInput, TOutput> EvaluationData)
-        TrainAndEvaluateSolution(ModelEvaluationInput<T, TInput, TOutput> input)
+        TrainAndEvaluateSolution(ModelEvaluationInput<T, TInput, TOutput> input, bool skipTraining = false)
     {
-        // Train the model
-        input.Model?.Train(input.InputData.XTrain, input.InputData.YTrain);
+        // Skip training when the optimizer has already updated parameters externally
+        // (e.g., gradient-based optimizers use UpdateSolution to set parameters directly).
+        // Training is still needed when feature selection changed the input subset,
+        // since closed-form models must re-solve with the new feature combination.
+        if (!skipTraining)
+        {
+            input.Model?.Train(input.InputData.XTrain, input.InputData.YTrain);
+        }
 
-        // Evaluate the trained model using inline evaluation
+        // Evaluate the model using inline evaluation
         var evaluationData = EvaluateModelDirectly(input);
         var fitDetectionResult = FitDetector.DetectFit(evaluationData);
         var currentFitnessScore = FitnessCalculator.CalculateFitnessScore(evaluationData);
@@ -533,32 +558,166 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         var predictionType = input.PredictionTypeOverride
             ?? PredictionTypeInference.InferFromTargets<T, TOutput>(inputData.YTrain);
 
-        var trainingSet = CalculateDataSetStatsForOptimizer(
-            model, inputData.XTrain, inputData.YTrain, predictionType);
+        // Only compute stats for the dataset the fitness calculator actually uses.
+        // Computing all 3 datasets every epoch (Predict + ErrorStats + PredictionStats each)
+        // was the dominant cost — 2/3 of the work was wasted.
+        //
+        // Probe for the optional IPreferredDataSetFitnessCalculator extension instead of
+        // requiring it on the base IFitnessCalculator interface, so external calculators
+        // that pre-date this perf work continue to compile and run. Calculators that don't
+        // opt in fall back to validation — the historical default before this optimization.
+        var preferred = FitnessCalculator is IPreferredDataSetFitnessCalculator<T, TInput, TOutput> pds
+            ? pds.PreferredDataSetType
+            : Enums.DataSetType.Validation;
 
+        DataSetStats<T, TInput, TOutput>? trainingSet = null;
         DataSetStats<T, TInput, TOutput>? validationSet = null;
-        if (inputData.XValidation != null && InputHelper<T, TInput>.GetInputSize(inputData.XValidation) > 0)
-        {
-            validationSet = CalculateDataSetStatsForOptimizer(
-                model, inputData.XValidation, inputData.YValidation, predictionType);
-        }
-
         DataSetStats<T, TInput, TOutput>? testSet = null;
-        if (inputData.XTest != null && InputHelper<T, TInput>.GetInputSize(inputData.XTest) > 0)
+        // Track which dataset was actually scored against so we can correctly populate
+        // the slot the FitnessCalculator reads from (and avoid silently scoring against
+        // an Empty dataset when a fallback fires).
+        Enums.DataSetType actualPreferred = preferred;
+
+        // Always compute the preferred dataset (with full stats) — this is what the
+        // FitnessCalculator scores against.
+        switch (preferred)
         {
-            testSet = CalculateDataSetStatsForOptimizer(
-                model, inputData.XTest, inputData.YTest, predictionType);
+            case Enums.DataSetType.Training:
+                trainingSet = CalculateDataSetStatsForOptimizer(model, inputData.XTrain, inputData.YTrain, predictionType);
+                break;
+            case Enums.DataSetType.Validation:
+                if (inputData.XValidation != null && InputHelper<T, TInput>.GetInputSize(inputData.XValidation) > 0)
+                {
+                    validationSet = CalculateDataSetStatsForOptimizer(model, inputData.XValidation, inputData.YValidation, predictionType);
+                }
+                else
+                {
+                    // Fallback: training data fills the validation slot too. This keeps
+                    // the FitnessCalculator (which reads PreferredDataSetType=Validation)
+                    // from scoring against an empty stats object.
+                    trainingSet = CalculateDataSetStatsForOptimizer(model, inputData.XTrain, inputData.YTrain, predictionType);
+                    validationSet = trainingSet;
+                    actualPreferred = Enums.DataSetType.Training;
+                }
+                break;
+            case Enums.DataSetType.Testing:
+                if (inputData.XTest != null && InputHelper<T, TInput>.GetInputSize(inputData.XTest) > 0)
+                {
+                    testSet = CalculateDataSetStatsForOptimizer(model, inputData.XTest, inputData.YTest, predictionType);
+                }
+                else
+                {
+                    // Same fallback rationale as the Validation branch above.
+                    trainingSet = CalculateDataSetStatsForOptimizer(model, inputData.XTrain, inputData.YTrain, predictionType);
+                    testSet = trainingSet;
+                    actualPreferred = Enums.DataSetType.Training;
+                }
+                break;
+            default:
+                trainingSet = CalculateDataSetStatsForOptimizer(model, inputData.XTrain, inputData.YTrain, predictionType);
+                break;
         }
 
-        var statsForModelCalc = validationSet ?? trainingSet;
+        // Lightweight R²-only stats for the non-preferred datasets, so FitDetector
+        // (which reads TrainingSet/ValidationSet/TestSet PredictionStats.R2) gets accurate
+        // overfitting/underfitting signals without paying the cost of full stats
+        // construction (learning curves, confidence intervals, etc.) for every dataset
+        // on every epoch. The FitnessCalculator still scores only against the
+        // fully-computed preferred dataset.
+        if (trainingSet is null)
+            trainingSet = CalculateR2OnlyStatsForOptimizer(model, inputData.XTrain, inputData.YTrain, predictionType);
+        if (validationSet is null && inputData.XValidation != null && InputHelper<T, TInput>.GetInputSize(inputData.XValidation) > 0)
+            validationSet = CalculateR2OnlyStatsForOptimizer(model, inputData.XValidation, inputData.YValidation, predictionType);
+        if (testSet is null && inputData.XTest != null && InputHelper<T, TInput>.GetInputSize(inputData.XTest) > 0)
+            testSet = CalculateR2OnlyStatsForOptimizer(model, inputData.XTest, inputData.YTest, predictionType);
+
+        // For model stats calculation, prefer whichever full set was computed
+        // (validation, then training, then test).
+        var statsForModelCalc = (actualPreferred == Enums.DataSetType.Validation ? validationSet : null)
+            ?? (actualPreferred == Enums.DataSetType.Testing ? testSet : null)
+            ?? trainingSet ?? validationSet ?? testSet
+            ?? new DataSetStats<T, TInput, TOutput>();
 
         return new ModelEvaluationData<T, TInput, TOutput>
         {
-            TrainingSet = trainingSet,
+            TrainingSet = trainingSet ?? new DataSetStats<T, TInput, TOutput>(),
             ValidationSet = validationSet ?? new DataSetStats<T, TInput, TOutput>(),
             TestSet = testSet ?? new DataSetStats<T, TInput, TOutput>(),
             ModelStats = TryCalculateModelStatsForOptimizer(
                 model, statsForModelCalc.Features, statsForModelCalc.Actual, statsForModelCalc.Predicted, input.PreprocessingInfo)
+        };
+    }
+
+    /// <summary>
+    /// Lightweight stats helper: computes R² only (the metric FitDetector reads) for a
+    /// dataset, skipping the expensive PredictionStats / ErrorStats / BasicStats
+    /// construction. The Predict call still happens because R² requires per-sample
+    /// predictions, but the heavier per-sample metric calculations are skipped.
+    /// </summary>
+    private DataSetStats<T, TInput, TOutput> CalculateR2OnlyStatsForOptimizer(
+        IFullModel<T, TInput, TOutput>? model,
+        TInput X,
+        TOutput y,
+        PredictionType predictionType)
+    {
+        if (model is null)
+        {
+            return new DataSetStats<T, TInput, TOutput>
+            {
+                ErrorStats = ErrorStats<T>.Empty(),
+                ActualBasicStats = BasicStats<T>.Empty(),
+                PredictedBasicStats = BasicStats<T>.Empty(),
+                PredictionStats = PredictionStats<T>.Empty(),
+                IsDataProvided = true
+            };
+        }
+
+        var predictions = model.Predict(X);
+        if (!TryGetAlignedVectorsForOptimizer(y, predictions, predictionType, out var actual, out var predicted))
+        {
+            return new DataSetStats<T, TInput, TOutput>
+            {
+                ErrorStats = ErrorStats<T>.Empty(),
+                ActualBasicStats = BasicStats<T>.Empty(),
+                PredictedBasicStats = BasicStats<T>.Empty(),
+                PredictionStats = PredictionStats<T>.Empty(),
+                Predicted = predictions,
+                Features = X,
+                Actual = y,
+                IsDataProvided = true
+            };
+        }
+
+        // R² = 1 - SS_res / SS_tot. Computed inline to avoid the cost of constructing
+        // a full PredictionStats (which would also compute MAE, RMSE, learning curves,
+        // confidence intervals, etc. that nothing in the FitDetector path consumes).
+        T ssRes = NumOps.Zero;
+        T meanActual = NumOps.Zero;
+        for (int i = 0; i < actual.Length; i++) meanActual = NumOps.Add(meanActual, actual[i]);
+        if (actual.Length > 0) meanActual = NumOps.Divide(meanActual, NumOps.FromDouble(actual.Length));
+
+        T ssTot = NumOps.Zero;
+        for (int i = 0; i < actual.Length; i++)
+        {
+            T diffRes = NumOps.Subtract(actual[i], predicted[i]);
+            ssRes = NumOps.Add(ssRes, NumOps.Multiply(diffRes, diffRes));
+            T diffTot = NumOps.Subtract(actual[i], meanActual);
+            ssTot = NumOps.Add(ssTot, NumOps.Multiply(diffTot, diffTot));
+        }
+        T r2 = NumOps.Equals(ssTot, NumOps.Zero)
+            ? NumOps.Zero
+            : NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
+
+        return new DataSetStats<T, TInput, TOutput>
+        {
+            ErrorStats = ErrorStats<T>.Empty(),
+            ActualBasicStats = BasicStats<T>.Empty(),
+            PredictedBasicStats = BasicStats<T>.Empty(),
+            PredictionStats = PredictionStats<T>.WithR2Only(r2),
+            Predicted = predictions,
+            Features = X,
+            Actual = y,
+            IsDataProvided = true
         };
     }
 
@@ -824,10 +983,54 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             return $"{solution.GetType().Name}_{solution.GetHashCode()}";
         }
 
-        // Generate a simple cache key based on parameter values
+        // Content-based hash from actual parameter values.
+        // Vector<T>.GetHashCode() returns the default object hash (memory address),
+        // which changes every time UpdateSolution creates a new model via WithParameters().
+        // This caused the cache to ALWAYS miss, making model.Train() run every epoch
+        // even when parameters hadn't changed — 1000x redundant training for closed-form models.
+        //
+        // Collision-resistance note: an earlier version hashed only 3 sampled parameters
+        // (first/middle/last). That made it trivial for two genuinely-different parameter
+        // vectors to collide, causing the cache to return STALE evaluation results for a
+        // different solution (silent correctness bug flagged in PR review). We now hash
+        // every parameter via a stable rolling hash. Cost is O(n) but n is typically
+        // a few thousand floats, and the alternative (always re-training) is orders of
+        // magnitude more expensive than the hash itself.
         var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
-        var paramHash = parameters.GetHashCode();
-        return $"{solution.GetType().Name}_{paramHash}";
+        unchecked
+        {
+            // FNV-1a-style rolling hash over all parameters: each new value is mixed
+            // multiplicatively, so transposing two values changes the hash. Length is
+            // folded in at the end to disambiguate same-prefix vectors of different sizes.
+            const int fnvOffsetBasis = unchecked((int)2166136261);
+            const int fnvPrime = 16777619;
+            int hash = fnvOffsetBasis;
+            int len = parameters.Length;
+            for (int i = 0; i < len; i++)
+            {
+                hash = (hash ^ NumOps.ToDouble(parameters[i]).GetHashCode()) * fnvPrime;
+            }
+            hash = (hash ^ len) * fnvPrime;
+
+            // Fold the model's active feature indices into the key, since two
+            // identical parameter vectors evaluated against different feature subsets
+            // produce different evaluation results — using the same cache key would
+            // serve a stale entry. Falls back to no-op when the model isn't
+            // IFeatureAware (e.g., dense models that consume all input features).
+            if (solution is IFeatureAware featureAware)
+            {
+                var indices = featureAware.GetActiveFeatureIndices();
+                if (indices is not null)
+                {
+                    foreach (int idx in indices)
+                    {
+                        hash = (hash ^ idx) * fnvPrime;
+                    }
+                }
+            }
+
+            return $"{solution.GetType().Name}_{hash}";
+        }
     }
 
     /// <summary>

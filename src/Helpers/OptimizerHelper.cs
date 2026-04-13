@@ -199,6 +199,18 @@ public static class OptimizerHelper<T, TInput, TOutput>
             validFeatures = Enumerable.Range(0, X.Columns).ToList();
         }
 
+        // Short-circuit: when all columns are selected in order, return the original
+        // matrix to avoid O(rows × cols) copy on every epoch.
+        if (validFeatures.Count == X.Columns)
+        {
+            bool allInOrder = true;
+            for (int i = 0; i < validFeatures.Count; i++)
+            {
+                if (validFeatures[i] != i) { allInOrder = false; break; }
+            }
+            if (allInOrder) return X;
+        }
+
         var selectedX = new Matrix<T>(X.Rows, validFeatures.Count);
         for (int i = 0; i < validFeatures.Count; i++)
         {

@@ -266,8 +266,9 @@ public class ImageTensor<T>
     /// <returns>A new ImageTensor with copied data.</returns>
     public ImageTensor<T> Clone()
     {
-        // Create a copy of the tensor data
-        var clonedData = new Tensor<T>((int[])_data._shape);
+        // Create a copy of the tensor data — defensive-copy the shape array
+        // so the clone never aliases the original's mutable shape metadata.
+        var clonedData = new Tensor<T>((int[])_data._shape.Clone());
         for (int i = 0; i < _data.Length; i++)
         {
             clonedData[i] = _data[i];
@@ -419,7 +420,7 @@ public class ImageTensor<T>
     /// <returns>The dimensions array.</returns>
     public int[] GetDimensions()
     {
-        return (int[])_data._shape;
+        return (int[])_data._shape.Clone();
     }
 
     /// <summary>

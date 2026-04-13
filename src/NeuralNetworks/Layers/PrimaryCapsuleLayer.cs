@@ -533,6 +533,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
         Tensor<T>? convOutput = null;
         Tensor<T>? convNHWC = null;
         Tensor<T>? capsuleLayout = null;
+        Tensor<T>? kernelNCHW = null;
 
         try
         {
@@ -555,9 +556,11 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
             int outputHeight = (inputHeight - _kernelSize) / _stride + 1;
             int outputWidth = (inputWidth - _kernelSize) / _stride + 1;
 
-            // Reshape weights to Conv2D kernel format [outChannels, inChannels, kH, kW]
+            // Reshape weights to Conv2D kernel format [outChannels, inChannels, kH, kW].
+            // Tracked via the outer kernelNCHW so the finally block can release the GPU
+            // tensor — otherwise every ForwardGpu call leaks one reshape tensor.
             int outputChannels = _capsuleChannels * _capsuleDimension;
-            var kernelNCHW = Engine.Reshape(_convWeights, new[] { outputChannels, _inputChannels, _kernelSize, _kernelSize });
+            kernelNCHW = Engine.Reshape(_convWeights, new[] { outputChannels, _inputChannels, _kernelSize, _kernelSize });
 
             // GPU Convolution + Bias (FusedActivationType.None since we apply Squash separately)
             convOutput = gpuEngine.FusedConv2DGpu<T>(
@@ -581,6 +584,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
         finally
         {
             // Dispose all intermediate tensors (not the input or final output)
+            kernelNCHW?.Dispose();
             inputNCHW?.Dispose();
             convOutput?.Dispose();
             convNHWC?.Dispose();
@@ -773,9 +777,17 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
-        // Use Tensor.FromVector for production-grade parameter setting
-        _convWeights = Tensor<T>.FromVector(parameters.Slice(0, weightSize), _convWeights._shape);
-        _convBias = Tensor<T>.FromVector(parameters.Slice(weightSize, biasSize), [biasSize]);
+        // Write in-place to preserve registered parameter tensor references
+        parameters.Slice(0, weightSize).AsSpan().CopyTo(_convWeights.Data.Span);
+        parameters.Slice(weightSize, biasSize).AsSpan().CopyTo(_convBias.Data.Span);
+
+        // Invalidate any GPU-resident copy of these persistent parameter tensors.
+        // The CPU spans were just overwritten, but the GPU keeps a separately-uploaded
+        // mirror of registered persistent tensors and reuses it on subsequent ForwardGpu
+        // calls. Without this invalidation the GPU forward path would silently keep
+        // computing against the pre-update weights, mirroring DenseLayer/Conv layers.
+        Engine.InvalidatePersistentTensor(_convWeights);
+        Engine.InvalidatePersistentTensor(_convBias);
     }
 
     /// <summary>
