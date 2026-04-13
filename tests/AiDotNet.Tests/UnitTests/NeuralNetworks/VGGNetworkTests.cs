@@ -365,8 +365,9 @@ public class VGGNetworkTests
     #region VGGNetwork Training Tests
 
     [Fact(Timeout = 120000)]
-    public void VGGNetwork_Train_CompletesWithoutError()
+    public async Task VGGNetwork_Train_CompletesWithoutError()
     {
+        await Task.Yield();
         // Arrange
         var config = new VGGConfiguration(VGGVariant.VGG11, numClasses: 10,
             inputHeight: 32, inputWidth: 32);
@@ -390,8 +391,9 @@ public class VGGNetworkTests
     }
 
     [Fact(Timeout = 120000)]
-    public void VGGNetwork_Train_LossDecreases()
+    public async Task VGGNetwork_Train_LossDecreases()
     {
+        await Task.Yield();
         // Arrange
         var config = new VGGConfiguration(VGGVariant.VGG11, numClasses: 10,
             inputHeight: 32, inputWidth: 32, dropoutRate: 0.0);  // No dropout for deterministic test

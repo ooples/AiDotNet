@@ -122,8 +122,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void OneVsRest_TrainsKBinaryClassifiers_ForKClasses()
+    public async Task OneVsRest_TrainsKBinaryClassifiers_ForKClasses()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
         var classifier = new OneVsRestClassifier<double>(
@@ -144,8 +145,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void OneVsRest_ProbabilitiesSumToOne()
+    public async Task OneVsRest_ProbabilitiesSumToOne()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
         var classifier = new OneVsRestClassifier<double>(
@@ -172,8 +174,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void OneVsRest_PredictionMatchesHighestProbability()
+    public async Task OneVsRest_PredictionMatchesHighestProbability()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
         var classifier = new OneVsRestClassifier<double>(
@@ -202,8 +205,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void OneVsRest_MultiLabel_ReturnsIndependentPredictions()
+    public async Task OneVsRest_MultiLabel_ReturnsIndependentPredictions()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
         var classifier = new OneVsRestClassifier<double>(
@@ -226,8 +230,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void OneVsRest_Clone_ProducesSamePredictions()
+    public async Task OneVsRest_Clone_ProducesSamePredictions()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
         var classifier = new OneVsRestClassifier<double>(
@@ -252,8 +257,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void OneVsOne_TrainsCorrectNumberOfClassifiers()
+    public async Task OneVsOne_TrainsCorrectNumberOfClassifiers()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
         var classifier = new OneVsOneClassifier<double>(
@@ -274,8 +280,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void OneVsOne_VotingMechanism_Works()
+    public async Task OneVsOne_VotingMechanism_Works()
     {
+        await Task.Yield();
         // Arrange - 4 classes = 4*3/2 = 6 pairwise classifiers
         int samplesPerClass = 20;
         int n = samplesPerClass * 4;
@@ -319,8 +326,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void OneVsOne_ProbabilitiesSumToOne()
+    public async Task OneVsOne_ProbabilitiesSumToOne()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
         var classifier = new OneVsOneClassifier<double>(
@@ -346,8 +354,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void OneVsOne_PairwiseClassifiers_UseCorrectSubsets()
+    public async Task OneVsOne_PairwiseClassifiers_UseCorrectSubsets()
     {
+        await Task.Yield();
         // Arrange - Create data where class 0 and class 1 are separable,
         // but class 2 is in between
         var (x, y) = CreateThreeClassData();
@@ -373,8 +382,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void OneVsOne_Clone_ProducesSamePredictions()
+    public async Task OneVsOne_Clone_ProducesSamePredictions()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
         var classifier = new OneVsOneClassifier<double>(
@@ -399,8 +409,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void VotingClassifier_HardVoting_UsesMajorityVote()
+    public async Task VotingClassifier_HardVoting_UsesMajorityVote()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
 
@@ -428,8 +439,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void VotingClassifier_SoftVoting_UsesAverageProbabilities()
+    public async Task VotingClassifier_SoftVoting_UsesAverageProbabilities()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
 
@@ -462,8 +474,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void VotingClassifier_Weights_AffectsVoting()
+    public async Task VotingClassifier_Weights_AffectsVoting()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateBinaryData();
 
@@ -506,8 +519,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void VotingClassifier_WeightsAreNormalized()
+    public async Task VotingClassifier_WeightsAreNormalized()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
 
@@ -545,8 +559,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void VotingClassifier_Clone_ProducesSamePredictions()
+    public async Task VotingClassifier_Clone_ProducesSamePredictions()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
 
@@ -575,8 +590,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void VotingClassifier_Metadata_ContainsVotingType()
+    public async Task VotingClassifier_Metadata_ContainsVotingType()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateBinaryData();
 
@@ -600,8 +616,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void BaggingClassifier_TrainsMultipleEstimators()
+    public async Task BaggingClassifier_TrainsMultipleEstimators()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
         var classifier = new BaggingClassifier<double>(
@@ -626,8 +643,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void BaggingClassifier_BootstrapSampling_CreatesDifferentModels()
+    public async Task BaggingClassifier_BootstrapSampling_CreatesDifferentModels()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
 
@@ -674,8 +692,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void BaggingClassifier_MaxSamples_UsesSubsetOfData()
+    public async Task BaggingClassifier_MaxSamples_UsesSubsetOfData()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
 
@@ -698,8 +717,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void BaggingClassifier_MaxFeatures_UsesSubsetOfFeatures()
+    public async Task BaggingClassifier_MaxFeatures_UsesSubsetOfFeatures()
     {
+        await Task.Yield();
         // Arrange - create data with more features
         int n = 100;
         int numFeatures = 10;
@@ -734,8 +754,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void BaggingClassifier_ProbabilitiesAreAveraged()
+    public async Task BaggingClassifier_ProbabilitiesAreAveraged()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
         var classifier = new BaggingClassifier<double>(
@@ -766,8 +787,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void BaggingClassifier_Clone_ProducesSamePredictions()
+    public async Task BaggingClassifier_Clone_ProducesSamePredictions()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
         var classifier = new BaggingClassifier<double>(
@@ -793,8 +815,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void BaggingClassifier_Metadata_ContainsConfiguration()
+    public async Task BaggingClassifier_Metadata_ContainsConfiguration()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateBinaryData();
         var classifier = new BaggingClassifier<double>(
@@ -822,8 +845,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void StackingClassifier_UsesBaseEstimatorPredictionsAsFeatures()
+    public async Task StackingClassifier_UsesBaseEstimatorPredictionsAsFeatures()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
 
@@ -857,8 +881,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void StackingClassifier_CrossValidation_ReducesOverfitting()
+    public async Task StackingClassifier_CrossValidation_ReducesOverfitting()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
 
@@ -903,8 +928,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void StackingClassifier_Passthrough_IncludesOriginalFeatures()
+    public async Task StackingClassifier_Passthrough_IncludesOriginalFeatures()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
 
@@ -934,8 +960,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void StackingClassifier_UseProbabilities_AffectsMetaFeatures()
+    public async Task StackingClassifier_UseProbabilities_AffectsMetaFeatures()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
 
@@ -978,8 +1005,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void StackingClassifier_Clone_ProducesSamePredictions()
+    public async Task StackingClassifier_Clone_ProducesSamePredictions()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
 
@@ -1012,8 +1040,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void StackingClassifier_Metadata_ContainsConfiguration()
+    public async Task StackingClassifier_Metadata_ContainsConfiguration()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateBinaryData();
 
@@ -1050,8 +1079,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ClassifierChain_CapturesLabelDependencies()
+    public async Task ClassifierChain_CapturesLabelDependencies()
     {
+        await Task.Yield();
         // Arrange - multi-label data where label 2 depends on labels 0 and 1
         var (x, yMultiLabel) = CreateMultiLabelData();
 
@@ -1080,8 +1110,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ClassifierChain_UsesAugmentedFeatures()
+    public async Task ClassifierChain_UsesAugmentedFeatures()
     {
+        await Task.Yield();
         // Arrange
         var (x, yMultiLabel) = CreateMultiLabelData();
 
@@ -1103,8 +1134,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ClassifierChain_RandomOrder_ShufflesChain()
+    public async Task ClassifierChain_RandomOrder_ShufflesChain()
     {
+        await Task.Yield();
         // Arrange
         var (x, yMultiLabel) = CreateMultiLabelData();
 
@@ -1150,8 +1182,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ClassifierChain_ExplicitOrder_UsesProvidedOrder()
+    public async Task ClassifierChain_ExplicitOrder_UsesProvidedOrder()
     {
+        await Task.Yield();
         // Arrange
         var (x, yMultiLabel) = CreateMultiLabelData();
 
@@ -1173,8 +1206,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ClassifierChain_SingleLabelTraining_ConvertsToMultiLabel()
+    public async Task ClassifierChain_SingleLabelTraining_ConvertsToMultiLabel()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
 
@@ -1198,8 +1232,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ClassifierChain_Clone_ProducesSamePredictions()
+    public async Task ClassifierChain_Clone_ProducesSamePredictions()
     {
+        await Task.Yield();
         // Arrange
         var (x, yMultiLabel) = CreateMultiLabelData();
 
@@ -1229,8 +1264,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void MultiOutputClassifier_TrainsIndependentClassifiers()
+    public async Task MultiOutputClassifier_TrainsIndependentClassifiers()
     {
+        await Task.Yield();
         // Arrange
         var (x, yMultiLabel) = CreateMultiLabelData();
 
@@ -1254,8 +1290,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void MultiOutputClassifier_LabelsAreIndependent()
+    public async Task MultiOutputClassifier_LabelsAreIndependent()
     {
+        await Task.Yield();
         // Arrange - create data where labels are truly independent
         int n = 100;
         var x = new Matrix<double>(n, 2);
@@ -1295,8 +1332,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void MultiOutputClassifier_SingleLabelTraining_Works()
+    public async Task MultiOutputClassifier_SingleLabelTraining_Works()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
 
@@ -1313,8 +1351,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void MultiOutputClassifier_ProbabilitiesPerLabel()
+    public async Task MultiOutputClassifier_ProbabilitiesPerLabel()
     {
+        await Task.Yield();
         // Arrange
         var (x, yMultiLabel) = CreateMultiLabelData();
 
@@ -1338,8 +1377,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void MultiOutputClassifier_Clone_ProducesSamePredictions()
+    public async Task MultiOutputClassifier_Clone_ProducesSamePredictions()
     {
+        await Task.Yield();
         // Arrange
         var (x, yMultiLabel) = CreateMultiLabelData();
 
@@ -1368,8 +1408,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void OneVsRest_ThrowsIfNotTrained()
+    public async Task OneVsRest_ThrowsIfNotTrained()
     {
+        await Task.Yield();
         // Arrange
         var classifier = new OneVsRestClassifier<double>(() => new GaussianNaiveBayes<double>());
         var input = new Matrix<double>(10, 2);
@@ -1380,8 +1421,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void OneVsOne_ThrowsIfNotTrained()
+    public async Task OneVsOne_ThrowsIfNotTrained()
     {
+        await Task.Yield();
         // Arrange
         var classifier = new OneVsOneClassifier<double>(() => new GaussianNaiveBayes<double>());
         var input = new Matrix<double>(10, 2);
@@ -1392,8 +1434,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void VotingClassifier_ThrowsIfNoEstimators()
+    public async Task VotingClassifier_ThrowsIfNoEstimators()
     {
+        await Task.Yield();
         // Arrange
         var emptyEstimators = new List<IClassifier<double>>();
         var classifier = new VotingClassifier<double>(emptyEstimators);
@@ -1407,8 +1450,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void BaggingClassifier_ThrowsIfNotTrained()
+    public async Task BaggingClassifier_ThrowsIfNotTrained()
     {
+        await Task.Yield();
         // Arrange
         var classifier = new BaggingClassifier<double>(() => new GaussianNaiveBayes<double>());
         var input = new Matrix<double>(10, 2);
@@ -1419,8 +1463,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void StackingClassifier_ThrowsIfNotTrained()
+    public async Task StackingClassifier_ThrowsIfNotTrained()
     {
+        await Task.Yield();
         // Arrange
         var estimators = new List<IClassifier<double>> { new GaussianNaiveBayes<double>() };
         var classifier = new StackingClassifier<double>(
@@ -1433,8 +1478,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ClassifierChain_ThrowsIfNotTrained()
+    public async Task ClassifierChain_ThrowsIfNotTrained()
     {
+        await Task.Yield();
         // Arrange
         var classifier = new ClassifierChain<double>(() => new GaussianNaiveBayes<double>());
         var input = new Matrix<double>(10, 2);
@@ -1445,8 +1491,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void MultiOutputClassifier_ThrowsIfNotTrained()
+    public async Task MultiOutputClassifier_ThrowsIfNotTrained()
     {
+        await Task.Yield();
         // Arrange
         var classifier = new MultiOutputClassifier<double>(() => new GaussianNaiveBayes<double>());
         var input = new Matrix<double>(10, 2);
@@ -1457,8 +1504,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void MetaClassifiers_HandleMismatchedXYLengths()
+    public async Task MetaClassifiers_HandleMismatchedXYLengths()
     {
+        await Task.Yield();
         // Arrange
         var x = new Matrix<double>(10, 2);
         var y = new Vector<double>(5); // Mismatched length
@@ -1479,8 +1527,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void OneVsRest_LogProbabilities_AreValid()
+    public async Task OneVsRest_LogProbabilities_AreValid()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
         var classifier = new OneVsRestClassifier<double>(
@@ -1505,8 +1554,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void VotingClassifier_LogProbabilities_AreNonPositive()
+    public async Task VotingClassifier_LogProbabilities_AreNonPositive()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
 
@@ -1540,8 +1590,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void OneVsRest_VsOneVsOne_BothProduceValidResults()
+    public async Task OneVsRest_VsOneVsOne_BothProduceValidResults()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
 
@@ -1573,8 +1624,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ClassifierChain_VsMultiOutput_BothHandleMultiLabel()
+    public async Task ClassifierChain_VsMultiOutput_BothHandleMultiLabel()
     {
+        await Task.Yield();
         // Arrange
         var (x, yMultiLabel) = CreateMultiLabelData();
 
@@ -1599,8 +1651,9 @@ public class MetaClassifierIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void Bagging_VsSingle_ReducesVariance()
+    public async Task Bagging_VsSingle_ReducesVariance()
     {
+        await Task.Yield();
         // Arrange
         var (x, y) = CreateThreeClassData();
 
