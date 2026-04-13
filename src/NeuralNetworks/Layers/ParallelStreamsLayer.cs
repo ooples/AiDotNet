@@ -118,12 +118,27 @@ public class ParallelStreamsLayer<T> : LayerBase<T>
         IEnumerable<ILayer<T>> streamBLayers)
         : base([inputSize], [streamAOutputSize + streamBOutputSize])
     {
+        // Fail fast at the boundary on bad inputs so misuse surfaces here, not deep in
+        // the forward pass where the error message would be cryptic shape mismatches.
+        if (inputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputSize), "Input size must be positive.");
+        if (streamAOutputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(streamAOutputSize), "Stream A output size must be positive.");
+        if (streamBOutputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(streamBOutputSize), "Stream B output size must be positive.");
+        if (streamALayers is null)
+            throw new ArgumentNullException(nameof(streamALayers));
+        if (streamBLayers is null)
+            throw new ArgumentNullException(nameof(streamBLayers));
         if (inputSize % 2 != 0)
             throw new ArgumentException("Input size must be even for equal split.", nameof(inputSize));
 
         _splitSize = inputSize / 2;
         _streamA = new List<ILayer<T>>(streamALayers);
         _streamB = new List<ILayer<T>>(streamBLayers);
+
+        if (_streamA.Any(l => l is null) || _streamB.Any(l => l is null))
+            throw new ArgumentException("Stream layer collections must not contain null entries.");
 
         foreach (var layer in _streamA) RegisterSubLayer(layer);
         foreach (var layer in _streamB) RegisterSubLayer(layer);
@@ -176,9 +191,26 @@ public class ParallelStreamsLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
         int rank = input.Shape.Length;
+        if (rank == 0)
+            throw new ArgumentException("Input tensor must have at least one dimension.", nameof(input));
+
         int featureSize = input.Shape[^1];
-        int halfSize = featureSize / 2;
+        // Enforce the constructor-time split contract: an odd or wrong-sized last dimension
+        // would silently drop one or more features via integer division and slicing,
+        // producing wrong outputs without any warning. Fail loudly instead.
+        int expectedFeatureSize = _splitSize * 2;
+        if (featureSize != expectedFeatureSize)
+        {
+            throw new ArgumentException(
+                $"Expected input feature dimension {expectedFeatureSize} (configured at construction), " +
+                $"but got {featureSize}.",
+                nameof(input));
+        }
+        int halfSize = _splitSize;
 
         // Split input along last axis using Engine ops (tape-tracked)
         int[] startA = new int[rank];
@@ -238,6 +270,19 @@ public class ParallelStreamsLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        if (parameters is null)
+            throw new ArgumentNullException(nameof(parameters));
+        // Enforce the documented contract that the vector has exactly ParameterCount
+        // elements. Without this check, a too-short vector would NRE deep in a sub-layer
+        // and a too-long vector would silently ignore tail values — both mask upstream
+        // optimizer bugs.
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected parameter vector length {ParameterCount}, but got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         int offset = 0;
         foreach (var layer in _streamA)
         {

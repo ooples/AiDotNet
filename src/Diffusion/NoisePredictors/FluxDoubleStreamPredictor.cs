@@ -161,11 +161,34 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        // Reject vectors that don't match ParameterCount up-front so that an upstream
+        // optimizer/state bug surfaces as an exception here instead of silently dropping
+        // tail values (oversized) or leaving later layers with stale weights (undersized).
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {ParameterCount} parameters but got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         int offset = 0;
         offset = SetParams(_patchEmbed, parameters, offset);
         foreach (var b in _doubleBlocks) offset = SetParams(b, parameters, offset);
         foreach (var b in _singleBlocks) offset = SetParams(b, parameters, offset);
-        SetParams(_finalLayer, parameters, offset);
+        offset = SetParams(_finalLayer, parameters, offset);
+
+        // Defense in depth: the per-layer SetParams calls already advance the offset
+        // through every trainable parameter, so a final-offset/ParameterCount mismatch
+        // would indicate that ParameterCount is out of sync with the layer composition
+        // (e.g., a new sub-layer was added without updating the count). Surface that
+        // class invariant violation immediately.
+        if (offset != ParameterCount)
+        {
+            throw new InvalidOperationException(
+                $"Internal invariant violation: SetParameters consumed {offset} elements " +
+                $"but ParameterCount reports {ParameterCount}. This indicates a layer was " +
+                "added or removed without updating ParameterCount.");
+        }
     }
 
     /// <inheritdoc />

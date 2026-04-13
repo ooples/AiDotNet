@@ -663,6 +663,14 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         index += neighborCount;
 
         parameters.SubVector(index, biasCount).AsSpan().CopyTo(_bias.Data.Span);
+
+        // Invalidate the GPU-resident copies of these persistent trainable tensors so
+        // ForwardGpu reuploads the freshly-written CPU values on its next call. Without
+        // this the GPU path would silently use the pre-update weights, mirroring the
+        // pattern in DenseLayer/Conv layers.
+        Engine.InvalidatePersistentTensor(_selfWeights);
+        Engine.InvalidatePersistentTensor(_neighborWeights);
+        Engine.InvalidatePersistentTensor(_bias);
     }
 
     public override void ClearGradients()

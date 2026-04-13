@@ -480,8 +480,13 @@ public class ModelStats<T, TInput, TOutput>
     private void EnsureFullStatsComputed()
     {
         if (_fullStatsComputed || _deferredInputs is null) return;
-        _fullStatsComputed = true;
+
+        // Run the heavy computation BEFORE marking computed, so a throw inside
+        // CalculateModelStats lets the next property access retry instead of leaving
+        // the instance permanently stuck with default values.
         CalculateModelStats(_deferredInputs);
+
+        _fullStatsComputed = true;
         _deferredInputs = null;
     }
 

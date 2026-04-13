@@ -2469,7 +2469,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // train/test split) since cluster structure depends on having all data points.
             // Note: preprocessedX/preprocessedY may only contain the training split in the
             // standard (non-federated) path. For clustering we need the complete dataset.
-            bool useFullData = model is Clustering.Base.ClusteringBase<T>;
+            //
+            // Probe the *unwrapped* model: by this point the local `model` variable may be a
+            // DDP/FSDP/ZeRO* distributed-training wrapper (see lines ~1921-1953), and a wrapper
+            // is never a ClusteringBase<T> so the check would silently flip to false and route
+            // clustering training back through the train/test split — which is exactly the bug
+            // this clustering-data path was added to prevent.
+            bool useFullData = _model is Clustering.Base.ClusteringBase<T>;
             // Clustering models need ALL data points for correct density estimation.
             // Use preparedX/preparedY (the full dataset before train/test split) when
             // the preprocessing pipeline is not configured. When it IS configured,
@@ -2497,6 +2503,23 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             }
             var directX = fullX;
             var directY = fullY;
+
+            // Override the earlier split-based sample counts logged at lines ~2222-2224 so
+            // experiment run metadata reflects the dataset actually fed to Train(). Without
+            // this, clustering runs would be reported with a train/val/test split that was
+            // never used (we just trained on the full dataset).
+            if (useFullData && experimentRun is not null)
+            {
+                int effectiveSamples = InputHelper<T, TInput>.GetInputSize(directX);
+                experimentRun.LogParameters(new Dictionary<string, object>
+                {
+                    ["training_samples"] = effectiveSamples,
+                    ["validation_samples"] = 0,
+                    ["test_samples"] = 0,
+                    ["full_data_used"] = true,
+                });
+            }
+
             model.Train(directX, directY);
 
             // Compute evaluation metrics

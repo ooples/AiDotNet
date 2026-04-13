@@ -780,6 +780,14 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
         // Write in-place to preserve registered parameter tensor references
         parameters.Slice(0, weightSize).AsSpan().CopyTo(_convWeights.Data.Span);
         parameters.Slice(weightSize, biasSize).AsSpan().CopyTo(_convBias.Data.Span);
+
+        // Invalidate any GPU-resident copy of these persistent parameter tensors.
+        // The CPU spans were just overwritten, but the GPU keeps a separately-uploaded
+        // mirror of registered persistent tensors and reuses it on subsequent ForwardGpu
+        // calls. Without this invalidation the GPU forward path would silently keep
+        // computing against the pre-update weights, mirroring DenseLayer/Conv layers.
+        Engine.InvalidatePersistentTensor(_convWeights);
+        Engine.InvalidatePersistentTensor(_convBias);
     }
 
     /// <summary>

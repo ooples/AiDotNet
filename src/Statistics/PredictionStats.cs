@@ -582,11 +582,16 @@ public class PredictionStats<T>
     private void EnsureFullStatsComputed()
     {
         if (_fullStatsComputed || _deferredInputs is null) return;
-        _fullStatsComputed = true;
 
+        // Run the heavy computation BEFORE marking the instance "computed" so that an
+        // exception inside CalculatePredictionStats leaves the lazy state intact —
+        // the next property access will retry instead of silently returning default
+        // values forever (the corruption-on-throw bug noted in PR review).
         CalculatePredictionStats(_deferredInputs.Actual, _deferredInputs.Predicted,
             _deferredInputs.NumberOfParameters, _numOps.FromDouble(_deferredInputs.ConfidenceLevel),
             _deferredInputs.LearningCurveSteps, _deferredInputs.PredictionType);
+
+        _fullStatsComputed = true;
         _deferredInputs = null; // Release reference
     }
 
@@ -603,6 +608,34 @@ public class PredictionStats<T>
     public static PredictionStats<T> Empty()
     {
         return new PredictionStats<T>(new());
+    }
+
+    /// <summary>
+    /// Creates a lightweight PredictionStats with only the R² coefficient populated.
+    /// All other metrics (AdjustedR², MAE, RMSE, learning curves, confidence intervals,
+    /// etc.) remain at their default zero values.
+    /// </summary>
+    /// <param name="r2">Pre-computed coefficient of determination.</param>
+    /// <returns>A PredictionStats instance with R² set, ready to satisfy fit-detection
+    /// checks without paying the cost of a full statistics computation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This factory exists so the optimizer can compute a cheap R² for non-preferred
+    /// datasets (the ones the FitnessCalculator doesn't score against) and still feed
+    /// FitDetector — which reads <c>TrainingSet.PredictionStats.R2</c>, etc. — without
+    /// running the full <c>PredictionStats</c> constructor (learning curves, confidence
+    /// intervals, etc.) for every non-preferred dataset on every epoch.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a "just enough" version of PredictionStats
+    /// for code paths that only need R² (the most common single metric used to detect
+    /// over- and underfitting). It avoids the heavier metric calculations.
+    /// </para>
+    /// </remarks>
+    public static PredictionStats<T> WithR2Only(T r2)
+    {
+        var stats = new PredictionStats<T>(new());
+        stats.R2 = r2;
+        return stats;
     }
 
     /// <summary>

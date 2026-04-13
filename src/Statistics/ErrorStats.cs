@@ -465,9 +465,14 @@ public class ErrorStats<T>
     private void EnsureFullStatsComputed()
     {
         if (_fullStatsComputed || _deferredInputs is null) return;
-        _fullStatsComputed = true;
+
+        // Run the heavy computation BEFORE marking computed, so a throw inside
+        // CalculateErrorStats lets the next property access retry instead of leaving
+        // the instance permanently stuck with default values.
         CalculateErrorStats(_deferredInputs.Actual, _deferredInputs.Predicted,
             _deferredInputs.FeatureCount, _deferredInputs.PredictionType);
+
+        _fullStatsComputed = true;
         _deferredInputs = null;
     }
 

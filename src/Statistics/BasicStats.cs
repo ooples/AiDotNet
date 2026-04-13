@@ -378,8 +378,13 @@ public class BasicStats<T>
     private void EnsureFullStatsComputed()
     {
         if (_fullStatsComputed || _deferredValues is null) return;
-        _fullStatsComputed = true;
+
+        // Run the heavy computation BEFORE marking computed, so a throw inside
+        // CalculateStats lets the next property access retry instead of leaving the
+        // instance permanently stuck with default values.
         CalculateStats(_deferredValues);
+
+        _fullStatsComputed = true;
         _deferredValues = null;
     }
 

@@ -125,10 +125,22 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         int lastAxis = predicted.Shape.Length - 1;
         var logSoftmax = Engine.TensorLogSoftmax(predicted, axis: lastAxis);
 
-        // CE = -mean(target * log_softmax)
+        // CE per-sample = -Σ_class target_i * log_softmax_i  (sum over class axis only).
+        // Match PyTorch's nn.CrossEntropyLoss(reduction='mean') and the scalar CalculateLoss
+        // path above — those return the per-sample sum across classes, NOT a mean across
+        // classes. Averaging over the class axis here would silently divide gradients by the
+        // class count, making tape training disagree with the CPU code path (that's the
+        // exact bug noted in PR review).
         var product = Engine.TensorMultiply(target, logSoftmax);
-        var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();
-        var mean = Engine.ReduceMean(product, allAxes, keepDims: false);
+        var perSample = Engine.ReduceSum(product, new[] { lastAxis }, keepDims: false);
+
+        // Mean over remaining (batch/sample) axes if any. For 1D inputs (logits was a single
+        // sample with no batch axis), perSample is rank-0 and there's nothing to average.
+        if (perSample.Shape.Length == 0)
+            return Engine.TensorNegate(perSample);
+
+        var batchAxes = Enumerable.Range(0, perSample.Shape.Length).ToArray();
+        var mean = Engine.ReduceMean(perSample, batchAxes, keepDims: false);
         return Engine.TensorNegate(mean);
     }
 }

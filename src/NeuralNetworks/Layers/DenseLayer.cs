@@ -1428,6 +1428,17 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             Engine.InvalidatePersistentTensor(_weights);
             Engine.InvalidatePersistentTensor(_biases);
 
+            // Return rented tensors to the TensorAllocator pool so they can be reused
+            // by subsequent layer constructors. Without this the eager-init path leaks
+            // the rented buffers and silently degrades the pooling optimization.
+            // Skip when the layer was lazy-initialized — those zero-sized placeholders
+            // were not rented and SetParameters/EnsureInitialized creates fresh tensors.
+            if (_isInitialized && _weights.Length > 0)
+            {
+                TensorAllocator.Return(_weights);
+                TensorAllocator.Return(_biases);
+            }
+
             // Clear other managed resources (CPU)
             _weightsGradient = null;
             _biasesGradient = null;

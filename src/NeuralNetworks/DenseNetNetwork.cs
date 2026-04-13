@@ -141,11 +141,22 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     private static ILossFunction<T> GetDenseNetDefaultLoss(NeuralNetworkTaskType taskType)
     {
+        // Match each task type to the corresponding *WithLogits loss so the DenseNet
+        // classification head's raw-logits output flows into a numerically stable loss
+        // that applies the activation internally:
+        //   * BinaryClassification — outputSize is typically 1, so softmax([x]) collapses
+        //     to a constant 1 (zero loss). Use BinaryCrossEntropyWithLogitsLoss instead,
+        //     which is the sigmoid+BCE fused form.
+        //   * MultiLabelClassification — labels are independent (not mutually exclusive),
+        //     so softmax cross-entropy is the wrong objective. BCE-with-logits per output
+        //     is the standard multi-label loss.
+        //   * MultiClassClassification — the only task type where softmax cross-entropy
+        //     is correct (mutually exclusive classes).
         return taskType switch
         {
-            NeuralNetworkTaskType.BinaryClassification => new CrossEntropyWithLogitsLoss<T>(),
+            NeuralNetworkTaskType.BinaryClassification     => new BinaryCrossEntropyWithLogitsLoss<T>(),
             NeuralNetworkTaskType.MultiClassClassification => new CrossEntropyWithLogitsLoss<T>(),
-            NeuralNetworkTaskType.MultiLabelClassification => new CrossEntropyWithLogitsLoss<T>(),
+            NeuralNetworkTaskType.MultiLabelClassification => new BinaryCrossEntropyWithLogitsLoss<T>(),
             _ => NeuralNetworkHelper<T>.GetDefaultLossFunction(taskType),
         };
     }

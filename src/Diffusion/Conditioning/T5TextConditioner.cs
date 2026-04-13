@@ -101,8 +101,27 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
     /// Computed once per unique seqLen via T5 bucketing and reused on subsequent calls.
     /// Invalidated together with the weight tensors when <see cref="InvalidateCachedWeightTensors"/>
     /// is called (so a mutated <see cref="_relativePositionBias"/> is picked up correctly).
+    /// Capacity is bounded by <see cref="MaxRpbCacheEntries"/> with simple LRU eviction —
+    /// each tensor is O(NumHeads * seqLen^2) which can be very large for T5-XXL (64 heads,
+    /// seqLen=256 → ~4M elements ≈ 16MB per entry in float32). An unbounded cache would
+    /// retain hundreds of MB across workloads with variable sequence lengths.
     /// </summary>
     private readonly Dictionary<int, Tensor<T>> _rpbBroadcastCache = new();
+
+    /// <summary>
+    /// LRU eviction order for <see cref="_rpbBroadcastCache"/>: tracks most-recently-used
+    /// seqLen at the tail. Sized small to bound peak memory; in practice 4 distinct
+    /// sequence lengths covers most workloads (one common train length, one inference
+    /// length, plus a couple of edge cases) without thrashing.
+    /// </summary>
+    private readonly LinkedList<int> _rpbCacheLruOrder = new();
+
+    /// <summary>
+    /// Maximum number of distinct seqLen entries to cache. With T5-XXL each entry can be
+    /// tens of MB; this cap keeps the worst-case memory footprint bounded regardless of
+    /// how many distinct sequence lengths a workload feeds the encoder.
+    /// </summary>
+    private const int MaxRpbCacheEntries = 4;
 
     /// <summary>
     /// Cached ones tensor [HiddenSize, 1] for RMS norm sum reduction.
@@ -264,6 +283,7 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
         _ffnValueWeightTensors = null;
         _ffnOutWeightTensors = null;
         _rpbBroadcastCache.Clear();
+        _rpbCacheLruOrder.Clear();
     }
 
     /// <inheritdoc />
@@ -513,7 +533,12 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
     private Tensor<T> GetOrBuildRelativePositionBias(int seqLen)
     {
         if (_rpbBroadcastCache.TryGetValue(seqLen, out var cached))
+        {
+            // Hit — bump to MRU position so it survives the next eviction.
+            _rpbCacheLruOrder.Remove(seqLen);
+            _rpbCacheLruOrder.AddLast(seqLen);
             return cached;
+        }
 
         const int maxDistance = 128; // T5 default
         var data = new Vector<T>(NumHeads * seqLen * seqLen);
@@ -540,7 +565,18 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
         }
 
         var tensor = new Tensor<T>(new[] { NumHeads, seqLen, seqLen }, data);
+
+        // LRU eviction before insert — evict the LEAST-recently-used seqLen entry when at
+        // capacity. Without this, workloads that feed varying sequence lengths (e.g.,
+        // dynamic-batch inference) would grow the cache unboundedly and retain potentially
+        // hundreds of MB worth of RPB tensors.
+        if (_rpbBroadcastCache.Count >= MaxRpbCacheEntries && _rpbCacheLruOrder.First is { } victim)
+        {
+            _rpbBroadcastCache.Remove(victim.Value);
+            _rpbCacheLruOrder.RemoveFirst();
+        }
         _rpbBroadcastCache[seqLen] = tensor;
+        _rpbCacheLruOrder.AddLast(seqLen);
         return tensor;
     }
 
