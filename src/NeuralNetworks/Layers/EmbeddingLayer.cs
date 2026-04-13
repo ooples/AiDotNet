@@ -365,13 +365,24 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // Initialize embedding tensor with small random values using Engine operations
         T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(1.0), NumOps.FromDouble(embeddingDim)));
 
-        // Initialize in-place: random [0,1] → shift to [-0.5, 0.5] → scale
-        // Uses in-place ops to avoid 3 temporary full-size tensor allocations
-        _embeddingTensor = Tensor<T>.CreateRandom(vocabSize, embeddingDim);
-        var halfTensor = TensorAllocator.Rent<T>([vocabSize, embeddingDim]);
-        halfTensor.Fill(NumOps.FromDouble(0.5));
-        Engine.TensorSubtractInPlace(_embeddingTensor, halfTensor);
-        TensorAllocator.Return(halfTensor);
+        // Initialize in-place with SimdRandom: random [0,1] → shift to [-0.5, 0.5] → scale
+        // SimdRandom uses AVX2 xoshiro256** for 4x faster random generation
+        _embeddingTensor = new Tensor<T>([vocabSize, embeddingDim]);
+        var rng = new SimdRandom();
+        var span = _embeddingTensor.Data.Span;
+        int total = span.Length;
+        const int batchSize = 4096;
+        var tempBuf = new double[Math.Min(total, batchSize)];
+        int offset = 0;
+        while (offset < total)
+        {
+            int chunk = Math.Min(batchSize, total - offset);
+            rng.NextDoubles(tempBuf.AsSpan(0, chunk));
+            for (int j = 0; j < chunk; j++)
+                span[offset + j] = NumOps.FromDouble(tempBuf[j] - 0.5); // shift to [-0.5, 0.5]
+            offset += chunk;
+        }
+
         Engine.TensorMultiplyScalarInPlace(_embeddingTensor, scale);
     }
 

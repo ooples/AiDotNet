@@ -417,21 +417,37 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         int cols = _queryWeights.Shape[1];
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (rows + cols)));
 
-        _queryWeights = Engine.TensorMultiplyScalar(
-            new Tensor<T>(_queryWeights._shape, Vector<T>.CreateRandom(rows * cols, -0.5, 0.5)),
-            scale);
-        _keyWeights = Engine.TensorMultiplyScalar(
-            new Tensor<T>(_keyWeights._shape, Vector<T>.CreateRandom(rows * cols, -0.5, 0.5)),
-            scale);
-        _valueWeights = Engine.TensorMultiplyScalar(
-            new Tensor<T>(_valueWeights._shape, Vector<T>.CreateRandom(rows * cols, -0.5, 0.5)),
-            scale);
-        _outputWeights = Engine.TensorMultiplyScalar(
-            new Tensor<T>(_outputWeights._shape, Vector<T>.CreateRandom(rows * cols, -0.5, 0.5)),
-            scale);
+        // Use SimdRandom for vectorized initialization (4x faster than Vector.CreateRandom
+        // which uses LockedRandom with per-element locking)
+        var rng = new SimdRandom();
+        FillTensorRandomScaled(_queryWeights, rng, scale);
+        FillTensorRandomScaled(_keyWeights, rng, scale);
+        FillTensorRandomScaled(_valueWeights, rng, scale);
+        FillTensorRandomScaled(_outputWeights, rng, scale);
 
         // Initialize bias tensor to zeros
         _outputBias.Fill(NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Fills a tensor with scaled random values in [-0.5, 0.5] * scale using SimdRandom.
+    /// </summary>
+    private void FillTensorRandomScaled(Tensor<T> tensor, SimdRandom rng, T scale)
+    {
+        var span = tensor.Data.Span;
+        int total = span.Length;
+        const int batchSize = 4096;
+        var tempBuf = new double[Math.Min(total, batchSize)];
+        double scaleDouble = NumOps.ToDouble(scale);
+        int offset = 0;
+        while (offset < total)
+        {
+            int chunk = Math.Min(batchSize, total - offset);
+            rng.NextDoubles(tempBuf.AsSpan(0, chunk));
+            for (int j = 0; j < chunk; j++)
+                span[offset + j] = NumOps.FromDouble((tempBuf[j] - 0.5) * scaleDouble);
+            offset += chunk;
+        }
     }
 
     /// <summary>

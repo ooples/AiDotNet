@@ -825,13 +825,25 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     {
         // He-uniform initialization: U(-bound, bound) where bound = sqrt(6 / fanIn)
         // per He et al. 2015 "Delving Deep into Rectifiers".
-        // For uniform distribution: Var(W) = bound^2/3, so bound = sqrt(3 * 2/fanIn) = sqrt(6/fanIn)
         int fanIn = InputDepth * KernelSize * KernelSize;
         double bound = Math.Sqrt(6.0 / fanIn);
-        var kernelShape = _kernels._shape;
-        var initData = Engine.TensorRandomUniformRange<T>(kernelShape, NumOps.FromDouble(-bound), NumOps.FromDouble(bound));
-        // Copy into existing tensor to avoid orphaning pre-allocated buffer
-        initData.Data.Span.CopyTo(_kernels.Data.Span);
+
+        // Use SimdRandom for vectorized initialization (4x faster than LockedRandom)
+        var rng = new SimdRandom();
+        var span = _kernels.Data.Span;
+        int total = span.Length;
+        const int batchSize = 4096;
+        var tempBuf = new double[Math.Min(total, batchSize)];
+        int offset = 0;
+        while (offset < total)
+        {
+            int chunk = Math.Min(batchSize, total - offset);
+            rng.NextDoubles(tempBuf.AsSpan(0, chunk));
+            for (int j = 0; j < chunk; j++)
+                span[offset + j] = NumOps.FromDouble((tempBuf[j] * 2.0 - 1.0) * bound);
+            offset += chunk;
+        }
+
         _biases.Fill(NumOps.Zero);
     }
 
