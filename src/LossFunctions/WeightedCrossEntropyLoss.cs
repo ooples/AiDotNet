@@ -170,7 +170,7 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
         var negativeTerm = Engine.TensorMultiply(oneMinusTarget, logOneMinusP);
         var bce = Engine.TensorAdd(positiveTerm, negativeTerm);
 
-        if (_weights.Length > 0)
+        if (_weights.Length > 1 && _weights.Length == bce.Length)
         {
             var weightTensor = Tensor<T>.FromVector(_weights);
             bce = Engine.TensorMultiply(bce, weightTensor);

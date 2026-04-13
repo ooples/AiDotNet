@@ -176,8 +176,8 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         var safeSoftmax = Engine.TensorAddScalar(softmaxed, NumOps.FromDouble(1e-7));
         var logP = Engine.TensorLog(safeSoftmax);
 
-        // If target is already one-hot (same shape as predicted), use dense path
-        if (target.Length == predicted.Length)
+        // If target has the same shape as predicted, treat as one-hot/dense targets
+        if (target.Rank == predicted.Rank && target._shape.SequenceEqual(predicted._shape))
         {
             target = EnsureTargetMatchesPredicted(predicted, target);
             var product = Engine.TensorMultiply(target, logP);
@@ -187,13 +187,16 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         }
 
         // Sparse path: target contains integer class indices
-        // Gather the log-probability at each target index
         int batchSize = target.Length;
         int numClasses = predicted.Shape[^1];
         var gatheredLogP = new Tensor<T>(target._shape);
         for (int i = 0; i < batchSize; i++)
         {
-            int classIdx = MathHelper.Clamp((int)Math.Round(NumOps.ToDouble(target[i])), 0, numClasses - 1);
+            double rawIdx = NumOps.ToDouble(target[i]);
+            int classIdx = (int)Math.Round(rawIdx);
+            if (classIdx < 0 || classIdx >= numClasses)
+                throw new ArgumentOutOfRangeException(nameof(target),
+                    $"Target index {classIdx} at position {i} is out of range [0, {numClasses}).");
             gatheredLogP[i] = predicted.Rank == 1
                 ? logP[classIdx]
                 : logP[i * numClasses + classIdx];
