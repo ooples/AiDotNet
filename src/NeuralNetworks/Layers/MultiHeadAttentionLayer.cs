@@ -436,25 +436,33 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     {
         var span = tensor.Data.Span;
         int total = span.Length;
+        if (total == 0) return; // zero-sized tensor: nothing to fill
         double scaleD = NumOps.ToDouble(scale);
 
-        // For double/float, write directly to avoid NumOps.FromDouble overhead
+        // For double/float, write via a temp array + array-level reinterpret so the
+        // SIMD-batched xoshiro256** path still applies. Span<T> can't be reinterpreted
+        // across generic T (MemoryMarshal.Cast needs T:struct; Unsafe.As<Span<T>,...>
+        // rejects the ref-struct; MemoryMarshal.CreateSpan is missing on net471).
+        // Arrays are reference types so Unsafe.As<double[], T[]> is unconstrained and
+        // safe when T == double/float at runtime.
         if (typeof(T) == typeof(double))
         {
-            var dSpan = System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
-                ref System.Runtime.CompilerServices.Unsafe.As<T, double>(ref span[0]), total);
-            rng.NextDoubles(dSpan);
+            var buffer = new double[total];
+            rng.NextDoubles(buffer.AsSpan());
             for (int i = 0; i < total; i++)
-                dSpan[i] = (dSpan[i] - 0.5) * scaleD;
+                buffer[i] = (buffer[i] - 0.5) * scaleD;
+            var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<double[], T[]>(ref buffer);
+            reinterpreted.AsSpan(0, total).CopyTo(span);
         }
         else if (typeof(T) == typeof(float))
         {
-            var fSpan = System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
-                ref System.Runtime.CompilerServices.Unsafe.As<T, float>(ref span[0]), total);
-            rng.NextFloats(fSpan);
+            var buffer = new float[total];
+            rng.NextFloats(buffer.AsSpan());
             float scaleF = (float)scaleD;
             for (int i = 0; i < total; i++)
-                fSpan[i] = (fSpan[i] - 0.5f) * scaleF;
+                buffer[i] = (buffer[i] - 0.5f) * scaleF;
+            var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<float[], T[]>(ref buffer);
+            reinterpreted.AsSpan(0, total).CopyTo(span);
         }
         else
         {

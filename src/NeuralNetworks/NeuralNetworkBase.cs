@@ -456,20 +456,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual Vector<T> GetParameters()
     {
-        // Recompute total to avoid stale cache issues (layers may initialize lazily)
-        int totalParameterCount = Layers.Sum(l => l.ParameterCount);
+        // Collect parameters from every layer — including ones whose ParameterCount
+        // currently reports 0. Lazy layers allocate their parameter vector inside
+        // GetParameters() itself, so reading ParameterCount first (to pre-filter or
+        // pre-size) would skip them or misreport the total. Iterate once, then
+        // concatenate. Length is derived from the returned vectors for the same
+        // reason — pre-call ParameterCount may be stale for any given layer.
+        var collected = new List<Vector<T>>(Layers.Count);
+        int totalParameterCount = 0;
+        foreach (var layer in Layers)
+        {
+            var layerParameters = layer.GetParameters();
+            if (layerParameters.Length == 0)
+                continue;
+            collected.Add(layerParameters);
+            totalParameterCount += layerParameters.Length;
+        }
+
         var parameters = new Vector<T>(totalParameterCount);
         var destSpan = parameters.AsWritableSpan();
 
         int currentIndex = 0;
-        foreach (var layer in Layers.Where(l => l.ParameterCount > 0))
+        foreach (var layerParameters in collected)
         {
-            int layerParameterCount = layer.ParameterCount;
-            var layerParameters = layer.GetParameters();
-            // Bulk copy via Span instead of element-by-element indexer access
-            layerParameters.AsSpan().Slice(0, layerParameterCount)
-                .CopyTo(destSpan.Slice(currentIndex, layerParameterCount));
-            currentIndex += layerParameterCount;
+            int copyLength = layerParameters.Length;
+            // Bulk copy via Span instead of element-by-element indexer access.
+            layerParameters.AsSpan().Slice(0, copyLength)
+                .CopyTo(destSpan.Slice(currentIndex, copyLength));
+            currentIndex += copyLength;
         }
 
         return parameters;

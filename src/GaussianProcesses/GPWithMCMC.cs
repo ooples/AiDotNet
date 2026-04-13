@@ -44,7 +44,11 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
     private Matrix<T> FittedX => _X ?? throw new InvalidOperationException("GP not fitted. Call Fit() first.");
 
     /// <summary>
-    /// Training output data (centered: y - mean(y)).
+    /// Training output data, standardized as <c>(y - mean(y)) / std(y)</c>. Both the
+    /// mean (for centering) and the standard deviation (for unit-variance scaling) are
+    /// removed so the zero-mean unit-variance GP prior is well-calibrated regardless of
+    /// the original target scale; <see cref="Predict"/> reverses both transforms before
+    /// returning predictions.
     /// </summary>
     private Vector<T>? _y;
     private Vector<T> FittedY => _y ?? throw new InvalidOperationException("GP not fitted. Call Fit() first.");
@@ -217,7 +221,18 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
     {
         if (_samples is null)
             throw new InvalidOperationException("Model not trained.");
-        return _samples.Select(s => (double[])s.Clone()).ToList();
+
+        // Rescale variance components from standardized-target units back to the
+        // original target scale. _samples holds [lengthscale, outputVariance, noiseVariance]
+        // where the variance entries were sampled against y / _yStd, so on the original
+        // scale they each get multiplied by _yStd^2. Lengthscale stays unchanged because
+        // it scales with the input X, not the target y. Without this rescale, callers of
+        // GetSamples() would see variances under-reported by a factor of _yStd^2 — exactly
+        // the discrepancy flagged in PR review.
+        double scale = _yStd * _yStd;
+        return _samples
+            .Select(s => new[] { s[0], s[1] * scale, s[2] * scale })
+            .ToList();
     }
 
     /// <summary>
@@ -248,6 +263,8 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
         Guard.NotNull(y);
 
         int n = X.Rows;
+        if (n == 0)
+            throw new ArgumentException("Cannot fit a Gaussian Process on an empty training set (X.Rows == 0).", nameof(X));
         if (y.Length != n)
             throw new ArgumentException("X and y must have same number of samples.");
 
@@ -455,9 +472,12 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
         if (_samples is null || _samples.Count == 0)
             throw new InvalidOperationException("Model not trained.");
 
+        // Rescale variance components back to the original target scale (see GetSamples()
+        // for the full explanation — _samples are stored in standardized units).
+        double scale = _yStd * _yStd;
         var lengthscales = _samples.Select(s => s[0]).ToArray();
-        var outputVars = _samples.Select(s => s[1]).ToArray();
-        var noiseVars = _samples.Select(s => s[2]).ToArray();
+        var outputVars = _samples.Select(s => s[1] * scale).ToArray();
+        var noiseVars = _samples.Select(s => s[2] * scale).ToArray();
 
         return new Dictionary<string, (double, double)>
         {

@@ -323,25 +323,34 @@ public class DDPMModelTests
     #region Parameter Management Tests
 
     [Fact(Timeout = 120000)]
-    public async Task GetParameters_ReturnsEmptyVector_WhenNoNeuralNetwork()
+    public async Task GetParameters_ReturnsUNetParameters_OnDefaultConstruction()
     {
-        // Arrange
+        // Arrange — default DDPMModel constructs a U-Net noise predictor (per Ho et al. 2020),
+        // so GetParameters must return the U-Net's full parameter vector, not an empty one.
         var model = new DDPMModel<double>();
 
         // Act
         var parameters = model.GetParameters();
 
-        // Assert
+        // Assert — non-empty, and length matches ParameterCount.
         Assert.NotNull(parameters);
-        Assert.Equal(0, parameters.Length);
+        Assert.True(parameters.Length > 0,
+            "Default DDPM should expose the U-Net's parameter vector via GetParameters().");
+        Assert.Equal(model.ParameterCount, parameters.Length);
     }
 
     [Fact(Timeout = 120000)]
     public async Task SetParameters_ThenGetParameters_ReturnsSetParameters()
     {
-        // Arrange
+        // Arrange — build a parameter vector matching the model's actual ParameterCount
+        // (defaults to the U-Net size). The previous test used a 5-element vector which
+        // would mismatch SetParameters' size validation now that the default model has
+        // a real U-Net.
         var model = new DDPMModel<double>();
-        var parameters = new Vector<double>(new double[] { 0.1, 0.2, 0.3, 0.4, 0.5 });
+        var seed = model.GetParameters();
+        var parameters = new Vector<double>(seed.Length);
+        for (int i = 0; i < parameters.Length; i++)
+            parameters[i] = (i % 7) * 0.01;
 
         // Act
         model.SetParameters(parameters);
@@ -368,9 +377,12 @@ public class DDPMModelTests
     [Fact(Timeout = 120000)]
     public async Task GetParameters_ReturnsCopy_NotReference()
     {
-        // Arrange
+        // Arrange — same size-matching pattern as SetParameters_ThenGetParameters above.
         var model = new DDPMModel<double>();
-        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var seed = model.GetParameters();
+        var parameters = new Vector<double>(seed.Length);
+        for (int i = 0; i < parameters.Length; i++)
+            parameters[i] = (i % 5) + 1.0;
         model.SetParameters(parameters);
 
         // Act
@@ -389,9 +401,15 @@ public class DDPMModelTests
     [Fact(Timeout = 120000)]
     public async Task SaveState_ThenLoadState_RestoresModel()
     {
-        // Arrange
+        // Arrange — populate the U-Net with a deterministic parameter pattern sized
+        // to the actual ParameterCount, so SaveState/LoadState round-trips a vector
+        // whose shape matches the underlying network. The previous fixture used a
+        // 3-element vector that no longer matches the U-Net default.
         var model = new DDPMModel<double>();
-        var parameters = new Vector<double>(new double[] { 0.1, 0.2, 0.3 });
+        var seed = model.GetParameters();
+        var parameters = new Vector<double>(seed.Length);
+        for (int i = 0; i < parameters.Length; i++)
+            parameters[i] = (i % 11) * 0.0125;
         model.SetParameters(parameters);
 
         using var stream = new MemoryStream();
@@ -403,7 +421,7 @@ public class DDPMModelTests
         var loadedModel = new DDPMModel<double>();
         loadedModel.LoadState(stream);
 
-        // Assert
+        // Assert — full vector round-trip with bit-exact precision.
         var loadedParams = loadedModel.GetParameters();
         Assert.Equal(parameters.Length, loadedParams.Length);
         for (int i = 0; i < parameters.Length; i++)
@@ -451,9 +469,13 @@ public class DDPMModelTests
     [Fact(Timeout = 120000)]
     public async Task Clone_ReturnsNewInstance()
     {
-        // Arrange
+        // Arrange — use the actual U-Net parameter size; the previous 3-element
+        // vector mismatched ParameterCount on the new default U-Net contract.
         var model = new DDPMModel<double>();
-        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var seed = model.GetParameters();
+        var parameters = new Vector<double>(seed.Length);
+        for (int i = 0; i < parameters.Length; i++)
+            parameters[i] = (i % 4) + 1.0;
         model.SetParameters(parameters);
 
         // Act
@@ -466,9 +488,12 @@ public class DDPMModelTests
     [Fact(Timeout = 120000)]
     public async Task Clone_CopiesParameters()
     {
-        // Arrange
+        // Arrange — full-size parameter vector for round-trip via Clone.
         var model = new DDPMModel<double>();
-        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var seed = model.GetParameters();
+        var parameters = new Vector<double>(seed.Length);
+        for (int i = 0; i < parameters.Length; i++)
+            parameters[i] = (i % 4) + 1.0;
         model.SetParameters(parameters);
 
         // Act
@@ -486,20 +511,27 @@ public class DDPMModelTests
     [Fact(Timeout = 120000)]
     public async Task Clone_IsIndependent()
     {
-        // Arrange
+        // Arrange — full-size vectors for both the original and the clone overwrite,
+        // since SetParameters now validates against the U-Net's ParameterCount.
         var model = new DDPMModel<double>();
-        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
-        model.SetParameters(parameters);
+        var seed = model.GetParameters();
+        var originalValues = new Vector<double>(seed.Length);
+        var cloneOverride = new Vector<double>(seed.Length);
+        for (int i = 0; i < seed.Length; i++)
+        {
+            originalValues[i] = (i % 4) + 1.0;
+            cloneOverride[i] = 9.0;
+        }
+        model.SetParameters(originalValues);
 
         // Act
         var clone = model.Clone();
-        clone.SetParameters(new Vector<double>(new double[] { 9.0, 9.0, 9.0 }));
+        clone.SetParameters(cloneOverride);
 
         // Assert - Original should be unchanged
         var originalParams = model.GetParameters();
-        Assert.Equal(1.0, originalParams[0]);
-        Assert.Equal(2.0, originalParams[1]);
-        Assert.Equal(3.0, originalParams[2]);
+        for (int i = 0; i < Math.Min(3, originalParams.Length); i++)
+            Assert.Equal(originalValues[i], originalParams[i]);
     }
 
     #endregion

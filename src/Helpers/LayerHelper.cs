@@ -14201,21 +14201,32 @@ public static class LayerHelper<T>
         switch (taskType.ToLowerInvariant())
         {
             case "classification":
-                // Per paper: global average pooling across sequence → classification head
+                // Per paper: global average pooling reduces [seqLen, hiddenDim] → [hiddenDim],
+                // then a classification head projects to numClasses. The pooling step is
+                // mandatory — without it the head emits one prediction per token instead
+                // of one per sequence, breaking downstream output-shape contracts.
+                yield return new GlobalPoolingLayer<T>(
+                    [contextLength, hiddenDim], PoolingType.Average, (IActivationFunction<T>?)null);
                 yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim, gelu);
                 yield return new FeedForwardLayer<T>(hiddenDim, numClasses, (IActivationFunction<T>?)null);
                 break;
 
             case "anomaly":
             case "imputation":
-                // Reconstruction: project hiddenDim → numFeatures per token
+                // Reconstruction: per-token projection (no pooling — we want one
+                // numFeatures-dimensional output per timestep).
                 yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim / 2, gelu);
                 yield return new FeedForwardLayer<T>(hiddenDim / 2, numFeatures, (IActivationFunction<T>?)null);
                 break;
 
             case "forecasting":
             default:
-                // Per paper: project hiddenDim → forecastHorizon per token, then pool
+                // Per paper: pool sequence first to a single hiddenDim vector, then project
+                // to forecastHorizon. Same rationale as the classification branch — without
+                // pooling the head emits forecastHorizon values per token instead of a
+                // single forecastHorizon vector for the whole sequence.
+                yield return new GlobalPoolingLayer<T>(
+                    [contextLength, hiddenDim], PoolingType.Average, (IActivationFunction<T>?)null);
                 yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim / 2, gelu);
                 yield return new FeedForwardLayer<T>(hiddenDim / 2, forecastHorizon, (IActivationFunction<T>?)null);
                 break;

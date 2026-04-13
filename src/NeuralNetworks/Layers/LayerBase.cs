@@ -2746,9 +2746,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         if (tensor is null)
             throw new ArgumentNullException(nameof(tensor));
 
-        Engine.RegisterPersistentTensor(tensor, role);
-
         // Check if this exact tensor is already registered (idempotent re-registration).
+        // The Engine.RegisterPersistentTensor call MUST run AFTER this check — otherwise
+        // a re-registration leaks an extra entry on the engine side (Dispose only
+        // unregisters the tensor once, leaving the duplicate behind). This matches the
+        // contract documented for PR review.
         for (int i = 0; i < _registeredTensors.Count; i++)
         {
             if (ReferenceEquals(_registeredTensors[i], tensor))
@@ -2757,21 +2759,50 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
 
         // For lazy-init layers (DenseLayer, FeedForwardLayer): when EnsureInitialized
         // replaces a placeholder tensor with the real one, the old placeholder has
-        // Length == 0. Replace it to avoid stale references.
+        // Length == 0. Replace it to avoid stale references — and unregister the
+        // placeholder from the engine so persistent-tensor bookkeeping stays accurate.
         for (int i = 0; i < _registeredTensors.Count; i++)
         {
             if (_registeredTensorRoles[i] == role && _registeredTensors[i].Length == 0)
             {
                 Engine.UnregisterPersistentTensor(_registeredTensors[i]);
                 _registeredTensors[i] = tensor;
+                Engine.RegisterPersistentTensor(tensor, role);
                 return;
             }
         }
 
         // Add new tensor — multiple tensors CAN share the same role
         // (e.g., MultiHeadAttention has Q/K/V/O all as Weights).
+        // To replace a non-empty tensor that already shares the same role (e.g., a
+        // resize / shape correction), call UnregisterTrainableParameter on the old
+        // tensor first; that keeps the multi-tensor-per-role contract intact while
+        // giving callers an explicit way to swap a stale tensor.
+        Engine.RegisterPersistentTensor(tensor, role);
         _registeredTensors.Add(tensor);
         _registeredTensorRoles.Add(role);
+    }
+
+    /// <summary>
+    /// Removes a previously-registered trainable parameter tensor from this layer's
+    /// registration and from the engine's persistent-tensor list. Use this before
+    /// re-registering a replacement tensor for the same role when the layer needs
+    /// to swap a non-empty tensor (resize, shape correction, etc.).
+    /// </summary>
+    /// <param name="tensor">The tensor to unregister. No-op if not currently registered.</param>
+    protected void UnregisterTrainableParameter(Tensor<T> tensor)
+    {
+        if (tensor is null) return;
+        for (int i = 0; i < _registeredTensors.Count; i++)
+        {
+            if (ReferenceEquals(_registeredTensors[i], tensor))
+            {
+                Engine.UnregisterPersistentTensor(tensor);
+                _registeredTensors.RemoveAt(i);
+                _registeredTensorRoles.RemoveAt(i);
+                return;
+            }
+        }
     }
 
     /// <summary>

@@ -271,6 +271,10 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     public override int ParameterCount => _isInitialized
         ? _weights.Length + _biases.Length
         : (_inputSize * _outputSize) + _outputSize;
+    // Note: the source generator (TrainableParameterGenerator) auto-emits
+    // GetTrainableParameters() with an EnsureInitialized() trampoline, so
+    // tape-based training that calls CollectParameters before the first Forward()
+    // correctly triggers our lazy weight allocation. No manual override needed.
 
     /// <summary>
     /// Allocates and initializes weight and bias tensors on first use.
@@ -293,32 +297,54 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
             var wSpan = _weights.Data.Span;
             int total = wSpan.Length;
 
-            // Fill with uniform random values. For double/float, write directly
-            // to avoid NumOps.FromDouble virtual dispatch overhead on every element.
-            if (typeof(T) == typeof(double))
+            // Xavier/Glorot uniform initialization: U(-a, a) where a = sqrt(6 / (fan_in + fan_out)).
+            // SimdRandom produces uniform [0, 1); we shift to [-0.5, 0.5] and scale by 2*a to
+            // get the Xavier range. Previously the raw [0, 1) values were written as-is,
+            // making the docstring misleading AND degrading convergence significantly
+            // (zero-mean assumption for SGD, gradient-variance balance for deep nets).
+            //
+            // Use a temp array + array-level reinterpret so the SIMD-batched xoshiro256** fill
+            // path still applies across our two frameworks. Span<T> can't be reinterpreted
+            // across generic T (see MultiHeadAttentionLayer for the full rationale), but
+            // arrays are reference types so Unsafe.As<double[], T[]> is unconstrained and
+            // safe when T == double/float at runtime. Guard total == 0 around the fill loops:
+            // an empty weight tensor would have no data to fill, but we still need to continue
+            // through bias init and RegisterTrainableParameter below.
+            double xavierBound = Math.Sqrt(6.0 / (_inputSize + _outputSize));
+            if (total > 0)
             {
-                var dSpan = System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
-                    ref System.Runtime.CompilerServices.Unsafe.As<T, double>(ref wSpan[0]), total);
-                rng.NextDoubles(dSpan);
-            }
-            else if (typeof(T) == typeof(float))
-            {
-                var fSpan = System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
-                    ref System.Runtime.CompilerServices.Unsafe.As<T, float>(ref wSpan[0]), total);
-                rng.NextFloats(fSpan);
-            }
-            else
-            {
-                const int batchSize = 4096;
-                var tempBuf = new double[Math.Min(total, batchSize)];
-                int offset = 0;
-                while (offset < total)
+                if (typeof(T) == typeof(double))
                 {
-                    int chunk = Math.Min(batchSize, total - offset);
-                    rng.NextDoubles(tempBuf.AsSpan(0, chunk));
-                    for (int j = 0; j < chunk; j++)
-                        wSpan[offset + j] = NumOps.FromDouble(tempBuf[j]);
-                    offset += chunk;
+                    var buffer = new double[total];
+                    rng.NextDoubles(buffer.AsSpan());
+                    for (int i = 0; i < total; i++)
+                        buffer[i] = (buffer[i] - 0.5) * 2.0 * xavierBound;
+                    var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<double[], T[]>(ref buffer);
+                    reinterpreted.AsSpan(0, total).CopyTo(wSpan);
+                }
+                else if (typeof(T) == typeof(float))
+                {
+                    var buffer = new float[total];
+                    rng.NextFloats(buffer.AsSpan());
+                    float xavierBoundF = (float)xavierBound;
+                    for (int i = 0; i < total; i++)
+                        buffer[i] = (buffer[i] - 0.5f) * 2f * xavierBoundF;
+                    var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<float[], T[]>(ref buffer);
+                    reinterpreted.AsSpan(0, total).CopyTo(wSpan);
+                }
+                else
+                {
+                    const int batchSize = 4096;
+                    var tempBuf = new double[Math.Min(total, batchSize)];
+                    int offset = 0;
+                    while (offset < total)
+                    {
+                        int chunk = Math.Min(batchSize, total - offset);
+                        rng.NextDoubles(tempBuf.AsSpan(0, chunk));
+                        for (int j = 0; j < chunk; j++)
+                            wSpan[offset + j] = NumOps.FromDouble((tempBuf[j] - 0.5) * 2.0 * xavierBound);
+                        offset += chunk;
+                    }
                 }
             }
 
@@ -378,6 +404,14 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     public FeedForwardLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
+        // Fail fast on bad dimensions: zero/negative would silently produce
+        // ParameterCount = 0/negative and confuse downstream code (e.g., the
+        // tape collector and parameter-shape assertions).
+        if (inputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputSize), inputSize, "Input size must be positive.");
+        if (outputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize), outputSize, "Output size must be positive.");
+
         _inputSize = inputSize;
         _outputSize = outputSize;
 
@@ -424,6 +458,12 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     public FeedForwardLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? activationFunction = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
+        // Fail fast on bad dimensions — see scalar-activation overload above for rationale.
+        if (inputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputSize), inputSize, "Input size must be positive.");
+        if (outputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize), outputSize, "Output size must be positive.");
+
         _inputSize = inputSize;
         _outputSize = outputSize;
 

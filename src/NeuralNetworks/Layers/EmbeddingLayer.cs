@@ -372,24 +372,31 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         var rng = new SimdRandom();
         var span = _embeddingTensor.Data.Span;
         int total = span.Length;
+        if (total == 0) return; // zero-sized embedding (no vocab or zero dim): nothing to fill
         double scaleD = NumOps.ToDouble(scale);
 
+        // Write via a temp array + array-level reinterpret so the SIMD-batched
+        // xoshiro256** fill path still applies. See MultiHeadAttentionLayer for full
+        // rationale (Span<T> can't be reinterpreted across generic T without a struct
+        // constraint, which we don't have, and CreateSpan isn't on net471).
         if (typeof(T) == typeof(double))
         {
-            var dSpan = System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
-                ref System.Runtime.CompilerServices.Unsafe.As<T, double>(ref span[0]), total);
-            rng.NextDoubles(dSpan);
+            var buffer = new double[total];
+            rng.NextDoubles(buffer.AsSpan());
             for (int i = 0; i < total; i++)
-                dSpan[i] = (dSpan[i] - 0.5) * scaleD;
+                buffer[i] = (buffer[i] - 0.5) * scaleD;
+            var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<double[], T[]>(ref buffer);
+            reinterpreted.AsSpan(0, total).CopyTo(span);
         }
         else if (typeof(T) == typeof(float))
         {
-            var fSpan = System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
-                ref System.Runtime.CompilerServices.Unsafe.As<T, float>(ref span[0]), total);
-            rng.NextFloats(fSpan);
+            var buffer = new float[total];
+            rng.NextFloats(buffer.AsSpan());
             float scaleF = (float)scaleD;
             for (int i = 0; i < total; i++)
-                fSpan[i] = (fSpan[i] - 0.5f) * scaleF;
+                buffer[i] = (buffer[i] - 0.5f) * scaleF;
+            var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<float[], T[]>(ref buffer);
+            reinterpreted.AsSpan(0, total).CopyTo(span);
         }
         else
         {

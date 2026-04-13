@@ -417,8 +417,15 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
             T predicted = PredictSingle(lookback);
             predictions[i] = predicted;
 
-            // Autoregressive: append prediction for subsequent windows
-            series.Add(_trainingSeries.Length > 0 ? predicted : NumOps.Zero);
+            // Autoregressive: always append the model's prediction so subsequent
+            // windows see it. The previous gate "append predicted only if training
+            // series is non-empty, otherwise zero" silently drove forecasts toward
+            // zero whenever we predict from cold-start (no training history) — it
+            // also broke the contract that predictions[i+1] sees predictions[i] as
+            // part of its lookback. If the caller wants different cold-start
+            // behavior, that should be handled before/while computing `predicted`,
+            // not by discarding predictions during the state update.
+            series.Add(predicted);
         }
 
         return predictions;

@@ -1097,22 +1097,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Checks whether a type has a [ModelDomain] attribute.
-    /// This enables discovery of algorithms and utilities that don't implement IFullModel
-    /// but still need mathematical invariant testing (e.g., causal discovery, decomposition methods).
-    /// </summary>
-    /// <summary>
-    /// Checks if a type IS or INHERITS FROM NeuralNetworkArchitecture&lt;T&gt;.
-    /// Uses Roslyn's <see cref="SymbolEqualityComparer"/> to walk the base type chain,
-    /// so derived architecture types (CodeSynthesisArchitecture, etc.) are recognized.
+    /// Checks if a type IS exactly <c>NeuralNetworkArchitecture&lt;T&gt;</c> (not a derived type).
+    /// Uses <see cref="SymbolEqualityComparer"/> for cross-assembly robustness, with a
+    /// metadata-name fallback when the resolved compilation symbol is unavailable.
     /// </summary>
     /// <param name="type">The parameter type to check.</param>
-    /// <param name="architectureSymbol">The resolved open generic NeuralNetworkArchitecture`1 symbol.
-    /// Pass null to fall back to metadata name matching.</param>
-    /// <summary>
-    /// Checks if a type IS exactly NeuralNetworkArchitecture&lt;T&gt; (not a derived type).
-    /// Uses <see cref="SymbolEqualityComparer"/> for cross-assembly robustness.
-    /// </summary>
+    /// <param name="architectureSymbol">The resolved open generic
+    /// <c>NeuralNetworkArchitecture`1</c> symbol. Pass <c>null</c> to fall back to
+    /// metadata-name matching.</param>
+    /// <returns><c>true</c> when <paramref name="type"/> is exactly the open generic
+    /// <c>NeuralNetworkArchitecture&lt;T&gt;</c>; <c>false</c> for derived types or
+    /// non-generic types.</returns>
     private static bool IsExactlyArchitecture(ITypeSymbol type, INamedTypeSymbol? architectureSymbol)
     {
         if (type is not INamedTypeSymbol namedType || !namedType.IsGenericType)

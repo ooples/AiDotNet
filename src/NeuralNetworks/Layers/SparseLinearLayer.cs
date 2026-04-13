@@ -101,10 +101,21 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         _weights.NonZeroCount + OutputFeatures;
 
     /// <summary>
-    /// Gets whether this layer supports training. SparseTensor is incompatible with
-    /// dense ParameterBuffer for tape-based autodiff, but the layer supports traditional
-    /// gradient-based training via UpdateParameters() with manually accumulated gradients.
+    /// Gets whether this layer supports training. Returns <c>true</c> because the layer
+    /// supports traditional gradient-based training via <see cref="UpdateParameters"/> with
+    /// manually accumulated gradients — that path is what <c>SupportsTraining</c> gates in
+    /// <see cref="AiDotNet.Optimizers.GradientBasedOptimizerBase{T,TInput,TOutput}"/>.
     /// </summary>
+    /// <remarks>
+    /// SparseTensor weights are intentionally NOT exposed to the tape-based autodiff path:
+    /// this layer has no <c>[TrainableParameter]</c> fields and never calls
+    /// <c>RegisterTrainableParameter</c>, so <c>TapeTrainingStep.CollectParameters</c>
+    /// finds zero parameters here and silently skips the layer in tape mode. That is the
+    /// intended behavior — sparse weight tensors don't fit the dense
+    /// <c>ParameterBuffer&lt;T&gt;</c> view contract used by the tape. Setting
+    /// <c>SupportsTraining = true</c> therefore routes only the manual gradient-update
+    /// codepath, never the tape codepath, so the two contracts stay consistent.
+    /// </remarks>
     public override bool SupportsTraining => true;
 
     /// <summary>
