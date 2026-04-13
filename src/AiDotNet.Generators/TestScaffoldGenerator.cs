@@ -1495,14 +1495,44 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 bool isVideo = model.Domains.Contains(3); // Video=3
                 bool isVision = model.Domains.Contains(1) || model.Domains.Contains(11); // Vision=1, ThreeD=11
                 bool isAudio = model.Domains.Contains(4); // Audio=4
-                // Video models (frame interpolation) often take 2 concatenated frames = 6 channels
-                int visionChannels = isVideo ? 6 : 3;
-                string inputTypeExpr = (isVision || isVideo) ? "AiDotNet.Enums.InputType.ThreeDimensional" :
-                                       isAudio ? "AiDotNet.Enums.InputType.TwoDimensional" :
-                                       "AiDotNet.Enums.InputType.OneDimensional";
-                string sizeExpr = (isVision || isVideo) ? $"inputHeight: 32, inputWidth: 32, inputDepth: {visionChannels}, outputSize: 4" :
-                                  isAudio ? "inputHeight: 32, inputWidth: 16, inputDepth: 1, outputSize: 4" :
-                                  "inputSize: 16, outputSize: 4";
+
+                // Use ModelTask to distinguish video subtypes:
+                // - FrameInterpolation (35): 2 concatenated RGB frames → [6, H, W] (3D)
+                // - ActionRecognition (22), VideoGeneration (41): temporal → [T, C, H, W] (4D)
+                bool isFrameInterp = model.Tasks.Contains(35); // FrameInterpolation
+                bool isTemporalVideo = isVideo && !isFrameInterp;
+
+                string inputTypeExpr;
+                string sizeExpr;
+
+                if (isTemporalVideo)
+                {
+                    // 4D temporal video: [frames, channels, height, width]
+                    inputTypeExpr = "AiDotNet.Enums.InputType.ThreeDimensional";
+                    sizeExpr = "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4";
+                }
+                else if (isFrameInterp)
+                {
+                    // Frame interpolation: 2 concatenated RGB frames = 6 channels
+                    inputTypeExpr = "AiDotNet.Enums.InputType.ThreeDimensional";
+                    sizeExpr = "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 4";
+                }
+                else if (isVision)
+                {
+                    // Standard vision: [C, H, W] with 64x64 to handle large conv kernels
+                    inputTypeExpr = "AiDotNet.Enums.InputType.ThreeDimensional";
+                    sizeExpr = "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4";
+                }
+                else if (isAudio)
+                {
+                    inputTypeExpr = "AiDotNet.Enums.InputType.TwoDimensional";
+                    sizeExpr = "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4";
+                }
+                else
+                {
+                    inputTypeExpr = "AiDotNet.Enums.InputType.OneDimensional";
+                    sizeExpr = "inputSize: 16, outputSize: 4";
+                }
                 // Always construct the base NeuralNetworkArchitecture<double> — even for derived
                 // architecture types, the base constructor args are compatible since C# allows
                 // passing a base object to a constructor that accepts a derived type via implicit
@@ -1582,22 +1612,30 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Override InputShape/OutputShape for domain-appropriate test data.
         // Vision/Video/3D models need [C, H, W]; default is [1, 4].
         bool isVideoModel = model.Domains.Contains(3);
+        bool isFrameInterpModel = model.Tasks.Contains(35); // FrameInterpolation
+        bool isTemporalVideoModel = isVideoModel && !isFrameInterpModel;
         bool isVisionModel = model.Domains.Contains(1) || model.Domains.Contains(11);
         bool isAudioModel = model.Domains.Contains(4);
-        if (isVideoModel)
+        if (isTemporalVideoModel)
         {
-            // Video models (frame interpolation) take 2 concatenated frames = 6 channels
-            sb.AppendLine("    protected override int[] InputShape => new[] { 6, 32, 32 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 32, 32 };");
+            // Temporal video: [frames, channels, height, width]
+            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 64, 64 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
+        else if (isFrameInterpModel)
+        {
+            // Frame interpolation: 2 concatenated RGB frames = 6 channels
+            sb.AppendLine("    protected override int[] InputShape => new[] { 6, 64, 64 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 64, 64 };");
         }
         else if (isVisionModel)
         {
-            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 64, 64 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
         else if (isAudioModel)
         {
-            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 32, 16 };");
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
 
