@@ -693,13 +693,12 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_transformationMatrixGradient == null || _biasGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // Update in-place to preserve registered parameter tensor references.
-        // scale gradient, then subtract from weights via in-place ops.
+        // Use Engine operations for GPU/CPU acceleration
         var scaledTransformGrad = Engine.TensorMultiplyScalar(_transformationMatrixGradient, learningRate);
-        Engine.TensorSubtractInPlace(_transformationMatrix, scaledTransformGrad);
+        _transformationMatrix = Engine.TensorSubtract(_transformationMatrix, scaledTransformGrad);
 
         var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasGradient, learningRate);
-        Engine.TensorSubtractInPlace(_bias, scaledBiasGrad);
+        _bias = Engine.TensorSubtract(_bias, scaledBiasGrad);
     }
 
     /// <summary>
@@ -811,9 +810,9 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (parameters.Length != matrixSize + biasSize)
             throw new ArgumentException($"Expected {matrixSize + biasSize} parameters, but got {parameters.Length}");
 
-        // Write in-place to preserve registered parameter tensor references
-        parameters.Slice(0, matrixSize).AsSpan().CopyTo(_transformationMatrix.Data.Span);
-        parameters.Slice(matrixSize, biasSize).AsSpan().CopyTo(_bias.Data.Span);
+        // Set parameters without hot-path conversions
+        _transformationMatrix = new Tensor<T>(_transformationMatrix._shape, parameters.Slice(0, matrixSize));
+        _bias = new Tensor<T>([biasSize], parameters.Slice(matrixSize, biasSize));
     }
 
     /// <summary>

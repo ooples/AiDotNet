@@ -31,8 +31,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void FedAvg_EqualWeights_IsSimpleAverage()
+    public async Task FedAvg_EqualWeights_IsSimpleAverage()
     {
+        await Task.Yield();
         // 3 clients, equal weights, 2 parameters each
         // θ₁ = [1, 4], θ₂ = [2, 5], θ₃ = [3, 6], w = [1,1,1]
         // Expected: [(1+2+3)/3, (4+5+6)/3] = [2, 5]
@@ -52,8 +53,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void FedAvg_UnequalWeights_HandCalculated()
+    public async Task FedAvg_UnequalWeights_HandCalculated()
     {
+        await Task.Yield();
         // θ₁ = [10, 20], θ₂ = [30, 40], weights = [100, 300]
         // normalized: w₁ = 100/400 = 0.25, w₂ = 300/400 = 0.75
         // Expected: [0.25*10 + 0.75*30, 0.25*20 + 0.75*40] = [25, 35]
@@ -72,8 +74,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void FedAvg_SingleClient_ReturnsSameParameters()
+    public async Task FedAvg_SingleClient_ReturnsSameParameters()
     {
+        await Task.Yield();
         var agg = new FedAvgFullModelAggregationStrategy<double, double[], double[]>();
         var models = MakeModels((0, new[] { 7.0, 8.0, 9.0 }));
         var weights = new Dictionary<int, double> { [0] = 1.0 };
@@ -88,8 +91,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void FedAvg_ThreeClients_WeightedAverage()
+    public async Task FedAvg_ThreeClients_WeightedAverage()
     {
+        await Task.Yield();
         // θ₁=[1], θ₂=[2], θ₃=[6], w=[1,2,1]
         // total = 4, normalized: 0.25, 0.5, 0.25
         // Expected: 0.25*1 + 0.5*2 + 0.25*6 = 0.25 + 1.0 + 1.5 = 2.75
@@ -108,8 +112,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void FedAvg_EmptyModels_Throws()
+    public async Task FedAvg_EmptyModels_Throws()
     {
+        await Task.Yield();
         var agg = new FedAvgFullModelAggregationStrategy<double, double[], double[]>();
         var models = new Dictionary<int, IFullModel<double, double[], double[]>>();
         var weights = new Dictionary<int, double>();
@@ -119,8 +124,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void FedAvg_StrategyName_IsFedAvg()
+    public async Task FedAvg_StrategyName_IsFedAvg()
     {
+        await Task.Yield();
         var agg = new FedAvgFullModelAggregationStrategy<double, double[], double[]>();
         Assert.Equal("FedAvg", agg.GetStrategyName());
     }
@@ -131,8 +137,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void Median_OddClients_HandCalculated()
+    public async Task Median_OddClients_HandCalculated()
     {
+        await Task.Yield();
         // 3 clients: θ₁=[1,10], θ₂=[5,20], θ₃=[3,30]
         // Sorted per coordinate:
         //   param0: [1,3,5] → median = 3
@@ -153,8 +160,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void Median_EvenClients_AverageOfMiddleTwo()
+    public async Task Median_EvenClients_AverageOfMiddleTwo()
     {
+        await Task.Yield();
         // 4 clients: θ₁=[10], θ₂=[20], θ₃=[30], θ₄=[40]
         // Sorted: [10,20,30,40] → median = (20+30)/2 = 25
         var agg = new MedianFullModelAggregationStrategy<double, double[], double[]>();
@@ -173,8 +181,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void Median_OutlierResistant_HandCalculated()
+    public async Task Median_OutlierResistant_HandCalculated()
     {
+        await Task.Yield();
         // 5 clients: θ₁=[1], θ₂=[2], θ₃=[3], θ₄=[4], θ₅=[1000]
         // Sorted: [1,2,3,4,1000] → median = 3 (outlier doesn't affect)
         var agg = new MedianFullModelAggregationStrategy<double, double[], double[]>();
@@ -194,8 +203,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void Median_StrategyName_IsMedian()
+    public async Task Median_StrategyName_IsMedian()
     {
+        await Task.Yield();
         var agg = new MedianFullModelAggregationStrategy<double, double[], double[]>();
         Assert.Equal("Median", agg.GetStrategyName());
     }
@@ -206,8 +216,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void TrimmedMean_20Pct_FiveClients_HandCalculated()
+    public async Task TrimmedMean_20Pct_FiveClients_HandCalculated()
     {
+        await Task.Yield();
         // 5 clients, trim=20%: floor(0.2*5) = 1 from each side
         // θ values for param0: [1, 2, 3, 4, 100]
         // Sorted: [1, 2, 3, 4, 100], trim 1 each side → [2, 3, 4]
@@ -229,8 +240,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void TrimmedMean_ZeroTrim_IsSameAsSimpleAverage()
+    public async Task TrimmedMean_ZeroTrim_IsSameAsSimpleAverage()
     {
+        await Task.Yield();
         // trim=0%: no trimming → simple average
         // θ: [10, 20, 30], average = 20
         var agg = new TrimmedMeanFullModelAggregationStrategy<double, double[], double[]>(trimFraction: 0.0);
@@ -248,8 +260,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void TrimmedMean_MultipleParams_HandCalculated()
+    public async Task TrimmedMean_MultipleParams_HandCalculated()
     {
+        await Task.Yield();
         // 5 clients, 2 params, trim=20% (trim 1 each side)
         // param0: [10, -5, 3, 7, 100] → sorted [-5, 3, 7, 10, 100] → kept [3, 7, 10] → avg = 20/3
         // param1: [1, 2, 3, 4, 5] → sorted [1, 2, 3, 4, 5] → kept [2, 3, 4] → avg = 3
@@ -271,8 +284,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void TrimmedMean_InvalidFraction_Throws()
+    public async Task TrimmedMean_InvalidFraction_Throws()
     {
+        await Task.Yield();
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new TrimmedMeanFullModelAggregationStrategy<double, double[], double[]>(trimFraction: 0.5));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -281,8 +295,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void TrimmedMean_StrategyName_IsTrimmedMean()
+    public async Task TrimmedMean_StrategyName_IsTrimmedMean()
     {
+        await Task.Yield();
         var agg = new TrimmedMeanFullModelAggregationStrategy<double, double[], double[]>();
         Assert.Equal("TrimmedMean", agg.GetStrategyName());
     }
@@ -293,8 +308,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void WinsorizedMean_20Pct_FiveClients_HandCalculated()
+    public async Task WinsorizedMean_20Pct_FiveClients_HandCalculated()
     {
+        await Task.Yield();
         // 5 clients, winsorize=20%: w=floor(0.2*5)=1
         // lowerIndex = min(max(0,1), max(0,4)) = 1
         // upperIndex = max(0, min(4-1, 4)) = 3
@@ -320,8 +336,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void WinsorizedMean_ZeroFraction_IsSameAsSimpleAverage()
+    public async Task WinsorizedMean_ZeroFraction_IsSameAsSimpleAverage()
     {
+        await Task.Yield();
         // winsorize=0%: no clipping → simple average
         // θ: [10, 20, 30] → average = 20
         var agg = new WinsorizedMeanFullModelAggregationStrategy<double, double[], double[]>(winsorizeFraction: 0.0);
@@ -339,8 +356,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void WinsorizedMean_InvalidFraction_Throws()
+    public async Task WinsorizedMean_InvalidFraction_Throws()
     {
+        await Task.Yield();
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new WinsorizedMeanFullModelAggregationStrategy<double, double[], double[]>(winsorizeFraction: 0.5));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -349,8 +367,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void WinsorizedMean_StrategyName_IsWinsorizedMean()
+    public async Task WinsorizedMean_StrategyName_IsWinsorizedMean()
     {
+        await Task.Yield();
         var agg = new WinsorizedMeanFullModelAggregationStrategy<double, double[], double[]>();
         Assert.Equal("WinsorizedMean", agg.GetStrategyName());
     }
@@ -361,8 +380,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void Krum_SelectsMostCentralClient_HandCalculated()
+    public async Task Krum_SelectsMostCentralClient_HandCalculated()
     {
+        await Task.Yield();
         // 4 clients, f=1: neighborsToSum = 4-1-2 = 1
         // θ₀=[0,0], θ₁=[1,0], θ₂=[0,1], θ₃=[100,100]
         //
@@ -398,8 +418,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void Krum_TooFewClients_Throws()
+    public async Task Krum_TooFewClients_Throws()
     {
+        await Task.Yield();
         // n=3, f=1 → neighborsToSum = 3-1-2 = 0 → throws
         var agg = new KrumFullModelAggregationStrategy<double, double[], double[]>(byzantineClientCount: 1);
         var models = MakeModels(
@@ -413,16 +434,18 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void Krum_NegativeByzantine_Throws()
+    public async Task Krum_NegativeByzantine_Throws()
     {
+        await Task.Yield();
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new KrumFullModelAggregationStrategy<double, double[], double[]>(byzantineClientCount: -1));
     }
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void Krum_StrategyName_IsKrum()
+    public async Task Krum_StrategyName_IsKrum()
     {
+        await Task.Yield();
         var agg = new KrumFullModelAggregationStrategy<double, double[], double[]>();
         Assert.Equal("Krum", agg.GetStrategyName());
     }
@@ -433,8 +456,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void MultiKrum_SelectsTwoBestAndAverages_HandCalculated()
+    public async Task MultiKrum_SelectsTwoBestAndAverages_HandCalculated()
     {
+        await Task.Yield();
         // 5 clients, f=1, selectionCount=2
         // neighborsToSum = 5-1-2 = 2
         // θ₀=[0], θ₁=[1], θ₂=[2], θ₃=[3], θ₄=[100]
@@ -473,8 +497,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void MultiKrum_StrategyName_IsMultiKrum()
+    public async Task MultiKrum_StrategyName_IsMultiKrum()
     {
+        await Task.Yield();
         var agg = new MultiKrumFullModelAggregationStrategy<double, double[], double[]>();
         Assert.Equal("MultiKrum", agg.GetStrategyName());
     }
@@ -485,8 +510,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void Bulyan_RequiresMinimumClients_HandCalculated()
+    public async Task Bulyan_RequiresMinimumClients_HandCalculated()
     {
+        await Task.Yield();
         // Bulyan requires n >= 4f+3. For f=1: n >= 7
         // 7 clients, f=1
         // selectionSize = n - 2f = 7 - 2 = 5
@@ -525,8 +551,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void Bulyan_TooFewClients_Throws()
+    public async Task Bulyan_TooFewClients_Throws()
     {
+        await Task.Yield();
         // Bulyan requires n >= 4f+3. For f=1: n >= 7
         // 6 clients, f=1 → should throw
         var agg = new BulyanFullModelAggregationStrategy<double, double[], double[]>(byzantineClientCount: 1);
@@ -545,8 +572,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void Bulyan_StrategyName_IsBulyan()
+    public async Task Bulyan_StrategyName_IsBulyan()
     {
+        await Task.Yield();
         var agg = new BulyanFullModelAggregationStrategy<double, double[], double[]>();
         Assert.Equal("Bulyan", agg.GetStrategyName());
     }
@@ -557,8 +585,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void RFA_IdenticalClients_ReturnsExactValue()
+    public async Task RFA_IdenticalClients_ReturnsExactValue()
     {
+        await Task.Yield();
         // All clients have same parameters → geometric median = that value
         var agg = new RfaFullModelAggregationStrategy<double, double[], double[]>();
         var models = MakeModels(
@@ -576,8 +605,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void RFA_OutlierResistant_HandCalculated()
+    public async Task RFA_OutlierResistant_HandCalculated()
     {
+        await Task.Yield();
         // 5 clients with one extreme outlier
         // θ₀=[1], θ₁=[2], θ₂=[3], θ₃=[4], θ₄=[1000]
         // Geometric median should be close to 3 (robust against outlier)
@@ -602,8 +632,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void RFA_TwoClients_ConvergesToMidpoint()
+    public async Task RFA_TwoClients_ConvergesToMidpoint()
     {
+        await Task.Yield();
         // 2 clients: geometric median of 2 points converges to midpoint
         // θ₀=[0, 0], θ₁=[10, 20]
         // Midpoint = [5, 10]
@@ -624,16 +655,18 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void RFA_StrategyName_IsRFA()
+    public async Task RFA_StrategyName_IsRFA()
     {
+        await Task.Yield();
         var agg = new RfaFullModelAggregationStrategy<double, double[], double[]>();
         Assert.Equal("RFA", agg.GetStrategyName());
     }
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void RFA_InvalidParameters_Throw()
+    public async Task RFA_InvalidParameters_Throw()
     {
+        await Task.Yield();
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new RfaFullModelAggregationStrategy<double, double[], double[]>(maxIterations: 0));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -648,8 +681,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void FedProx_AggregationIsSameAsFedAvg()
+    public async Task FedProx_AggregationIsSameAsFedAvg()
     {
+        await Task.Yield();
         // FedProx aggregation is identical to FedAvg (proximal term only affects local training)
         var fedProx = new FedProxFullModelAggregationStrategy<double, double[], double[]>(mu: 0.01);
         var fedAvg = new FedAvgFullModelAggregationStrategy<double, double[], double[]>();
@@ -668,24 +702,27 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void FedProx_MuAccessible()
+    public async Task FedProx_MuAccessible()
     {
+        await Task.Yield();
         var fedProx = new FedProxFullModelAggregationStrategy<double, double[], double[]>(mu: 0.05);
         Assert.Equal(0.05, fedProx.GetMu(), Tol);
     }
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void FedProx_NegativeMu_Throws()
+    public async Task FedProx_NegativeMu_Throws()
     {
+        await Task.Yield();
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new FedProxFullModelAggregationStrategy<double, double[], double[]>(mu: -0.1));
     }
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void FedProx_StrategyName_IsFedProx()
+    public async Task FedProx_StrategyName_IsFedProx()
     {
+        await Task.Yield();
         var agg = new FedProxFullModelAggregationStrategy<double, double[], double[]>();
         Assert.Equal("FedProx", agg.GetStrategyName());
     }
@@ -696,8 +733,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void AllStrategies_IdenticalClients_ReturnSameResult()
+    public async Task AllStrategies_IdenticalClients_ReturnSameResult()
     {
+        await Task.Yield();
         // When all clients have identical parameters, all strategies should return the same
         var models = MakeModels(
             (0, new[] { 5.0, 10.0 }),
@@ -731,8 +769,9 @@ public class FederatedLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void RobustStrategies_OutlierResistant_AllNearMedian()
+    public async Task RobustStrategies_OutlierResistant_AllNearMedian()
     {
+        await Task.Yield();
         // 7 clients with one outlier
         // θ: [1, 2, 3, 4, 5, 6, 1000]
         // Robust strategies should all produce results near the median (3-4 range)

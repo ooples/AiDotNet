@@ -1421,11 +1421,7 @@ public partial class GRULayer<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters but got {parameters.Length}.",
-                nameof(parameters));
-
+        // Bulk copy from parameter vector into tensor storage — avoids per-element SetFlat calls
         int idx = 0;
         parameters.Slice(idx, _Wz.Length).AsSpan().CopyTo(_Wz.Data.Span); idx += _Wz.Length;
         parameters.Slice(idx, _Wr.Length).AsSpan().CopyTo(_Wr.Data.Span); idx += _Wr.Length;

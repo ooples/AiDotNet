@@ -139,17 +139,44 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        // Weighted CE = -mean(weights * target * log(predicted))
-        var safePred = Engine.TensorAddScalar(predicted, NumOps.FromDouble(1e-7));
-        var logP = Engine.TensorLog(safePred);
-        var product = Engine.TensorMultiply(target, logP);
-        if (_weights.Length > 0)
+        // Only one-hot encode for multi-class (numClasses > 1).
+        // For binary (predicted=[B,1], target=[B]), just reshape.
+        if (target.Shape.Length < predicted.Shape.Length)
+        {
+            if (predicted.Shape[predicted.Shape.Length - 1] > 1)
+            {
+                target = EnsureTargetMatchesPredicted(predicted, target);
+            }
+            else if (target.Shape.Length == predicted.Shape.Length - 1
+                     && predicted.Shape[predicted.Shape.Length - 1] == 1
+                     && target.Length == predicted.Length)
+            {
+                target = Engine.Reshape(target, predicted.Shape.ToArray());
+            }
+        }
+
+        // Full weighted BCE: -mean(weights * (target * log(p) + (1-target) * log(1-p)))
+        var eps = NumOps.FromDouble(1e-7);
+        var oneMinusEps = NumOps.FromDouble(1.0 - 1e-7);
+        var clamped = Engine.TensorClamp(predicted, eps, oneMinusEps);
+
+        var logP = Engine.TensorLog(clamped);
+        var oneMinusP = Engine.ScalarMinusTensor(NumOps.One, clamped);
+        var logOneMinusP = Engine.TensorLog(oneMinusP);
+        var oneMinusTarget = Engine.ScalarMinusTensor(NumOps.One, target);
+
+        // target * log(p) + (1-target) * log(1-p)
+        var positiveTerm = Engine.TensorMultiply(target, logP);
+        var negativeTerm = Engine.TensorMultiply(oneMinusTarget, logOneMinusP);
+        var bce = Engine.TensorAdd(positiveTerm, negativeTerm);
+
+        if (_weights.Length > 1 && _weights.Length == bce.Length)
         {
             var weightTensor = Tensor<T>.FromVector(_weights);
-            product = Engine.TensorMultiply(product, weightTensor);
+            bce = Engine.TensorMultiply(bce, weightTensor);
         }
-        var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();
-        var mean = Engine.ReduceMean(product, allAxes, keepDims: false);
+        var allAxes = Enumerable.Range(0, bce.Shape.Length).ToArray();
+        var mean = Engine.ReduceMean(bce, allAxes, keepDims: false);
         return Engine.TensorNegate(mean);
     }
 }

@@ -123,6 +123,7 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
+        target = EnsureTargetMatchesPredicted(predicted, target);
         // Categorical CE = -mean(target * log(softmax(predicted) + eps))
         var softmaxed = Engine.Softmax(predicted);
         var safeSoftmax = Engine.TensorAddScalar(softmaxed, NumOps.FromDouble(1e-7));

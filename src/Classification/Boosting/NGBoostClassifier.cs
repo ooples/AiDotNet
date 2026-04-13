@@ -225,12 +225,11 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
 
             var xSample = x.GetRows(sampleIndices);
             T lr = NumOps.FromDouble(_options.LearningRate);
-            T negOne = NumOps.Negate(NumOps.One);
 
             for (int c = 0; c < _numClasses; c++)
             {
                 var residuals = new Vector<T>(naturalGradients[c]);
-                residuals.MultiplyInPlace(negOne);
+                residuals.MultiplyInPlace(NumOps.Negate(NumOps.One));
 
                 var tree = new DecisionTreeRegression<T>(new DecisionTreeOptions
                 {

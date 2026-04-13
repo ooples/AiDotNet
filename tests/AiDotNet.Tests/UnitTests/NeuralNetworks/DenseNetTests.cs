@@ -316,8 +316,9 @@ public class DenseNetTests
     #region Training Tests (Skipped for performance)
 
     [Fact(Timeout = 120000)]
-    public void DenseNet121_Train_CompletesWithoutError()
+    public async Task DenseNet121_Train_CompletesWithoutError()
     {
+        await Task.Yield();
         // Arrange
         var network = DenseNetNetwork<float>.DenseNet121(numClasses: 10);
         var input = new Tensor<float>([1, 3, 224, 224]);

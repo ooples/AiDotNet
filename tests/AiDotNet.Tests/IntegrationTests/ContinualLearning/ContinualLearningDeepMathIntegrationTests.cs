@@ -33,8 +33,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void EWC_NoTasks_RegularizationLossIsZero()
+    public async Task EWC_NoTasks_RegularizationLossIsZero()
     {
+        await Task.Yield();
         var ewc = new ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>>(
             new MeanSquaredErrorLoss<double>(),
             lambda: 1000.0);
@@ -46,8 +47,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void EWC_OriginalFormulation_HandCalculatedLoss()
+    public async Task EWC_OriginalFormulation_HandCalculatedLoss()
     {
+        await Task.Yield();
         // Setup: lambda=10, 3 parameters
         // After task 1: optimal params = [1, 2, 3], Fisher = [0.5, 1.0, 0.2]
         // Current params = [1.5, 2.5, 3.5]
@@ -95,8 +97,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void EWC_SameParameters_LossIsZero()
+    public async Task EWC_SameParameters_LossIsZero()
     {
+        await Task.Yield();
         var ewc = new ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>>(
             new MeanSquaredErrorLoss<double>(),
             lambda: 1000.0);
@@ -115,8 +118,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void EWC_LambdaScaling_LossProportionalToLambda()
+    public async Task EWC_LambdaScaling_LossProportionalToLambda()
     {
+        await Task.Yield();
         // With same Fisher and parameter deviation, loss should scale linearly with lambda
         var model1 = CreateMockModel(3, new double[] { 1.0, 2.0, 3.0 });
         var model2 = CreateMockModel(3, new double[] { 1.0, 2.0, 3.0 });
@@ -148,8 +152,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void EWC_OnlineMode_AccumulatesFisher()
+    public async Task EWC_OnlineMode_AccumulatesFisher()
     {
+        await Task.Yield();
         var options = new EWCOptions<double>
         {
             Lambda = 100.0,
@@ -184,8 +189,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void EWC_FisherComputation_EmptyCache_UniformImportance()
+    public async Task EWC_FisherComputation_EmptyCache_UniformImportance()
     {
+        await Task.Yield();
         var ewc = new ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>>(
             new MeanSquaredErrorLoss<double>(), lambda: 100.0);
 
@@ -206,8 +212,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void EWC_OptimalParameters_StoredCorrectly()
+    public async Task EWC_OptimalParameters_StoredCorrectly()
     {
+        await Task.Yield();
         var ewc = new ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>>(
             new MeanSquaredErrorLoss<double>(), lambda: 100.0);
 
@@ -228,8 +235,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void EWC_Reset_ClearsAllState()
+    public async Task EWC_Reset_ClearsAllState()
     {
+        await Task.Yield();
         var ewc = new ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>>(
             new MeanSquaredErrorLoss<double>(), lambda: 100.0);
 
@@ -255,8 +263,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void SI_NoTasks_RegularizationLossIsZero()
+    public async Task SI_NoTasks_RegularizationLossIsZero()
     {
+        await Task.Yield();
         var si = new SynapticIntelligence<double, Tensor<double>, Tensor<double>>(
             new MeanSquaredErrorLoss<double>(), lambda: 1.0);
         var model = CreateMockModel(5);
@@ -267,8 +276,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void SI_Name_IsCorrect()
+    public async Task SI_Name_IsCorrect()
     {
+        await Task.Yield();
         var si = new SynapticIntelligence<double, Tensor<double>, Tensor<double>>(
             new MeanSquaredErrorLoss<double>(), lambda: 1.0);
         Assert.Equal("Synaptic-Intelligence", si.Name);
@@ -276,8 +286,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void SI_ImportanceComputation_PathIntegral()
+    public async Task SI_ImportanceComputation_PathIntegral()
     {
+        await Task.Yield();
         // SI tracks: ω_i += -g_i * Δθ_i during training
         // Then: Ω_i = ω_i / (Δθ²_i + ξ)
         var si = new SynapticIntelligence<double, Tensor<double>, Tensor<double>>(
@@ -312,8 +323,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void SI_SameParameters_LossIsZero()
+    public async Task SI_SameParameters_LossIsZero()
     {
+        await Task.Yield();
         var si = new SynapticIntelligence<double, Tensor<double>, Tensor<double>>(
             new MeanSquaredErrorLoss<double>(), lambda: 10.0);
 
@@ -334,8 +346,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void SI_ImportanceAccumulation_SumMode()
+    public async Task SI_ImportanceAccumulation_SumMode()
     {
+        await Task.Yield();
         var options = new SIOptions<double>
         {
             Lambda = 1.0,
@@ -377,8 +390,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void SI_ImportanceAccumulation_MaxMode()
+    public async Task SI_ImportanceAccumulation_MaxMode()
     {
+        await Task.Yield();
         var options = new SIOptions<double>
         {
             Lambda = 1.0,
@@ -411,8 +425,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void SI_ImportanceAccumulation_WeightedSumMode()
+    public async Task SI_ImportanceAccumulation_WeightedSumMode()
     {
+        await Task.Yield();
         var options = new SIOptions<double>
         {
             Lambda = 1.0,
@@ -440,8 +455,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void SI_Reset_ClearsAllState()
+    public async Task SI_Reset_ClearsAllState()
     {
+        await Task.Yield();
         var si = new SynapticIntelligence<double, Tensor<double>, Tensor<double>>(
             new MeanSquaredErrorLoss<double>(), lambda: 1.0);
 
@@ -465,8 +481,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void SI_DampingPreventsZeroDivision()
+    public async Task SI_DampingPreventsZeroDivision()
     {
+        await Task.Yield();
         // If params don't change, Δθ² = 0, but ξ prevents division by zero
         var options = new SIOptions<double>
         {
@@ -497,8 +514,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ReplayBuffer_InitialState_EmptyBuffer()
+    public async Task ReplayBuffer_InitialState_EmptyBuffer()
     {
+        await Task.Yield();
         var buffer = new ExperienceReplayBuffer<double, double[], double[]>(
             maxSize: 100);
 
@@ -510,16 +528,18 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ReplayBuffer_NegativeMaxSize_Throws()
+    public async Task ReplayBuffer_NegativeMaxSize_Throws()
     {
+        await Task.Yield();
         Assert.Throws<ArgumentException>(() =>
             new ExperienceReplayBuffer<double, double[], double[]>(maxSize: -1));
     }
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ReplayBuffer_SampleBatch_ReturnsCorrectSize()
+    public async Task ReplayBuffer_SampleBatch_ReturnsCorrectSize()
     {
+        await Task.Yield();
         var buffer = new ExperienceReplayBuffer<double, double[], double[]>(
             maxSize: 100,
             replayStrategy: ReplaySamplingStrategy.Uniform,
@@ -534,8 +554,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ReplayBuffer_SampleBatchLargerThanBuffer_ReturnsBufferSize()
+    public async Task ReplayBuffer_SampleBatchLargerThanBuffer_ReturnsBufferSize()
     {
+        await Task.Yield();
         var buffer = new ExperienceReplayBuffer<double, double[], double[]>(
             maxSize: 100,
             replayStrategy: ReplaySamplingStrategy.Uniform,
@@ -550,8 +571,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ReplayBuffer_EmptyBuffer_SampleReturnsEmpty()
+    public async Task ReplayBuffer_EmptyBuffer_SampleReturnsEmpty()
     {
+        await Task.Yield();
         var buffer = new ExperienceReplayBuffer<double, double[], double[]>(maxSize: 100);
         var batch = buffer.SampleBatch(5);
         Assert.Empty(batch);
@@ -559,8 +581,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ReplayBuffer_TaskTracking_CorrectCounts()
+    public async Task ReplayBuffer_TaskTracking_CorrectCounts()
     {
+        await Task.Yield();
         var buffer = new ExperienceReplayBuffer<double, double[], double[]>(
             maxSize: 100, seed: 42);
 
@@ -575,8 +598,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ReplayBuffer_Statistics_CorrectFillRatio()
+    public async Task ReplayBuffer_Statistics_CorrectFillRatio()
     {
+        await Task.Yield();
         var buffer = new ExperienceReplayBuffer<double, double[], double[]>(
             maxSize: 100, seed: 42);
 
@@ -592,8 +616,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ReplayBuffer_Clear_EmptiesBuffer()
+    public async Task ReplayBuffer_Clear_EmptiesBuffer()
     {
+        await Task.Yield();
         var buffer = new ExperienceReplayBuffer<double, double[], double[]>(
             maxSize: 100, seed: 42);
 
@@ -607,8 +632,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ReplayBuffer_UpdatePriority_ValidRange()
+    public async Task ReplayBuffer_UpdatePriority_ValidRange()
     {
+        await Task.Yield();
         var buffer = new ExperienceReplayBuffer<double, double[], double[]>(
             maxSize: 100,
             replayStrategy: ReplaySamplingStrategy.PriorityBased,
@@ -629,8 +655,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ReplayBuffer_SampleFromTask_ReturnsCorrectTaskData()
+    public async Task ReplayBuffer_SampleFromTask_ReturnsCorrectTaskData()
     {
+        await Task.Yield();
         var buffer = new ExperienceReplayBuffer<double, double[], double[]>(
             maxSize: 100, seed: 42);
 
@@ -654,8 +681,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ReplayBuffer_SampleFromNonexistentTask_ReturnsEmpty()
+    public async Task ReplayBuffer_SampleFromNonexistentTask_ReturnsEmpty()
     {
+        await Task.Yield();
         var buffer = new ExperienceReplayBuffer<double, double[], double[]>(
             maxSize: 100, seed: 42);
 
@@ -667,8 +695,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ReplayBuffer_GetAll_ReturnsAllStoredData()
+    public async Task ReplayBuffer_GetAll_ReturnsAllStoredData()
     {
+        await Task.Yield();
         var buffer = new ExperienceReplayBuffer<double, double[], double[]>(
             maxSize: 100, seed: 42);
 
@@ -680,8 +709,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ReplayBuffer_ReplayStrategies_AllReturnValidData()
+    public async Task ReplayBuffer_ReplayStrategies_AllReturnValidData()
     {
+        await Task.Yield();
         foreach (var strategy in new[] {
             ReplaySamplingStrategy.Uniform,
             ReplaySamplingStrategy.TaskBalanced,
@@ -703,8 +733,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void DataPoint_Constructor_StoresCorrectly()
+    public async Task DataPoint_Constructor_StoresCorrectly()
     {
+        await Task.Yield();
         var input = new double[] { 1.0, 2.0, 3.0 };
         var output = new double[] { 4.0, 5.0 };
         var dp = new DataPoint<double, double[], double[]>(input, output, taskId: 7);
@@ -717,8 +748,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ReplayBuffer_TotalSamplesProcessed_Tracks()
+    public async Task ReplayBuffer_TotalSamplesProcessed_Tracks()
     {
+        await Task.Yield();
         var buffer = new ExperienceReplayBuffer<double, double[], double[]>(
             maxSize: 100, seed: 42);
 
@@ -733,8 +765,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void ReplayBuffer_TotalReplaySamples_Tracks()
+    public async Task ReplayBuffer_TotalReplaySamples_Tracks()
     {
+        await Task.Yield();
         var buffer = new ExperienceReplayBuffer<double, double[], double[]>(
             maxSize: 100,
             replayStrategy: ReplaySamplingStrategy.Uniform,
@@ -757,8 +790,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void EWC_Properties_Accessible()
+    public async Task EWC_Properties_Accessible()
     {
+        await Task.Yield();
         var ewc = new ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>>(
             new MeanSquaredErrorLoss<double>(), lambda: 42.0);
 
@@ -770,8 +804,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void SI_Properties_Accessible()
+    public async Task SI_Properties_Accessible()
     {
+        await Task.Yield();
         var options = new SIOptions<double> { Lambda = 5.0, Damping = 0.2 };
         var si = new SynapticIntelligence<double, Tensor<double>, Tensor<double>>(
             new MeanSquaredErrorLoss<double>(), options);
@@ -785,8 +820,9 @@ public class ContinualLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void EWC_GetMetrics_ReturnsExpectedKeys()
+    public async Task EWC_GetMetrics_ReturnsExpectedKeys()
     {
+        await Task.Yield();
         var ewc = new ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>>(
             new MeanSquaredErrorLoss<double>(), lambda: 100.0);
 

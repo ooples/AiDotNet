@@ -91,4 +91,73 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
             throw new ArgumentException("Predicted and actual vectors must have the same length.");
         }
     }
+
+    /// <summary>
+    /// When the target has fewer dimensions than the prediction (e.g., integer
+    /// class indices <c>[B, S]</c> vs logits <c>[B, S, V]</c>), auto-converts
+    /// to one-hot encoding so pointwise loss operations (multiply, subtract)
+    /// work without shape mismatch. Returns the target unchanged when shapes
+    /// already match. Fixes #1114 — affects all classification loss functions.
+    /// </summary>
+    /// <remarks>
+    /// <para>Only use this in classification-specific loss functions (cross-entropy,
+    /// focal, sparse categorical). Do NOT use for contrastive, Wasserstein, or
+    /// other non-classification losses where targets have different semantics.</para>
+    /// <para>Validates that target shape is a prefix of predicted shape (all dims
+    /// except the last class dimension must match). Throws on invalid class indices.</para>
+    /// </remarks>
+    protected Tensor<T> EnsureTargetMatchesPredicted(Tensor<T> predicted, Tensor<T> target)
+    {
+        if (target.Shape.Length >= predicted.Shape.Length)
+            return target;
+
+        int numClasses = predicted.Shape[predicted.Shape.Length - 1];
+
+        // Validate shape prefix: target shape must match predicted shape
+        // for all dimensions except the final class dimension.
+        // e.g., predicted [B, S, V] requires target [B, S]
+        if (target.Shape.Length != predicted.Shape.Length - 1)
+        {
+            throw new ArgumentException(
+                $"Target rank ({target.Shape.Length}) must be exactly one less than predicted rank " +
+                $"({predicted.Shape.Length}) for one-hot encoding. " +
+                $"Target shape: [{string.Join(", ", target.Shape.ToArray())}], " +
+                $"Predicted shape: [{string.Join(", ", predicted.Shape.ToArray())}].");
+        }
+
+        for (int d = 0; d < target.Shape.Length; d++)
+        {
+            if (target.Shape[d] != predicted.Shape[d])
+            {
+                throw new ArgumentException(
+                    $"Target shape dimension {d} ({target.Shape[d]}) does not match " +
+                    $"predicted shape dimension {d} ({predicted.Shape[d]}). " +
+                    $"Target shape: [{string.Join(", ", target.Shape.ToArray())}], " +
+                    $"Predicted shape: [{string.Join(", ", predicted.Shape.ToArray())}].");
+            }
+        }
+
+        var oneHot = new Tensor<T>(predicted.Shape.ToArray());
+        int batchElements = target.Length;
+
+        for (int i = 0; i < batchElements; i++)
+        {
+            double rawVal = NumOps.ToDouble(target[i]);
+            int classIdx = (int)rawVal;
+            if (rawVal != classIdx)
+            {
+                throw new ArgumentException(
+                    $"Target value {rawVal} at position {i} is not an integer class index.");
+            }
+            if (classIdx < 0 || classIdx >= numClasses)
+            {
+                throw new ArgumentOutOfRangeException(nameof(target),
+                    $"Class index {classIdx} at position {i} is out of range [0, {numClasses}). " +
+                    "Target values must be valid class indices.");
+            }
+            oneHot[i * numClasses + classIdx] = NumOps.One;
+        }
+
+        return oneHot;
+    }
 }

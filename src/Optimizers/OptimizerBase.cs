@@ -315,6 +315,22 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
     /// <summary>
+    /// Checks whether a model uses embedding-based input (Transformers, RNNs with
+    /// token input, etc.) and therefore does not support feature selection. Their
+    /// "input dimension" is a single token ID, not a feature vector — the optimizer
+    /// sees the sequence length as the feature count, producing indices that exceed
+    /// the embedding layer's input shape. Used by both <see cref="ApplyFeatureSelection"/>
+    /// and <see cref="PrepareAndEvaluateSolution"/> to skip feature selection entirely.
+    /// Fixes #1113 / #1121.
+    /// </summary>
+    protected static bool IsEmbeddingBasedModel(IFullModel<T, TInput, TOutput> model)
+    {
+        return model is NeuralNetworks.NeuralNetworkBase<T> nn
+            && nn.Layers.Count > 0
+            && nn.Layers[0] is NeuralNetworks.Layers.EmbeddingLayer<T>;
+    }
+
+    /// <summary>
     /// Applies the selected features to a model.
     /// </summary>
     /// <param name="model">The model to apply feature selection to.</param>
@@ -326,6 +342,9 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
         if (selectedFeatures == null || selectedFeatures.Count == 0)
             throw new ArgumentException("At least one feature must be selected.", nameof(selectedFeatures));
+
+        if (IsEmbeddingBasedModel(model))
+            return;
 
         // Apply features if model supports it
         if (model is IFeatureAware featureAwareModel)
@@ -412,10 +431,16 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // Models that don't support parameter initialization (NB, decision trees, etc.)
         // learn their structure from ALL features during training. Random feature selection
         // can remove features that are critical for discrimination, causing 50% accuracy.
+        //
+        // Embedding-based models (Transformers, RNNs with token input) also MUST use all
+        // features — their "feature dimension" is the sequence length, and selecting a
+        // random subset of token positions breaks the shape contract between input and
+        // target. Fixes #1113 / #1121 — affects ALL optimizers via OptimizerBase.
         int totalFeatures = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
         List<int> selectedFeaturesIndices;
 
-        if (!InterfaceGuard.Parameterizable(solution).SupportsParameterInitialization)
+        if (!InterfaceGuard.Parameterizable(solution).SupportsParameterInitialization
+            || IsEmbeddingBasedModel(solution))
         {
             selectedFeaturesIndices = Enumerable.Range(0, totalFeatures).ToList();
         }

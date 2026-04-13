@@ -282,55 +282,57 @@ public partial class ReservoirLayer<T> : LayerBase<T>
             ? Engine.Reshape(input, [1, _inputSize])
             : Engine.Reshape(input, [flatBatch, _inputSize]);
 
-        // All operations use Engine calls so the autodiff tape records every step.
-        // _inputWeights: [reservoirSize, inputSize], _reservoirWeights: [reservoirSize, reservoirSize]
+        var outputs = new Tensor<T>([flatBatch, _reservoirSize]);
         T inputScale = NumOps.FromDouble(_inputScaling);
-        T leakRate = NumOps.FromDouble(_leakingRate);
-        T oneMinusLeak = NumOps.FromDouble(1.0 - _leakingRate);
 
-        // Scale input: [batch, inputSize] * scalar
-        var scaledInput = Engine.TensorMultiplyScalar(input2D, inputScale);
-
-        // Input contribution: [batch, inputSize] @ [inputSize, reservoirSize] = [batch, reservoirSize]
-        // _inputWeights is [reservoirSize, inputSize], so transpose for matmul
-        var inputWeights2D = Engine.Reshape(_inputWeights, [_reservoirSize, _inputSize]);
-        var inputWeightsT = Engine.TensorTranspose(inputWeights2D);
-        var allInputContributions = Engine.TensorMatMul(scaledInput, inputWeightsT);
-
-        // Process each timestep with leaky integration (sequential due to state dependency)
-        var outputRows = new List<Tensor<T>>(flatBatch);
         for (int i = 0; i < flatBatch; i++)
         {
-            // Extract row i: [1, inputSize] contribution
-            var stepContribution = allInputContributions.GetSliceAlongDimension(i, 0);
-            var stepContrib1D = Engine.Reshape(stepContribution, [_reservoirSize]);
+            // Extract step input manually to avoid GetSlice issues
+            var stepInput = new Tensor<T>([_inputSize]);
+            for (int j = 0; j < _inputSize; j++)
+            {
+                stepInput[j] = input2D[i, j];
+            }
 
-            // Weighted state: [reservoirSize, reservoirSize] @ [reservoirSize, 1] -> [reservoirSize]
-            var state2D = Engine.Reshape(_reservoirState, [_reservoirSize, 1]);
-            var weightedState2D = Engine.TensorMatMul(_reservoirWeights, state2D);
-            var weightedState = Engine.Reshape(weightedState2D, [_reservoirSize]);
+            // Scale input
+            for (int j = 0; j < _inputSize; j++)
+            {
+                stepInput[j] = NumOps.Multiply(stepInput[j], inputScale);
+            }
 
-            // Reservoir input = weighted_state + input_contribution
-            var reservoirInput = Engine.TensorAdd(weightedState, stepContrib1D);
+            // Manual matmul for input contribution
+            var inputContribution = new Tensor<T>([_reservoirSize]);
+            for (int r = 0; r < _reservoirSize; r++)
+            {
+                T sum = NumOps.Zero;
+                for (int c = 0; c < _inputSize; c++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(_inputWeights[r, c], stepInput[c]));
+                }
+                inputContribution[r] = sum;
+            }
 
-            // Apply activation (reshape to 2D for activation, then back to 1D)
-            var newState = Engine.Reshape(
-                ApplyActivation(Engine.Reshape(reservoirInput, [1, _reservoirSize])),
-                [_reservoirSize]);
+            // Manual matmul for weighted state
+            var weightedState = new Tensor<T>([_reservoirSize]);
+            for (int r = 0; r < _reservoirSize; r++)
+            {
+                T sum = NumOps.Zero;
+                for (int c = 0; c < _reservoirSize; c++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(_reservoirWeights[r, c], _reservoirState[c]));
+                }
+                weightedState[r] = sum;
+            }
 
-            // Leaky integration: state = (1-leak)*old_state + leak*new_state
-            var oldComponent = Engine.TensorMultiplyScalar(_reservoirState, oneMinusLeak);
-            var newComponent = Engine.TensorMultiplyScalar(newState, leakRate);
+            var reservoirInput = Engine.TensorAdd(weightedState, inputContribution);
+
+            var newState = Engine.Reshape(ApplyActivation(Engine.Reshape(reservoirInput, [1, _reservoirSize])), [_reservoirSize]);
+            var oldComponent = Engine.TensorMultiplyScalar(_reservoirState, NumOps.FromDouble(1 - _leakingRate));
+            var newComponent = Engine.TensorMultiplyScalar(newState, NumOps.FromDouble(_leakingRate));
             _reservoirState = Engine.TensorAdd(oldComponent, newComponent);
 
-            outputRows.Add(_reservoirState);
-        }
-
-        // Stack rows into [batch, reservoirSize] output
-        var outputs = new Tensor<T>([flatBatch, _reservoirSize]);
-        for (int i = 0; i < flatBatch; i++)
-        {
-            var stateSpan = outputRows[i].Data.Span;
+            // Copy state to outputs row by row using Span
+            var stateSpan = _reservoirState.Data.Span;
             var outputSpan = outputs.Data.Span;
             stateSpan.CopyTo(outputSpan.Slice(i * _reservoirSize, _reservoirSize));
         }

@@ -117,37 +117,24 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
     /// </summary>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        if (!_isTraining)
+        T alpha;
+        if (_isTraining)
         {
-            // Inference: use midpoint of bounds (deterministic)
-            T alpha = NumOps.Divide(NumOps.Add(_lowerBound, _upperBound), NumOps.FromDouble(2.0));
+            double lo = Convert.ToDouble(_lowerBound);
+            double hi = Convert.ToDouble(_upperBound);
+            alpha = NumOps.FromDouble((_random.NextDouble() * (hi - lo)) + lo);
             _alpha = alpha;
-            var positivePart = Engine.ReLU(input);
-            var negated = Engine.TensorNegate(input);
-            var negativePart = Engine.ReLU(negated);
-            var scaledNegative = Engine.TensorMultiplyScalar(negativePart, alpha);
-            return Engine.TensorSubtract(positivePart, scaledNegative);
+        }
+        else
+        {
+            alpha = NumOps.Divide(NumOps.Add(_lowerBound, _upperBound), NumOps.FromDouble(2.0));
         }
 
-        // Training: sample per-element random slope per PyTorch RReLU spec.
-        // Build alpha tensor and use Engine ops so the tape tracks everything.
-        double lo = Convert.ToDouble(_lowerBound);
-        double hi = Convert.ToDouble(_upperBound);
-        var alphaData = new T[input.Length];
-        for (int i = 0; i < input.Length; i++)
-            alphaData[i] = NumOps.FromDouble((_random.NextDouble() * (hi - lo)) + lo);
-        var alphaTensor = new Tensor<T>(input._shape, new Vector<T>(alphaData));
-
-        // RReLU(x) = max(0,x) + alpha * min(0,x) = relu(x) + alpha * (-relu(-x))
-        var pos = Engine.ReLU(input);
-        var neg = Engine.TensorNegate(input);
-        var negPart = Engine.ReLU(neg);
-        var scaled = Engine.TensorMultiply(negPart, alphaTensor);
-        var output = Engine.TensorSubtract(pos, scaled);
-
-        // Store midpoint as representative alpha for derivative
-        _alpha = NumOps.Divide(NumOps.Add(_lowerBound, _upperBound), NumOps.FromDouble(2.0));
-        return output;
+        var positivePart = Engine.ReLU(input);
+        var negated = Engine.TensorNegate(input);
+        var negativePart = Engine.ReLU(negated);
+        var scaledNegative = Engine.TensorMultiplyScalar(negativePart, alpha);
+        return Engine.TensorSubtract(positivePart, scaledNegative);
     }
 
     /// <summary>

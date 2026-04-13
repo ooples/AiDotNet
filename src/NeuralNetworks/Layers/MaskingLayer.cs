@@ -235,7 +235,6 @@ public class MaskingLayer<T> : LayerBase<T>
         // Store mask GPU tensor for backward pass (if training)
         if (IsTrainingMode)
         {
-            _lastMaskGpu?.Dispose();
             _lastMaskGpu = GpuTensorHelper.UploadToGpu<T>(backend, maskBuffer, input._shape, GpuTensorRole.Intermediate, ownsBuffer: true);
         }
         else

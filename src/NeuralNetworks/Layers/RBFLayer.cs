@@ -58,7 +58,8 @@ public partial class RBFLayer<T> : LayerBase<T>
     /// width values mean the neuron responds more broadly, while smaller values make the response
     /// more focused around the center.
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.ScaleParameters)]
+    // TODO: Change to PersistentTensorRole.ScaleParameters once Tensors NuGet ships PR #152
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T> _widths;
 
     /// <summary>
@@ -412,9 +413,13 @@ public partial class RBFLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
-        // Write in-place to preserve registered parameter tensor references
-        parameters.Slice(0, centersSize).AsSpan().CopyTo(_centers.Data.Span);
-        parameters.Slice(centersSize, _numCenters).AsSpan().CopyTo(_widths.Data.Span);
+        // Extract and reshape centers from the first portion of parameters
+        var centersVector = parameters.Slice(0, centersSize);
+        _centers = Tensor<T>.FromVector(centersVector, [_numCenters, _inputSize]);
+
+        // Extract widths from the remaining portion
+        var widthsVector = parameters.Slice(centersSize, _numCenters);
+        _widths = Tensor<T>.FromVector(widthsVector, [_numCenters]);
     }
 
     /// <inheritdoc/>
@@ -509,7 +514,7 @@ public partial class RBFLayer<T> : LayerBase<T>
 
         // Register after initialization so tensor references are final
         RegisterTrainableParameter(_centers, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_widths, PersistentTensorRole.ScaleParameters);
+        RegisterTrainableParameter(_widths, PersistentTensorRole.Biases);
     }
 
 }

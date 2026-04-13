@@ -2479,15 +2479,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             TOutput fullY;
             if (useFullData)
             {
-                // Clustering needs the full dataset for correct density estimation.
-                // Do NOT apply data preparation pipeline (resampling/augmentation) here —
-                // those operations are label-aware and would leak ground truth into
-                // unsupervised clustering. Only apply feature transformations.
-                if (_preprocessingPipeline is not null)
+                if (_preprocessingPipeline is not null && _preprocessingPipeline.IsFitted)
                 {
-                    // Refit on full dataset so clustering uses full-data statistics,
-                    // not train-split statistics from the supervised path.
-                    _preprocessingPipeline.Fit(preparedX);
                     fullX = _preprocessingPipeline.Transform(preparedX);
                     fullY = preparedY;
                 }
