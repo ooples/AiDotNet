@@ -1411,12 +1411,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Vision/Video/3D models need ThreeDimensional input; Audio needs TwoDimensional;
                 // others default to OneDimensional.
                 needsArchitectureUsing = true;
-                bool isVision = model.Domains.Contains(1) || model.Domains.Contains(3) || model.Domains.Contains(11); // Vision=1, Video=3, ThreeD=11
-                bool isAudio = model.Domains.Contains(4); // Audio=4 (using raw int since enum isn't available in generator)
-                string inputTypeExpr = isVision ? "AiDotNet.Enums.InputType.ThreeDimensional" :
+                bool isVideo = model.Domains.Contains(3); // Video=3
+                bool isVision = model.Domains.Contains(1) || model.Domains.Contains(11); // Vision=1, ThreeD=11
+                bool isAudio = model.Domains.Contains(4); // Audio=4
+                // Video models (frame interpolation) often take 2 concatenated frames = 6 channels
+                int visionChannels = isVideo ? 6 : 3;
+                string inputTypeExpr = (isVision || isVideo) ? "AiDotNet.Enums.InputType.ThreeDimensional" :
                                        isAudio ? "AiDotNet.Enums.InputType.TwoDimensional" :
                                        "AiDotNet.Enums.InputType.OneDimensional";
-                string sizeExpr = isVision ? "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4" :
+                string sizeExpr = (isVision || isVideo) ? $"inputHeight: 32, inputWidth: 32, inputDepth: {visionChannels}, outputSize: 4" :
                                   isAudio ? "inputHeight: 32, inputWidth: 16, inputDepth: 1, outputSize: 4" :
                                   "inputSize: 16, outputSize: 4";
                 string archExpr = $"new NeuralNetworkArchitecture<double>(" +
@@ -1490,9 +1493,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         // Override InputShape/OutputShape for domain-appropriate test data.
         // Vision/Video/3D models need [C, H, W]; default is [1, 4].
-        bool isVisionModel = model.Domains.Contains(1) || model.Domains.Contains(3) || model.Domains.Contains(11);
+        bool isVideoModel = model.Domains.Contains(3);
+        bool isVisionModel = model.Domains.Contains(1) || model.Domains.Contains(11);
         bool isAudioModel = model.Domains.Contains(4);
-        if (isVisionModel)
+        if (isVideoModel)
+        {
+            // Video models (frame interpolation) take 2 concatenated frames = 6 channels
+            sb.AppendLine("    protected override int[] InputShape => new[] { 6, 32, 32 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 32, 32 };");
+        }
+        else if (isVisionModel)
         {
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
