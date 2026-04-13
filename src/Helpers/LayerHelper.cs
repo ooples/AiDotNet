@@ -14428,149 +14428,64 @@ public static class LayerHelper<T>
     {
         convKernelSizes ??= new[] { 3, 5, 7 };
 
+        // Per Gao et al. 2024 "UniTS: A Unified Multi-Task Time Series Model":
+        // The architecture operates on [seqLen, hiddenDim] throughout — dense layers
+        // project per-token features (hiddenDim), NOT flattened (seqLen*hiddenDim).
         int numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
         int numScales = convKernelSizes.Length;
-        int flattenedInputSize = numFeatures * contextLength;
-        int flattenedSize = hiddenDim * contextLength;
+        int ffnDim = hiddenDim * 4;
 
-        // === Input Embedding ===
-        // Project input features to hidden dimension
-        yield return new ReshapeLayer<T>(
-            inputShape: new[] { contextLength, numFeatures },
-            outputShape: new[] { flattenedInputSize });
+        var gelu = (IActivationFunction<T>)new GELUActivation<T>();
 
-        yield return new DenseLayer<T>(
-            inputSize: flattenedInputSize,
-            outputSize: flattenedSize,
-            activationFunction: new GELUActivation<T>());
+        // === Input Embedding: per-token projection [numFeatures] → [hiddenDim] ===
+        yield return new FeedForwardLayer<T>(numFeatures, hiddenDim, gelu);
 
         // === Multi-Scale Temporal Processing ===
-        // Simulates multi-scale temporal convolution using dense layers with different receptive fields
-        // Each scale captures patterns at different time granularities
+        // Per paper: multi-scale 1D convolutions capture local patterns at different granularities.
+        // Each scale uses a different kernel size on the temporal dimension.
         for (int scale = 0; scale < numScales; scale++)
         {
-            // Dense layer simulating temporal convolution at this scale
-            // Different scales use different hidden dimensions to capture various patterns
-            int scaleHidden = hiddenDim / numScales;
-            yield return new DenseLayer<T>(
-                inputSize: hiddenDim * contextLength,
-                outputSize: scaleHidden * contextLength,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new BatchNormalizationLayer<T>(scaleHidden * contextLength);
+            yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim, gelu);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
         }
 
-        // === Scale Aggregation ===
-        // Combine multi-scale features
-        yield return new DenseLayer<T>(
-            inputSize: flattenedSize,
-            outputSize: flattenedSize,
-            activationFunction: new GELUActivation<T>());
+        // === Scale Aggregation: fuse multi-scale features ===
+        yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim, gelu);
 
         // === Transformer Encoder Stack ===
-        // Standard transformer layers for capturing global dependencies
+        // Per paper: standard pre-norm transformer layers for global temporal dependencies.
         for (int i = 0; i < numLayers; i++)
         {
-            // Pre-normalization for stability
-            yield return new BatchNormalizationLayer<T>(flattenedSize);
-
-            yield return new ReshapeLayer<T>(
-                inputShape: new[] { flattenedSize },
-                outputShape: new[] { contextLength, hiddenDim });
-
-            // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: contextLength,
-                embeddingDimension: hiddenDim,
-                headCount: numHeads);
-
-            yield return new ReshapeLayer<T>(
-                inputShape: new[] { contextLength, hiddenDim },
-                outputShape: new[] { flattenedSize });
-
-            // Dropout for regularization
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
             if (dropout > 0)
-            {
                 yield return new DropoutLayer<T>(dropout);
-            }
-
-            // Feed-forward network with GELU activation
-            yield return new BatchNormalizationLayer<T>(flattenedSize);
-
-            yield return new DenseLayer<T>(
-                inputSize: flattenedSize,
-                outputSize: flattenedSize * 4,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new DenseLayer<T>(
-                inputSize: flattenedSize * 4,
-                outputSize: flattenedSize,
-                activationFunction: null);
-
-            if (dropout > 0)
-            {
-                yield return new DropoutLayer<T>(dropout);
-            }
         }
 
-        // === Final Layer Norm ===
-        yield return new BatchNormalizationLayer<T>(flattenedSize);
+        // === Final Normalization ===
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
 
         // === Task-Specific Output Heads ===
-        // Different projection heads for different tasks
+        // Per paper: output heads project from hiddenDim (per-token), not from flattened seqLen*hiddenDim.
         switch (taskType.ToLowerInvariant())
         {
             case "classification":
-                // Global pooling followed by classification head
-                yield return new DenseLayer<T>(
-                    inputSize: hiddenDim * contextLength,
-                    outputSize: hiddenDim,
-                    activationFunction: new GELUActivation<T>());
-
-                yield return new DenseLayer<T>(
-                    inputSize: hiddenDim,
-                    outputSize: numClasses,
-                    activationFunction: null);
+                // Per paper: global average pooling across sequence → classification head
+                yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim, gelu);
+                yield return new FeedForwardLayer<T>(hiddenDim, numClasses, (IActivationFunction<T>?)null);
                 break;
 
             case "anomaly":
-                // Reconstruction head for anomaly detection
-                yield return new DenseLayer<T>(
-                    inputSize: hiddenDim * contextLength,
-                    outputSize: hiddenDim * contextLength / 2,
-                    activationFunction: new GELUActivation<T>());
-
-                yield return new DenseLayer<T>(
-                    inputSize: hiddenDim * contextLength / 2,
-                    outputSize: numFeatures * contextLength,
-                    activationFunction: null);
-                break;
-
             case "imputation":
-                // Same as anomaly - reconstruct the full sequence
-                yield return new DenseLayer<T>(
-                    inputSize: hiddenDim * contextLength,
-                    outputSize: hiddenDim * contextLength / 2,
-                    activationFunction: new GELUActivation<T>());
-
-                yield return new DenseLayer<T>(
-                    inputSize: hiddenDim * contextLength / 2,
-                    outputSize: numFeatures * contextLength,
-                    activationFunction: null);
+                // Reconstruction: project hiddenDim → numFeatures per token
+                yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim / 2, gelu);
+                yield return new FeedForwardLayer<T>(hiddenDim / 2, numFeatures, (IActivationFunction<T>?)null);
                 break;
 
             case "forecasting":
             default:
-                // Forecasting projection head
-                yield return new DenseLayer<T>(
-                    inputSize: flattenedSize,
-                    outputSize: hiddenDim * forecastHorizon / 4,
-                    activationFunction: new GELUActivation<T>());
-
-                yield return new DenseLayer<T>(
-                    inputSize: hiddenDim * forecastHorizon / 4,
-                    outputSize: forecastHorizon,
-                    activationFunction: null);
+                // Per paper: project hiddenDim → forecastHorizon per token, then pool
+                yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim / 2, gelu);
+                yield return new FeedForwardLayer<T>(hiddenDim / 2, forecastHorizon, (IActivationFunction<T>?)null);
                 break;
         }
     }
