@@ -74,6 +74,11 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
     private Tensor<T>? _rmsOnesTensor;
 
     /// <summary>
+    /// Cached epsilon tensor [1, 1] for RMS norm numerical stability.
+    /// </summary>
+    private Tensor<T>? _rmsEpsTensor;
+
+    /// <summary>
     /// Gets whether this module produces pooled output (T5 does not).
     /// </summary>
     public override bool ProducesPooledOutput => false;
@@ -238,6 +243,11 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
         // Mean pool: sum across sequence dimension, then divide
         var pooledData = new Vector<T>(batchSize * EmbeddingDimension);
 
+        // Hoist constant ones tensor outside the batch loop
+        var onesForMean = new Tensor<T>(new[] { 1, seqLen });
+        var onesSpan = onesForMean.AsWritableSpan();
+        for (int i = 0; i < seqLen; i++) onesSpan[i] = NumOps.One;
+
         for (int b = 0; b < batchSize; b++)
         {
             // Build a [seqLen, embDim] tensor for this batch
@@ -245,13 +255,8 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
             var batchVec = new Vector<T>(sequenceEmbeddings.AsSpan().Slice(batchOff, seqLen * EmbeddingDimension).ToArray());
             var batchTensor = new Tensor<T>(new[] { seqLen, EmbeddingDimension }, batchVec);
 
-            // Sum across seqLen using Engine: create ones vector [1, seqLen]
-            var ones = new Tensor<T>(new[] { 1, seqLen });
-            var onesSpan = ones.AsWritableSpan();
-            for (int i = 0; i < seqLen; i++) onesSpan[i] = NumOps.One;
-
             // [1, seqLen] @ [seqLen, embDim] -> [1, embDim]
-            var summed = Engine.TensorMatMul(ones, batchTensor);
+            var summed = Engine.TensorMatMul(onesForMean, batchTensor);
 
             // Divide by seqLen
             var meanTensor = Engine.TensorDivideScalar(summed, NumOps.FromDouble(seqLen));
@@ -383,8 +388,8 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
         var mean = Engine.TensorDivideScalar(sumSq, NumOps.FromDouble(dim));
 
         // rms = sqrt(mean + eps)
-        var epsTensor = new Tensor<T>(new[] { 1, 1 }, new Vector<T>(new[] { NumOps.FromDouble(1e-6) }));
-        var meanPlusEps = Engine.TensorBroadcastAdd(mean, epsTensor);
+        _rmsEpsTensor ??= new Tensor<T>(new[] { 1, 1 }, new Vector<T>(new[] { NumOps.FromDouble(1e-6) }));
+        var meanPlusEps = Engine.TensorBroadcastAdd(mean, _rmsEpsTensor);
         var rms = Engine.TensorSqrt(meanPlusEps); // [numVectors, 1]
 
         // normalized = input / rms (broadcast along last dim)
@@ -403,6 +408,8 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
     /// </summary>
     private static Vector<T> ExtractSubVectorFast(Vector<T> source, int offset, int length)
     {
+        if (offset < 0)
+            throw new ArgumentOutOfRangeException(nameof(offset), "Offset must be non-negative.");
         int safeLength = Math.Min(length, source.Length - offset);
         if (safeLength <= 0)
             return new Vector<T>(length);

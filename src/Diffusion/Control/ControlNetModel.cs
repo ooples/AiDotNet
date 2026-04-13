@@ -855,8 +855,8 @@ public class ControlNetEncoder<T>
         {
             int channels = _baseChannels * mult;
 
-            // Stride-2 conv for downsampling: spatial /= 2
-            int outSpatial = Math.Max(1, spatialSize / 2);
+            // Conv output size: floor((input + 2*padding - kernel) / stride) + 1
+            int outSpatial = Math.Max(1, (spatialSize + 2 * 1 - 3) / 2 + 1);
             var downBlock = new ConvolutionalLayer<T>(
                 prevChannels, spatialSize, spatialSize,
                 channels, kernelSize: 3, stride: 2, padding: 1,
