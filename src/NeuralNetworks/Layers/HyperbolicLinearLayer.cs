@@ -78,6 +78,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
     /// Stored pre-activation output for gradient computation.
     /// </summary>
     private Tensor<T>? _lastOutput;
+    private Tensor<T>? _cachedMaxNormTensor;
 
     /// <summary>
     /// Gradient for weights, stored during backward pass.
@@ -311,7 +312,10 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         var normSq = Engine.ReduceSum(Engine.TensorMultiply(output, output), new[] { 1 }, keepDims: true); // [batch, 1]
         var norm = Engine.TensorSqrt(Engine.TensorAddScalar(normSq, NumOps.FromDouble(1e-8))); // [batch, 1]
         // projScale = min(1, maxNorm / ||x||) — clamp via TensorClamp upper bound of 1.0
-        var maxNormTensor = Tensor<T>.CreateDefault([batchSize, 1], NumOps.FromDouble(maxNorm));
+        // Reuse cached maxNorm tensor if batch size matches to avoid per-forward allocation
+        if (_cachedMaxNormTensor is null || _cachedMaxNormTensor.Shape[0] != batchSize)
+            _cachedMaxNormTensor = Tensor<T>.CreateDefault([batchSize, 1], NumOps.FromDouble(maxNorm));
+        var maxNormTensor = _cachedMaxNormTensor;
         var projScale = Engine.TensorDivide(maxNormTensor, Engine.TensorAddScalar(norm, NumOps.FromDouble(1e-8)));
         projScale = Engine.TensorClamp(projScale, NumOps.Zero, NumOps.One); // clamp to [0, 1]
         output = Engine.TensorBroadcastMultiply(projScale, output); // [batch, outputFeatures]

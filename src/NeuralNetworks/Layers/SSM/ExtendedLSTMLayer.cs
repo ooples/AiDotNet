@@ -286,20 +286,22 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
         var allCellStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
         var allNormStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension });
 
+        // Hoist invariant bias reshapes out of the timestep loop
+        var inputBiasReshaped = Engine.Reshape(_inputGateBias, new[] { 1, _modelDimension });
+        var forgetBiasReshaped = Engine.Reshape(_forgetGateBias, new[] { 1, _modelDimension });
+        var outputBiasReshaped = Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension });
+
         for (int t = 0; t < seqLen; t++)
         {
             var x_t = input3D.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
 
             // Gate computations
             var iGateRaw = Engine.TensorBroadcastAdd(
-                Engine.TensorMatMul(x_t, _inputGateWeights),
-                Engine.Reshape(_inputGateBias, new[] { 1, _modelDimension }));
+                Engine.TensorMatMul(x_t, _inputGateWeights), inputBiasReshaped);
             var fGateRaw = Engine.TensorBroadcastAdd(
-                Engine.TensorMatMul(x_t, _forgetGateWeights),
-                Engine.Reshape(_forgetGateBias, new[] { 1, _modelDimension }));
+                Engine.TensorMatMul(x_t, _forgetGateWeights), forgetBiasReshaped);
             var oGate = Engine.Sigmoid(Engine.TensorBroadcastAdd(
-                Engine.TensorMatMul(x_t, _outputGateWeights),
-                Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })));
+                Engine.TensorMatMul(x_t, _outputGateWeights), outputBiasReshaped));
 
             // Exponential input gate (xLSTM innovation)
             var iGate = Engine.TensorExp(iGateRaw);

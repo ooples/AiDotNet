@@ -405,13 +405,11 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         try
         {
             // Set network + layer eval mode for deterministic inference.
-            // Don't zero _metaState — Forward no longer mutates it in eval mode,
-            // and zeroing would destroy learned self-modification state.
+            // Don't reset context flow or layer states — this would destroy
+            // learned self-modification state and accumulated context.
             SetTrainingMode(false);
-            _contextFlow.Reset();
             foreach (var layer in Layers)
             {
-                layer.ResetState();
                 layer.SetTrainingMode(false);
             }
 
@@ -494,6 +492,12 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         try
         {
             TrainWithTape(input, expectedOutput, _optimizer);
+
+            // Consolidate memory periodically — only after successful training
+            if (_adaptationStep % 100 == 0)
+            {
+                ConsolidateMemory();
+            }
         }
         finally
         {
@@ -504,12 +508,6 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             {
                 foreach (var layer in Layers)
                     layer.SetTrainingMode(false);
-            }
-
-            // Consolidate memory periodically — safe in eval mode
-            if (_adaptationStep % 100 == 0)
-            {
-                ConsolidateMemory();
             }
         }
     }
