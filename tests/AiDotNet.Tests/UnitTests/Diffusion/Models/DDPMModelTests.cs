@@ -22,7 +22,8 @@ public class DDPMModelTests
         // Assert
         Assert.NotNull(model);
         Assert.NotNull(model.Scheduler);
-        Assert.Equal(0, model.ParameterCount); // No neural network, so no parameters
+        // Per Ho et al. 2020, DDPM uses a U-Net noise predictor with learnable parameters
+        Assert.True(model.ParameterCount > 0, "DDPM should have learnable parameters from the U-Net noise predictor.");
     }
 
     [Fact(Timeout = 120000)]
