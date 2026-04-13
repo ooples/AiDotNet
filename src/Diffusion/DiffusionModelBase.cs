@@ -336,17 +336,12 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
         // Per-tensor SGD: param -= lr * grad, applied in place so registered
         // tensor references stay stable across training steps.
+        // Uses Engine.TensorSubtractInPlace for SIMD-accelerated bulk update.
         foreach (var param in paramTensors)
         {
             if (!grads.TryGetValue(param, out var grad) || grad is null) continue;
             var update = Engine.TensorMultiplyScalar(grad, LearningRate);
-            var paramSpan = param.Data.Span;
-            var updateSpan = update.AsSpan();
-            int n = Math.Min(paramSpan.Length, updateSpan.Length);
-            for (int i = 0; i < n; i++)
-            {
-                paramSpan[i] = NumOps.Subtract(paramSpan[i], updateSpan[i]);
-            }
+            Engine.TensorSubtractInPlace(param, update);
         }
     }
 

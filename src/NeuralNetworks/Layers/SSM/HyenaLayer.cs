@@ -319,7 +319,7 @@ public partial class HyenaLayer<T> : LayerBase<T>
         {
             var rawProj = Engine.TensorBroadcastAdd(
                 Engine.TensorMatMul(inputFlat, _inputProjectionWeights[i]),
-                _inputProjectionBiases[i].Reshape(1, _modelDimension));
+                Engine.Reshape(_inputProjectionBiases[i], new[] { 1, _modelDimension }));
             projectionsRaw[i] = Engine.Reshape(rawProj, new[] { batchSize, seqLen, _modelDimension });
 
             // Apply element-wise activation for gates (SiLU for gates, identity for v)
@@ -357,7 +357,7 @@ public partial class HyenaLayer<T> : LayerBase<T>
             // MLP layer 1: posEnc [seqLen, 1] x W1 [1, filterDim] + b1 -> [seqLen, filterDim]
             var hidden = Engine.TensorBroadcastAdd(
                 Engine.TensorMatMul(posEnc, _filterWeights1[i]),
-                _filterBiases1[i].Reshape(1, _filterDim));
+                Engine.Reshape(_filterBiases1[i], new[] { 1, _filterDim }));
 
             // Apply SiLU activation on the hidden layer
             var hiddenAct = Engine.Swish(hidden);
@@ -366,7 +366,7 @@ public partial class HyenaLayer<T> : LayerBase<T>
             // MLP layer 2: hiddenAct [seqLen, filterDim] x W2 [filterDim, modelDim] + b2 -> [seqLen, modelDim]
             var filter = Engine.TensorBroadcastAdd(
                 Engine.TensorMatMul(hiddenAct, _filterWeights2[i]),
-                _filterBiases2[i].Reshape(1, _modelDimension));
+                Engine.Reshape(_filterBiases2[i], new[] { 1, _modelDimension }));
 
             filters[i] = filter;
         }
