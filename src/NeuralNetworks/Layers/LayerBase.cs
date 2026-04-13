@@ -2748,22 +2748,28 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
 
         Engine.RegisterPersistentTensor(tensor, role);
 
-        // Replace by role: EnsureInitialized creates new tensor objects for the same role
-        // (e.g., _weights gets replaced from [0,0] placeholder to [inputSize, outputSize]).
-        // Without replacement, GetTrainableParameters() returns both old and new, causing
-        // compiled training plans to receive stale placeholder tensors.
-        for (int i = 0; i < _registeredTensorRoles.Count; i++)
+        // Check if this exact tensor is already registered (idempotent re-registration).
+        for (int i = 0; i < _registeredTensors.Count; i++)
         {
-            if (_registeredTensorRoles[i] == role)
+            if (ReferenceEquals(_registeredTensors[i], tensor))
+                return; // Same object, already registered — no-op
+        }
+
+        // For lazy-init layers (DenseLayer, FeedForwardLayer): when EnsureInitialized
+        // replaces a placeholder tensor with the real one, the old placeholder has
+        // Length == 0. Replace it to avoid stale references.
+        for (int i = 0; i < _registeredTensors.Count; i++)
+        {
+            if (_registeredTensorRoles[i] == role && _registeredTensors[i].Length == 0)
             {
-                if (ReferenceEquals(_registeredTensors[i], tensor))
-                    return; // Same object, already registered
-                // Unregister old tensor from engine to prevent GPU memory leaks
                 Engine.UnregisterPersistentTensor(_registeredTensors[i]);
-                _registeredTensors[i] = tensor; // Replace with new tensor
+                _registeredTensors[i] = tensor;
                 return;
             }
         }
+
+        // Add new tensor — multiple tensors CAN share the same role
+        // (e.g., MultiHeadAttention has Q/K/V/O all as Weights).
         _registeredTensors.Add(tensor);
         _registeredTensorRoles.Add(role);
     }
