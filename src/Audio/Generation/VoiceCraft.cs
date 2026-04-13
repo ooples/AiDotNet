@@ -247,6 +247,7 @@ public class VoiceCraft<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers);
         else Layers.AddRange(LayerHelper<T>.CreateDefaultVoiceCraftLayers(
+            Architecture,
             hiddenDim: _options.HiddenDim, numLayers: _options.NumLayers,
             numHeads: _options.NumHeads, codebookSize: _options.CodebookSize,
             dropoutRate: _options.DropoutRate));

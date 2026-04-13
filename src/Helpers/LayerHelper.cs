@@ -21488,6 +21488,7 @@ public static class LayerHelper<T>
 
     /// <summary>Creates default layers for VoiceCraft codec language model.</summary>
     public static IEnumerable<ILayer<T>> CreateDefaultVoiceCraftLayers(
+        NeuralNetworkArchitecture<T> architecture,
         int hiddenDim = 2048, int numLayers = 16,
         int numHeads = 12, int codebookSize = 2048,
         double dropoutRate = 0.1)
@@ -31271,11 +31272,11 @@ public static class LayerHelper<T>
         for (int i = 0; i < 4; i++)
             yield return new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads);
 
-        // Task-specific heads: event classification, temporal boundary, spatial localization, anomaly
+        // Primary output head: event classification
+        // Multi-task heads (temporal boundary, spatial localization, anomaly) require parallel
+        // branching which a sequential layer stack cannot express — they must be handled by the
+        // model's own forward pass if needed.
         yield return new DenseLayer<T>(embeddingDimension, numCategories, nullActivation);
-        yield return new DenseLayer<T>(embeddingDimension, 2, nullActivation);
-        yield return new DenseLayer<T>(embeddingDimension, 4, nullActivation);
-        yield return new DenseLayer<T>(embeddingDimension, 1, nullActivation);
     }
 
     /// <summary>

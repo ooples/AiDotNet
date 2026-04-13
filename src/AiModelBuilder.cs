@@ -2479,15 +2479,35 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             TOutput fullY;
             if (useFullData)
             {
+                // Apply data preparation (outlier removal, resampling, augmentation) to
+                // full dataset so clustering operates on the same cleaned data as supervised models.
+                TInput clusterX = preparedX;
+                TOutput clusterY = preparedY;
+                if (_dataPreparationPipeline is not null && _dataPreparationPipeline.Count > 0)
+                {
+                    if (clusterX is Matrix<T> xMatrix && clusterY is Vector<T> yVector)
+                    {
+                        var (px, py) = _dataPreparationPipeline.FitResample(xMatrix, yVector);
+                        clusterX = (TInput)(object)px;
+                        clusterY = (TOutput)(object)py;
+                    }
+                    else if (clusterX is Tensor<T> xTensor && clusterY is Tensor<T> yTensor)
+                    {
+                        var (px, py) = _dataPreparationPipeline.FitResampleTensor(xTensor, yTensor);
+                        clusterX = (TInput)(object)px;
+                        clusterY = (TOutput)(object)py;
+                    }
+                }
+
                 if (_preprocessingPipeline is not null && _preprocessingPipeline.IsFitted)
                 {
-                    fullX = _preprocessingPipeline.Transform(preparedX);
-                    fullY = preparedY;
+                    fullX = _preprocessingPipeline.Transform(clusterX);
+                    fullY = clusterY;
                 }
                 else
                 {
-                    fullX = preparedX;
-                    fullY = preparedY;
+                    fullX = clusterX;
+                    fullY = clusterY;
                 }
             }
             else

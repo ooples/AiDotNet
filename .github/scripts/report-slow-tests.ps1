@@ -3,11 +3,10 @@
 
 Write-Host "=== COMPREHENSIVE TEST TIMING DIAGNOSTICS ===" -ForegroundColor Cyan
 $trxFiles = Get-ChildItem -Path "TestResults" -Recurse -Filter "*.trx" -ErrorAction SilentlyContinue
-if ($trxFiles.Count -eq 0) {
-  Write-Host "No TRX files found"
-  exit 0
-}
 $allTests = @()
+if ($trxFiles.Count -eq 0) {
+  Write-Host "No TRX files found - skipping timing analysis"
+} else {
 $totalExecutionTime = 0
 foreach ($trx in $trxFiles) {
   [xml]$xml = Get-Content $trx.FullName
@@ -84,6 +83,7 @@ if ($optimizeCandidates.Count -gt 0) {
     Write-Host ("  [OPTIMIZE] {0,7:N1}s - {1}" -f $_.Duration, $_.Name) -ForegroundColor Cyan
   }
 }
+} # end if ($trxFiles.Count -gt 0)
 
 # Check for blame-hang results (tests killed by --blame-hang-timeout)
 $blameFiles = Get-ChildItem -Path "TestResults" -Recurse -Filter "Sequence_*.xml" -ErrorAction SilentlyContinue

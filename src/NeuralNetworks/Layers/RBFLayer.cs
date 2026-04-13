@@ -58,8 +58,7 @@ public partial class RBFLayer<T> : LayerBase<T>
     /// width values mean the neuron responds more broadly, while smaller values make the response
     /// more focused around the center.
     /// </remarks>
-    // TODO: Change to PersistentTensorRole.ScaleParameters once Tensors NuGet ships PR #152
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.ScaleParameters)]
     private Tensor<T> _widths;
 
     /// <summary>
@@ -514,7 +513,7 @@ public partial class RBFLayer<T> : LayerBase<T>
 
         // Register after initialization so tensor references are final
         RegisterTrainableParameter(_centers, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_widths, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_widths, PersistentTensorRole.ScaleParameters);
     }
 
 }
