@@ -828,20 +828,41 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         int fanIn = InputDepth * KernelSize * KernelSize;
         double bound = Math.Sqrt(6.0 / fanIn);
 
-        // Use SimdRandom for vectorized initialization (4x faster than LockedRandom)
+        // Use SimdRandom for vectorized He-uniform initialization
         var rng = new SimdRandom();
         var span = _kernels.Data.Span;
         int total = span.Length;
-        const int batchSize = 4096;
-        var tempBuf = new double[Math.Min(total, batchSize)];
-        int offset = 0;
-        while (offset < total)
+
+        if (typeof(T) == typeof(double))
         {
-            int chunk = Math.Min(batchSize, total - offset);
-            rng.NextDoubles(tempBuf.AsSpan(0, chunk));
-            for (int j = 0; j < chunk; j++)
-                span[offset + j] = NumOps.FromDouble((tempBuf[j] * 2.0 - 1.0) * bound);
-            offset += chunk;
+            var dSpan = System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
+                ref System.Runtime.CompilerServices.Unsafe.As<T, double>(ref span[0]), total);
+            rng.NextDoubles(dSpan);
+            for (int i = 0; i < total; i++)
+                dSpan[i] = (dSpan[i] * 2.0 - 1.0) * bound;
+        }
+        else if (typeof(T) == typeof(float))
+        {
+            var fSpan = System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
+                ref System.Runtime.CompilerServices.Unsafe.As<T, float>(ref span[0]), total);
+            rng.NextFloats(fSpan);
+            float boundF = (float)bound;
+            for (int i = 0; i < total; i++)
+                fSpan[i] = (fSpan[i] * 2f - 1f) * boundF;
+        }
+        else
+        {
+            const int batchSize = 4096;
+            var tempBuf = new double[Math.Min(total, batchSize)];
+            int offset = 0;
+            while (offset < total)
+            {
+                int chunk = Math.Min(batchSize, total - offset);
+                rng.NextDoubles(tempBuf.AsSpan(0, chunk));
+                for (int j = 0; j < chunk; j++)
+                    span[offset + j] = NumOps.FromDouble((tempBuf[j] * 2.0 - 1.0) * bound);
+                offset += chunk;
+            }
         }
 
         _biases.Fill(NumOps.Zero);

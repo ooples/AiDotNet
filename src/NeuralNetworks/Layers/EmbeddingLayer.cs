@@ -365,25 +365,46 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // Initialize embedding tensor with small random values using Engine operations
         T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(1.0), NumOps.FromDouble(embeddingDim)));
 
-        // Initialize in-place with SimdRandom: random [0,1] → shift to [-0.5, 0.5] → scale
-        // SimdRandom uses AVX2 xoshiro256** for 4x faster random generation
+        // Initialize with SimdRandom: random [0,1] → shift to [-0.5, 0.5] → scale.
+        // For double/float, write directly to avoid NumOps.FromDouble virtual dispatch
+        // on every element (23M elements for BERT vocab).
         _embeddingTensor = new Tensor<T>([vocabSize, embeddingDim]);
         var rng = new SimdRandom();
         var span = _embeddingTensor.Data.Span;
         int total = span.Length;
-        const int batchSize = 4096;
-        var tempBuf = new double[Math.Min(total, batchSize)];
-        int offset = 0;
-        while (offset < total)
-        {
-            int chunk = Math.Min(batchSize, total - offset);
-            rng.NextDoubles(tempBuf.AsSpan(0, chunk));
-            for (int j = 0; j < chunk; j++)
-                span[offset + j] = NumOps.FromDouble(tempBuf[j] - 0.5); // shift to [-0.5, 0.5]
-            offset += chunk;
-        }
+        double scaleD = NumOps.ToDouble(scale);
 
-        Engine.TensorMultiplyScalarInPlace(_embeddingTensor, scale);
+        if (typeof(T) == typeof(double))
+        {
+            var dSpan = System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
+                ref System.Runtime.CompilerServices.Unsafe.As<T, double>(ref span[0]), total);
+            rng.NextDoubles(dSpan);
+            for (int i = 0; i < total; i++)
+                dSpan[i] = (dSpan[i] - 0.5) * scaleD;
+        }
+        else if (typeof(T) == typeof(float))
+        {
+            var fSpan = System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
+                ref System.Runtime.CompilerServices.Unsafe.As<T, float>(ref span[0]), total);
+            rng.NextFloats(fSpan);
+            float scaleF = (float)scaleD;
+            for (int i = 0; i < total; i++)
+                fSpan[i] = (fSpan[i] - 0.5f) * scaleF;
+        }
+        else
+        {
+            const int batchSize = 4096;
+            var tempBuf = new double[Math.Min(total, batchSize)];
+            int offset = 0;
+            while (offset < total)
+            {
+                int chunk = Math.Min(batchSize, total - offset);
+                rng.NextDoubles(tempBuf.AsSpan(0, chunk));
+                for (int j = 0; j < chunk; j++)
+                    span[offset + j] = NumOps.FromDouble((tempBuf[j] - 0.5) * scaleD);
+                offset += chunk;
+            }
+        }
     }
 
     /// <summary>

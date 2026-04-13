@@ -436,17 +436,39 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     {
         var span = tensor.Data.Span;
         int total = span.Length;
-        const int batchSize = 4096;
-        var tempBuf = new double[Math.Min(total, batchSize)];
-        double scaleDouble = NumOps.ToDouble(scale);
-        int offset = 0;
-        while (offset < total)
+        double scaleD = NumOps.ToDouble(scale);
+
+        // For double/float, write directly to avoid NumOps.FromDouble overhead
+        if (typeof(T) == typeof(double))
         {
-            int chunk = Math.Min(batchSize, total - offset);
-            rng.NextDoubles(tempBuf.AsSpan(0, chunk));
-            for (int j = 0; j < chunk; j++)
-                span[offset + j] = NumOps.FromDouble((tempBuf[j] - 0.5) * scaleDouble);
-            offset += chunk;
+            var dSpan = System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
+                ref System.Runtime.CompilerServices.Unsafe.As<T, double>(ref span[0]), total);
+            rng.NextDoubles(dSpan);
+            for (int i = 0; i < total; i++)
+                dSpan[i] = (dSpan[i] - 0.5) * scaleD;
+        }
+        else if (typeof(T) == typeof(float))
+        {
+            var fSpan = System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
+                ref System.Runtime.CompilerServices.Unsafe.As<T, float>(ref span[0]), total);
+            rng.NextFloats(fSpan);
+            float scaleF = (float)scaleD;
+            for (int i = 0; i < total; i++)
+                fSpan[i] = (fSpan[i] - 0.5f) * scaleF;
+        }
+        else
+        {
+            const int batchSize = 4096;
+            var tempBuf = new double[Math.Min(total, batchSize)];
+            int offset = 0;
+            while (offset < total)
+            {
+                int chunk = Math.Min(batchSize, total - offset);
+                rng.NextDoubles(tempBuf.AsSpan(0, chunk));
+                for (int j = 0; j < chunk; j++)
+                    span[offset + j] = NumOps.FromDouble((tempBuf[j] - 0.5) * scaleD);
+                offset += chunk;
+            }
         }
     }
 
