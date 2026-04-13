@@ -83,23 +83,46 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// The bias is added to the weighted sum of inputs before applying the activation function.
     /// </para>
     /// <para><b>For Beginners:</b> Biases are like default or starting values for each output.
-    /// 
+    ///
     /// Biases serve several important purposes:
     /// - They allow outputs to be activated even when all inputs are zero
     /// - They act like an adjustable threshold for each neuron
     /// - They give the network more flexibility in learning
-    /// 
+    ///
     /// For example:
     /// - A neuron with a large negative bias is "reluctant" to activate
     /// - A neuron with a large positive bias "wants" to activate
     /// - During training, biases adjust to find the optimal activation threshold
-    /// 
+    ///
     /// Without biases, all outputs would be zero when all inputs are zero,
     /// which would limit what the network can learn.
     /// </para>
     /// </remarks>
     [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T> _biases;
+
+    /// <summary>
+    /// Whether the weight and bias tensors have been allocated and initialized.
+    /// Lazy initialization defers the expensive allocation (potentially millions of
+    /// parameters) from construction time to first Forward() call, reducing model
+    /// construction time from minutes to milliseconds for large architectures.
+    /// </summary>
+    private bool _isInitialized;
+
+    /// <summary>
+    /// Gets whether this layer's parameters have been allocated and initialized.
+    /// </summary>
+    public override bool IsInitialized => _isInitialized;
+
+    /// <summary>
+    /// Stored input dimension for lazy initialization.
+    /// </summary>
+    private readonly int _inputSize;
+
+    /// <summary>
+    /// Stored output dimension for lazy initialization.
+    /// </summary>
+    private readonly int _outputSize;
 
     /// <summary>
     /// The input tensor from the last forward pass, saved for backpropagation.
@@ -245,7 +268,32 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// <remarks>
     /// This includes all weights (inputSize × outputSize) and all biases (outputSize).
     /// </remarks>
-    public override int ParameterCount => _weights.Length + _biases.Length;
+    public override int ParameterCount => _isInitialized
+        ? _weights.Length + _biases.Length
+        : (_inputSize * _outputSize) + _outputSize;
+
+    /// <summary>
+    /// Allocates and initializes weight and bias tensors on first use.
+    /// Uses Xavier/Glorot initialization for weights and zero for biases.
+    /// Thread-safe via double-checked locking.
+    /// </summary>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+
+        lock (InitializationLock)
+        {
+            if (_isInitialized) return;
+
+            _weights = Tensor<T>.CreateRandom([_inputSize, _outputSize]);
+            _biases = Tensor<T>.CreateDefault([1, _outputSize], NumOps.Zero);
+
+            RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+            _isInitialized = true;
+        }
+    }
 
     /// <summary>
     /// Gets the weight tensor for JIT compilation and graph composition.
@@ -294,16 +342,19 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     public FeedForwardLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
-        _weights = Tensor<T>.CreateRandom([inputSize, outputSize]);
-        _biases = Tensor<T>.CreateDefault([1, outputSize], NumOps.Zero);
+        _inputSize = inputSize;
+        _outputSize = outputSize;
+
+        // Defer weight allocation to first Forward() call via EnsureInitialized().
+        // For large layers (e.g., 768→3072 = 2.3M params), this avoids expensive
+        // Tensor.CreateRandom + initialization during model construction.
+        _weights = Tensor<T>.Empty();
+        _biases = Tensor<T>.Empty();
         _weightsGradient = Tensor<T>.Empty();
         _biasesGradient = Tensor<T>.Empty();
         Input = Tensor<T>.Empty();
         Output = Tensor<T>.Empty();
-
-        // Register tensors for GPU memory persistence
-        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        _isInitialized = false;
     }
 
     /// <summary>
@@ -337,16 +388,16 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     public FeedForwardLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? activationFunction = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
-        _weights = Tensor<T>.CreateRandom([inputSize, outputSize]);
-        _biases = Tensor<T>.CreateDefault([1, outputSize], NumOps.Zero);
+        _inputSize = inputSize;
+        _outputSize = outputSize;
+
+        _weights = Tensor<T>.Empty();
+        _biases = Tensor<T>.Empty();
         _weightsGradient = Tensor<T>.Empty();
         _biasesGradient = Tensor<T>.Empty();
         Input = Tensor<T>.Empty();
         Output = Tensor<T>.Empty();
-
-        // Register tensors for GPU memory persistence
-        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        _isInitialized = false;
     }
 
     /// <summary>
@@ -376,6 +427,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitialized();
         Input = input;
 
         // Use Engine.TensorMatMul for GPU acceleration
@@ -404,6 +456,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
+        EnsureInitialized();
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
@@ -477,6 +530,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
+        EnsureInitialized();
         if (_weightsGradient == null || _biasesGradient == null ||
             _weightsGradient.Length == 0 || _biasesGradient.Length == 0)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
@@ -517,6 +571,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        EnsureInitialized();
         // Bulk copy from contiguous tensor storage — replaces nested scalar loops
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_weights.Data),
@@ -551,6 +606,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureInitialized();
         int weightLen = _weights.Length;
         int biasLen = _biases.Length;
         if (parameters.Length != weightLen + biasLen)
