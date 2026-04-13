@@ -46,7 +46,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Transformer)]
-[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.FrameInterpolation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TLBVFI: Token-Level Bidirectional Video Frame Interpolation",

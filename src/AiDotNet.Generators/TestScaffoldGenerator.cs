@@ -48,13 +48,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     // These are compositional/wrapper patterns that require a user-provided inner model.
     private static readonly string[] ExcludedBaseClasses =
     [
-        "MetaLearnerBase",         // Meta-learning: wraps an IFullModel chosen by the user
-        "NeuralProcessBase",       // Neural processes: inherits MetaLearnerBase
-        "ShardedModelBase",        // Distributed training: wraps a model for tensor/data parallelism
-        "NoisePredictorBase",      // Noise predictors: internal diffusion components, not standalone
-        "SSLMethodBase",           // Self-supervised learning: wraps encoder + projector
-        "AudioSafetyModuleBase",   // Audio safety: wraps another model for content moderation
-        "TextSafetyModuleBase",    // Text safety: wraps another model for content moderation
+        "MetaLearnerBase",           // Meta-learning: wraps an IFullModel chosen by the user
+        "MetaLearningModelBase",     // Meta-learning variant with different naming
+        "NeuralProcessBase",         // Neural processes: inherits MetaLearnerBase
+        "ShardedModelBase",          // Distributed training: wraps a model for tensor/data parallelism
+        "NoisePredictorBase",        // Noise predictors: internal diffusion components, not standalone
+        "SSLMethodBase",             // Self-supervised learning: wraps encoder + projector
+        "AudioSafetyModuleBase",     // Audio safety: wraps another model for content moderation
+        "TextSafetyModuleBase",      // Text safety: wraps another model for content moderation
+        "ImageWatermarkerBase",      // Watermarking: wraps images, not a standalone model
+        "SupervisedAutoMLModelBase", // AutoML: wraps other models for hyperparameter search
     ];
 
     // Attribute metadata names
