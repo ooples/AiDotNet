@@ -419,7 +419,7 @@ public class ImageTensor<T>
     /// <returns>The dimensions array.</returns>
     public int[] GetDimensions()
     {
-        return (int[])_data._shape;
+        return (int[])_data._shape.Clone();
     }
 
     /// <summary>
