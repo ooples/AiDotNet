@@ -95,6 +95,9 @@ public abstract class FitnessCalculatorBase<T, TInput, TOutput> : IFitnessCalcul
         _dataSetType = dataSetType;
     }
 
+    /// <inheritdoc/>
+    public DataSetType PreferredDataSetType => _dataSetType;
+
     /// <summary>
     /// Calculates the fitness score for a model using the specified evaluation data.
     /// </summary>

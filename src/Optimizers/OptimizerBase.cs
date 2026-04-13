@@ -105,6 +105,19 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     protected int IterationsWithoutImprovement;
 
     /// <summary>
+    /// When true, TrainAndEvaluateSolution skips model.Train() during evaluation.
+    /// Gradient-based optimizers set this because they already update parameters
+    /// via UpdateSolution() — calling Train() would overwrite those updates.
+    /// </summary>
+    protected virtual bool SkipTrainingInEvaluation => false;
+
+    /// <summary>
+    /// Called after the first TrainAndEvaluateSolution completes successfully.
+    /// Gradient-based optimizers use this to enable SkipTrainingInEvaluation.
+    /// </summary>
+    protected virtual void OnInitialTrainingCompleted() { }
+
+    /// <summary>
     /// Counts the number of consecutive iterations with improvement.
     /// </summary>
     protected int IterationsWithImprovement;
@@ -453,9 +466,15 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             InputData = subsetInputData
         };
 
-        // Step 7: Train and evaluate
+        // Step 7: Train and evaluate.
+        // On the first call, always train (SkipTrainingInEvaluation is false initially).
+        // After the first training, gradient-based optimizers skip Train() because they
+        // update parameters via UpdateSolution() — re-training would overwrite those.
         var (currentFitnessScore, fitDetectionResult, evaluationData) =
-            TrainAndEvaluateSolution(input);
+            TrainAndEvaluateSolution(input, skipTraining: SkipTrainingInEvaluation);
+
+        // After first successful train+evaluate, enable skip for subsequent calls
+        OnInitialTrainingCompleted();
 
         FitnessList.Add(currentFitnessScore);
 
@@ -485,12 +504,18 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <param name="input">The input data for model evaluation.</param>
     /// <returns>A tuple containing the fitness score, fit detection result, and evaluation data.</returns>
     private (T CurrentFitnessScore, FitDetectorResult<T> FitDetectionResult, ModelEvaluationData<T, TInput, TOutput> EvaluationData)
-        TrainAndEvaluateSolution(ModelEvaluationInput<T, TInput, TOutput> input)
+        TrainAndEvaluateSolution(ModelEvaluationInput<T, TInput, TOutput> input, bool skipTraining = false)
     {
-        // Train the model
-        input.Model?.Train(input.InputData.XTrain, input.InputData.YTrain);
+        // Skip training when the optimizer has already updated parameters externally
+        // (e.g., gradient-based optimizers use UpdateSolution to set parameters directly).
+        // Training is still needed when feature selection changed the input subset,
+        // since closed-form models must re-solve with the new feature combination.
+        if (!skipTraining)
+        {
+            input.Model?.Train(input.InputData.XTrain, input.InputData.YTrain);
+        }
 
-        // Evaluate the trained model using inline evaluation
+        // Evaluate the model using inline evaluation
         var evaluationData = EvaluateModelDirectly(input);
         var fitDetectionResult = FitDetector.DetectFit(evaluationData);
         var currentFitnessScore = FitnessCalculator.CalculateFitnessScore(evaluationData);
@@ -508,28 +533,45 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         var predictionType = input.PredictionTypeOverride
             ?? PredictionTypeInference.InferFromTargets<T, TOutput>(inputData.YTrain);
 
-        var trainingSet = CalculateDataSetStatsForOptimizer(
-            model, inputData.XTrain, inputData.YTrain, predictionType);
+        // Only compute stats for the dataset the fitness calculator actually uses.
+        // Computing all 3 datasets every epoch (Predict + ErrorStats + PredictionStats each)
+        // was the dominant cost — 2/3 of the work was wasted.
+        var preferred = FitnessCalculator.PreferredDataSetType;
 
+        DataSetStats<T, TInput, TOutput>? trainingSet = null;
         DataSetStats<T, TInput, TOutput>? validationSet = null;
-        if (inputData.XValidation != null && InputHelper<T, TInput>.GetInputSize(inputData.XValidation) > 0)
-        {
-            validationSet = CalculateDataSetStatsForOptimizer(
-                model, inputData.XValidation, inputData.YValidation, predictionType);
-        }
-
         DataSetStats<T, TInput, TOutput>? testSet = null;
-        if (inputData.XTest != null && InputHelper<T, TInput>.GetInputSize(inputData.XTest) > 0)
+
+        // Always compute the preferred dataset
+        switch (preferred)
         {
-            testSet = CalculateDataSetStatsForOptimizer(
-                model, inputData.XTest, inputData.YTest, predictionType);
+            case Enums.DataSetType.Training:
+                trainingSet = CalculateDataSetStatsForOptimizer(model, inputData.XTrain, inputData.YTrain, predictionType);
+                break;
+            case Enums.DataSetType.Validation:
+                if (inputData.XValidation != null && InputHelper<T, TInput>.GetInputSize(inputData.XValidation) > 0)
+                    validationSet = CalculateDataSetStatsForOptimizer(model, inputData.XValidation, inputData.YValidation, predictionType);
+                else
+                    trainingSet = CalculateDataSetStatsForOptimizer(model, inputData.XTrain, inputData.YTrain, predictionType);
+                break;
+            case Enums.DataSetType.Testing:
+                if (inputData.XTest != null && InputHelper<T, TInput>.GetInputSize(inputData.XTest) > 0)
+                    testSet = CalculateDataSetStatsForOptimizer(model, inputData.XTest, inputData.YTest, predictionType);
+                else
+                    trainingSet = CalculateDataSetStatsForOptimizer(model, inputData.XTrain, inputData.YTrain, predictionType);
+                break;
+            default:
+                trainingSet = CalculateDataSetStatsForOptimizer(model, inputData.XTrain, inputData.YTrain, predictionType);
+                break;
         }
 
-        var statsForModelCalc = validationSet ?? trainingSet;
+        // For model stats calculation, use whichever set was computed
+        var statsForModelCalc = validationSet ?? trainingSet ?? testSet
+            ?? new DataSetStats<T, TInput, TOutput>();
 
         return new ModelEvaluationData<T, TInput, TOutput>
         {
-            TrainingSet = trainingSet,
+            TrainingSet = trainingSet ?? new DataSetStats<T, TInput, TOutput>(),
             ValidationSet = validationSet ?? new DataSetStats<T, TInput, TOutput>(),
             TestSet = testSet ?? new DataSetStats<T, TInput, TOutput>(),
             ModelStats = TryCalculateModelStatsForOptimizer(
@@ -799,10 +841,23 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             return $"{solution.GetType().Name}_{solution.GetHashCode()}";
         }
 
-        // Generate a simple cache key based on parameter values
+        // Content-based hash from actual parameter values.
+        // Vector<T>.GetHashCode() returns the default object hash (memory address),
+        // which changes every time UpdateSolution creates a new model via WithParameters().
+        // This caused the cache to ALWAYS miss, making model.Train() run every epoch
+        // even when parameters hadn't changed — 1000x redundant training for closed-form models.
         var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
-        var paramHash = parameters.GetHashCode();
-        return $"{solution.GetType().Name}_{paramHash}";
+        unchecked
+        {
+            int hash = 17;
+            int len = parameters.Length;
+            // Sample elements for O(1) hashing instead of O(n) full scan
+            if (len > 0) hash = hash * 31 + NumOps.ToDouble(parameters[0]).GetHashCode();
+            if (len > 1) hash = hash * 31 + NumOps.ToDouble(parameters[len - 1]).GetHashCode();
+            if (len > 2) hash = hash * 31 + NumOps.ToDouble(parameters[len / 2]).GetHashCode();
+            hash = hash * 31 + len;
+            return $"{solution.GetType().Name}_{hash}";
+        }
     }
 
     /// <summary>

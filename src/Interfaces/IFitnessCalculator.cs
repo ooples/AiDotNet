@@ -1,3 +1,5 @@
+using AiDotNet.Enums;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>
@@ -84,6 +86,13 @@ public interface IFitnessCalculator<T, TInput, TOutput>
     /// Knowing this helps you correctly interpret and compare fitness scores.
     /// </remarks>
     bool IsHigherScoreBetter { get; }
+
+    /// <summary>
+    /// The dataset type this calculator uses for fitness scoring.
+    /// Optimizers use this to compute stats only for the needed dataset,
+    /// skipping expensive Predict + stats computation for unused datasets.
+    /// </summary>
+    DataSetType PreferredDataSetType => DataSetType.Validation;
 
     /// <summary>
     /// Compares two fitness scores and determines if the current score is better than the best score so far.
