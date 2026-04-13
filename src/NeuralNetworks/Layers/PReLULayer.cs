@@ -185,6 +185,14 @@ public class PReLULayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["NumParameters"] = _numParameters.ToString();
+        metadata["ChannelAxis"] = _channelAxis.ToString();
+        return metadata;
+    }
+
     public override LayerBase<T> Clone()
     {
         var copy = new PReLULayer<T>(InputShape, _numParameters, _channelAxis,

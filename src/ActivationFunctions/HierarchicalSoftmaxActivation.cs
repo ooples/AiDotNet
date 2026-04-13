@@ -177,15 +177,32 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
         var sigs = Engine.Sigmoid(scores);
 
         // Build the constant path mask [1, numClasses, treeDepth]:
-        // mask[c, d] = 1 if class c goes right at depth d, else 0.
+        // mask[c, d] = 1 if class c goes right at depth d, 0 if left, -1 if past leaf.
+        // activeMask[c, d] = 1 if depth d is part of the path, 0 if past leaf.
+        // Past-leaf depths must contribute 1.0 to the path product (neutral).
         var mask = new Tensor<T>(new[] { 1, _numClasses, _treeDepth });
+        var activeMask = new Tensor<T>(new[] { 1, _numClasses, _treeDepth });
         var maskSpan = mask.Data.Span;
+        var activeSpan = activeMask.Data.Span;
         for (int c = 0; c < _numClasses; c++)
         {
+            int node = 1;
             for (int d = 0; d < _treeDepth; d++)
             {
-                bool goRight = (c & (1 << (_treeDepth - d - 1))) != 0;
-                maskSpan[c * _treeDepth + d] = goRight ? NumOps.One : NumOps.Zero;
+                int idx = c * _treeDepth + d;
+                if (node >= _numClasses)
+                {
+                    // Past leaf — mark inactive (path product = 1.0 at this depth)
+                    maskSpan[idx] = NumOps.Zero;
+                    activeSpan[idx] = NumOps.Zero;
+                }
+                else
+                {
+                    bool goRight = (c & (1 << (_treeDepth - d - 1))) != 0;
+                    maskSpan[idx] = goRight ? NumOps.One : NumOps.Zero;
+                    activeSpan[idx] = NumOps.One;
+                    node = node * 2 + (goRight ? 1 : 0);
+                }
             }
         }
 
@@ -200,7 +217,16 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
         var maskedOneMinusSigs = Engine.TensorBroadcastMultiply(oneMinusSigs3D, oneMinusMask);
         var perPath = Engine.TensorAdd(maskedSigs, maskedOneMinusSigs);
 
-        // Reduce path product via log-sum-exp on the depth axis.
+        // Zero out inactive (past-leaf) depths so they contribute log(1)=0 to the sum.
+        // perPath at inactive positions may be 0 or negative, which would give -Inf in log.
+        // Replace: perPath = activeMask * perPath + (1 - activeMask) * 1.0
+        var oneMinusActive = Engine.TensorSubtractScalar(
+            Engine.TensorNegate(activeMask), NumOps.Negate(NumOps.One));
+        perPath = Engine.TensorAdd(
+            Engine.TensorBroadcastMultiply(perPath, activeMask),
+            oneMinusActive); // inactive positions become 1.0
+
+        // Reduce path product via log-sum on the depth axis.
         var logPerPath = Engine.TensorLog(perPath);
         var sumLog = Engine.ReduceSum(logPerPath, new[] { 2 }, keepDims: false);
         var output2D = Engine.TensorExp(sumLog);
