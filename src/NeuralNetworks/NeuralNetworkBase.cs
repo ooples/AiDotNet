@@ -459,17 +459,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Recompute total to avoid stale cache issues (layers may initialize lazily)
         int totalParameterCount = Layers.Sum(l => l.ParameterCount);
         var parameters = new Vector<T>(totalParameterCount);
+        var destSpan = parameters.AsWritableSpan();
 
         int currentIndex = 0;
         foreach (var layer in Layers.Where(l => l.ParameterCount > 0))
         {
             int layerParameterCount = layer.ParameterCount;
             var layerParameters = layer.GetParameters();
-            for (int i = 0; i < layerParameterCount; i++)
-            {
-                parameters[currentIndex + i] = layerParameters[i];
-            }
-
+            // Bulk copy via Span instead of element-by-element indexer access
+            layerParameters.AsSpan().Slice(0, layerParameterCount)
+                .CopyTo(destSpan.Slice(currentIndex, layerParameterCount));
             currentIndex += layerParameterCount;
         }
 
