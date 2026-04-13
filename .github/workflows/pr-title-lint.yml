@@ -23,7 +23,7 @@ jobs:
           fetch-depth: 0
 
       - name: Auto-fix PR title to conventional commits format
-        uses: actions/github-script@450193c5abd4cdb17ba9f3ffcfe8f635c4bb6c2a # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
         with:
           script: |
             const prTitle = context.payload.pull_request.title;
