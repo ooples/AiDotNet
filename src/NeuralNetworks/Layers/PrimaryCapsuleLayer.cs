@@ -533,6 +533,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
         Tensor<T>? convOutput = null;
         Tensor<T>? convNHWC = null;
         Tensor<T>? capsuleLayout = null;
+        Tensor<T>? kernelNCHW = null;
 
         try
         {
@@ -555,9 +556,11 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
             int outputHeight = (inputHeight - _kernelSize) / _stride + 1;
             int outputWidth = (inputWidth - _kernelSize) / _stride + 1;
 
-            // Reshape weights to Conv2D kernel format [outChannels, inChannels, kH, kW]
+            // Reshape weights to Conv2D kernel format [outChannels, inChannels, kH, kW].
+            // Tracked via the outer kernelNCHW so the finally block can release the GPU
+            // tensor — otherwise every ForwardGpu call leaks one reshape tensor.
             int outputChannels = _capsuleChannels * _capsuleDimension;
-            var kernelNCHW = Engine.Reshape(_convWeights, new[] { outputChannels, _inputChannels, _kernelSize, _kernelSize });
+            kernelNCHW = Engine.Reshape(_convWeights, new[] { outputChannels, _inputChannels, _kernelSize, _kernelSize });
 
             // GPU Convolution + Bias (FusedActivationType.None since we apply Squash separately)
             convOutput = gpuEngine.FusedConv2DGpu<T>(
@@ -581,6 +584,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
         finally
         {
             // Dispose all intermediate tensors (not the input or final output)
+            kernelNCHW?.Dispose();
             inputNCHW?.Dispose();
             convOutput?.Dispose();
             convNHWC?.Dispose();

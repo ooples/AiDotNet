@@ -886,8 +886,12 @@ public class ControlNetEncoder<T>
     /// </summary>
     private static void ZeroInitializeConv(ConvolutionalLayer<T> layer)
     {
+        // Vector<T>(int length) zero-fills the backing storage by default — the underlying
+        // array allocation initializes every element to default(T), which is the additive
+        // identity for every numeric type (0 for float/double/int, etc.). This matches the
+        // ControlNet paper's "zero convolution" requirement: zc(x) = 0 at initialization so
+        // the residual connection passes through the frozen base model unchanged on step 0.
         var zeroParams = new Vector<T>(layer.ParameterCount);
-        // Vector<T> is zero-initialized by default
         layer.SetParameters(zeroParams);
     }
 

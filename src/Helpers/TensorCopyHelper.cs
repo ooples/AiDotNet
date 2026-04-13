@@ -34,6 +34,42 @@ public static class TensorCopyHelper
     /// sample (all its data across other dimensions) from one position to another.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Allocates a new empty tensor with the same per-sample shape as <paramref name="source"/>,
+    /// but with the batch dimension (axis 0) replaced by <paramref name="batchSize"/>.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the tensor elements.</typeparam>
+    /// <param name="source">A reference tensor whose shape (excluding the batch axis) will be copied.</param>
+    /// <param name="batchSize">The size of the new batch dimension.</param>
+    /// <returns>A new zero-initialized tensor of shape [batchSize, source.Shape[1], …].</returns>
+    /// <remarks>
+    /// <para>
+    /// This is the standard pre-allocation step before <see cref="CopySample{T}"/> is used in a loop
+    /// to populate the batch from the source. Centralizing the allocation here avoids 30+ data
+    /// loaders depending on <c>Tensor&lt;T&gt;._shape</c> internals directly and keeps the
+    /// "build a batch then copy into it" pattern consistent across the codebase.
+    /// </para>
+    /// <para><b>For Beginners:</b> If <c>source</c> has shape [N, H, W, C] (a batch of images),
+    /// this gives you back an empty tensor of shape [batchSize, H, W, C] ready to be filled in.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="source"/> has rank 0.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="batchSize"/> is negative.</exception>
+    public static Tensor<T> CreateEmptyBatchLike<T>(Tensor<T> source, int batchSize)
+    {
+        if (source is null)
+            throw new ArgumentNullException(nameof(source));
+        if (source.Shape.Length == 0)
+            throw new ArgumentException("Source tensor must have at least one dimension (the batch axis).", nameof(source));
+        if (batchSize < 0)
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be non-negative.");
+
+        var newShape = (int[])source._shape.Clone();
+        newShape[0] = batchSize;
+        return new Tensor<T>(newShape);
+    }
+
     public static void CopySample<T>(Tensor<T> source, Tensor<T> dest, int sourceIndex, int destIndex)
     {
         // Validate tensor compatibility

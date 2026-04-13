@@ -239,8 +239,10 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     public override Tensor<T> Activate(Tensor<T> input)
     {
         // Forward pass produces true binary spikes (Heaviside step) matching the
-        // scalar Activate(T) path. The surrogate gradient (smooth sigmoid) is
-        // used only in the Derivative method for backprop per Neftci et al. 2019.
+        // scalar Activate(T) path. The surrogate gradient (smooth sigmoid) is used
+        // for backprop — both in the Derivative method (manual/graph-free path) and
+        // in graph mode via ApplyToGraph -> TensorOperations<T>.SurrogateSpike, per
+        // Neftci et al. 2019.
         var result = new Tensor<T>(input._shape);
         for (int i = 0; i < input.Length; i++)
         {

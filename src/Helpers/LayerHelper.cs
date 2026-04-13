@@ -4619,8 +4619,12 @@ public static class LayerHelper<T>
         yield return new FlattenLayer<T>([currentChannels, 1, 1]);
 
         // Classification head per Huang et al. 2017: outputs raw logits (no softmax).
-        // Must be paired with CrossEntropyWithLogitsLoss (which applies LogSoftmax
-        // internally), NOT CrossEntropyLoss (which expects probabilities).
+        // Must be paired with one of the *WithLogits losses, which apply the activation
+        // internally for numerical stability:
+        //   - Multi-class (NumClasses > 1): use CrossEntropyWithLogitsLoss<T>
+        //   - Binary      (NumClasses == 1): use BinaryCrossEntropyWithLogitsLoss<T>
+        // Do NOT pair with CrossEntropyLoss/BinaryCrossEntropyLoss — those expect
+        // probabilities and will silently produce wrong gradients on logits.
         yield return new DenseLayer<T>(currentChannels, configuration.NumClasses,
             activationFunction: new IdentityActivation<T>());
     }
@@ -4753,7 +4757,10 @@ public static class LayerHelper<T>
         // Flatten
         yield return new FlattenLayer<T>([headChannels, 1, 1]);
 
-        // Classification head
+        // Classification head — outputs raw logits. Pair with CrossEntropyWithLogitsLoss<T>
+        // (multi-class) or BinaryCrossEntropyWithLogitsLoss<T> (binary). The probability-
+        // input variants (CrossEntropyLoss / BinaryCrossEntropyLoss) would silently produce
+        // wrong gradients here.
         yield return new DenseLayer<T>(headChannels, configuration.NumClasses,
             activationFunction: new IdentityActivation<T>());
     }
@@ -4883,7 +4890,8 @@ public static class LayerHelper<T>
         // Flatten
         yield return new FlattenLayer<T>([finalConvChannels, 1, 1]);
 
-        // Classification head
+        // Classification head — outputs raw logits. Pair with CrossEntropyWithLogitsLoss<T>
+        // (multi-class) or BinaryCrossEntropyWithLogitsLoss<T> (binary).
         yield return new DenseLayer<T>(finalConvChannels, configuration.NumClasses,
             activationFunction: new IdentityActivation<T>());
     }
@@ -5002,7 +5010,8 @@ public static class LayerHelper<T>
         // Flatten
         yield return new FlattenLayer<T>([finalChannels, 1, 1]);
 
-        // Classification head
+        // Classification head — outputs raw logits. Pair with CrossEntropyWithLogitsLoss<T>
+        // (multi-class) or BinaryCrossEntropyWithLogitsLoss<T> (binary).
         yield return new DenseLayer<T>(finalChannels, configuration.NumClasses,
             activationFunction: new IdentityActivation<T>());
     }
@@ -21484,7 +21493,39 @@ public static class LayerHelper<T>
         yield return new FullyConnectedLayer<T>(semanticDim, semanticVocabSize, (IActivationFunction<T>?)null);
     }
 
-    /// <summary>Creates default layers for VoiceCraft codec language model.</summary>
+    /// <summary>
+    /// Creates the default layer stack for a VoiceCraft codec language model.
+    /// </summary>
+    /// <param name="architecture">Architecture metadata used to configure the layer stack
+    /// (e.g., input/output shapes, task type). Currently unused at the per-layer level
+    /// but accepted for API symmetry with sibling <c>CreateDefault{ModelName}Layers</c>
+    /// helpers and to allow future architecture-specific tuning without a breaking change.</param>
+    /// <param name="hiddenDim">Hidden dimension shared across the codec language model's
+    /// transformer blocks. Defaults to the VoiceCraft-Base value (2048).</param>
+    /// <param name="numLayers">Number of stacked causal transformer blocks. Defaults to 16
+    /// (VoiceCraft-Base configuration).</param>
+    /// <param name="numHeads">Number of multi-head attention heads in each transformer block.
+    /// Must divide <paramref name="hiddenDim"/> evenly. Defaults to 12.</param>
+    /// <param name="codebookSize">Size of the audio codec vocabulary (number of discrete
+    /// codes per quantizer). Defaults to 2048, matching EnCodec/Vall-E-style codebooks.</param>
+    /// <param name="dropoutRate">Dropout probability applied after each transformer block
+    /// during training. Set to 0 to disable. Defaults to 0.1 per the VoiceCraft paper.</param>
+    /// <returns>A lazily-yielded sequence of layers forming the VoiceCraft codec language
+    /// model: codec embedding projection, <paramref name="numLayers"/> causal transformer
+    /// blocks, and an output projection to the codec vocabulary.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> VoiceCraft is a speech-editing model that treats audio
+    /// codec tokens like text — the model predicts the next codec code given the previous
+    /// codes, the same way a language model predicts the next word. This helper builds the
+    /// neural network that does that prediction: an embedding lookup that turns each
+    /// integer code into a dense vector, several transformer layers that mix information
+    /// across the sequence (with causal masking so the model can only see the past), and
+    /// a final projection back to the codec vocabulary so we can pick the next code.
+    /// </para>
+    /// <para>The default values match the VoiceCraft-Base configuration. Increase
+    /// <paramref name="numLayers"/> and <paramref name="hiddenDim"/> for larger model
+    /// variants; the codec embedding and output projection scale automatically.</para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultVoiceCraftLayers(
         NeuralNetworkArchitecture<T> architecture,
         int hiddenDim = 2048, int numLayers = 16,

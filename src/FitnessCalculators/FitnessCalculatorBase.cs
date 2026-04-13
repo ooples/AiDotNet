@@ -20,7 +20,7 @@ namespace AiDotNet.FitnessCalculators;
 /// This base class provides the common functionality that all these different "judges" share.
 /// </para>
 /// </remarks>
-public abstract class FitnessCalculatorBase<T, TInput, TOutput> : IFitnessCalculator<T, TInput, TOutput>
+public abstract class FitnessCalculatorBase<T, TInput, TOutput> : IPreferredDataSetFitnessCalculator<T, TInput, TOutput>
 {
     /// <summary>
     /// Indicates whether higher fitness scores represent better performance.

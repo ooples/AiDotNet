@@ -536,7 +536,14 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // Only compute stats for the dataset the fitness calculator actually uses.
         // Computing all 3 datasets every epoch (Predict + ErrorStats + PredictionStats each)
         // was the dominant cost — 2/3 of the work was wasted.
-        var preferred = FitnessCalculator.PreferredDataSetType;
+        //
+        // Probe for the optional IPreferredDataSetFitnessCalculator extension instead of
+        // requiring it on the base IFitnessCalculator interface, so external calculators
+        // that pre-date this perf work continue to compile and run. Calculators that don't
+        // opt in fall back to validation — the historical default before this optimization.
+        var preferred = FitnessCalculator is IPreferredDataSetFitnessCalculator<T, TInput, TOutput> pds
+            ? pds.PreferredDataSetType
+            : Enums.DataSetType.Validation;
 
         DataSetStats<T, TInput, TOutput>? trainingSet = null;
         DataSetStats<T, TInput, TOutput>? validationSet = null;

@@ -38,7 +38,7 @@ namespace AiDotNet.FitnessCalculators;
 /// - For medical/financial applications: increase accuracyWeight
 /// </para>
 /// </remarks>
-public class CompressionAwareFitnessCalculator<T, TInput, TOutput> : IFitnessCalculator<T, TInput, TOutput>
+public class CompressionAwareFitnessCalculator<T, TInput, TOutput> : IPreferredDataSetFitnessCalculator<T, TInput, TOutput>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -97,7 +97,16 @@ public class CompressionAwareFitnessCalculator<T, TInput, TOutput> : IFitnessCal
     /// </summary>
     public bool IsHigherScoreBetter => true;
 
-    public DataSetType PreferredDataSetType => _baseFitnessCalculator.PreferredDataSetType;
+    /// <summary>
+    /// Forwards the wrapped calculator's preferred dataset type when it implements
+    /// <see cref="IPreferredDataSetFitnessCalculator{T, TInput, TOutput}"/>; otherwise falls back
+    /// to <see cref="DataSetType.Validation"/>, which preserves the historical default for
+    /// external calculators that don't opt in to the optimizer-skip optimization.
+    /// </summary>
+    public DataSetType PreferredDataSetType =>
+        _baseFitnessCalculator is IPreferredDataSetFitnessCalculator<T, TInput, TOutput> pds
+            ? pds.PreferredDataSetType
+            : DataSetType.Validation;
 
 
     /// <summary>

@@ -147,12 +147,15 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var vectors = new List<Vector<T>>();
-        vectors.Add(_patchEmbed.GetParameters());
-        foreach (var b in _doubleBlocks) vectors.Add(b.GetParameters());
-        foreach (var b in _singleBlocks) vectors.Add(b.GetParameters());
-        vectors.Add(_finalLayer.GetParameters());
-        return Vector<T>.Concatenate(vectors.ToArray());
+        // Pre-size the array (1 patch embed + N double + N single + 1 final) so we skip
+        // the List growth/copy + ToArray allocation on every optimizer step.
+        var vectors = new Vector<T>[2 + _doubleBlocks.Length + _singleBlocks.Length];
+        int i = 0;
+        vectors[i++] = _patchEmbed.GetParameters();
+        foreach (var b in _doubleBlocks) vectors[i++] = b.GetParameters();
+        foreach (var b in _singleBlocks) vectors[i++] = b.GetParameters();
+        vectors[i] = _finalLayer.GetParameters();
+        return Vector<T>.Concatenate(vectors);
     }
 
     /// <inheritdoc />
@@ -185,11 +188,14 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
 
     protected override Vector<T> GetParameterGradients()
     {
-        var vectors = new List<Vector<T>>();
-        vectors.Add(_patchEmbed.GetParameterGradients());
-        foreach (var b in _doubleBlocks) vectors.Add(b.GetParameterGradients());
-        foreach (var b in _singleBlocks) vectors.Add(b.GetParameterGradients());
-        vectors.Add(_finalLayer.GetParameterGradients());
-        return Vector<T>.Concatenate(vectors.ToArray());
+        // Same fixed-size-array pattern as GetParameters above — avoids the per-call
+        // List<T> allocation and ToArray copy on the gradient side too.
+        var vectors = new Vector<T>[2 + _doubleBlocks.Length + _singleBlocks.Length];
+        int i = 0;
+        vectors[i++] = _patchEmbed.GetParameterGradients();
+        foreach (var b in _doubleBlocks) vectors[i++] = b.GetParameterGradients();
+        foreach (var b in _singleBlocks) vectors[i++] = b.GetParameterGradients();
+        vectors[i] = _finalLayer.GetParameterGradients();
+        return Vector<T>.Concatenate(vectors);
     }
 }

@@ -824,7 +824,21 @@ public class HDBSCAN<T> : ClusteringBase<T>
         _probabilities = new T[n];
         _outlierScores = new T[n];
 
-        // For each point, probability is based on lambda at which it joined its cluster
+        // Initialize every point from its final label so that points recovered via the
+        // union-find fallback (which never appear as a direct child in the condensed tree)
+        // still receive proper probability/outlier metadata. Points labeled to a cluster
+        // get probability=1, outlier=0; noise points (label = -1) get probability=0, outlier=1.
+        for (int i = 0; i < n; i++)
+        {
+            bool inCluster = labels[i] >= 0;
+            _probabilities[i] = inCluster ? NumOps.One : NumOps.Zero;
+            _outlierScores[i] = inCluster ? NumOps.Zero : NumOps.One;
+        }
+
+        // Refine from the condensed tree for points that were directly recorded there.
+        // (Currently uses the same {0,1} scheme as the initial pass; future work can
+        // derive richer per-point probability from the lambda at which the point left
+        // its cluster, but that refinement still benefits from the all-points init above.)
         foreach (var node in condensedTree)
         {
             if (node.Child < n)

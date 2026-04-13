@@ -116,6 +116,12 @@ public class TensorOperationsVerification<T>
             var inputNode = TensorOperations<T>.Variable(input.Clone(), "input", requiresGradient: true);
 
             var outputNode = operation(inputNode);
+            if (outputNode.Value is null)
+            {
+                throw new InvalidOperationException(
+                    $"Operation '{operationName}' produced a ComputationNode with a null Value. " +
+                    "Cannot verify gradients against an unevaluated node.");
+            }
             outputShape = outputNode.Value._shape;
 
             // Create output gradient (ones)
@@ -190,6 +196,12 @@ public class TensorOperationsVerification<T>
             var node2 = TensorOperations<T>.Variable(input2.Clone(), "input2", requiresGradient: true);
 
             var outputNode = operation(node1, node2);
+            if (outputNode.Value is null)
+            {
+                throw new InvalidOperationException(
+                    $"Operation '{operationName}' produced a ComputationNode with a null Value. " +
+                    "Cannot verify gradients against an unevaluated node.");
+            }
             outputShape = outputNode.Value._shape;
 
             // Create output gradient (ones)
