@@ -487,6 +487,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
         var taskAttrSymbol = compilation.GetTypeByMetadataName(ModelTaskAttr);
         var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
+        var architectureSymbol = compilation.GetTypeByMetadataName("AiDotNet.NeuralNetworks.NeuralNetworkArchitecture`1");
 
         // Build test class name set for fast lookup
         var testNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
@@ -507,7 +508,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 continue;
 
             ProcessModelSymbol(modelClass, domainAttrSymbol, categoryAttrSymbol, taskAttrSymbol,
-                exemptAttrSymbol, testNames, testedModels, untestedModels, seen);
+                exemptAttrSymbol, architectureSymbol, testNames, testedModels, untestedModels, seen);
         }
 
         // Detect if we're in the source project (not the test project).
@@ -519,7 +520,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (!modelsFoundFromSource)
         {
             DiscoverModelsFromReferencedAssemblies(compilation, domainAttrSymbol, categoryAttrSymbol,
-                taskAttrSymbol, exemptAttrSymbol, testNames, testedModels, untestedModels, seen);
+                taskAttrSymbol, exemptAttrSymbol, architectureSymbol, testNames, testedModels, untestedModels, seen);
         }
 
         testedModels.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
@@ -612,6 +613,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         INamedTypeSymbol? categoryAttrSymbol,
         INamedTypeSymbol? taskAttrSymbol,
         INamedTypeSymbol? exemptAttrSymbol,
+        INamedTypeSymbol? architectureSymbol,
         HashSet<string> testNames,
         List<ModelTestInfo> testedModels,
         List<ModelTestInfo> untestedModels,
@@ -872,6 +874,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // either parameterless, or all parameters have default values.
         bool hasParameterlessCtor = false;
         bool hasArchitectureOnlyCtor = false;
+        string? architectureParamTypeName = null;
         foreach (var ctor in modelClass.InstanceConstructors)
         {
             if (ctor.DeclaredAccessibility != Accessibility.Public)
@@ -904,9 +907,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             if (ctor.Parameters.Length >= 1 && !hasArchitectureOnlyCtor)
             {
                 var firstParam = ctor.Parameters[0];
-                string firstParamTypeName = firstParam.Type.ToDisplayString();
-                bool isArchitectureParam = firstParamTypeName.StartsWith(
-                    "AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<", System.StringComparison.Ordinal);
+                // Check if the first parameter type IS exactly NeuralNetworkArchitecture<T>.
+                // Derived types (CodeSynthesisArchitecture<T>, etc.) have incompatible constructors
+                // and need manual test classes — they stay as NotImplementedException.
+                bool isArchitectureParam = IsExactlyArchitecture(firstParam.Type, architectureSymbol);
 
                 if (isArchitectureParam && !firstParam.HasExplicitDefaultValue)
                 {
@@ -924,6 +928,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     if (restOptional)
                     {
                         hasArchitectureOnlyCtor = true;
+                        // Store the actual param type for derived architectures.
+                        // For generic types, replace the type parameter with 'double'.
+                        string paramTypeName = firstParam.Type.ToDisplayString();
+                        if (firstParam.Type is INamedTypeSymbol { IsGenericType: true } namedParamType)
+                        {
+                            // Get the unbound definition and reconstruct with double
+                            string openName = namedParamType.OriginalDefinition.ToDisplayString();
+                            // Replace the type parameter (e.g., T) with double
+                            architectureParamTypeName = openName.Replace("<T>", "<double>");
+                        }
+                        else
+                        {
+                            architectureParamTypeName = paramTypeName;
+                        }
                     }
                 }
             }
@@ -946,6 +964,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             UsesVectorOutput = usesVectorOutput,
             HasParameterlessConstructor = hasParameterlessCtor,
             HasArchitectureOnlyConstructor = hasArchitectureOnlyCtor,
+            ArchitectureParamTypeName = architectureParamTypeName,
             ExtendsAudioNeuralNetworkBase = extendsAudioNN,
             ExtendsDocumentNeuralNetworkBase = extendsDocumentNN,
             ExtendsVisionLanguageModelBase = extendsVisionLanguage,
@@ -1009,6 +1028,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         INamedTypeSymbol? categoryAttrSymbol,
         INamedTypeSymbol? taskAttrSymbol,
         INamedTypeSymbol? exemptAttrSymbol,
+        INamedTypeSymbol? architectureSymbol,
         HashSet<string> testNames,
         List<ModelTestInfo> testedModels,
         List<ModelTestInfo> untestedModels,
@@ -1020,7 +1040,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             if (symbol is IAssemblySymbol assembly)
             {
                 CollectModelsFromNamespace(assembly.GlobalNamespace, domainAttrSymbol, categoryAttrSymbol,
-                    taskAttrSymbol, exemptAttrSymbol, testNames, testedModels, untestedModels, seen);
+                    taskAttrSymbol, exemptAttrSymbol, architectureSymbol, testNames, testedModels, untestedModels, seen);
             }
         }
     }
@@ -1034,6 +1054,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         INamedTypeSymbol? categoryAttrSymbol,
         INamedTypeSymbol? taskAttrSymbol,
         INamedTypeSymbol? exemptAttrSymbol,
+        INamedTypeSymbol? architectureSymbol,
         HashSet<string> testNames,
         List<ModelTestInfo> testedModels,
         List<ModelTestInfo> untestedModels,
@@ -1044,7 +1065,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             if (member is INamespaceSymbol childNs)
             {
                 CollectModelsFromNamespace(childNs, domainAttrSymbol, categoryAttrSymbol,
-                    taskAttrSymbol, exemptAttrSymbol, testNames, testedModels, untestedModels, seen);
+                    taskAttrSymbol, exemptAttrSymbol, architectureSymbol, testNames, testedModels, untestedModels, seen);
             }
             else if (member is INamedTypeSymbol type)
             {
@@ -1053,7 +1074,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     ImplementsIFullModel(type))
                 {
                     ProcessModelSymbol(type, domainAttrSymbol, categoryAttrSymbol, taskAttrSymbol,
-                        exemptAttrSymbol, testNames, testedModels, untestedModels, seen);
+                        exemptAttrSymbol, architectureSymbol, testNames, testedModels, untestedModels, seen);
                 }
             }
         }
@@ -1064,6 +1085,34 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// This enables discovery of algorithms and utilities that don't implement IFullModel
     /// but still need mathematical invariant testing (e.g., causal discovery, decomposition methods).
     /// </summary>
+    /// <summary>
+    /// Checks if a type IS or INHERITS FROM NeuralNetworkArchitecture&lt;T&gt;.
+    /// Uses Roslyn's <see cref="SymbolEqualityComparer"/> to walk the base type chain,
+    /// so derived architecture types (CodeSynthesisArchitecture, etc.) are recognized.
+    /// </summary>
+    /// <param name="type">The parameter type to check.</param>
+    /// <param name="architectureSymbol">The resolved open generic NeuralNetworkArchitecture`1 symbol.
+    /// Pass null to fall back to metadata name matching.</param>
+    /// <summary>
+    /// Checks if a type IS exactly NeuralNetworkArchitecture&lt;T&gt; (not a derived type).
+    /// Uses <see cref="SymbolEqualityComparer"/> for cross-assembly robustness.
+    /// </summary>
+    private static bool IsExactlyArchitecture(ITypeSymbol type, INamedTypeSymbol? architectureSymbol)
+    {
+        if (type is not INamedTypeSymbol namedType || !namedType.IsGenericType)
+            return false;
+
+        var originalDef = namedType.OriginalDefinition;
+
+        // Primary: use SymbolEqualityComparer against resolved compilation symbol
+        if (architectureSymbol is not null)
+            return SymbolEqualityComparer.Default.Equals(originalDef, architectureSymbol);
+
+        // Fallback: metadata name check if symbol resolution failed
+        return originalDef.MetadataName == "NeuralNetworkArchitecture`1" &&
+               originalDef.ContainingNamespace.ToDisplayString() == "AiDotNet.NeuralNetworks";
+    }
+
     private static bool HasModelDomainAttribute(INamedTypeSymbol type, INamedTypeSymbol? domainAttrSymbol)
     {
         if (domainAttrSymbol is null) return false;
@@ -1422,7 +1471,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 string sizeExpr = (isVision || isVideo) ? $"inputHeight: 32, inputWidth: 32, inputDepth: {visionChannels}, outputSize: 4" :
                                   isAudio ? "inputHeight: 32, inputWidth: 16, inputDepth: 1, outputSize: 4" :
                                   "inputSize: 16, outputSize: 4";
-                string archExpr = $"new NeuralNetworkArchitecture<double>(" +
+                // Always construct the base NeuralNetworkArchitecture<double> — even for derived
+                // architecture types, the base constructor args are compatible since C# allows
+                // passing a base object to a constructor that accepts a derived type via implicit
+                // conversion (NOT — this doesn't work in C#). Instead, only models whose first
+                // param IS exactly NeuralNetworkArchitecture<T> (not a derived type) can be
+                // auto-constructed. Derived types need manual test classes.
+                string archTypeName = "NeuralNetworkArchitecture<double>";
+                string archExpr = $"new {archTypeName}(" +
                     $"inputType: {inputTypeExpr}, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     $"{sizeExpr})";
@@ -3075,6 +3131,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         /// When true, the generator can emit a default architecture to construct the model.
         /// </summary>
         public bool HasArchitectureOnlyConstructor { get; set; }
+        /// <summary>
+        /// The fully-qualified display name of the architecture parameter type (e.g.,
+        /// "AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture&lt;double&gt;").
+        /// Null when the model uses the base NeuralNetworkArchitecture directly.
+        /// </summary>
+        public string? ArchitectureParamTypeName { get; set; }
 
         // Base class chain detection (for mid-level hierarchy resolution)
         public bool ExtendsAudioNeuralNetworkBase { get; set; }
