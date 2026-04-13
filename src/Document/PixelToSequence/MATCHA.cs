@@ -324,8 +324,6 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
 
     private string DecodeOutput(Tensor<T> output, int maxLength)
     {
-        // TODO: Replace per-row argmax with Engine.ArgmaxAxis when a general (non-GPU-only)
-        // version is available. The sequential EOS-break logic requires per-row processing.
         var tokens = new List<int>();
         int seqLen = Math.Min(output.Shape[0], maxLength);
 

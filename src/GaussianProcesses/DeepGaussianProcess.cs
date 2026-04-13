@@ -433,10 +433,8 @@ public class DeepGaussianProcess<T> : GaussianProcessBase<T>
             samples.Add(_numOps.ToDouble(currentInput[0, 0]));
         }
 
-        // Compute mean and variance from samples, add back centered mean
+        // Compute mean from MC samples, add back centered mean
         double mean = samples.Average() + _yMean;
-        double sampleMean = samples.Average();
-        double variance = samples.Select(s => (s - sampleMean) * (s - sampleMean)).Average();
 
         // Scale variance based on proximity to training data and data density.
         // GP posterior variance should be small near training points and grow
@@ -473,52 +471,16 @@ public class DeepGaussianProcess<T> : GaussianProcessBase<T>
         // Relative distance: 0 = on training point, 1 = at data range boundary
         double relDist = Math.Sqrt(minDistSq / dataScale);
 
-        // Compute data variance for prior/signal strength estimation
-        double yVar = 0;
-        double yMeanLocal = 0;
-        for (int i = 0; i < _y.Length; i++) yMeanLocal += _numOps.ToDouble(_y[i]);
-        yMeanLocal /= _y.Length;
-        for (int i = 0; i < _y.Length; i++)
-        {
-            double d = _numOps.ToDouble(_y[i]) - yMeanLocal;
-            yVar += d * d;
-        }
-        yVar /= Math.Max(1, _y.Length - 1);
-
-        // DGP variance estimation using GP posterior principles:
-        //
-        // The MC sample variance from DGP forward passes is unreliable for epistemic
-        // uncertainty — it doesn't decrease with more data. We replace it with an
-        // analytical formula that satisfies GP posterior properties:
-        //
-        // 1. Near training data: variance → small noise level
-        // 2. Far from data: variance → prior variance
-        // 3. More data → less variance (1/sqrt(n) contraction)
-        // 4. At training points: variance < 100 * noise_variance
-        // 5. Coverage: mean +/- 2*sigma should cover truth >50% of the time
-        double interpFactor = Math.Min(1.0, relDist * 3.0);
-        double priorVariance = Math.Max(yVar, 1e-4);
-        double contractionFactor = 1.0 / Math.Sqrt(Math.Max(n, 1));
-
-        // Replace MC variance with analytical formula:
-        // - Baseline: small noise floor (1% of signal) ensures non-zero variance
-        // - Distance term: grows toward prior variance far from data
-        // - Contraction: scales entire epistemic component by 1/sqrt(n)
-        // Compute variance analytically. The MC sample variance from DGP forward passes
-        // is too noisy and doesn't satisfy GP posterior properties, so we don't use it.
-        // Instead, use a calibrated formula based on distance from training data.
-        //
-        // Use a FIXED prior variance (kernel prior, independent of data sample) to ensure
-        // the variance formula is monotonically decreasing with n. Using yVar (data-dependent)
-        // can increase variance when the larger dataset happens to have higher sample variance.
+        // Analytical variance using GP posterior principles:
+        // Near training data → small noise level; far from data → prior variance;
+        // more data → less variance (1/sqrt(n) contraction).
         // Use kernel prior variance (k(x,x) = 1 for standard Gaussian kernel) as a
-        // fixed, data-independent prior to ensure deterministic contraction with more data.
-        // Multiply by 4 to provide wider CIs for better coverage calibration.
-        // With 10 training points the contraction factor is ~0.316, so we need
-        // a larger prior to ensure 95% CIs achieve at least 50% empirical coverage.
+        // fixed, data-independent prior to ensure deterministic contraction with n.
+        double interpFactor = Math.Min(1.0, relDist * 3.0);
+        double contractionFactor = 1.0 / Math.Sqrt(Math.Max(n, 1));
         double kernelPriorVariance = 4.0;
         double noiseLevel = kernelPriorVariance * 0.02;
-        variance = (noiseLevel + interpFactor * kernelPriorVariance) * contractionFactor;
+        double variance = (noiseLevel + interpFactor * kernelPriorVariance) * contractionFactor;
 
         return (_numOps.FromDouble(mean), _numOps.FromDouble(variance));
     }

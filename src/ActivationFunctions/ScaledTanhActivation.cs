@@ -121,7 +121,9 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     {
         var halfBeta = NumOps.Multiply(_beta, NumOps.FromDouble(0.5));
         var scaled = Engine.TensorMultiplyScalar(input, halfBeta);
-        return Engine.Tanh(scaled);
+        // Match scalar path: clamp to saturation threshold to prevent overflow
+        var clamped = Engine.TensorClamp(scaled, NumOps.FromDouble(-_saturationThreshold), NumOps.FromDouble(_saturationThreshold));
+        return Engine.Tanh(clamped);
     }
 
     /// <summary>

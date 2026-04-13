@@ -303,8 +303,13 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     private Tensor<T> ApplyMask(Tensor<T> stft, Tensor<T> mask)
     {
+        if (stft.Length != mask.Length)
+            throw new ArgumentException(
+                $"Mask length ({mask.Length}) must match STFT length ({stft.Length}). " +
+                "A mismatch indicates a model output shape bug upstream.");
+
         var result = new Tensor<T>(stft._shape);
-        for (int i = 0; i < Math.Min(stft.Length, mask.Length); i++)
+        for (int i = 0; i < stft.Length; i++)
             result[i] = NumOps.Multiply(stft[i], mask[i]);
         return result;
     }

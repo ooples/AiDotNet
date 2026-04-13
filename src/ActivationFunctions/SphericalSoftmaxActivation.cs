@@ -114,7 +114,9 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
         int lastAxis = input.Shape.Length - 1;
         var squared = Engine.TensorMultiply(input, input);
         var sumSquared = Engine.ReduceSum(squared, new[] { lastAxis }, keepDims: true);
-        var norm = Engine.TensorSqrt(sumSquared);
+        var eps = Tensor<T>.CreateDefault(sumSquared.Shape, NumOps.FromDouble(1e-12));
+        var safeSum = Engine.TensorAdd(sumSquared, eps);
+        var norm = Engine.TensorSqrt(safeSum);
         var normalized = Engine.TensorBroadcastDivide(input, norm);
         return Engine.Softmax(normalized, axis: lastAxis);
     }

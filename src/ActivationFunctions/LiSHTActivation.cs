@@ -75,7 +75,10 @@ public class LiSHTActivation<T> : ActivationFunctionBase<T>
     /// </summary>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        var tanh = Engine.Tanh(input);
+        // Guard against overflow: for |x| > 20, tanh(x) ≈ sign(x), so x*tanh(x) ≈ |x|.
+        // Clamp input to [-20, 20] before tanh to prevent NaN/Inf.
+        var clamped = Engine.TensorClamp(input, NumOps.FromDouble(-20.0), NumOps.FromDouble(20.0));
+        var tanh = Engine.Tanh(clamped);
         return Engine.TensorMultiply(input, tanh);
     }
 

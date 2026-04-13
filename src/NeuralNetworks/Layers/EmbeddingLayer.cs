@@ -296,7 +296,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         AuxiliaryLossWeight = NumOps.FromDouble(0.0001);
         _lastEmbeddingRegularizationLoss = NumOps.Zero;
 
-        _embeddingTensor = TensorAllocator.Rent<T>([vocabularySize, embeddingDimension]);
+        _embeddingTensor = new Tensor<T>([vocabularySize, embeddingDimension]);
         InitializeParameters();
 
         // Register trainable parameters for GPU memory optimization

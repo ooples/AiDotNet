@@ -117,24 +117,39 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
     /// </summary>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        T alpha;
-        if (_isTraining)
+        if (!_isTraining)
         {
-            double lo = Convert.ToDouble(_lowerBound);
-            double hi = Convert.ToDouble(_upperBound);
-            alpha = NumOps.FromDouble((_random.NextDouble() * (hi - lo)) + lo);
+            // Inference: use midpoint of bounds (deterministic)
+            T alpha = NumOps.Divide(NumOps.Add(_lowerBound, _upperBound), NumOps.FromDouble(2.0));
             _alpha = alpha;
-        }
-        else
-        {
-            alpha = NumOps.Divide(NumOps.Add(_lowerBound, _upperBound), NumOps.FromDouble(2.0));
+            var positivePart = Engine.ReLU(input);
+            var negated = Engine.TensorNegate(input);
+            var negativePart = Engine.ReLU(negated);
+            var scaledNegative = Engine.TensorMultiplyScalar(negativePart, alpha);
+            return Engine.TensorSubtract(positivePart, scaledNegative);
         }
 
-        var positivePart = Engine.ReLU(input);
-        var negated = Engine.TensorNegate(input);
-        var negativePart = Engine.ReLU(negated);
-        var scaledNegative = Engine.TensorMultiplyScalar(negativePart, alpha);
-        return Engine.TensorSubtract(positivePart, scaledNegative);
+        // Training: sample per-element random slope per PyTorch RReLU spec
+        double lo = Convert.ToDouble(_lowerBound);
+        double hi = Convert.ToDouble(_upperBound);
+        var result = new Tensor<T>(input.Shape);
+        for (int i = 0; i < input.Length; i++)
+        {
+            T val = input[i];
+            if (NumOps.GreaterThanOrEquals(val, NumOps.Zero))
+            {
+                result[i] = val;
+            }
+            else
+            {
+                T a = NumOps.FromDouble((_random.NextDouble() * (hi - lo)) + lo);
+                result[i] = NumOps.Multiply(a, val);
+            }
+        }
+
+        // Store midpoint as representative alpha for derivative
+        _alpha = NumOps.Divide(NumOps.Add(_lowerBound, _upperBound), NumOps.FromDouble(2.0));
+        return result;
     }
 
     /// <summary>
