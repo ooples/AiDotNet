@@ -282,6 +282,20 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when latentCodeSize is not positive or mutualInfoCoefficient is negative.
     /// </exception>
+    /// <summary>
+    /// Creates an InfoGAN with default architectures derived from a single architecture.
+    /// Per Chen et al. 2016: latent code size 10, mutual info coefficient 1.0.
+    /// </summary>
+    public InfoGAN(
+        NeuralNetworkArchitecture<T> architecture,
+        int latentCodeSize = 10,
+        double mutualInfoCoefficient = 1.0,
+        InfoGANOptions? options = null)
+        : this(architecture, architecture, architecture, latentCodeSize, architecture.InputType,
+               mutualInfoCoefficient: mutualInfoCoefficient, options: options)
+    {
+    }
+
     public InfoGAN(
         NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> discriminatorArchitecture,

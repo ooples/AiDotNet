@@ -175,6 +175,21 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     /// - Critic iterations (5) means the critic trains 5 times per generator update
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Creates a WGAN-GP with default generator and critic architectures derived from a single architecture.
+    /// Per Gulrajani et al. 2017: gradient penalty coefficient 10, 5 critic iterations per generator step.
+    /// </summary>
+    public WGANGP(
+        NeuralNetworkArchitecture<T> architecture,
+        double gradientPenaltyCoefficient = 10.0,
+        int criticIterations = 5,
+        WGANGPOptions? options = null)
+        : this(architecture, architecture, architecture.InputType,
+               gradientPenaltyCoefficient: gradientPenaltyCoefficient,
+               criticIterations: criticIterations, options: options)
+    {
+    }
+
     public WGANGP(
         NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> criticArchitecture,

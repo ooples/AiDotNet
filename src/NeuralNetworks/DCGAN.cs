@@ -85,6 +85,25 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
     /// The default learning rate (0.0002) is lower than typical GANs for more stable training.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Creates a DCGAN with default dimensions derived from the architecture.
+    /// Per Radford et al. 2016: latent size 100, 64×64 images, 64 feature maps.
+    /// </summary>
+    public DCGAN(
+        NeuralNetworkArchitecture<T> architecture,
+        int latentSize = 100,
+        int generatorFeatureMaps = 64,
+        int discriminatorFeatureMaps = 64,
+        DCGANOptions? options = null)
+        : this(latentSize,
+               architecture.InputDepth > 0 ? architecture.InputDepth : 3,
+               architecture.InputHeight > 0 ? architecture.InputHeight : 64,
+               architecture.InputWidth > 0 ? architecture.InputWidth : 64,
+               generatorFeatureMaps, discriminatorFeatureMaps,
+               lossFunction: null, options: options)
+    {
+    }
+
     public DCGAN(
         int latentSize,
         int imageChannels,

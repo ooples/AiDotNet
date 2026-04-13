@@ -179,6 +179,23 @@ public class SAGAN<T> : NeuralNetworkBase<T>
     /// <param name="inputType">The type of input.</param>
     /// <param name="lossFunction">Loss function for training (defaults to hinge loss)</param>
     /// <param name="initialLearningRate">Initial learning rate (default 0.0001)</param>
+    /// <summary>
+    /// Creates a SAGAN with default architectures derived from a single architecture.
+    /// Per Zhang et al. 2019: self-attention at multiple scales, spectral normalization.
+    /// </summary>
+    public SAGAN(
+        NeuralNetworkArchitecture<T> architecture,
+        int latentSize = 128,
+        int numClasses = 0,
+        SAGANOptions? options = null)
+        : this(architecture, architecture, latentSize,
+               architecture.InputDepth > 0 ? architecture.InputDepth : 3,
+               architecture.InputHeight > 0 ? architecture.InputHeight : 64,
+               architecture.InputWidth > 0 ? architecture.InputWidth : 64,
+               numClasses, options: options)
+    {
+    }
+
     public SAGAN(
         NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> discriminatorArchitecture,
