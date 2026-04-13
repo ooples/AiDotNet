@@ -3904,17 +3904,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         int currentIndex = 0;
+        var srcSpan = parameters.AsSpan();
         foreach (var layer in Layers.Where(l => l.ParameterCount > 0))
         {
             int layerParameterCount = layer.ParameterCount;
-            // Extract parameters for this layer
+            // Bulk copy via Span instead of element-by-element
             var layerParameters = new Vector<T>(layerParameterCount);
-            for (int i = 0; i < layerParameterCount; i++)
-            {
-                layerParameters[i] = parameters[currentIndex + i];
-            }
-
-            // Set the layer's parameters
+            srcSpan.Slice(currentIndex, layerParameterCount)
+                .CopyTo(layerParameters.AsWritableSpan());
             layer.SetParameters(layerParameters);
             currentIndex += layerParameterCount;
         }
