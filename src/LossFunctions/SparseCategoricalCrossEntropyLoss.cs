@@ -193,7 +193,11 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         for (int i = 0; i < batchSize; i++)
         {
             double rawIdx = NumOps.ToDouble(target[i]);
-            int classIdx = (int)Math.Round(rawIdx);
+            int classIdx = (int)rawIdx;
+            if (Math.Abs(rawIdx - classIdx) > 1e-6)
+                throw new ArgumentException(
+                    $"Target at position {i} is {rawIdx}, expected an integer class index.",
+                    nameof(target));
             if (classIdx < 0 || classIdx >= numClasses)
                 throw new ArgumentOutOfRangeException(nameof(target),
                     $"Target index {classIdx} at position {i} is out of range [0, {numClasses}).");
