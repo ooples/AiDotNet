@@ -687,7 +687,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
             {
                 var childClusters = new HashSet<int>(
                     condensedTree.Where(node => node.Child >= n).Select(node => node.Child));
-                int root = clusterList.FirstOrDefault(c => !childClusters.Contains(c), clusterList[0]);
+                int root = clusterList.Where(c => !childClusters.Contains(c)).DefaultIfEmpty(clusterList[0]).First();
                 selectedClusters.Add(root);
             }
 

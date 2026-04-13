@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.ModelCompression;
@@ -95,6 +96,8 @@ public class CompressionAwareFitnessCalculator<T, TInput, TOutput> : IFitnessCal
     /// Gets a value indicating whether higher fitness scores are better.
     /// </summary>
     public bool IsHigherScoreBetter => true;
+
+    public DataSetType PreferredDataSetType => _baseFitnessCalculator.PreferredDataSetType;
 
     /// <summary>
     /// Gets or sets the current compression metrics to use in fitness calculation.

@@ -92,7 +92,7 @@ public interface IFitnessCalculator<T, TInput, TOutput>
     /// Optimizers use this to compute stats only for the needed dataset,
     /// skipping expensive Predict + stats computation for unused datasets.
     /// </summary>
-    DataSetType PreferredDataSetType => DataSetType.Validation;
+    DataSetType PreferredDataSetType { get; }
 
     /// <summary>
     /// Compares two fitness scores and determines if the current score is better than the best score so far.

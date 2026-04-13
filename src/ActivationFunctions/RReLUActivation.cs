@@ -132,7 +132,7 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
         // Training: sample per-element random slope per PyTorch RReLU spec
         double lo = Convert.ToDouble(_lowerBound);
         double hi = Convert.ToDouble(_upperBound);
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input._shape);
         for (int i = 0; i < input.Length; i++)
         {
             T val = input[i];
