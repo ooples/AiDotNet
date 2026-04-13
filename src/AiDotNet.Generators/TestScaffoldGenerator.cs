@@ -49,7 +49,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly string[] ExcludedBaseClasses =
     [
         "MetaLearnerBase",       // Meta-learning: wraps an IFullModel chosen by the user
+        "NeuralProcessBase",     // Neural processes: also meta-learning, inherits MetaLearnerBase
         "ShardedModelBase",      // Distributed training: wraps a model for tensor/data parallelism
+        "NoisePredictorBase",    // Noise predictors: internal diffusion components, not standalone models
     ];
 
     // Attribute metadata names
@@ -913,7 +915,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
             // Check if only the first parameter is required and is NeuralNetworkArchitecture<T>.
             // The rest must all have default values. This allows generating a default architecture.
-            if (ctor.Parameters.Length >= 1 && !hasArchitectureOnlyCtor)
+            if (ctor.Parameters.Length >= 1)
             {
                 var firstParam = ctor.Parameters[0];
                 // Check if the first parameter type IS exactly NeuralNetworkArchitecture<T>.
