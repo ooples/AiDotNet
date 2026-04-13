@@ -773,9 +773,9 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
-        // Use Tensor.FromVector for production-grade parameter setting
-        _convWeights = Tensor<T>.FromVector(parameters.Slice(0, weightSize), _convWeights._shape);
-        _convBias = Tensor<T>.FromVector(parameters.Slice(weightSize, biasSize), [biasSize]);
+        // Write in-place to preserve registered parameter tensor references
+        parameters.Slice(0, weightSize).AsSpan().CopyTo(_convWeights.Data.Span);
+        parameters.Slice(weightSize, biasSize).AsSpan().CopyTo(_convBias.Data.Span);
     }
 
     /// <summary>

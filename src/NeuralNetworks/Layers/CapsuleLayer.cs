@@ -810,9 +810,9 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (parameters.Length != matrixSize + biasSize)
             throw new ArgumentException($"Expected {matrixSize + biasSize} parameters, but got {parameters.Length}");
 
-        // Set parameters without hot-path conversions
-        _transformationMatrix = new Tensor<T>(_transformationMatrix._shape, parameters.Slice(0, matrixSize));
-        _bias = new Tensor<T>([biasSize], parameters.Slice(matrixSize, biasSize));
+        // Write in-place to preserve registered parameter tensor references
+        parameters.Slice(0, matrixSize).AsSpan().CopyTo(_transformationMatrix.Data.Span);
+        parameters.Slice(matrixSize, biasSize).AsSpan().CopyTo(_bias.Data.Span);
     }
 
     /// <summary>

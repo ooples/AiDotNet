@@ -1298,56 +1298,44 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
 
         int index = 0;
 
-        var queryParams = parameters.SubVector(index, querySize);
-        _queryWeights = Tensor<T>.FromVector(queryParams).Reshape(_queryWeights._shape);
+        // Write in-place to preserve registered parameter tensor references
+        parameters.SubVector(index, querySize).AsSpan().CopyTo(_queryWeights.Data.Span);
         index += querySize;
 
-        var keyParams = parameters.SubVector(index, keySize);
-        _keyWeights = Tensor<T>.FromVector(keyParams).Reshape(_keyWeights._shape);
+        parameters.SubVector(index, keySize).AsSpan().CopyTo(_keyWeights.Data.Span);
         index += keySize;
 
-        var valueParams = parameters.SubVector(index, valueSize);
-        _valueWeights = Tensor<T>.FromVector(valueParams).Reshape(_valueWeights._shape);
+        parameters.SubVector(index, valueSize).AsSpan().CopyTo(_valueWeights.Data.Span);
         index += valueSize;
 
-        var outputWeightsParams = parameters.SubVector(index, outputWeightsSize);
-        _outputWeights = Tensor<T>.FromVector(outputWeightsParams).Reshape(_outputWeights._shape);
+        parameters.SubVector(index, outputWeightsSize).AsSpan().CopyTo(_outputWeights.Data.Span);
         index += outputWeightsSize;
 
-        var outputBiasParams = parameters.SubVector(index, outputBiasSize);
-        _outputBias = Tensor<T>.FromVector(outputBiasParams);
+        parameters.SubVector(index, outputBiasSize).AsSpan().CopyTo(_outputBias.Data.Span);
         index += outputBiasSize;
 
-        var ffn1Params = parameters.SubVector(index, ffn1Size);
-        _ffnWeights1 = Tensor<T>.FromVector(ffn1Params).Reshape(_ffnWeights1._shape);
+        parameters.SubVector(index, ffn1Size).AsSpan().CopyTo(_ffnWeights1.Data.Span);
         index += ffn1Size;
 
-        var ffn2Params = parameters.SubVector(index, ffn2Size);
-        _ffnWeights2 = Tensor<T>.FromVector(ffn2Params).Reshape(_ffnWeights2._shape);
+        parameters.SubVector(index, ffn2Size).AsSpan().CopyTo(_ffnWeights2.Data.Span);
         index += ffn2Size;
 
-        var ffnBias1Params = parameters.SubVector(index, ffnBias1Size);
-        _ffnBias1 = Tensor<T>.FromVector(ffnBias1Params);
+        parameters.SubVector(index, ffnBias1Size).AsSpan().CopyTo(_ffnBias1.Data.Span);
         index += ffnBias1Size;
 
-        var ffnBias2Params = parameters.SubVector(index, ffnBias2Size);
-        _ffnBias2 = Tensor<T>.FromVector(ffnBias2Params);
+        parameters.SubVector(index, ffnBias2Size).AsSpan().CopyTo(_ffnBias2.Data.Span);
         index += ffnBias2Size;
 
-        var ln1ScaleParams = parameters.SubVector(index, ln1ScaleSize);
-        _layerNorm1Scale = Tensor<T>.FromVector(ln1ScaleParams);
+        parameters.SubVector(index, ln1ScaleSize).AsSpan().CopyTo(_layerNorm1Scale.Data.Span);
         index += ln1ScaleSize;
 
-        var ln1BiasParams = parameters.SubVector(index, ln1BiasSize);
-        _layerNorm1Bias = Tensor<T>.FromVector(ln1BiasParams);
+        parameters.SubVector(index, ln1BiasSize).AsSpan().CopyTo(_layerNorm1Bias.Data.Span);
         index += ln1BiasSize;
 
-        var ln2ScaleParams = parameters.SubVector(index, ln2ScaleSize);
-        _layerNorm2Scale = Tensor<T>.FromVector(ln2ScaleParams);
+        parameters.SubVector(index, ln2ScaleSize).AsSpan().CopyTo(_layerNorm2Scale.Data.Span);
         index += ln2ScaleSize;
 
-        var ln2BiasParams = parameters.SubVector(index, ln2BiasSize);
-        _layerNorm2Bias = Tensor<T>.FromVector(ln2BiasParams);
+        parameters.SubVector(index, ln2BiasSize).AsSpan().CopyTo(_layerNorm2Bias.Data.Span);
     }
 
     /// <inheritdoc/>

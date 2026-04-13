@@ -655,15 +655,14 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         int index = 0;
 
-        _selfWeights = Tensor<T>.FromVector(parameters.SubVector(index, selfCount))
-            .Reshape(_selfWeights._shape);
+        // Write in-place to preserve registered parameter tensor references
+        parameters.SubVector(index, selfCount).AsSpan().CopyTo(_selfWeights.Data.Span);
         index += selfCount;
 
-        _neighborWeights = Tensor<T>.FromVector(parameters.SubVector(index, neighborCount))
-            .Reshape(_neighborWeights._shape);
+        parameters.SubVector(index, neighborCount).AsSpan().CopyTo(_neighborWeights.Data.Span);
         index += neighborCount;
 
-        _bias = Tensor<T>.FromVector(parameters.SubVector(index, biasCount));
+        parameters.SubVector(index, biasCount).AsSpan().CopyTo(_bias.Data.Span);
     }
 
     public override void ClearGradients()
