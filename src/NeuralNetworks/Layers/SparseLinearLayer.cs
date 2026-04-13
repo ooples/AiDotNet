@@ -101,11 +101,11 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         _weights.NonZeroCount + OutputFeatures;
 
     /// <summary>
-    /// Gets whether this layer supports tape-based training.
-    /// Returns false because SparseTensor is incompatible with dense ParameterBuffer.
-    /// Use UpdateParameters() with manually accumulated gradients from Backward() instead.
+    /// Gets whether this layer supports training. SparseTensor is incompatible with
+    /// dense ParameterBuffer for tape-based autodiff, but the layer supports traditional
+    /// gradient-based training via UpdateParameters() with manually accumulated gradients.
     /// </summary>
-    public override bool SupportsTraining => false;
+    public override bool SupportsTraining => true;
 
     /// <summary>
     /// Initializes a new instance of the SparseLinearLayer.

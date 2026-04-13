@@ -668,6 +668,39 @@ public static class DeserializationHelper
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { inChannels, outChannels, inputHeight, inputWidth, expansionRatio, stride, useSE, seRatio, activation });
         }
+        else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.BottleneckBlock<>) ||
+                 (openGenericType.FullName != null && openGenericType.FullName.Contains("NeuralNetworks.Layers.BottleneckBlock")))
+        {
+            // BottleneckBlock(int inChannels, int baseChannels, int stride, int inputHeight, int inputWidth, bool zeroInitResidual)
+            int inChannels = TryGetInt(additionalParams, "InChannels") ?? (inputShape.Length > 0 ? inputShape[0] : 64);
+            int outChannels = outputShape.Length > 0 ? outputShape[0] : inChannels;
+            int baseChannels = outChannels / 4; // Expansion factor is 4 for BottleneckBlock
+            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
+            int inputHeight = inputShape.Length > 1 ? inputShape[1] : 56;
+            int inputWidth = inputShape.Length > 2 ? inputShape[2] : 56;
+            bool zeroInitResidual = TryGetBool(additionalParams, "ZeroInitResidual") ?? true;
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool) });
+            if (ctor is null)
+                throw new InvalidOperationException("Cannot find BottleneckBlock constructor.");
+            instance = ctor.Invoke(new object[] { inChannels, baseChannels, stride, inputHeight, inputWidth, zeroInitResidual });
+        }
+        else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.BasicBlock<>) ||
+                 (openGenericType.FullName != null && openGenericType.FullName.Contains("NeuralNetworks.Layers.BasicBlock")))
+        {
+            // BasicBlock(int inChannels, int outChannels, int stride, int inputHeight, int inputWidth, bool zeroInitResidual)
+            int inChannels = TryGetInt(additionalParams, "InChannels") ?? (inputShape.Length > 0 ? inputShape[0] : 64);
+            int outChannels = TryGetInt(additionalParams, "OutChannels") ?? (outputShape.Length > 0 ? outputShape[0] : inChannels);
+            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
+            int inputHeight = inputShape.Length > 1 ? inputShape[1] : 56;
+            int inputWidth = inputShape.Length > 2 ? inputShape[2] : 56;
+            bool zeroInitResidual = TryGetBool(additionalParams, "ZeroInitResidual") ?? true;
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool) });
+            if (ctor is null)
+                throw new InvalidOperationException("Cannot find BasicBlock constructor.");
+            instance = ctor.Invoke(new object[] { inChannels, outChannels, stride, inputHeight, inputWidth, zeroInitResidual });
+        }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.TransitionLayer<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.Contains("NeuralNetworks.Layers.TransitionLayer")))
         {
