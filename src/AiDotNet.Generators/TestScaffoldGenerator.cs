@@ -1533,8 +1533,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 }
                 else
                 {
+                    // Domain-appropriate 1D input size:
+                    // Language/Multimodal models typically use embedding dimensions (768 for BERT-scale)
+                    // General models use smaller defaults
+                    bool isLanguage = model.Domains.Contains(2); // Language=2
+                    bool isMultimodal = model.Domains.Contains(5); // Multimodal=5
+                    int inputSize1D = (isLanguage || isMultimodal) ? 128 : 16;
                     inputTypeExpr = "AiDotNet.Enums.InputType.OneDimensional";
-                    sizeExpr = "inputSize: 16, outputSize: 4";
+                    sizeExpr = $"inputSize: {inputSize1D}, outputSize: 4";
                 }
                 // Always construct the base NeuralNetworkArchitecture<double> — even for derived
                 // architecture types, the base constructor args are compatible since C# allows
@@ -1639,6 +1645,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         else if (isAudioModel)
         {
             sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
+        else if (family == TestFamily.NeuralNetwork || family == TestFamily.GAN ||
+                 family == TestFamily.Embedding || family == TestFamily.GraphNN)
+        {
+            // 1D models in families that support InputShape override:
+            // match the architecture's inputSize
+            bool isLang = model.Domains.Contains(2) || model.Domains.Contains(5);
+            int dim = isLang ? 128 : 16;
+            sb.AppendLine($"    protected override int[] InputShape => new[] {{ {dim} }};");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
 
