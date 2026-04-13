@@ -576,7 +576,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
 
             // Standard normal noise via Box-Muller
             var noiseData = new T[routingLogits.Length];
-            var rng = RandomHelper.CreateSeededRandom(42);
+            var rng = RandomHelper.CreateSecureRandom();
             for (int i = 0; i < noiseData.Length; i++)
             {
                 double u1 = 1.0 - rng.NextDouble();
