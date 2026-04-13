@@ -193,7 +193,7 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         var gatheredLogP = new Tensor<T>(target._shape);
         for (int i = 0; i < batchSize; i++)
         {
-            int classIdx = Math.Clamp((int)Math.Round(NumOps.ToDouble(target[i])), 0, numClasses - 1);
+            int classIdx = MathHelper.Clamp((int)Math.Round(NumOps.ToDouble(target[i])), 0, numClasses - 1);
             gatheredLogP[i] = predicted.Rank == 1
                 ? logP[classIdx]
                 : logP[i * numClasses + classIdx];
