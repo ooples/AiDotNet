@@ -33,6 +33,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
 
             public DataSetType PreferredDataSetType => DataSetType.Validation;
 
+
             public double CalculateFitnessScore(ModelEvaluationData<double, Matrix<double>, Vector<double>> evaluationData)
             {
                 return _returnValue;
@@ -58,7 +59,6 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
         {
             public bool IsHigherScoreBetter => true;
 
-            public DataSetType PreferredDataSetType => DataSetType.Validation;
 
             public float CalculateFitnessScore(ModelEvaluationData<float, Matrix<float>, Vector<float>> evaluationData)
             {

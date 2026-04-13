@@ -693,12 +693,13 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_transformationMatrixGradient == null || _biasGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // Use Engine operations for GPU/CPU acceleration
+        // Update in-place to preserve registered parameter tensor references.
+        // scale gradient, then subtract from weights via in-place ops.
         var scaledTransformGrad = Engine.TensorMultiplyScalar(_transformationMatrixGradient, learningRate);
-        _transformationMatrix = Engine.TensorSubtract(_transformationMatrix, scaledTransformGrad);
+        Engine.TensorSubtractInPlace(_transformationMatrix, scaledTransformGrad);
 
         var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasGradient, learningRate);
-        _bias = Engine.TensorSubtract(_bias, scaledBiasGrad);
+        Engine.TensorSubtractInPlace(_bias, scaledBiasGrad);
     }
 
     /// <summary>

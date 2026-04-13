@@ -99,6 +99,7 @@ public class CompressionAwareFitnessCalculator<T, TInput, TOutput> : IFitnessCal
 
     public DataSetType PreferredDataSetType => _baseFitnessCalculator.PreferredDataSetType;
 
+
     /// <summary>
     /// Gets or sets the current compression metrics to use in fitness calculation.
     /// </summary>

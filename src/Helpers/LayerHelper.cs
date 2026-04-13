@@ -31249,19 +31249,38 @@ public static class LayerHelper<T>
         int sequenceLength = 32;
         int numHeads = 8;
 
-        // Audio encoder: input projection + N attention layers + output projection
-        yield return new DenseLayer<T>(inputSize, embeddingDimension, tanhActivation);
-        for (int i = 0; i < numEncoderLayers; i++)
-            yield return new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads);
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
+        // Dual-stream architecture: audio and visual encoders run in parallel via
+        // ParallelStreamsLayer, then fused with cross-modal attention.
+        // Input is [audioFeatures | visualFeatures] concatenated, split in half.
+        int halfInput = inputSize / 2;
 
-        // Visual encoder: input projection + N attention layers + output projection
-        yield return new DenseLayer<T>(inputSize, embeddingDimension, tanhActivation);
+        var audioEncoderLayers = new List<ILayer<T>>
+        {
+            new DenseLayer<T>(halfInput, embeddingDimension, tanhActivation)
+        };
         for (int i = 0; i < numEncoderLayers; i++)
-            yield return new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads);
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
+            audioEncoderLayers.Add(new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads));
+        audioEncoderLayers.Add(new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation));
 
-        // Temporal modeling: 4 attention layers + proposal head
+        var visualEncoderLayers = new List<ILayer<T>>
+        {
+            new DenseLayer<T>(halfInput, embeddingDimension, tanhActivation)
+        };
+        for (int i = 0; i < numEncoderLayers; i++)
+            visualEncoderLayers.Add(new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads));
+        visualEncoderLayers.Add(new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation));
+
+        yield return new ParallelStreamsLayer<T>(
+            inputSize, embeddingDimension, embeddingDimension,
+            audioEncoderLayers, visualEncoderLayers);
+
+        // Fused representation is [audioEmbed | visualEmbed] = 2 * embeddingDimension
+        int fusedDim = embeddingDimension * 2;
+
+        // Project fused features back to embeddingDimension
+        yield return new DenseLayer<T>(fusedDim, embeddingDimension, tanhActivation);
+
+        // Temporal modeling: 4 attention layers
         for (int i = 0; i < 4; i++)
             yield return new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads);
         yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
@@ -31270,10 +31289,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < 4; i++)
             yield return new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads);
 
-        // Primary output head: event classification
-        // Multi-task heads (temporal boundary, spatial localization, anomaly) require parallel
-        // branching which a sequential layer stack cannot express — they must be handled by the
-        // model's own forward pass if needed.
+        // Event classification head
         yield return new DenseLayer<T>(embeddingDimension, numCategories, nullActivation);
     }
 
@@ -32712,10 +32728,10 @@ public static class LayerHelper<T>
         // === Mel conditioning: project mel features to hidden dim ===
         yield return new DenseLayer<T>(melChannels, hiddenDim, reluActivation);
 
-        // === GRU layers (paper: 2 stacked GRUs with residual connections) ===
-        // Paper uses single large GRU (896 units); we use hiddenDim with 2 layers
-        yield return new GRULayer<T>(hiddenDim, hiddenDim, false, (IActivationFunction<T>?)null);
-        yield return new GRULayer<T>(hiddenDim, hiddenDim, false, (IActivationFunction<T>?)null);
+        // === GRU layers (paper: single large GRU; we stack multiple per numResidualLayers) ===
+        int gruCount = Math.Max(1, Math.Min(numResidualLayers, 4));
+        for (int i = 0; i < gruCount; i++)
+            yield return new GRULayer<T>(hiddenDim, hiddenDim, false, (IActivationFunction<T>?)null);
 
         // === Output FC chain (paper: fc1 → fc2 → fc3) ===
         // fc1: hiddenDim → hiddenDim with ReLU
