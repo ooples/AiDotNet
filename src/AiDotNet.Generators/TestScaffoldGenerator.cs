@@ -1407,12 +1407,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else
             {
-                // Architecture-only constructor: provide a default NeuralNetworkArchitecture
+                // Architecture-only constructor: provide a domain-appropriate NeuralNetworkArchitecture.
+                // Vision/Video/3D models need ThreeDimensional input; Audio needs TwoDimensional;
+                // others default to OneDimensional.
                 needsArchitectureUsing = true;
-                string archExpr = "new NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                bool isVision = model.Domains.Contains(1) || model.Domains.Contains(3) || model.Domains.Contains(11); // Vision=1, Video=3, ThreeD=11
+                bool isAudio = model.Domains.Contains(4); // Audio=4 (using raw int since enum isn't available in generator)
+                string inputTypeExpr = isVision ? "AiDotNet.Enums.InputType.ThreeDimensional" :
+                                       isAudio ? "AiDotNet.Enums.InputType.TwoDimensional" :
+                                       "AiDotNet.Enums.InputType.OneDimensional";
+                string sizeExpr = isVision ? "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4" :
+                                  isAudio ? "inputHeight: 32, inputWidth: 16, inputDepth: 1, outputSize: 4" :
+                                  "inputSize: 16, outputSize: 4";
+                string archExpr = $"new NeuralNetworkArchitecture<double>(" +
+                    $"inputType: {inputTypeExpr}, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 16, outputSize: 4)";
+                    $"{sizeExpr})";
 
                 if (model.TypeParameterCount == 0)
                 {
@@ -1477,6 +1487,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"public class {testClassName} : {baseClassName}");
         sb.AppendLine("{");
+
+        // Override InputShape/OutputShape for domain-appropriate test data.
+        // Vision/Video/3D models need [C, H, W]; default is [1, 4].
+        bool isVisionModel = model.Domains.Contains(1) || model.Domains.Contains(3) || model.Domains.Contains(11);
+        bool isAudioModel = model.Domains.Contains(4);
+        if (isVisionModel)
+        {
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
+        else if (isAudioModel)
+        {
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 32, 16 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
+
         sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
         sb.AppendLine(factoryBody);
         sb.AppendLine("}");
