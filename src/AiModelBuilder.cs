@@ -2479,35 +2479,22 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             TOutput fullY;
             if (useFullData)
             {
-                // Apply data preparation (outlier removal, resampling, augmentation) to
-                // full dataset so clustering operates on the same cleaned data as supervised models.
-                TInput clusterX = preparedX;
-                TOutput clusterY = preparedY;
-                if (_dataPreparationPipeline is not null && _dataPreparationPipeline.Count > 0)
+                // Clustering needs the full dataset for correct density estimation.
+                // Do NOT apply data preparation pipeline (resampling/augmentation) here —
+                // those operations are label-aware and would leak ground truth into
+                // unsupervised clustering. Only apply feature transformations.
+                if (_preprocessingPipeline is not null)
                 {
-                    if (clusterX is Matrix<T> xMatrix && clusterY is Vector<T> yVector)
-                    {
-                        var (px, py) = _dataPreparationPipeline.FitResample(xMatrix, yVector);
-                        clusterX = (TInput)(object)px;
-                        clusterY = (TOutput)(object)py;
-                    }
-                    else if (clusterX is Tensor<T> xTensor && clusterY is Tensor<T> yTensor)
-                    {
-                        var (px, py) = _dataPreparationPipeline.FitResampleTensor(xTensor, yTensor);
-                        clusterX = (TInput)(object)px;
-                        clusterY = (TOutput)(object)py;
-                    }
-                }
-
-                if (_preprocessingPipeline is not null && _preprocessingPipeline.IsFitted)
-                {
-                    fullX = _preprocessingPipeline.Transform(clusterX);
-                    fullY = clusterY;
+                    // Refit on full dataset so clustering uses full-data statistics,
+                    // not train-split statistics from the supervised path.
+                    _preprocessingPipeline.Fit(preparedX);
+                    fullX = _preprocessingPipeline.Transform(preparedX);
+                    fullY = preparedY;
                 }
                 else
                 {
-                    fullX = clusterX;
-                    fullY = clusterY;
+                    fullX = preparedX;
+                    fullY = preparedY;
                 }
             }
             else

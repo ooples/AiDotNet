@@ -4618,11 +4618,9 @@ public static class LayerHelper<T>
         // Flatten
         yield return new FlattenLayer<T>([currentChannels, 1, 1]);
 
-        // Classification head per Huang et al. 2017: Dense layer outputs raw logits.
-        // Softmax/Sigmoid is NOT applied here — it's handled by the loss function
-        // (CrossEntropyLoss = LogSoftmax + NLLLoss). Applying Softmax in the model
-        // causes double-softmax when paired with CrossEntropy, and makes the output
-        // scale-invariant (destroying input sensitivity for testing).
+        // Classification head per Huang et al. 2017: outputs raw logits (no softmax).
+        // Must be paired with CrossEntropyWithLogitsLoss (which applies LogSoftmax
+        // internally), NOT CrossEntropyLoss (which expects probabilities).
         yield return new DenseLayer<T>(currentChannels, configuration.NumClasses,
             activationFunction: new IdentityActivation<T>());
     }

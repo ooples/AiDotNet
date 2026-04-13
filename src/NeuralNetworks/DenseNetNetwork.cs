@@ -116,7 +116,7 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0,
         DenseNetOptions? options = null)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        : base(architecture, lossFunction ?? GetDenseNetDefaultLoss(architecture.TaskType), maxGradNorm)
     {
         _options = options ?? new DenseNetOptions();
         Options = _options;
@@ -129,9 +129,25 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
             nameof(DenseNetNetwork<T>));
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+        _lossFunction = lossFunction ?? GetDenseNetDefaultLoss(architecture.TaskType);
 
         InitializeLayers();
+    }
+
+    /// <summary>
+    /// Returns the appropriate loss function for DenseNet. DenseNet outputs raw logits
+    /// (no softmax activation), so classification tasks use CrossEntropyWithLogitsLoss
+    /// which applies LogSoftmax internally per Huang et al. 2017.
+    /// </summary>
+    private static ILossFunction<T> GetDenseNetDefaultLoss(NeuralNetworkTaskType taskType)
+    {
+        return taskType switch
+        {
+            NeuralNetworkTaskType.BinaryClassification => new CrossEntropyWithLogitsLoss<T>(),
+            NeuralNetworkTaskType.MultiClassClassification => new CrossEntropyWithLogitsLoss<T>(),
+            NeuralNetworkTaskType.MultiLabelClassification => new CrossEntropyWithLogitsLoss<T>(),
+            _ => NeuralNetworkHelper<T>.GetDefaultLossFunction(taskType),
+        };
     }
 
     /// <summary>
