@@ -782,14 +782,11 @@ public enum ControlType
 }
 
 /// <summary>
-/// ControlNet encoder that processes control signals.
-/// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <summary>
 /// ControlNet encoder per Zhang et al. (2023) "Adding Conditional Control to Text-to-Image Diffusion Models".
 /// Uses convolutional layers (NOT dense/fully-connected) operating on spatial [C, H, W] tensors.
 /// Zero convolutions are 1×1 convolutions initialized to zero for safe integration with pretrained models.
 /// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class ControlNetEncoder<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

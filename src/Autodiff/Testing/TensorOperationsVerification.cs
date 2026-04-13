@@ -126,8 +126,9 @@ public class TensorOperationsVerification<T>
             autodiffGradient = inputNode.Gradient ?? new Tensor<T>(input._shape);
         }
 
-        // Compute numerical gradient
-        var outputGrad = CreateOnes(input._shape);
+        // Compute numerical gradient using the operation's output shape for the seed gradient
+        var operationOutput = operation(new Tensor<T>((int[])input._shape.Clone(), input.Data));
+        var outputGrad = CreateOnes(operationOutput._shape);
         var numericalGradient = NumericalGradient<T>.ComputeForOperation(
             input.Clone(),
             outputGrad,
@@ -199,8 +200,11 @@ public class TensorOperationsVerification<T>
             autodiffGrad2 = node2.Gradient ?? new Tensor<T>(input2._shape);
         }
 
-        // Compute numerical gradients
-        var outputGrad = CreateOnes(input1._shape);
+        // Compute numerical gradients using the operation's output shape for the seed gradient
+        var binaryOutput = operation(
+            new Tensor<T>((int[])input1._shape.Clone(), input1.Data),
+            new Tensor<T>((int[])input2._shape.Clone(), input2.Data));
+        var outputGrad = CreateOnes(binaryOutput._shape);
         var (numericalGrad1, numericalGrad2) = NumericalGradient<T>.ComputeForBinaryOperation(
             input1.Clone(),
             input2.Clone(),
