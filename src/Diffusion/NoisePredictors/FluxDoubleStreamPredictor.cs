@@ -179,8 +179,7 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
     private static int SetParams(DenseLayer<T> layer, Vector<T> parameters, int offset)
     {
         int count = layer.ParameterCount;
-        var p = new Vector<T>(parameters.AsSpan().Slice(offset, count).ToArray());
-        layer.SetParameters(p);
+        layer.SetParameters(parameters.GetSubVector(offset, count));
         return offset + count;
     }
 

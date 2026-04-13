@@ -1249,16 +1249,9 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");
         }
 
-        // Modify weights and biases IN PLACE to preserve engine's persistent tensor references
-        int index = 0;
-        var wSpan = _weights.Data.Span;
-        for (int i = 0; i < _weights.Length; i++)
-            wSpan[i] = parameters[index + i];
-        index += _weights.Length;
-
-        var bSpan = _biases.Data.Span;
-        for (int i = 0; i < _biases.Length; i++)
-            bSpan[i] = parameters[index + i];
+        // Bulk copy via Span to preserve engine's persistent tensor references
+        parameters.AsSpan().Slice(0, _weights.Length).CopyTo(_weights.Data.Span);
+        parameters.AsSpan().Slice(_weights.Length, _biases.Length).CopyTo(_biases.Data.Span);
 
         // Notify engine that data changed (for GPU re-upload)
         Engine.InvalidatePersistentTensor(_weights);
