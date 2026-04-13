@@ -403,8 +403,9 @@ public class ResNetNetworkTests
     #region ResNetNetwork Training Tests
 
     [Fact(Timeout = 120000)]
-    public void ResNetNetwork_Train_CompletesWithoutError()
+    public async Task ResNetNetwork_Train_CompletesWithoutError()
     {
+        await Task.Yield();
         // Arrange
         var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
             inputHeight: 32, inputWidth: 32);
@@ -428,8 +429,9 @@ public class ResNetNetworkTests
     }
 
     [Fact(Timeout = 120000)]
-    public void ResNetNetwork_Train_LossDecreases()
+    public async Task ResNetNetwork_Train_LossDecreases()
     {
+        await Task.Yield();
         // Arrange
         var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
             inputHeight: 32, inputWidth: 32);

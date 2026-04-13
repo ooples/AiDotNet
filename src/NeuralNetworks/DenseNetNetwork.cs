@@ -116,7 +116,7 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0,
         DenseNetOptions? options = null)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        : base(architecture, lossFunction ?? GetDenseNetDefaultLoss(architecture.TaskType), maxGradNorm)
     {
         _options = options ?? new DenseNetOptions();
         Options = _options;
@@ -129,9 +129,36 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
             nameof(DenseNetNetwork<T>));
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+        _lossFunction = lossFunction ?? GetDenseNetDefaultLoss(architecture.TaskType);
 
         InitializeLayers();
+    }
+
+    /// <summary>
+    /// Returns the appropriate loss function for DenseNet. DenseNet outputs raw logits
+    /// (no softmax activation), so classification tasks use CrossEntropyWithLogitsLoss
+    /// which applies LogSoftmax internally per Huang et al. 2017.
+    /// </summary>
+    private static ILossFunction<T> GetDenseNetDefaultLoss(NeuralNetworkTaskType taskType)
+    {
+        // Match each task type to the corresponding *WithLogits loss so the DenseNet
+        // classification head's raw-logits output flows into a numerically stable loss
+        // that applies the activation internally:
+        //   * BinaryClassification — outputSize is typically 1, so softmax([x]) collapses
+        //     to a constant 1 (zero loss). Use BinaryCrossEntropyWithLogitsLoss instead,
+        //     which is the sigmoid+BCE fused form.
+        //   * MultiLabelClassification — labels are independent (not mutually exclusive),
+        //     so softmax cross-entropy is the wrong objective. BCE-with-logits per output
+        //     is the standard multi-label loss.
+        //   * MultiClassClassification — the only task type where softmax cross-entropy
+        //     is correct (mutually exclusive classes).
+        return taskType switch
+        {
+            NeuralNetworkTaskType.BinaryClassification     => new BinaryCrossEntropyWithLogitsLoss<T>(),
+            NeuralNetworkTaskType.MultiClassClassification => new CrossEntropyWithLogitsLoss<T>(),
+            NeuralNetworkTaskType.MultiLabelClassification => new BinaryCrossEntropyWithLogitsLoss<T>(),
+            _ => NeuralNetworkHelper<T>.GetDefaultLossFunction(taskType),
+        };
     }
 
     /// <summary>

@@ -296,7 +296,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         AuxiliaryLossWeight = NumOps.FromDouble(0.0001);
         _lastEmbeddingRegularizationLoss = NumOps.Zero;
 
-        _embeddingTensor = TensorAllocator.Rent<T>([vocabularySize, embeddingDimension]);
+        _embeddingTensor = new Tensor<T>([vocabularySize, embeddingDimension]);
         InitializeParameters();
 
         // Register trainable parameters for GPU memory optimization
@@ -443,9 +443,15 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             // Project from input features to embedding dimension
             int inputFeatures = input.Shape[input.Rank - 1];
 
-            // Create projection weights if needed (lazy initialization)
+            // Create projection weights if needed (lazy initialization).
+            // If the input feature dimension changes between calls, return the previously
+            // rented buffer to the pool before renting a new one — otherwise the old buffer
+            // is leaked from the allocator's free list and degrades pooling efficiency over
+            // long runs that see varying input shapes.
             if (_projectionWeights == null || _projectionWeights.Shape[0] != inputFeatures)
             {
+                if (_projectionWeights != null)
+                    TensorAllocator.Return(_projectionWeights);
                 _projectionWeights = TensorAllocator.Rent<T>([inputFeatures, embeddingDim]);
                 // Xavier initialization
                 T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));
@@ -580,9 +586,14 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             // Linear projection for continuous input: input @ _projectionWeights
             int inputFeatures = inputTensor.Shape[^1];
 
-            // Create projection weights if needed (lazy initialization)
+            // Create projection weights if needed (lazy initialization).
+            // Return the previously rented buffer to the pool before renting a replacement
+            // when the input feature dimension changes between calls — see comment above
+            // the matching block in the non-GPU forward path for details.
             if (_projectionWeights == null || _projectionWeights.Shape[0] != inputFeatures)
             {
+                if (_projectionWeights != null)
+                    TensorAllocator.Return(_projectionWeights);
                 _projectionWeights = TensorAllocator.Rent<T>([inputFeatures, embeddingDim]);
                 // Xavier initialization
                 T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));

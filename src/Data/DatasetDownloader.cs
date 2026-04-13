@@ -17,7 +17,18 @@ internal static class DatasetDownloader
 
     private static HttpClient CreateHttpClient()
     {
-        var client = new HttpClient();
+        // Explicitly configure redirect following and cap the number of
+        // automatic redirects. This preserves standard redirect handling
+        // for responses that include a valid Location header (302, 307, 308).
+        // Note: S3 cross-region 301 responses lack a Location header, so
+        // HttpClient cannot follow them — the real fix for those is using
+        // region-specific URLs (see WikiText103DataLoader). Fixes #1117.
+        var handler = new HttpClientHandler
+        {
+            AllowAutoRedirect = true,
+            MaxAutomaticRedirections = 10,
+        };
+        var client = new HttpClient(handler);
         client.Timeout = TimeSpan.FromMinutes(30);
         return client;
     }

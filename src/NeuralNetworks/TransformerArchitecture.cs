@@ -341,4 +341,84 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
         UsePositionalEncoding = usePositionalEncoding;
         Temperature = temperature;
     }
+
+    /// <summary>
+    /// Infers the correct classification task type from the shape of the target data.
+    /// </summary>
+    /// <param name="targetShape">The shape of the target tensor (e.g., [numSamples] or [numSamples, seqLen]).</param>
+    /// <param name="inputSeqLen">The sequence length of the input data.</param>
+    /// <returns>
+    /// <see cref="NeuralNetworkTaskType.TokenClassification"/> if targets have a sequence
+    /// dimension matching the input (per-position labels);
+    /// <see cref="NeuralNetworkTaskType.SequenceClassification"/> if targets are 1D
+    /// (one label per sequence).
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this helper before constructing a Transformer to automatically
+    /// pick the right task type based on your target data shape. If your targets have one label
+    /// per token position (like NER or POS tagging), it returns TokenClassification. If your
+    /// targets have one label per whole sequence (like sentiment analysis), it returns
+    /// SequenceClassification.
+    /// </para>
+    /// </remarks>
+    internal static NeuralNetworkTaskType InferClassificationTaskType(int[] targetShape, int inputSeqLen)
+    {
+        if (targetShape is null || targetShape.Length == 0)
+            throw new ArgumentException("Target shape must not be null or empty.", nameof(targetShape));
+        if (inputSeqLen <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputSeqLen), "Input sequence length must be positive.");
+
+        if (targetShape.Length >= 2 && targetShape[1] == inputSeqLen)
+        {
+            // Target has shape [numSamples, seqLen] → per-position labels
+            return NeuralNetworkTaskType.TokenClassification;
+        }
+
+        // Target has shape [numSamples] → one label per sequence
+        return NeuralNetworkTaskType.SequenceClassification;
+    }
+
+    /// <summary>
+    /// Validates that the configured task type is consistent with the target data shape.
+    /// Throws a descriptive exception if there is a mismatch.
+    /// </summary>
+    /// <param name="taskType">The configured task type.</param>
+    /// <param name="targetShape">The shape of the target tensor.</param>
+    /// <param name="inputSeqLen">The sequence length of the input.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the task type is SequenceClassification but targets have per-position labels,
+    /// or when the task type is TokenClassification but targets have per-sequence labels.
+    /// </exception>
+    internal static void ValidateTaskTypeVsTargetShape(
+        NeuralNetworkTaskType taskType, int[] targetShape, int inputSeqLen)
+    {
+        if (targetShape is null || targetShape.Length == 0)
+            throw new ArgumentException("Target shape must not be null or empty.", nameof(targetShape));
+        if (inputSeqLen <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputSeqLen), "Input sequence length must be positive.");
+
+        bool hasPerPositionTargets = targetShape.Length >= 2 && targetShape[1] == inputSeqLen;
+
+        if (taskType == NeuralNetworkTaskType.SequenceClassification && hasPerPositionTargets)
+        {
+            throw new InvalidOperationException(
+                $"Task type mismatch: SequenceClassification was configured, but target shape " +
+                $"[{string.Join(", ", targetShape)}] has a sequence dimension matching the input " +
+                $"sequence length ({inputSeqLen}). This indicates per-position labels. " +
+                $"Use NeuralNetworkTaskType.TokenClassification instead, or use " +
+                $"TransformerArchitecture.InferClassificationTaskType() to auto-detect.");
+        }
+
+        if (taskType == NeuralNetworkTaskType.TokenClassification && !hasPerPositionTargets)
+        {
+            throw new InvalidOperationException(
+                $"Task type mismatch: TokenClassification was configured, but target shape " +
+                $"[{string.Join(", ", targetShape)}] does not have a sequence dimension matching " +
+                $"the input sequence length ({inputSeqLen}). TokenClassification requires " +
+                $"per-position labels with shape [batch, {inputSeqLen}, ...]. " +
+                $"Use NeuralNetworkTaskType.SequenceClassification instead, or use " +
+                $"TransformerArchitecture.InferClassificationTaskType() to auto-detect.");
+        }
+    }
 }

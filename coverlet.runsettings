@@ -16,7 +16,17 @@
             File exclusions mirror sonar.coverage.exclusions in sonarcloud.yml — Sonar discards
             these anyway, so there is no point instrumenting or serializing them.
           -->
-          <ExcludeByFile>**/ProgramSynthesis/Models/**/*.cs,**/ProgramSynthesis/Execution/**/*.cs,**/ProgramSynthesis/Requests/**/*.cs,**/ProgramSynthesis/Results/**/*.cs,**/ProgramSynthesis/Interfaces/**/*.cs,**/ProgramSynthesis/Enums/**/*.cs,**/AiDotNet.Serving/Configuration/**/*.cs,**/AiDotNet.Serving/Models/**/*.cs,**/AiDotNet.Serving/Persistence/Entities/**/*.cs,**/AiDotNet.Serving/Persistence/Migrations/**/*.cs,**/AiDotNet.Serving/**/I*.cs,**/Interfaces/**/*.cs</ExcludeByFile>
+          <!--
+            Do NOT add a broad **/Interfaces/**/*.cs exclusion here: several files under
+            src/Interfaces are not pure interfaces (e.g. SubModel.cs contains a concrete
+            class; IParameterizable.cs has default interface method bodies). Excluding
+            the whole directory would silently hide executable code from coverage.
+            Configuration/DTO directories with no executable code are listed explicitly.
+            For the AiDotNet.Serving project we use the more aggressive **/I*.cs pattern
+            (per master's narrower-than-the-folder convention) to catch I-prefixed
+            interface files anywhere under that project tree.
+          -->
+          <ExcludeByFile>**/ProgramSynthesis/Models/**/*.cs,**/ProgramSynthesis/Execution/**/*.cs,**/ProgramSynthesis/Requests/**/*.cs,**/ProgramSynthesis/Results/**/*.cs,**/ProgramSynthesis/Interfaces/**/*.cs,**/ProgramSynthesis/Enums/**/*.cs,**/AiDotNet.Serving/Configuration/**/*.cs,**/AiDotNet.Serving/Models/**/*.cs,**/AiDotNet.Serving/Persistence/Entities/**/*.cs,**/AiDotNet.Serving/Persistence/Migrations/**/*.cs,**/AiDotNet.Serving/**/I*.cs</ExcludeByFile>
           <!-- SingleHit: record only whether each line was hit, not the hit count. Smaller XML, faster write. -->
           <SingleHit>true</SingleHit>
           <!-- SkipAutoProps: don't instrument trivial compiler-generated property accessors. -->

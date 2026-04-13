@@ -387,8 +387,9 @@ public class EfficientNetTests
     #region Training Tests (Skipped for performance)
 
     [Fact(Timeout = 120000)]
-    public void EfficientNetB0_Train_CompletesWithoutError()
+    public async Task EfficientNetB0_Train_CompletesWithoutError()
     {
+        await Task.Yield();
         // Arrange
         var network = EfficientNetNetwork<float>.EfficientNetB0(numClasses: 10);
         var input = new Tensor<float>([1, 3, 224, 224]);

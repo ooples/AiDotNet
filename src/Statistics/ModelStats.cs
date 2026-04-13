@@ -46,7 +46,8 @@ public class ModelStats<T, TInput, TOutput>
     /// This helps you understand which features might be providing similar information.
     /// </para>
     /// </remarks>
-    public Matrix<T> CorrelationMatrix { get; private set; }
+    private Matrix<T> _correlationMatrix = default!;
+    public Matrix<T> CorrelationMatrix { get { EnsureFullStatsComputed(); return _correlationMatrix; } private set { _correlationMatrix = value; } }
 
     /// <summary>
     /// Gets the covariance matrix showing how features vary together.
@@ -57,7 +58,8 @@ public class ModelStats<T, TInput, TOutput>
     /// It helps identify patterns in how your features behave together.
     /// </para>
     /// </remarks>
-    public Matrix<T> CovarianceMatrix { get; private set; }
+    private Matrix<T> _covarianceMatrix = default!;
+    public Matrix<T> CovarianceMatrix { get { EnsureFullStatsComputed(); return _covarianceMatrix; } private set { _covarianceMatrix = value; } }
 
     /// <summary>
     /// Gets the Variance Inflation Factor (VIF) for each feature.
@@ -68,7 +70,8 @@ public class ModelStats<T, TInput, TOutput>
     /// as its information is already captured by other features.
     /// </para>
     /// </remarks>
-    public List<T> VIFList { get; private set; }
+    private List<T> _vIFList = default!;
+    public List<T> VIFList { get { EnsureFullStatsComputed(); return _vIFList; } private set { _vIFList = value; } }
 
     /// <summary>
     /// Gets the condition number, a measure of the model's numerical stability.
@@ -79,7 +82,8 @@ public class ModelStats<T, TInput, TOutput>
     /// (typically above 30) suggests that your model might be unstable and sensitive to small data changes.
     /// </para>
     /// </remarks>
-    public T ConditionNumber { get; private set; }
+    private T _conditionNumber = default!;
+    public T ConditionNumber { get { EnsureFullStatsComputed(); return _conditionNumber; } private set { _conditionNumber = value; } }
 
     /// <summary>
     /// Gets the log pointwise predictive density, a measure of prediction accuracy.
@@ -89,7 +93,8 @@ public class ModelStats<T, TInput, TOutput>
     /// Higher values generally indicate better predictions. It's particularly useful when comparing different models.
     /// </para>
     /// </remarks>
-    public T LogPointwisePredictiveDensity { get; private set; }
+    private T _logPointwisePredictiveDensity = default!;
+    public T LogPointwisePredictiveDensity { get { EnsureFullStatsComputed(); return _logPointwisePredictiveDensity; } private set { _logPointwisePredictiveDensity = value; } }
 
     /// <summary>
     /// Gets the leave-one-out predictive densities for each data point.
@@ -99,7 +104,8 @@ public class ModelStats<T, TInput, TOutput>
     /// It helps identify which data points might be harder for the model to predict accurately.
     /// </para>
     /// </remarks>
-    public List<T> LeaveOneOutPredictiveDensities { get; private set; }
+    private List<T> _leaveOneOutPredictiveDensities = default!;
+    public List<T> LeaveOneOutPredictiveDensities { get { EnsureFullStatsComputed(); return _leaveOneOutPredictiveDensities; } private set { _leaveOneOutPredictiveDensities = value; } }
 
     /// <summary>
     /// Gets the observed test statistic for model evaluation.
@@ -109,7 +115,8 @@ public class ModelStats<T, TInput, TOutput>
     /// It's used in statistical tests to determine if your model is significantly better than a simpler alternative.
     /// </para>
     /// </remarks>
-    public T ObservedTestStatistic { get; private set; }
+    private T _observedTestStatistic = default!;
+    public T ObservedTestStatistic { get { EnsureFullStatsComputed(); return _observedTestStatistic; } private set { _observedTestStatistic = value; } }
 
     /// <summary>
     /// Gets samples from the posterior predictive distribution.
@@ -119,7 +126,8 @@ public class ModelStats<T, TInput, TOutput>
     /// They help you understand the range and uncertainty of your model's predictions.
     /// </para>
     /// </remarks>
-    public List<T> PosteriorPredictiveSamples { get; private set; }
+    private List<T> _posteriorPredictiveSamples = default!;
+    public List<T> PosteriorPredictiveSamples { get { EnsureFullStatsComputed(); return _posteriorPredictiveSamples; } private set { _posteriorPredictiveSamples = value; } }
 
     /// <summary>
     /// Gets the marginal likelihood of the model.
@@ -129,7 +137,8 @@ public class ModelStats<T, TInput, TOutput>
     /// It helps in comparing different models, with higher values generally indicating better models.
     /// </para>
     /// </remarks>
-    public T MarginalLikelihood { get; private set; }
+    private T _marginalLikelihood = default!;
+    public T MarginalLikelihood { get { EnsureFullStatsComputed(); return _marginalLikelihood; } private set { _marginalLikelihood = value; } }
 
     /// <summary>
     /// Gets the marginal likelihood of a reference (simpler) model.
@@ -139,7 +148,8 @@ public class ModelStats<T, TInput, TOutput>
     /// It's used as a comparison point to see how much better your more complex model performs.
     /// </para>
     /// </remarks>
-    public T ReferenceModelMarginalLikelihood { get; private set; }
+    private T _referenceModelMarginalLikelihood = default!;
+    public T ReferenceModelMarginalLikelihood { get { EnsureFullStatsComputed(); return _referenceModelMarginalLikelihood; } private set { _referenceModelMarginalLikelihood = value; } }
 
     /// <summary>
     /// Gets the log-likelihood of the model.
@@ -149,7 +159,8 @@ public class ModelStats<T, TInput, TOutput>
     /// Higher values mean your model fits the data better. It's often used in more advanced statistical techniques.
     /// </para>
     /// </remarks>
-    public T LogLikelihood { get; private set; }
+    private T _logLikelihood = default!;
+    public T LogLikelihood { get { EnsureFullStatsComputed(); return _logLikelihood; } private set { _logLikelihood = value; } }
 
     /// <summary>
     /// Gets the effective number of parameters in the model.
@@ -160,7 +171,8 @@ public class ModelStats<T, TInput, TOutput>
     /// (using more complexity than needed to explain the data).
     /// </para>
     /// </remarks>
-    public T EffectiveNumberOfParameters { get; private set; }
+    private T _effectiveNumberOfParameters = default!;
+    public T EffectiveNumberOfParameters { get { EnsureFullStatsComputed(); return _effectiveNumberOfParameters; } private set { _effectiveNumberOfParameters = value; } }
 
     /// <summary>
     /// Gets the actual (observed) values from the dataset.
@@ -200,7 +212,8 @@ public class ModelStats<T, TInput, TOutput>
     /// Lower values indicate predictions that are closer to the actual values.
     /// </para>
     /// </remarks>
-    public T EuclideanDistance { get; private set; }
+    private T _euclideanDistance = default!;
+    public T EuclideanDistance { get { EnsureFullStatsComputed(); return _euclideanDistance; } private set { _euclideanDistance = value; } }
 
     /// <summary>
     /// Gets the Manhattan distance between actual and predicted values.
@@ -210,7 +223,8 @@ public class ModelStats<T, TInput, TOutput>
     /// horizontally or vertically (like navigating city blocks). Lower values indicate better predictions.
     /// </para>
     /// </remarks>
-    public T ManhattanDistance { get; private set; }
+    private T _manhattanDistance = default!;
+    public T ManhattanDistance { get { EnsureFullStatsComputed(); return _manhattanDistance; } private set { _manhattanDistance = value; } }
 
     /// <summary>
     /// Gets the cosine similarity between actual and predicted values.
@@ -220,7 +234,8 @@ public class ModelStats<T, TInput, TOutput>
     /// ignoring their magnitude. Values closer to 1 indicate more similar directions.
     /// </para>
     /// </remarks>
-    public T CosineSimilarity { get; private set; }
+    private T _cosineSimilarity = default!;
+    public T CosineSimilarity { get { EnsureFullStatsComputed(); return _cosineSimilarity; } private set { _cosineSimilarity = value; } }
 
     /// <summary>
     /// Gets the Jaccard similarity between actual and predicted values.
@@ -230,7 +245,8 @@ public class ModelStats<T, TInput, TOutput>
     /// It's especially useful for binary (yes/no) predictions. Values closer to 1 indicate more overlap.
     /// </para>
     /// </remarks>
-    public T JaccardSimilarity { get; private set; }
+    private T _jaccardSimilarity = default!;
+    public T JaccardSimilarity { get { EnsureFullStatsComputed(); return _jaccardSimilarity; } private set { _jaccardSimilarity = value; } }
 
     /// <summary>
     /// Gets the Hamming distance between actual and predicted values.
@@ -240,7 +256,8 @@ public class ModelStats<T, TInput, TOutput>
     /// It's most useful for categorical predictions. Lower values indicate fewer differences.
     /// </para>
     /// </remarks>
-    public T HammingDistance { get; private set; }
+    private T _hammingDistance = default!;
+    public T HammingDistance { get { EnsureFullStatsComputed(); return _hammingDistance; } private set { _hammingDistance = value; } }
 
     /// <summary>
     /// Gets the Mahalanobis distance between actual and predicted values.
@@ -250,7 +267,8 @@ public class ModelStats<T, TInput, TOutput>
     /// are related to each other. It can be more meaningful than simpler distances when your features are correlated.
     /// </para>
     /// </remarks>
-    public T MahalanobisDistance { get; private set; }
+    private T _mahalanobisDistance = default!;
+    public T MahalanobisDistance { get { EnsureFullStatsComputed(); return _mahalanobisDistance; } private set { _mahalanobisDistance = value; } }
 
     /// <summary>
     /// Gets the mutual information between actual and predicted values.
@@ -260,7 +278,8 @@ public class ModelStats<T, TInput, TOutput>
     /// Higher values mean your predictions are more informative and closely related to the actual values.
     /// </para>
     /// </remarks>
-    public T MutualInformation { get; private set; }
+    private T _mutualInformation = default!;
+    public T MutualInformation { get { EnsureFullStatsComputed(); return _mutualInformation; } private set { _mutualInformation = value; } }
 
     /// <summary>
     /// Gets the normalized mutual information between actual and predicted values.
@@ -270,7 +289,8 @@ public class ModelStats<T, TInput, TOutput>
     /// It's easier to interpret across different datasets. Values closer to 1 indicate better predictions.
     /// </para>
     /// </remarks>
-    public T NormalizedMutualInformation { get; private set; }
+    private T _normalizedMutualInformation = default!;
+    public T NormalizedMutualInformation { get { EnsureFullStatsComputed(); return _normalizedMutualInformation; } private set { _normalizedMutualInformation = value; } }
 
     /// <summary>
     /// Gets the variation of information between actual and predicted values.
@@ -281,7 +301,8 @@ public class ModelStats<T, TInput, TOutput>
     /// It's particularly useful when comparing different clustering results.
     /// </para>
     /// </remarks>
-    public T VariationOfInformation { get; private set; }
+    private T _variationOfInformation = default!;
+    public T VariationOfInformation { get { EnsureFullStatsComputed(); return _variationOfInformation; } private set { _variationOfInformation = value; } }
 
     /// <summary>
     /// Gets the silhouette score, a measure of how similar an object is to its own cluster compared to other clusters.
@@ -294,7 +315,8 @@ public class ModelStats<T, TInput, TOutput>
     /// - Values close to -1 mean some data points might be in the wrong group
     /// </para>
     /// </remarks>
-    public T SilhouetteScore { get; private set; }
+    private T _silhouetteScore = default!;
+    public T SilhouetteScore { get { EnsureFullStatsComputed(); return _silhouetteScore; } private set { _silhouetteScore = value; } }
 
     /// <summary>
     /// Gets the Calinski-Harabasz index, a measure of cluster separation.
@@ -305,7 +327,8 @@ public class ModelStats<T, TInput, TOutput>
     /// It's useful when comparing different ways of grouping your data.
     /// </para>
     /// </remarks>
-    public T CalinskiHarabaszIndex { get; private set; }
+    private T _calinskiHarabaszIndex = default!;
+    public T CalinskiHarabaszIndex { get { EnsureFullStatsComputed(); return _calinskiHarabaszIndex; } private set { _calinskiHarabaszIndex = value; } }
 
     /// <summary>
     /// Gets the Davies-Bouldin index, a measure of the average similarity between each cluster and its most similar cluster.
@@ -316,7 +339,8 @@ public class ModelStats<T, TInput, TOutput>
     /// It's particularly useful when you're not sure how many groups to divide your data into.
     /// </para>
     /// </remarks>
-    public T DaviesBouldinIndex { get; private set; }
+    private T _daviesBouldinIndex = default!;
+    public T DaviesBouldinIndex { get { EnsureFullStatsComputed(); return _daviesBouldinIndex; } private set { _daviesBouldinIndex = value; } }
 
     /// <summary>
     /// Gets the Mean Average Precision, a measure of ranking quality.
@@ -327,7 +351,8 @@ public class ModelStats<T, TInput, TOutput>
     /// For example, in a search engine, it would measure how well the most relevant results are placed at the top.
     /// </para>
     /// </remarks>
-    public T MeanAveragePrecision { get; private set; }
+    private T _meanAveragePrecision = default!;
+    public T MeanAveragePrecision { get { EnsureFullStatsComputed(); return _meanAveragePrecision; } private set { _meanAveragePrecision = value; } }
 
     /// <summary>
     /// Gets the Normalized Discounted Cumulative Gain, a measure of ranking quality that takes the position of correct items into account.
@@ -337,7 +362,8 @@ public class ModelStats<T, TInput, TOutput>
     /// It ranges from 0 to 1, where 1 is perfect. It's often used in search engines or recommendation systems to ensure the most relevant items appear first.
     /// </para>
     /// </remarks>
-    public T NormalizedDiscountedCumulativeGain { get; private set; }
+    private T _normalizedDiscountedCumulativeGain = default!;
+    public T NormalizedDiscountedCumulativeGain { get { EnsureFullStatsComputed(); return _normalizedDiscountedCumulativeGain; } private set { _normalizedDiscountedCumulativeGain = value; } }
 
     /// <summary>
     /// Gets the Mean Reciprocal Rank, a statistic measuring the performance of a system that produces a list of possible responses to a query.
@@ -348,7 +374,8 @@ public class ModelStats<T, TInput, TOutput>
     /// or search engines to measure how quickly a user might find the right answer.
     /// </para>
     /// </remarks>
-    public T MeanReciprocalRank { get; private set; }
+    private T _meanReciprocalRank = default!;
+    public T MeanReciprocalRank { get { EnsureFullStatsComputed(); return _meanReciprocalRank; } private set { _meanReciprocalRank = value; } }
 
     /// <summary>
     /// Gets the Auto-Correlation Function, which measures the correlation between a time series and a lagged version of itself.
@@ -439,12 +466,28 @@ public class ModelStats<T, TInput, TOutput>
         FeatureNames = inputs.FeatureNames ?? new List<string>();
         FeatureValues = inputs.FeatureValues ?? new Dictionary<string, TOutput>();
 
-        // Only calculate statistics if we have actual data to analyze
-        // Skip calculation for empty ModelStats (placeholder objects)
+        // Defer expensive computation (CorrelationMatrix, VIF, ConditionNumber,
+        // LOO, posterior sampling, etc.) until first property access.
         if (!IsEmptyInput(inputs))
         {
-            CalculateModelStats(inputs);
+            _deferredInputs = inputs;
         }
+    }
+
+    private ModelStatsInputs<T, TInput, TOutput>? _deferredInputs;
+    private bool _fullStatsComputed;
+
+    private void EnsureFullStatsComputed()
+    {
+        if (_fullStatsComputed || _deferredInputs is null) return;
+
+        // Run the heavy computation BEFORE marking computed, so a throw inside
+        // CalculateModelStats lets the next property access retry instead of leaving
+        // the instance permanently stuck with default values.
+        CalculateModelStats(_deferredInputs);
+
+        _fullStatsComputed = true;
+        _deferredInputs = null;
     }
 
     /// <summary>

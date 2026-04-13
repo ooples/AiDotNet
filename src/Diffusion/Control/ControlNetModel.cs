@@ -782,14 +782,11 @@ public enum ControlType
 }
 
 /// <summary>
-/// ControlNet encoder that processes control signals.
-/// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <summary>
 /// ControlNet encoder per Zhang et al. (2023) "Adding Conditional Control to Text-to-Image Diffusion Models".
 /// Uses convolutional layers (NOT dense/fully-connected) operating on spatial [C, H, W] tensors.
 /// Zero convolutions are 1×1 convolutions initialized to zero for safe integration with pretrained models.
 /// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class ControlNetEncoder<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -855,8 +852,8 @@ public class ControlNetEncoder<T>
         {
             int channels = _baseChannels * mult;
 
-            // Stride-2 conv for downsampling: spatial /= 2
-            int outSpatial = Math.Max(1, spatialSize / 2);
+            // Conv output size: floor((input + 2*padding - kernel) / stride) + 1
+            int outSpatial = Math.Max(1, (spatialSize + 2 * 1 - 3) / 2 + 1);
             var downBlock = new ConvolutionalLayer<T>(
                 prevChannels, spatialSize, spatialSize,
                 channels, kernelSize: 3, stride: 2, padding: 1,
@@ -889,8 +886,12 @@ public class ControlNetEncoder<T>
     /// </summary>
     private static void ZeroInitializeConv(ConvolutionalLayer<T> layer)
     {
+        // Vector<T>(int length) zero-fills the backing storage by default — the underlying
+        // array allocation initializes every element to default(T), which is the additive
+        // identity for every numeric type (0 for float/double/int, etc.). This matches the
+        // ControlNet paper's "zero convolution" requirement: zc(x) = 0 at initialization so
+        // the residual connection passes through the frozen base model unchanged on step 0.
         var zeroParams = new Vector<T>(layer.ParameterCount);
-        // Vector<T> is zero-initialized by default
         layer.SetParameters(zeroParams);
     }
 

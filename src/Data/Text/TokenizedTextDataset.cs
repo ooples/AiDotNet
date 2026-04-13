@@ -198,9 +198,7 @@ public class TokenizedTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
 
     private static Tensor<T> ExtractTensorBatch(Tensor<T> source, int[] indices)
     {
-        var newShape = (int[])source._shape;
-        newShape[0] = indices.Length;
-        var result = new Tensor<T>(newShape);
+        var result = TensorCopyHelper.CreateEmptyBatchLike(source, indices.Length);
 
         for (int i = 0; i < indices.Length; i++)
         {

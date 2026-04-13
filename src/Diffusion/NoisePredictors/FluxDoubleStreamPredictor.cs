@@ -147,22 +147,48 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var vectors = new List<Vector<T>>();
-        vectors.Add(_patchEmbed.GetParameters());
-        foreach (var b in _doubleBlocks) vectors.Add(b.GetParameters());
-        foreach (var b in _singleBlocks) vectors.Add(b.GetParameters());
-        vectors.Add(_finalLayer.GetParameters());
-        return Vector<T>.Concatenate(vectors.ToArray());
+        // Pre-size the array (1 patch embed + N double + N single + 1 final) so we skip
+        // the List growth/copy + ToArray allocation on every optimizer step.
+        var vectors = new Vector<T>[2 + _doubleBlocks.Length + _singleBlocks.Length];
+        int i = 0;
+        vectors[i++] = _patchEmbed.GetParameters();
+        foreach (var b in _doubleBlocks) vectors[i++] = b.GetParameters();
+        foreach (var b in _singleBlocks) vectors[i++] = b.GetParameters();
+        vectors[i] = _finalLayer.GetParameters();
+        return Vector<T>.Concatenate(vectors);
     }
 
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        // Reject vectors that don't match ParameterCount up-front so that an upstream
+        // optimizer/state bug surfaces as an exception here instead of silently dropping
+        // tail values (oversized) or leaving later layers with stale weights (undersized).
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {ParameterCount} parameters but got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         int offset = 0;
         offset = SetParams(_patchEmbed, parameters, offset);
         foreach (var b in _doubleBlocks) offset = SetParams(b, parameters, offset);
         foreach (var b in _singleBlocks) offset = SetParams(b, parameters, offset);
-        SetParams(_finalLayer, parameters, offset);
+        offset = SetParams(_finalLayer, parameters, offset);
+
+        // Defense in depth: the per-layer SetParams calls already advance the offset
+        // through every trainable parameter, so a final-offset/ParameterCount mismatch
+        // would indicate that ParameterCount is out of sync with the layer composition
+        // (e.g., a new sub-layer was added without updating the count). Surface that
+        // class invariant violation immediately.
+        if (offset != ParameterCount)
+        {
+            throw new InvalidOperationException(
+                $"Internal invariant violation: SetParameters consumed {offset} elements " +
+                $"but ParameterCount reports {ParameterCount}. This indicates a layer was " +
+                "added or removed without updating ParameterCount.");
+        }
     }
 
     /// <inheritdoc />
@@ -179,18 +205,20 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
     private static int SetParams(DenseLayer<T> layer, Vector<T> parameters, int offset)
     {
         int count = layer.ParameterCount;
-        var p = new Vector<T>(parameters.AsSpan().Slice(offset, count).ToArray());
-        layer.SetParameters(p);
+        layer.SetParameters(parameters.GetSubVector(offset, count));
         return offset + count;
     }
 
     protected override Vector<T> GetParameterGradients()
     {
-        var vectors = new List<Vector<T>>();
-        vectors.Add(_patchEmbed.GetParameterGradients());
-        foreach (var b in _doubleBlocks) vectors.Add(b.GetParameterGradients());
-        foreach (var b in _singleBlocks) vectors.Add(b.GetParameterGradients());
-        vectors.Add(_finalLayer.GetParameterGradients());
-        return Vector<T>.Concatenate(vectors.ToArray());
+        // Same fixed-size-array pattern as GetParameters above — avoids the per-call
+        // List<T> allocation and ToArray copy on the gradient side too.
+        var vectors = new Vector<T>[2 + _doubleBlocks.Length + _singleBlocks.Length];
+        int i = 0;
+        vectors[i++] = _patchEmbed.GetParameterGradients();
+        foreach (var b in _doubleBlocks) vectors[i++] = b.GetParameterGradients();
+        foreach (var b in _singleBlocks) vectors[i++] = b.GetParameterGradients();
+        vectors[i] = _finalLayer.GetParameterGradients();
+        return Vector<T>.Concatenate(vectors);
     }
 }

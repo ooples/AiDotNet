@@ -36,6 +36,14 @@ namespace AiDotNet.ActivationFunctions;
 public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>
+    /// Numerical-stability epsilon added to the squared-norm before the sqrt to avoid
+    /// division-by-zero when the input vector is exactly zero. The value 1e-12 is well
+    /// below single-precision rounding error and is the standard guard used in
+    /// L2-normalization layers (e.g. PyTorch's <c>F.normalize(eps=1e-12)</c>).
+    /// </summary>
+    private static readonly T NormalizationEpsilon = MathHelper.GetNumericOperations<T>().FromDouble(1e-12);
+
+    /// <summary>
     /// Indicates whether this activation function supports scalar operations.
     /// </summary>
     /// <returns>Always returns false as Spherical Softmax requires a vector of values.</returns>
@@ -111,10 +119,17 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </summary>
     public override Tensor<T> Activate(Tensor<T> input)
     {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+        if (input.Shape.Length == 0)
+            throw new ArgumentException("SphericalSoftmax requires at least one tensor dimension.", nameof(input));
+
         int lastAxis = input.Shape.Length - 1;
         var squared = Engine.TensorMultiply(input, input);
         var sumSquared = Engine.ReduceSum(squared, new[] { lastAxis }, keepDims: true);
-        var norm = Engine.TensorSqrt(sumSquared);
+        var eps = Tensor<T>.CreateDefault(sumSquared._shape, NormalizationEpsilon);
+        var safeSum = Engine.TensorAdd(sumSquared, eps);
+        var norm = Engine.TensorSqrt(safeSum);
         var normalized = Engine.TensorBroadcastDivide(input, norm);
         return Engine.Softmax(normalized, axis: lastAxis);
     }

@@ -621,8 +621,9 @@ public class MobileNetTests
     #region Training Tests (Skipped for CI)
 
     [Fact(Timeout = 120000)]
-    public void MobileNetV2_Train_CompletesWithoutError()
+    public async Task MobileNetV2_Train_CompletesWithoutError()
     {
+        await Task.Yield();
         // Arrange - Use factory method
         var network = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
 
@@ -636,8 +637,9 @@ public class MobileNetTests
     }
 
     [Fact(Timeout = 120000)]
-    public void MobileNetV3_Train_CompletesWithoutError()
+    public async Task MobileNetV3_Train_CompletesWithoutError()
     {
+        await Task.Yield();
         // Arrange - Use factory method
         var network = MobileNetV3Network<double>.MobileNetV3Small(numClasses: 10);
 

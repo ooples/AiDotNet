@@ -146,6 +146,14 @@ public class ModifiedHuberLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
+        // Modified Huber targets are signed labels (-1/+1), not class indices.
+        // Do NOT one-hot encode — just align singleton dimensions if needed.
+        if (target.Shape.Length == predicted.Shape.Length - 1
+            && predicted.Shape[predicted.Shape.Length - 1] == 1
+            && target.Length == predicted.Length)
+        {
+            target = Engine.Reshape(target, predicted.Shape.ToArray());
+        }
         // Modified Huber: max(0, 1-y*f)² if y*f >= -1, else -4*y*f
         var product = Engine.TensorMultiply(target, predicted);
         var margin = Engine.ScalarMinusTensor(NumOps.One, product);

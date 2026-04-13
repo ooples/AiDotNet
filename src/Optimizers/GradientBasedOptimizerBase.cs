@@ -37,6 +37,20 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected GradientBasedOptimizerOptions<T, TInput, TOutput> GradientOptions;
 
     /// <summary>
+    /// Gradient-based optimizers skip model.Train() during evaluation AFTER the
+    /// initial training. They already update parameters via UpdateSolution() —
+    /// re-training would overwrite gradient updates. The flag is set to true
+    /// after the first PrepareAndEvaluateSolution call.
+    /// </summary>
+    protected override bool SkipTrainingInEvaluation => _hasCompletedInitialTraining;
+    private bool _hasCompletedInitialTraining;
+
+    protected override void OnInitialTrainingCompleted()
+    {
+        _hasCompletedInitialTraining = true;
+    }
+
+    /// <summary>
     /// The current learning rate used in the optimization process.
     /// </summary>
     private double _currentLearningRate;
@@ -685,6 +699,60 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
             if (predictions is Tensor<T> tensorPredictions && y is Tensor<T> tensorY)
             {
+                // When prediction and target have different shapes (e.g.,
+                // Transformer output [B, S, V] vs target [B, S] integer
+                // indices), one-hot encode the target to match before
+                // flattening to vectors. Without this, ToVector() produces
+                // different-length vectors and CalculateDerivative throws.
+                // Fixes #1115 — affects ALL gradient-based optimizers.
+                //
+                // Only one-hot encode when target rank is exactly 1 less than
+                // predicted rank (classification shape contract). For singleton
+                // dimension mismatches (e.g., [B] vs [B,1]), reshape instead.
+                if (tensorPredictions.Shape.Length > tensorY.Shape.Length)
+                {
+                    int numClasses = tensorPredictions.Shape[tensorPredictions.Shape.Length - 1];
+
+                    if (numClasses > 1 && tensorY.Shape.Length == tensorPredictions.Shape.Length - 1)
+                    {
+                        // Validate shape prefix matches
+                        for (int d = 0; d < tensorY.Shape.Length; d++)
+                        {
+                            if (tensorY.Shape[d] != tensorPredictions.Shape[d])
+                            {
+                                throw new ArgumentException(
+                                    $"Target shape dimension {d} ({tensorY.Shape[d]}) does not match " +
+                                    $"predicted shape dimension {d} ({tensorPredictions.Shape[d]}).");
+                            }
+                        }
+
+                        var numOps = MathHelper.GetNumericOperations<T>();
+                        var oneHot = new Tensor<T>(tensorPredictions.Shape.ToArray());
+                        int batchElements = tensorY.Length;
+                        for (int i = 0; i < batchElements; i++)
+                        {
+                            double rawVal = numOps.ToDouble(tensorY[i]);
+                            int classIdx = (int)rawVal;
+                            if (rawVal != classIdx)
+                            {
+                                throw new ArgumentException(
+                                    $"Target value {rawVal} at position {i} is not an integer class index.");
+                            }
+                            if (classIdx < 0 || classIdx >= numClasses)
+                            {
+                                throw new ArgumentOutOfRangeException(nameof(y),
+                                    $"Class index {classIdx} at position {i} is out of range [0, {numClasses}).");
+                            }
+                            oneHot[i * numClasses + classIdx] = numOps.One;
+                        }
+                        tensorY = oneHot;
+                    }
+                    else if (tensorY.Length == tensorPredictions.Length)
+                    {
+                        // Singleton dimension alignment (e.g., [B] → [B,1])
+                        tensorY = tensorY.Reshape(tensorPredictions.Shape.ToArray());
+                    }
+                }
                 gradient = LossFunction.CalculateDerivative(tensorPredictions.ToVector(), tensorY.ToVector());
             }
             else if (predictions is Vector<T> vectorPredictions && y is Vector<T> vectorY)
@@ -1106,10 +1174,16 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         IFullModel<T, TInput, TOutput> currentSolution,
         Vector<T> gradient)
     {
-        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
+        var parameterizable = InterfaceGuard.Parameterizable(currentSolution);
+        var parameters = parameterizable.GetParameters();
         var newParameters = UpdateParameters(parameters, gradient);
 
-        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newParameters);
+        // In-place update: SetParameters modifies the existing model directly,
+        // avoiding the Clone+Serialize+Deserialize overhead of WithParameters.
+        // WithParameters was called 1600+ times per optimization run, each time
+        // doing a full serialization roundtrip — the dominant training bottleneck.
+        parameterizable.SetParameters(newParameters);
+        return currentSolution;
     }
 
     /// <summary>

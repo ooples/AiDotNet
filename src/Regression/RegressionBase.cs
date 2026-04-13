@@ -573,8 +573,10 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
             throw new ArgumentException($"Expected {expectedCount} parameters, but got {parameters.Length}", nameof(parameters));
         }
 
-        // Create a new instance of the model
-        var newModel = (RegressionBase<T>)Clone();
+        // Lightweight copy: CreateNewInstance() + parameter assignment.
+        // Do NOT use Clone/DeepCopy which does Serialize+Deserialize — that was
+        // called 1600+ times per optimization run, dominating training time.
+        var newModel = (RegressionBase<T>)CreateNewInstance();
 
         // Extract coefficients
         Vector<T> newCoefficients = new Vector<T>(coefficientCount);

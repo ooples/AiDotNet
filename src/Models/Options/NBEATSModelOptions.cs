@@ -94,14 +94,14 @@ public class NBEATSModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the polynomial degree for trend basis expansion.
     /// </summary>
-    /// <value>The polynomial degree, defaulting to 3.</value>
+    /// <value>The polynomial degree, defaulting to 2.</value>
     /// <remarks>
     /// <para>
     /// Controls the complexity of polynomial trends the model can represent. Higher degrees
     /// allow for more complex trend shapes but may lead to overfitting.
     /// </para>
     /// <para><b>For Beginners:</b> This controls how complex the trend patterns can be.
-    /// A degree of 3 means the model can represent trends that curve up and down.
+    /// A degree of 2 means the model can represent quadratic trends.
     /// Higher values allow for more wiggly trends, while lower values are more restricted.
     /// </para>
     /// </remarks>
@@ -143,7 +143,7 @@ public class NBEATSModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the hidden layer size for the fully connected layers within each block.
     /// </summary>
-    /// <value>The hidden layer size, defaulting to 256.</value>
+    /// <value>The hidden layer size, defaulting to 512.</value>
     /// <remarks>
     /// <para>
     /// Controls the capacity of the neural network within each block. Larger values
@@ -151,7 +151,7 @@ public class NBEATSModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// <para><b>For Beginners:</b> This controls how many neurons are in the hidden layers
     /// of the network. More neurons mean the model can learn more complex relationships,
-    /// but require more training data and computation. 256 is a good starting point for
+    /// but require more training data and computation. 512 is a good starting point for
     /// most time series problems.
     /// </para>
     /// </remarks>

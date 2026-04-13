@@ -3436,6 +3436,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             throw new ArgumentNullException(nameof(featureIndices), "Feature indices cannot be null.");
         }
 
+        // Sequence models with EmbeddingLayer don't support feature selection.
+        // Their input shape is [1] (single token ID), not a feature vector.
+        // Fixes #1113.
+        if (Layers.Count > 0 && Layers[0] is Layers.EmbeddingLayer<T>)
+        {
+            // Clear any stale feature mask so IsFeatureUsed() doesn't
+            // answer from a previous dense-feature configuration.
+            _explicitlySetActiveFeatures?.Clear();
+            return;
+        }
+
         // Initialize the hash set if it doesn't exist
         _explicitlySetActiveFeatures ??= new HashSet<int>();
 
@@ -4125,12 +4136,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     /// <param name="input">The input tensor.</param>
     /// <param name="target">The target tensor.</param>
-    /// <param name="lossFunction">Optional override loss function (defaults to <see cref="DefaultLossFunction"/>).</param>
+    /// <param name="lossFunction">Optional override loss function (defaults to the model's configured loss).</param>
     /// <returns>A vector containing the concatenated gradients for all layer parameters.</returns>
     /// <remarks>
     /// <para>
-    /// This method performs a forward pass, computes the loss derivative, backpropagates gradients, and then
-    /// concatenates the parameter gradients across all layers into a single vector.
+    /// This method performs a forward pass under tape recording, computes the loss via
+    /// <see cref="LossFunctions.LossFunctionBase{T}.ComputeTapeLoss"/>, runs reverse-mode
+    /// autodiff, and concatenates per-parameter gradients into a single vector.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Gradients are the "direction to change weights" so the model makes fewer mistakes.
@@ -4138,70 +4150,73 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
     {
-        // Try tape-based gradient computation first (preferred path)
+        using var tape = new GradientTape<T>();
+
+        // Forward pass under tape recording (NOT Predict which uses NoGradScope).
+        // Must happen BEFORE collecting trainable parameters — layers may
+        // initialize or resize weights on their first forward pass.
+        var prediction = ForwardForTraining(input);
+
+        // Collect parameters AFTER forward so lazy-initialized layers are included
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
-        if (trainableParams.Count > 0)
+        if (trainableParams.Count == 0)
         {
-            try
+            throw new InvalidOperationException(
+                "No trainable parameters found. ComputeGradients requires at least one " +
+                "layer implementing ITrainableLayer<T> with registered parameters.");
+        }
+
+        // Compute loss via the user's configured loss function.
+        // Shape matching (integer → one-hot, singleton reshape) is handled
+        // inside each loss function's ComputeTapeLoss via EnsureTargetMatchesPredicted.
+        var resolved = lossFunction ?? LossFunction;
+        Tensor<T> lossTensor;
+        if (resolved is LossFunctions.LossFunctionBase<T> tapeLoss)
+        {
+            lossTensor = tapeLoss.ComputeTapeLoss(prediction, target);
+        }
+        else
+        {
+            // Fallback for custom ILossFunction: use CalculateDerivative to get
+            // the loss gradient w.r.t. predictions, then backpropagate manually.
+            // This preserves the IGradientComputable contract without silently
+            // producing zero gradients from a disconnected scalar tensor.
+            var predVec = prediction.ToVector();
+            var targetVec = target.ToVector();
+            var derivVec = resolved.CalculateDerivative(predVec, targetVec);
+            lossTensor = new Tensor<T>(prediction._shape, derivVec);
+        }
+
+        // Reverse-mode AD: compute gradients for all trainable parameters
+        var grads = tape.ComputeGradients(lossTensor, trainableParams);
+
+        // Flatten into parameter gradient vector (same ordering as GetParameters)
+        var flatGradients = new List<T>();
+        foreach (var layer in Layers)
+        {
+            if (layer is ITrainableLayer<T> trainable)
             {
-                var engine = AiDotNetEngine.Current;
-
-                using var tape = new GradientTape<T>();
-
-                // Forward pass under tape recording (NOT using Predict which has NoGradScope)
-                var prediction = ForwardForTraining(input);
-
-                // Compute MSE loss via tape-recorded engine ops
-                var diff = engine.TensorSubtract(prediction, target);
-                var squared = engine.TensorMultiply(diff, diff);
-                var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
-                var lossTensor = engine.ReduceMean(squared, allAxes, keepDims: false);
-
-                // Reverse-mode AD: compute gradients for all trainable parameters
-                var grads = tape.ComputeGradients(lossTensor, trainableParams);
-
-                // Flatten into parameter gradient vector (same ordering as GetParameters)
-                var flatGradients = new List<T>();
-                foreach (var layer in Layers)
+                foreach (var param in trainable.GetTrainableParameters())
                 {
-                    if (layer is ITrainableLayer<T> trainable)
+                    if (grads.TryGetValue(param, out var grad))
                     {
-                        foreach (var param in trainable.GetTrainableParameters())
-                        {
-                            if (grads.TryGetValue(param, out var grad))
-                            {
-                                for (int i = 0; i < grad.Length; i++)
-                                    flatGradients.Add(grad[i]);
-                            }
-                            else
-                            {
-                                // No gradient for this param — add zeros
-                                for (int i = 0; i < param.Length; i++)
-                                    flatGradients.Add(NumOps.Zero);
-                            }
-                        }
+                        for (int i = 0; i < grad.Length; i++)
+                            flatGradients.Add(grad[i]);
                     }
                     else
                     {
-                        // Non-trainable layer: add zeros for its parameter count
-                        for (int i = 0; i < layer.ParameterCount; i++)
+                        for (int i = 0; i < param.Length; i++)
                             flatGradients.Add(NumOps.Zero);
                     }
                 }
-                return new Vector<T>(flatGradients.ToArray());
             }
-            catch
+            else
             {
-                // Fall through to legacy backward path
+                for (int i = 0; i < layer.ParameterCount; i++)
+                    flatGradients.Add(NumOps.Zero);
             }
         }
-
-        // Legacy path: manual backward through layers
-        var loss = lossFunction ?? DefaultLossFunction;
-        var pred = Predict(input);
-        var lossDerivative = loss.CalculateDerivative(pred.ToVector(), target.ToVector());
-        var outputGradients = new Tensor<T>(pred._shape, lossDerivative);
-        return GetParameterGradients();
+        return new Vector<T>(flatGradients.ToArray());
     }
 
     /// <summary>

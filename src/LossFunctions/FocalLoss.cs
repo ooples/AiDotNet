@@ -173,6 +173,7 @@ public class FocalLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
+        target = EnsureTargetMatchesPredicted(predicted, target);
         // Focal = -mean(alpha * (1 - pt)^gamma * log(pt))
         var clamped = Engine.TensorClamp(predicted, NumOps.FromDouble(1e-7), NumOps.FromDouble(1.0 - 1e-7));
         var oneMinusP = Engine.ScalarMinusTensor(NumOps.One, clamped);

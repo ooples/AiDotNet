@@ -25,8 +25,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void CORAL_IdenticalDomains_DiscrepancyNearZero()
+    public async Task CORAL_IdenticalDomains_DiscrepancyNearZero()
     {
+        await Task.Yield();
         // If source and target have the same distribution, discrepancy should be near zero
         var coral = new CORALDomainAdapter<double>();
         var data = MakeMatrix(new double[,]
@@ -44,8 +45,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void CORAL_DifferentDomains_PositiveDiscrepancy()
+    public async Task CORAL_DifferentDomains_PositiveDiscrepancy()
     {
+        await Task.Yield();
         var coral = new CORALDomainAdapter<double>();
         var source = MakeMatrix(new double[,]
         {
@@ -70,8 +72,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void CORAL_CovarianceComputation_HandCalculated()
+    public async Task CORAL_CovarianceComputation_HandCalculated()
     {
+        await Task.Yield();
         // Data: [[1,2],[3,4],[5,6]]
         // Mean: [3, 4]
         // Centered: [[-2,-2],[0,0],[2,2]]
@@ -95,8 +98,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void CORAL_AdaptSource_PreservesMean()
+    public async Task CORAL_AdaptSource_PreservesMean()
     {
+        await Task.Yield();
         var coral = new CORALDomainAdapter<double>();
         var source = MakeMatrix(new double[,]
         {
@@ -129,8 +133,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void CORAL_AdaptationReducesDiscrepancy()
+    public async Task CORAL_AdaptationReducesDiscrepancy()
     {
+        await Task.Yield();
         var coral = new CORALDomainAdapter<double>();
         var source = MakeMatrix(new double[,]
         {
@@ -158,8 +163,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void CORAL_FrobeniusNorm_HandCalculated()
+    public async Task CORAL_FrobeniusNorm_HandCalculated()
     {
+        await Task.Yield();
         // For a 2x2 matrix [[a,b],[c,d]], ||M||_F = sqrt(a²+b²+c²+d²)
         // If source cov = [[1,0],[0,1]] and target cov = [[4,0],[0,4]]
         // Diff = [[3,0],[0,3]]
@@ -191,16 +197,18 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void CORAL_AdaptationMethod_IsCorrectName()
+    public async Task CORAL_AdaptationMethod_IsCorrectName()
     {
+        await Task.Yield();
         var coral = new CORALDomainAdapter<double>();
         Assert.Equal("CORAL (CORrelation ALignment)", coral.AdaptationMethod);
     }
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void CORAL_RequiresTraining_IsTrue()
+    public async Task CORAL_RequiresTraining_IsTrue()
     {
+        await Task.Yield();
         var coral = new CORALDomainAdapter<double>();
         Assert.True(coral.RequiresTraining);
     }
@@ -211,8 +219,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void MMD_IdenticalDomains_DiscrepancyNearZero()
+    public async Task MMD_IdenticalDomains_DiscrepancyNearZero()
     {
+        await Task.Yield();
         var mmd = new MMDDomainAdapter<double>(sigma: 1.0);
         var data = MakeMatrix(new double[,]
         {
@@ -230,8 +239,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void MMD_DifferentDomains_PositiveDiscrepancy()
+    public async Task MMD_DifferentDomains_PositiveDiscrepancy()
     {
+        await Task.Yield();
         var mmd = new MMDDomainAdapter<double>(sigma: 1.0);
         var source = MakeMatrix(new double[,]
         {
@@ -254,8 +264,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void MMD_HandCalculated_TwoPoints()
+    public async Task MMD_HandCalculated_TwoPoints()
     {
+        await Task.Yield();
         // Source: [[0]], Target: [[d]]
         // k(x,y) = exp(-||x-y||² / (2*σ²))
         // With σ=1: k(x,y) = exp(-||x-y||²/2)
@@ -281,8 +292,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void MMD_AdaptSource_ShiftsMean()
+    public async Task MMD_AdaptSource_ShiftsMean()
     {
+        await Task.Yield();
         var mmd = new MMDDomainAdapter<double>(sigma: 1.0);
         var source = MakeMatrix(new double[,]
         {
@@ -317,8 +329,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void MMD_SymmetricDiscrepancy()
+    public async Task MMD_SymmetricDiscrepancy()
     {
+        await Task.Yield();
         // MMD(source, target) = MMD(target, source)
         var mmd = new MMDDomainAdapter<double>(sigma: 1.0);
         var source = MakeMatrix(new double[,]
@@ -340,8 +353,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void MMD_NonNegativeDiscrepancy()
+    public async Task MMD_NonNegativeDiscrepancy()
     {
+        await Task.Yield();
         var mmd = new MMDDomainAdapter<double>(sigma: 1.0);
         var source = MakeMatrix(new double[,]
         {
@@ -360,16 +374,18 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void MMD_AdaptationMethod_IsCorrectName()
+    public async Task MMD_AdaptationMethod_IsCorrectName()
     {
+        await Task.Yield();
         var mmd = new MMDDomainAdapter<double>();
         Assert.Equal("Maximum Mean Discrepancy (MMD)", mmd.AdaptationMethod);
     }
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void MMD_RequiresTraining_IsFalse()
+    public async Task MMD_RequiresTraining_IsFalse()
     {
+        await Task.Yield();
         var mmd = new MMDDomainAdapter<double>();
         Assert.False(mmd.RequiresTraining);
     }
@@ -380,8 +396,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void LinearMapper_Train_SetsIsTrained()
+    public async Task LinearMapper_Train_SetsIsTrained()
     {
+        await Task.Yield();
         var mapper = new LinearFeatureMapper<double>();
         Assert.False(mapper.IsTrained);
 
@@ -404,8 +421,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void LinearMapper_MapToTarget_CorrectDimensions()
+    public async Task LinearMapper_MapToTarget_CorrectDimensions()
     {
+        await Task.Yield();
         var mapper = new LinearFeatureMapper<double>();
         var source = MakeMatrix(new double[,]
         {
@@ -430,8 +448,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void LinearMapper_MapToSource_CorrectDimensions()
+    public async Task LinearMapper_MapToSource_CorrectDimensions()
     {
+        await Task.Yield();
         var mapper = new LinearFeatureMapper<double>();
         var source = MakeMatrix(new double[,]
         {
@@ -456,8 +475,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void LinearMapper_Untrained_Throws()
+    public async Task LinearMapper_Untrained_Throws()
     {
+        await Task.Yield();
         var mapper = new LinearFeatureMapper<double>();
         var data = MakeMatrix(new double[,] { { 1, 2 }, { 3, 4 } });
 
@@ -467,8 +487,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void LinearMapper_ConfidenceInZeroOneRange()
+    public async Task LinearMapper_ConfidenceInZeroOneRange()
     {
+        await Task.Yield();
         var mapper = new LinearFeatureMapper<double>();
         var source = MakeMatrix(new double[,]
         {
@@ -495,8 +516,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void LinearMapper_SameDimensions_HigherConfidence()
+    public async Task LinearMapper_SameDimensions_HigherConfidence()
     {
+        await Task.Yield();
         // Mapping between same-dimensionality data should generally have higher confidence
         var mapper1 = new LinearFeatureMapper<double>();
         var source1 = MakeMatrix(new double[,]
@@ -527,8 +549,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void CORAL_AdaptTarget_InverseOfAdaptSource()
+    public async Task CORAL_AdaptTarget_InverseOfAdaptSource()
     {
+        await Task.Yield();
         var coral = new CORALDomainAdapter<double>();
         var source = MakeMatrix(new double[,]
         {
@@ -559,8 +582,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void MMD_LargerSigma_LowerDiscrepancy()
+    public async Task MMD_LargerSigma_LowerDiscrepancy()
     {
+        await Task.Yield();
         // Larger sigma → more smoothing → lower discrepancy (kernel values closer to 1)
         var source = MakeMatrix(new double[,]
         {
@@ -587,8 +611,9 @@ public class TransferLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "IntegrationTest")]
-    public void MMD_TrainUpdatesSigma()
+    public async Task MMD_TrainUpdatesSigma()
     {
+        await Task.Yield();
         var mmd = new MMDDomainAdapter<double>(sigma: 1.0);
         var source = MakeMatrix(new double[,]
         {

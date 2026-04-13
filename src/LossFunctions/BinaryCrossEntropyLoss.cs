@@ -132,6 +132,19 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
+        // Only one-hot encode for multi-class (numClasses > 1).
+        // For binary (predicted=[B,1], target=[B]), just reshape.
+        if (target.Shape.Length < predicted.Shape.Length)
+        {
+            if (predicted.Shape[predicted.Shape.Length - 1] > 1)
+            {
+                target = EnsureTargetMatchesPredicted(predicted, target);
+            }
+            else if (target.Length == predicted.Length)
+            {
+                target = Engine.Reshape(target, predicted.Shape.ToArray());
+            }
+        }
         // BCE = -mean(target * log(p) + (1 - target) * log(1 - p))
         var eps = NumOps.FromDouble(1e-7);
         var oneMinusEps = NumOps.FromDouble(1.0 - 1e-7);

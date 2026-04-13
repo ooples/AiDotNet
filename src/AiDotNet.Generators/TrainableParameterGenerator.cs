@@ -248,7 +248,24 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             {
                 sb.AppendLine($"        {paramFields[i].Name} = parameters[{i}] ?? throw new System.ArgumentNullException(nameof(parameters), \"Parameter at index {i} is null.\");");
             }
-            sb.AppendLine("        base.SetTrainableParameters(parameters);");
+            // Re-sync _registeredTensors with the newly assigned field values.
+            // We cannot call base.SetTrainableParameters because _registeredTensors
+            // may have a different count than paramFields when multiple parameters
+            // share the same PersistentTensorRole (the replace-by-role logic in
+            // RegisterTrainableParameter collapses them). Instead, clear and
+            // re-register each field so the runtime list matches the generator's
+            // field count exactly. The role is read from the [TrainableParameter]
+            // attribute at compile time — no hardcoded mapping needed.
+            sb.AppendLine("        ClearRegisteredParameters();");
+            for (int i = 0; i < paramFields.Count; i++)
+            {
+                // Use AppendTrainableParameter (not RegisterTrainableParameter)
+                // after ClearRegisteredParameters to avoid role-based dedup.
+                // Layers like MultiHeadAttentionLayer have multiple parameters
+                // with the same role (e.g., 4 × Weights) — RegisterTrainableParameter
+                // would collapse them back to 1 via replace-by-role logic.
+                sb.AppendLine($"        AppendTrainableParameter({paramFields[i].Name}, {paramFields[i].Role});");
+            }
             sb.AppendLine("    }");
             sb.AppendLine();
 
@@ -376,7 +393,9 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         return false;
     }
 
-    // Simple enum matching for PersistentTensorRole values in attribute
+    // Mirror of PersistentTensorRole enum for mapping attribute integer values
+    // to fully-qualified enum names in generated code. MUST be kept in sync with
+    // AiDotNet.Tensors.Engines.PersistentTensorRole — if you add a new role there, add it here.
     private enum PersistentTensorRoleEnum
     {
         Weights = 0,
@@ -386,7 +405,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         AttentionCache = 4,
         OptimizerState = 5,
         Constant = 6,
-        Other = 7
+        Other = 7,
+        ScaleParameters = 8,
     }
 
     /// <summary>

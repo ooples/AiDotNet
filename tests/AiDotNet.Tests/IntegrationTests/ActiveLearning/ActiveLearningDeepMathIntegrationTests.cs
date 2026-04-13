@@ -35,8 +35,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void Softmax_UniformLogits_ProducesUniformProbabilities()
+    public async Task Softmax_UniformLogits_ProducesUniformProbabilities()
     {
+        await Task.Yield();
         // Logits: [1, 1, 1] → softmax = [1/3, 1/3, 1/3]
         var model = new DeterministicModel(new double[] { 1.0, 1.0, 1.0 });
         var pool = MakePool(1, 2); // 1 sample, 2 features
@@ -50,8 +51,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void Softmax_DominantLogit_ProducesNearOneProbability()
+    public async Task Softmax_DominantLogit_ProducesNearOneProbability()
     {
+        await Task.Yield();
         // Logits: [10, 0, 0] → softmax ≈ [0.9999, 0.00005, 0.00005]
         // exp(10-10)=1, exp(0-10)=exp(-10)≈4.54e-5
         // sum ≈ 1.0 + 2*4.54e-5 = 1.0000908
@@ -67,8 +69,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void Softmax_NumericalStability_LargeLogitsDoNotOverflow()
+    public async Task Softmax_NumericalStability_LargeLogitsDoNotOverflow()
     {
+        await Task.Yield();
         // Logits: [1000, 999, 998] - large logits, but max-shift prevents overflow
         // Shifted: [0, -1, -2] → exp: [1, 0.3679, 0.1353] → sum = 1.5032
         // probs: [0.6652, 0.2447, 0.09003]
@@ -98,8 +101,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void Entropy_HandCalculated_ThreeClassUniform()
+    public async Task Entropy_HandCalculated_ThreeClassUniform()
     {
+        await Task.Yield();
         // Logits: [0, 0, 0] → softmax = [1/3, 1/3, 1/3]
         // H = -3 * (1/3 + ε) * ln(1/3 + ε)
         var model = new DeterministicModel(new double[] { 0.0, 0.0, 0.0 });
@@ -115,8 +119,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void Entropy_HandCalculated_TwoClassLogits()
+    public async Task Entropy_HandCalculated_TwoClassLogits()
     {
+        await Task.Yield();
         // Logits: [2, 0] → shifted: [0, -2]
         // exp: [1, e^-2] = [1, 0.13534]
         // sum = 1.13534
@@ -138,8 +143,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void Entropy_CertainPrediction_NearZero()
+    public async Task Entropy_CertainPrediction_NearZero()
     {
+        await Task.Yield();
         // Logits: [100, 0, 0] → nearly all prob on first class
         var model = new DeterministicModel(new double[] { 100.0, 0.0, 0.0 });
         var pool = MakePool(1, 2);
@@ -151,8 +157,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void Entropy_MultipleSamples_CorrectScorePerSample()
+    public async Task Entropy_MultipleSamples_CorrectScorePerSample()
     {
+        await Task.Yield();
         // Two samples with different logits
         // Sample 0: logits [0, 0] → uniform → max entropy = ln(2)
         // Sample 1: logits [5, 0] → skewed → lower entropy
@@ -173,8 +180,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void Entropy_SelectTopScoring_ReturnsHighestEntropyIndices()
+    public async Task Entropy_SelectTopScoring_ReturnsHighestEntropyIndices()
     {
+        await Task.Yield();
         // 3 samples: sample 1 has most uniform logits → highest entropy
         // Sample 0: [5, 0] → skewed
         // Sample 1: [0, 0] → uniform (highest entropy)
@@ -194,8 +202,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void Margin_HandCalculated_UniformDistribution()
+    public async Task Margin_HandCalculated_UniformDistribution()
     {
+        await Task.Yield();
         // Logits: [0, 0, 0] → probs = [1/3, 1/3, 1/3]
         // Margin = P1 - P2 = 1/3 - 1/3 = 0
         // Score = 1 - 0 = 1
@@ -209,8 +218,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void Margin_HandCalculated_TwoClassLogits()
+    public async Task Margin_HandCalculated_TwoClassLogits()
     {
+        await Task.Yield();
         // Logits: [1, 0] → shifted: [0, -1]
         // exp: [1, e^-1] → sum = 1 + 0.3679 = 1.3679
         // p0 = 0.73106, p1 = 0.26894
@@ -231,8 +241,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void Margin_DominantPrediction_ScoreNearZero()
+    public async Task Margin_DominantPrediction_ScoreNearZero()
     {
+        await Task.Yield();
         // Logits: [20, 0, 0] → nearly all prob on class 0
         // margin ≈ 1.0 - 0.0 = 1.0 → score ≈ 1 - 1 = 0
         var model = new DeterministicModel(new double[] { 20.0, 0.0, 0.0 });
@@ -245,8 +256,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void Margin_ThreeClassWithTwoTied_ScoreIsOne()
+    public async Task Margin_ThreeClassWithTwoTied_ScoreIsOne()
     {
+        await Task.Yield();
         // Logits: [5, 5, 0] → top two are equal → margin = 0 → score = 1
         var model = new DeterministicModel(new double[] { 5.0, 5.0, 0.0 });
         var pool = MakePool(1, 2);
@@ -264,8 +276,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void LeastConfidence_HandCalculated_Uniform()
+    public async Task LeastConfidence_HandCalculated_Uniform()
     {
+        await Task.Yield();
         // Logits: [0, 0, 0] → probs = [1/3, 1/3, 1/3]
         // LC = 1 - 1/3 = 2/3
         var model = new DeterministicModel(new double[] { 0.0, 0.0, 0.0 });
@@ -278,8 +291,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void LeastConfidence_HandCalculated_TwoClass()
+    public async Task LeastConfidence_HandCalculated_TwoClass()
     {
+        await Task.Yield();
         // Logits: [3, 0] → shifted: [0, -3]
         // exp: [1, e^-3=0.04979], sum = 1.04979
         // max_p = 1/1.04979 = 0.95257
@@ -297,8 +311,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void LeastConfidence_BinaryUniform_ScoreIsHalf()
+    public async Task LeastConfidence_BinaryUniform_ScoreIsHalf()
     {
+        await Task.Yield();
         // Logits: [0, 0] → probs = [0.5, 0.5]
         // LC = 1 - 0.5 = 0.5
         var model = new DeterministicModel(new double[] { 0.0, 0.0 });
@@ -315,8 +330,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void AllStrategies_UniformLogits_AllMaximal()
+    public async Task AllStrategies_UniformLogits_AllMaximal()
     {
+        await Task.Yield();
         // Uniform logits → all strategies give maximum uncertainty
         var model = new DeterministicModel(new double[] { 0.0, 0.0, 0.0 });
         var pool = MakePool(1, 2);
@@ -335,8 +351,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void AllStrategies_SkewedLogits_ConsistentOrdering()
+    public async Task AllStrategies_SkewedLogits_ConsistentOrdering()
     {
+        await Task.Yield();
         // Two samples: sample 0 is more uncertain than sample 1
         // Sample 0: [0, 0, 0] → uniform
         // Sample 1: [5, 0, 0] → skewed
@@ -363,8 +380,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void BALD_ScoreIsNonNegative()
+    public async Task BALD_ScoreIsNonNegative()
     {
+        await Task.Yield();
         // BALD score = H(avg) - avg(H) ≥ 0 by Jensen's inequality (H is concave)
         var model = new DeterministicModel(new double[] { 1.0, 2.0, 0.5 });
         var pool = MakePool(1, 2);
@@ -377,16 +395,18 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void BALD_NameIncludesMCSamples()
+    public async Task BALD_NameIncludesMCSamples()
     {
+        await Task.Yield();
         var bald = new BALD<double>(numMcSamples: 15);
         Assert.Equal("BALD-MC15", bald.Name);
     }
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void BALD_MultiSample_ScoresAreFinite()
+    public async Task BALD_MultiSample_ScoresAreFinite()
     {
+        await Task.Yield();
         var model = new DeterministicModel(
             new double[] { 1.0, 0.0, 3.0, 0.5, 0.0, 2.0, -1.0, 1.5, 0.5 },
             numClasses: 3);
@@ -407,8 +427,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void InformationDensity_CosineSimilarity_HandCalculated()
+    public async Task InformationDensity_CosineSimilarity_HandCalculated()
     {
+        await Task.Yield();
         // Two identical samples → cosine similarity = 1 → normalized = (1+1)/2 = 1
         // Pool: sample 0 = [1, 0], sample 1 = [1, 0]
         var poolData = new Vector<double>(new double[] { 1.0, 0.0, 1.0, 0.0 });
@@ -429,8 +450,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void InformationDensity_RBFSimilarity_HandCalculated()
+    public async Task InformationDensity_RBFSimilarity_HandCalculated()
     {
+        await Task.Yield();
         // Pool: sample 0 = [0, 0], sample 1 = [1, 0]
         // Euclidean distance = 1.0
         // RBF(gamma=1) = exp(-1 * 1²) = exp(-1) = 0.3679
@@ -451,8 +473,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void InformationDensity_InverseEuclidean_HandCalculated()
+    public async Task InformationDensity_InverseEuclidean_HandCalculated()
     {
+        await Task.Yield();
         // Pool: sample 0 = [0, 0], sample 1 = [3, 4]
         // Euclidean distance = 5.0
         // InverseEuclidean = 1/(1+5) = 1/6 ≈ 0.1667
@@ -472,8 +495,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void InformationDensity_BetaExponent_ScalesCorrectly()
+    public async Task InformationDensity_BetaExponent_ScalesCorrectly()
     {
+        await Task.Yield();
         // With beta=2, the similarity term is squared
         var poolData = new Vector<double>(new double[] { 0.0, 0.0, 1.0, 0.0 });
         var pool = new Tensor<double>(new[] { 2, 2 }, poolData);
@@ -498,8 +522,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void InformationDensity_ThreeSamples_CosineSimilarityHandCalculated()
+    public async Task InformationDensity_ThreeSamples_CosineSimilarityHandCalculated()
     {
+        await Task.Yield();
         // Pool: [1,0], [0,1], [1,1]
         // Cosine similarities (raw):
         //   cos([1,0],[0,1]) = 0/(1*1) = 0 → normalized = 0.5
@@ -533,8 +558,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void SelectSamples_ReturnsCorrectBatchSize()
+    public async Task SelectSamples_ReturnsCorrectBatchSize()
     {
+        await Task.Yield();
         var model = new DeterministicModel(
             new double[] { 0.0, 0.0, 5.0, 0.0, 2.0, 0.0, 1.0, 0.0, 0.5, 0.0 }, numClasses: 2);
         var pool = MakePool(5, 3);
@@ -546,8 +572,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void SelectSamples_BatchSizeExceedsPool_ReturnsAll()
+    public async Task SelectSamples_BatchSizeExceedsPool_ReturnsAll()
     {
+        await Task.Yield();
         var model = new DeterministicModel(new double[] { 1.0, 0.0, 2.0, 0.0 }, numClasses: 2);
         var pool = MakePool(2, 2);
 
@@ -557,8 +584,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void GetSelectionStatistics_AfterCompute_ReturnsCorrectStats()
+    public async Task GetSelectionStatistics_AfterCompute_ReturnsCorrectStats()
     {
+        await Task.Yield();
         // 3 samples with different entropy levels
         var model = new DeterministicModel(
             new double[] { 0.0, 0.0, 3.0, 0.0, 10.0, 0.0 }, numClasses: 2);
@@ -578,8 +606,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void Entropy_FourClassUniform_MaximumEntropy()
+    public async Task Entropy_FourClassUniform_MaximumEntropy()
     {
+        await Task.Yield();
         // Logits: [0, 0, 0, 0] → all equal → H = ln(4)
         var model = new DeterministicModel(new double[] { 0.0, 0.0, 0.0, 0.0 });
         var pool = MakePool(1, 2);
@@ -594,8 +623,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void LeastConfidence_FourClassUniform_ScoreIs075()
+    public async Task LeastConfidence_FourClassUniform_ScoreIs075()
     {
+        await Task.Yield();
         // LC = 1 - max(p) = 1 - 0.25 = 0.75
         var model = new DeterministicModel(new double[] { 0.0, 0.0, 0.0, 0.0 });
         var pool = MakePool(1, 2);
@@ -607,8 +637,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void Margin_FourClassAllEqual_ScoreIsOne()
+    public async Task Margin_FourClassAllEqual_ScoreIsOne()
     {
+        await Task.Yield();
         // All equal → top two are same → margin=0 → score=1
         var model = new DeterministicModel(new double[] { 0.0, 0.0, 0.0, 0.0 });
         var pool = MakePool(1, 2);
@@ -620,8 +651,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void UseBatchDiversity_CanBeSetAndRetrieved()
+    public async Task UseBatchDiversity_CanBeSetAndRetrieved()
     {
+        await Task.Yield();
         var entropy = new EntropySampling<double>();
         Assert.False(entropy.UseBatchDiversity);
 
@@ -639,8 +671,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void StrategyNames_AreCorrect()
+    public async Task StrategyNames_AreCorrect()
     {
+        await Task.Yield();
         Assert.Equal("EntropySampling", new EntropySampling<double>().Name);
         Assert.Equal("MarginSampling", new MarginSampling<double>().Name);
         Assert.Equal("LeastConfidenceSampling", new LeastConfidenceSampling<double>().Name);
@@ -652,8 +685,9 @@ public class ActiveLearningDeepMathIntegrationTests
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public void Entropy_Monotonicity_MoreClassesHigherMaxEntropy()
+    public async Task Entropy_Monotonicity_MoreClassesHigherMaxEntropy()
     {
+        await Task.Yield();
         // Max entropy for k classes = ln(k)
         // So 4-class uniform > 3-class uniform > 2-class uniform
         var model2 = new DeterministicModel(new double[] { 0.0, 0.0 });
