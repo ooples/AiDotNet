@@ -412,13 +412,9 @@ public partial class RBFLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
-        // Extract and reshape centers from the first portion of parameters
-        var centersVector = parameters.Slice(0, centersSize);
-        _centers = Tensor<T>.FromVector(centersVector, [_numCenters, _inputSize]);
-
-        // Extract widths from the remaining portion
-        var widthsVector = parameters.Slice(centersSize, _numCenters);
-        _widths = Tensor<T>.FromVector(widthsVector, [_numCenters]);
+        // Write in-place to preserve registered parameter tensor references
+        parameters.Slice(0, centersSize).AsSpan().CopyTo(_centers.Data.Span);
+        parameters.Slice(centersSize, _numCenters).AsSpan().CopyTo(_widths.Data.Span);
     }
 
     /// <inheritdoc/>

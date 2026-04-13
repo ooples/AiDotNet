@@ -129,27 +129,25 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
             return Engine.TensorSubtract(positivePart, scaledNegative);
         }
 
-        // Training: sample per-element random slope per PyTorch RReLU spec
+        // Training: sample per-element random slope per PyTorch RReLU spec.
+        // Build alpha tensor and use Engine ops so the tape tracks everything.
         double lo = Convert.ToDouble(_lowerBound);
         double hi = Convert.ToDouble(_upperBound);
-        var result = new Tensor<T>(input._shape);
+        var alphaData = new T[input.Length];
         for (int i = 0; i < input.Length; i++)
-        {
-            T val = input[i];
-            if (NumOps.GreaterThanOrEquals(val, NumOps.Zero))
-            {
-                result[i] = val;
-            }
-            else
-            {
-                T a = NumOps.FromDouble((_random.NextDouble() * (hi - lo)) + lo);
-                result[i] = NumOps.Multiply(a, val);
-            }
-        }
+            alphaData[i] = NumOps.FromDouble((_random.NextDouble() * (hi - lo)) + lo);
+        var alphaTensor = new Tensor<T>(input._shape, new Vector<T>(alphaData));
+
+        // RReLU(x) = max(0,x) + alpha * min(0,x) = relu(x) + alpha * (-relu(-x))
+        var pos = Engine.ReLU(input);
+        var neg = Engine.TensorNegate(input);
+        var negPart = Engine.ReLU(neg);
+        var scaled = Engine.TensorMultiply(negPart, alphaTensor);
+        var output = Engine.TensorSubtract(pos, scaled);
 
         // Store midpoint as representative alpha for derivative
         _alpha = NumOps.Divide(NumOps.Add(_lowerBound, _upperBound), NumOps.FromDouble(2.0));
-        return result;
+        return output;
     }
 
     /// <summary>
