@@ -1754,7 +1754,6 @@ public static class LayerHelper<T>
             case NeuralNetworkTaskType.MultiLabelClassification:
             case NeuralNetworkTaskType.SequenceClassification:
             case NeuralNetworkTaskType.ImageClassification:
-            case NeuralNetworkTaskType.TokenClassification:
                 yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
                 break;
 
@@ -4619,11 +4618,13 @@ public static class LayerHelper<T>
         // Flatten
         yield return new FlattenLayer<T>([currentChannels, 1, 1]);
 
-        // Classification head per Huang et al. 2017: Dense layer outputs raw logits.
-        // Softmax/Sigmoid is NOT applied here — it's handled by the loss function
-        // (CrossEntropyLoss = LogSoftmax + NLLLoss). Applying Softmax in the model
-        // causes double-softmax when paired with CrossEntropy, and makes the output
-        // scale-invariant (destroying input sensitivity for testing).
+        // Classification head per Huang et al. 2017: outputs raw logits (no softmax).
+        // Must be paired with one of the *WithLogits losses, which apply the activation
+        // internally for numerical stability:
+        //   - Multi-class (NumClasses > 1): use CrossEntropyWithLogitsLoss<T>
+        //   - Binary      (NumClasses == 1): use BinaryCrossEntropyWithLogitsLoss<T>
+        // Do NOT pair with CrossEntropyLoss/BinaryCrossEntropyLoss — those expect
+        // probabilities and will silently produce wrong gradients on logits.
         yield return new DenseLayer<T>(currentChannels, configuration.NumClasses,
             activationFunction: new IdentityActivation<T>());
     }
@@ -4756,7 +4757,10 @@ public static class LayerHelper<T>
         // Flatten
         yield return new FlattenLayer<T>([headChannels, 1, 1]);
 
-        // Classification head
+        // Classification head — outputs raw logits. Pair with CrossEntropyWithLogitsLoss<T>
+        // (multi-class) or BinaryCrossEntropyWithLogitsLoss<T> (binary). The probability-
+        // input variants (CrossEntropyLoss / BinaryCrossEntropyLoss) would silently produce
+        // wrong gradients here.
         yield return new DenseLayer<T>(headChannels, configuration.NumClasses,
             activationFunction: new IdentityActivation<T>());
     }
@@ -4886,7 +4890,8 @@ public static class LayerHelper<T>
         // Flatten
         yield return new FlattenLayer<T>([finalConvChannels, 1, 1]);
 
-        // Classification head
+        // Classification head — outputs raw logits. Pair with CrossEntropyWithLogitsLoss<T>
+        // (multi-class) or BinaryCrossEntropyWithLogitsLoss<T> (binary).
         yield return new DenseLayer<T>(finalConvChannels, configuration.NumClasses,
             activationFunction: new IdentityActivation<T>());
     }
@@ -5005,7 +5010,8 @@ public static class LayerHelper<T>
         // Flatten
         yield return new FlattenLayer<T>([finalChannels, 1, 1]);
 
-        // Classification head
+        // Classification head — outputs raw logits. Pair with CrossEntropyWithLogitsLoss<T>
+        // (multi-class) or BinaryCrossEntropyWithLogitsLoss<T> (binary).
         yield return new DenseLayer<T>(finalChannels, configuration.NumClasses,
             activationFunction: new IdentityActivation<T>());
     }
@@ -21487,8 +21493,41 @@ public static class LayerHelper<T>
         yield return new FullyConnectedLayer<T>(semanticDim, semanticVocabSize, (IActivationFunction<T>?)null);
     }
 
-    /// <summary>Creates default layers for VoiceCraft codec language model.</summary>
+    /// <summary>
+    /// Creates the default layer stack for a VoiceCraft codec language model.
+    /// </summary>
+    /// <param name="architecture">Architecture metadata used to configure the layer stack
+    /// (e.g., input/output shapes, task type). Currently unused at the per-layer level
+    /// but accepted for API symmetry with sibling <c>CreateDefault{ModelName}Layers</c>
+    /// helpers and to allow future architecture-specific tuning without a breaking change.</param>
+    /// <param name="hiddenDim">Hidden dimension shared across the codec language model's
+    /// transformer blocks. Defaults to the VoiceCraft-Base value (2048).</param>
+    /// <param name="numLayers">Number of stacked causal transformer blocks. Defaults to 16
+    /// (VoiceCraft-Base configuration).</param>
+    /// <param name="numHeads">Number of multi-head attention heads in each transformer block.
+    /// Must divide <paramref name="hiddenDim"/> evenly. Defaults to 12.</param>
+    /// <param name="codebookSize">Size of the audio codec vocabulary (number of discrete
+    /// codes per quantizer). Defaults to 2048, matching EnCodec/Vall-E-style codebooks.</param>
+    /// <param name="dropoutRate">Dropout probability applied after each transformer block
+    /// during training. Set to 0 to disable. Defaults to 0.1 per the VoiceCraft paper.</param>
+    /// <returns>A lazily-yielded sequence of layers forming the VoiceCraft codec language
+    /// model: codec embedding projection, <paramref name="numLayers"/> causal transformer
+    /// blocks, and an output projection to the codec vocabulary.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> VoiceCraft is a speech-editing model that treats audio
+    /// codec tokens like text — the model predicts the next codec code given the previous
+    /// codes, the same way a language model predicts the next word. This helper builds the
+    /// neural network that does that prediction: an embedding lookup that turns each
+    /// integer code into a dense vector, several transformer layers that mix information
+    /// across the sequence (with causal masking so the model can only see the past), and
+    /// a final projection back to the codec vocabulary so we can pick the next code.
+    /// </para>
+    /// <para>The default values match the VoiceCraft-Base configuration. Increase
+    /// <paramref name="numLayers"/> and <paramref name="hiddenDim"/> for larger model
+    /// variants; the codec embedding and output projection scale automatically.</para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultVoiceCraftLayers(
+        NeuralNetworkArchitecture<T> architecture,
         int hiddenDim = 2048, int numLayers = 16,
         int numHeads = 12, int codebookSize = 2048,
         double dropoutRate = 0.1)
@@ -31251,19 +31290,38 @@ public static class LayerHelper<T>
         int sequenceLength = 32;
         int numHeads = 8;
 
-        // Audio encoder: input projection + N attention layers + output projection
-        yield return new DenseLayer<T>(inputSize, embeddingDimension, tanhActivation);
-        for (int i = 0; i < numEncoderLayers; i++)
-            yield return new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads);
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
+        // Dual-stream architecture: audio and visual encoders run in parallel via
+        // ParallelStreamsLayer, then fused with cross-modal attention.
+        // Input is [audioFeatures | visualFeatures] concatenated, split in half.
+        int halfInput = inputSize / 2;
 
-        // Visual encoder: input projection + N attention layers + output projection
-        yield return new DenseLayer<T>(inputSize, embeddingDimension, tanhActivation);
+        var audioEncoderLayers = new List<ILayer<T>>
+        {
+            new DenseLayer<T>(halfInput, embeddingDimension, tanhActivation)
+        };
         for (int i = 0; i < numEncoderLayers; i++)
-            yield return new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads);
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
+            audioEncoderLayers.Add(new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads));
+        audioEncoderLayers.Add(new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation));
 
-        // Temporal modeling: 4 attention layers + proposal head
+        var visualEncoderLayers = new List<ILayer<T>>
+        {
+            new DenseLayer<T>(halfInput, embeddingDimension, tanhActivation)
+        };
+        for (int i = 0; i < numEncoderLayers; i++)
+            visualEncoderLayers.Add(new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads));
+        visualEncoderLayers.Add(new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation));
+
+        yield return new ParallelStreamsLayer<T>(
+            inputSize, embeddingDimension, embeddingDimension,
+            audioEncoderLayers, visualEncoderLayers);
+
+        // Fused representation is [audioEmbed | visualEmbed] = 2 * embeddingDimension
+        int fusedDim = embeddingDimension * 2;
+
+        // Project fused features back to embeddingDimension
+        yield return new DenseLayer<T>(fusedDim, embeddingDimension, tanhActivation);
+
+        // Temporal modeling: 4 attention layers
         for (int i = 0; i < 4; i++)
             yield return new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads);
         yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
@@ -31272,11 +31330,8 @@ public static class LayerHelper<T>
         for (int i = 0; i < 4; i++)
             yield return new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads);
 
-        // Task-specific heads: event classification, temporal boundary, spatial localization, anomaly
+        // Event classification head
         yield return new DenseLayer<T>(embeddingDimension, numCategories, nullActivation);
-        yield return new DenseLayer<T>(embeddingDimension, 2, nullActivation);
-        yield return new DenseLayer<T>(embeddingDimension, 4, nullActivation);
-        yield return new DenseLayer<T>(embeddingDimension, 1, nullActivation);
     }
 
     /// <summary>
@@ -32714,10 +32769,10 @@ public static class LayerHelper<T>
         // === Mel conditioning: project mel features to hidden dim ===
         yield return new DenseLayer<T>(melChannels, hiddenDim, reluActivation);
 
-        // === GRU layers (paper: 2 stacked GRUs with residual connections) ===
-        // Paper uses single large GRU (896 units); we use hiddenDim with 2 layers
-        yield return new GRULayer<T>(hiddenDim, hiddenDim, false, (IActivationFunction<T>?)null);
-        yield return new GRULayer<T>(hiddenDim, hiddenDim, false, (IActivationFunction<T>?)null);
+        // === GRU layers (paper: single large GRU; we stack multiple per numResidualLayers) ===
+        int gruCount = Math.Max(1, Math.Min(numResidualLayers, 4));
+        for (int i = 0; i < gruCount; i++)
+            yield return new GRULayer<T>(hiddenDim, hiddenDim, false, (IActivationFunction<T>?)null);
 
         // === Output FC chain (paper: fc1 → fc2 → fc3) ===
         // fc1: hiddenDim → hiddenDim with ReLU

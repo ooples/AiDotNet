@@ -270,13 +270,20 @@ public class HDBSCAN<T> : ClusteringBase<T>
     private static void MarkDescendantsNotCluster(int cluster, Dictionary<int, List<int>> children,
         HashSet<int> clusterNodes, Dictionary<int, bool> isCluster)
     {
-        if (!children.TryGetValue(cluster, out var kids)) return;
-        foreach (int child in kids)
+        // Iterative traversal to avoid stack overflow on deep condensed trees
+        var stack = new Stack<int>();
+        stack.Push(cluster);
+        while (stack.Count > 0)
         {
-            if (clusterNodes.Contains(child))
+            int current = stack.Pop();
+            if (!children.TryGetValue(current, out var kids)) continue;
+            foreach (int child in kids)
             {
-                isCluster[child] = false;
-                MarkDescendantsNotCluster(child, children, clusterNodes, isCluster);
+                if (clusterNodes.Contains(child))
+                {
+                    isCluster[child] = false;
+                    stack.Push(child);
+                }
             }
         }
     }
@@ -675,10 +682,13 @@ public class HDBSCAN<T> : ClusteringBase<T>
             }
 
             // Per scikit-learn: when allowSingleCluster and the result is 0 clusters,
-            // select the root as a valid single-cluster result
+            // select the root cluster (the one with no parent in condensed tree)
             if (allowSingleCluster && selectedClusters.Count == 0 && clusterList.Count > 0)
             {
-                selectedClusters.Add(clusterList[^1]);
+                var childClusters = new HashSet<int>(
+                    condensedTree.Where(node => node.Child >= n).Select(node => node.Child));
+                int root = clusterList.Where(c => !childClusters.Contains(c)).DefaultIfEmpty(clusterList[0]).First();
+                selectedClusters.Add(root);
             }
 
             int labelNum = 0;
@@ -766,12 +776,42 @@ public class HDBSCAN<T> : ClusteringBase<T>
                 clusterToLabel[cluster] = labelNum++;
             }
 
-            // Assign points
+            // Assign points directly attached to leaf clusters
             foreach (var node in condensedTree)
             {
                 if (node.Child < n && clusterToLabel.ContainsKey(node.Parent))
                 {
                     labels[node.Child] = clusterToLabel[node.Parent];
+                }
+            }
+
+            // Fallback for unlabeled points: walk up condensed tree to find a leaf cluster
+            if (ufParent is not null)
+            {
+                var parentLookup = new Dictionary<int, int>();
+                foreach (var node in condensedTree)
+                {
+                    if (node.Child >= n && !parentLookup.ContainsKey(node.Child))
+                        parentLookup[node.Child] = node.Parent;
+                }
+
+                var leafSet = new HashSet<int>(leafClusters);
+                for (int i = 0; i < n; i++)
+                {
+                    if (labels[i] >= 0) continue;
+
+                    int root = Find(ufParent, i);
+                    int current = root;
+                    while (current >= n && !leafSet.Contains(current))
+                    {
+                        if (!parentLookup.TryGetValue(current, out int par) || par == current)
+                            break;
+                        current = par;
+                    }
+                    if (clusterToLabel.TryGetValue(current, out int lbl))
+                    {
+                        labels[i] = lbl;
+                    }
                 }
             }
         }
@@ -784,7 +824,21 @@ public class HDBSCAN<T> : ClusteringBase<T>
         _probabilities = new T[n];
         _outlierScores = new T[n];
 
-        // For each point, probability is based on lambda at which it joined its cluster
+        // Initialize every point from its final label so that points recovered via the
+        // union-find fallback (which never appear as a direct child in the condensed tree)
+        // still receive proper probability/outlier metadata. Points labeled to a cluster
+        // get probability=1, outlier=0; noise points (label = -1) get probability=0, outlier=1.
+        for (int i = 0; i < n; i++)
+        {
+            bool inCluster = labels[i] >= 0;
+            _probabilities[i] = inCluster ? NumOps.One : NumOps.Zero;
+            _outlierScores[i] = inCluster ? NumOps.Zero : NumOps.One;
+        }
+
+        // Refine from the condensed tree for points that were directly recorded there.
+        // (Currently uses the same {0,1} scheme as the initial pass; future work can
+        // derive richer per-point probability from the lambda at which the point left
+        // its cluster, but that refinement still benefits from the all-points init above.)
         foreach (var node in condensedTree)
         {
             if (node.Child < n)

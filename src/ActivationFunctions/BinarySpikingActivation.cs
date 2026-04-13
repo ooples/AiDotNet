@@ -238,20 +238,48 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        // Binary spiking is non-differentiable by design (Heaviside step), so
-        // surrogate-gradient learning approximates the forward with a steep
-        // sigmoid. This is the standard approach in SNN literature (Neftci et
-        // al., "Surrogate Gradient Learning in SNNs", 2019) and lets every op
-        // land on the gradient tape.
+        // Straight-through estimator (STE) per Neftci et al. 2019,
+        // "Surrogate Gradient Learning in Spiking Neural Networks":
+        //   * Forward value = Heaviside(input - threshold) — true binary spike.
+        //   * Backward value = sigmoid'(slope·(input - threshold)) — smooth surrogate.
         //
-        // f(x) ≈ sigmoid(slope * (x - threshold))
+        // The trick: build the output as
+        //     output = sigmoid + (heaviside - sigmoid_detached)
+        // where the sigmoid term is a tape-tracked Engine.Sigmoid so the gradient
+        // flows through the sigmoid derivative, and the (heaviside - sigmoid_detached)
+        // correction is a tape-detached constant offset that simply subtracts the
+        // sigmoid value and adds the Heaviside value, yielding the correct binary
+        // forward output. Because the correction tensors have no GradFn, the tape
+        // never tries to backprop through them — so the gradient of `output` w.r.t.
+        // `input` is exactly the sigmoid derivative, the surrogate prescribed by
+        // the SNN literature.
         //
-        // Larger `derivativeSlope` sharpens the approximation toward the true
-        // Heaviside and narrows the non-zero gradient window, matching the
-        // intent of the scalar Derivative(T) rectangle.
+        // This preserves the paper-faithful Heaviside output (true binary spikes
+        // at inference and on the forward pass during training) while keeping every
+        // step on the gradient tape so optimizer backward works automatically.
         var shifted = Engine.TensorSubtractScalar(input, _threshold);
         var scaled = Engine.TensorMultiplyScalar(shifted, _derivativeSlope);
-        return Engine.Sigmoid(scaled);
+        var sigmoidValue = Engine.Sigmoid(scaled);  // tape-tracked
+
+        // Heaviside snapshot — detached from tape, plain Tensor<T>.
+        var heaviside = new Tensor<T>(input._shape);
+        for (int i = 0; i < input.Length; i++)
+            heaviside[i] = NumOps.GreaterThanOrEquals(input[i], _threshold) ? NumOps.One : NumOps.Zero;
+
+        // Detached snapshot of sigmoidValue — copy the values out so the resulting
+        // tensor has no GradFn link back to `scaled` / `input`. The cheapest way to
+        // do this without engine support is to materialize a fresh Tensor<T> from
+        // the value buffer.
+        var sigmoidDetached = new Tensor<T>(input._shape);
+        for (int i = 0; i < sigmoidValue.Length; i++)
+            sigmoidDetached[i] = sigmoidValue[i];
+
+        // correction = heaviside - sigmoidDetached  (both detached → result detached)
+        // output = sigmoidValue + correction        (sigmoidValue is tape-tracked)
+        // Forward value collapses to: sigmoid + heaviside - sigmoid = heaviside  ✓
+        // Backward gradient: only sigmoidValue contributes               → sigmoid' ✓
+        var correction = Engine.TensorSubtract(heaviside, sigmoidDetached);
+        return Engine.TensorAdd(sigmoidValue, correction);
     }
 
     /// <summary>

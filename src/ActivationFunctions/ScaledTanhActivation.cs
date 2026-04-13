@@ -40,6 +40,12 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     private readonly T _beta;
     private readonly double _saturationThreshold;
 
+    // Precomputed constants for the tensor hot path to avoid repeated NumOps.FromDouble
+    // conversions and scalar arithmetic per Activate(Tensor<T>) call.
+    private readonly T _halfBeta;
+    private readonly T _negSaturationThreshold;
+    private readonly T _posSaturationThreshold;
+
     /// <summary>
     /// Initializes a new instance of the ScaledTanhActivation class with the specified steepness parameter.
     /// </summary>
@@ -64,6 +70,9 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     {
         _beta = NumOps.FromDouble(beta);
         _saturationThreshold = saturationThreshold;
+        _halfBeta = NumOps.Multiply(_beta, NumOps.FromDouble(0.5));
+        _negSaturationThreshold = NumOps.FromDouble(-saturationThreshold);
+        _posSaturationThreshold = NumOps.FromDouble(saturationThreshold);
     }
 
     /// <summary>
@@ -119,9 +128,10 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// </summary>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        var halfBeta = NumOps.Multiply(_beta, NumOps.FromDouble(0.5));
-        var scaled = Engine.TensorMultiplyScalar(input, halfBeta);
-        return Engine.Tanh(scaled);
+        var scaled = Engine.TensorMultiplyScalar(input, _halfBeta);
+        // Match scalar path: clamp to saturation threshold to prevent overflow
+        var clamped = Engine.TensorClamp(scaled, _negSaturationThreshold, _posSaturationThreshold);
+        return Engine.Tanh(clamped);
     }
 
     /// <summary>

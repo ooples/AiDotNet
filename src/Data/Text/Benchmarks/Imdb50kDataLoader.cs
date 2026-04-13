@@ -280,9 +280,7 @@ public class Imdb50kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
 
     private static Tensor<T> ExtractTensorBatch(Tensor<T> source, int[] indices)
     {
-        var newShape = (int[])source._shape.Clone();
-        newShape[0] = indices.Length;
-        var result = new Tensor<T>(newShape);
+        var result = TensorCopyHelper.CreateEmptyBatchLike(source, indices.Length);
         for (int i = 0; i < indices.Length; i++)
             TensorCopyHelper.CopySample(source, result, indices[i], i);
         return result;

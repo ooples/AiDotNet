@@ -324,8 +324,6 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
 
     private string DecodeOutput(Tensor<T> output, int maxLength)
     {
-        // TODO: Replace per-row argmax with Engine.ArgmaxAxis when a general (non-GPU-only)
-        // version is available. The sequential EOS-break logic requires per-row processing.
         var tokens = new List<int>();
         int seqLen = Math.Min(output.Shape[0], maxLength);
 
@@ -616,12 +614,22 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
         var srcSpan = image.Data.Span;
         var dstSpan = normalized.Data.Span;
 
+        // Hoist the per-channel scalar conversions out of the batch loop so we don't
+        // re-run NumOps.FromDouble on the same constants once per batch element.
+        var channelMeans = new T[channels];
+        var channelStds = new T[channels];
+        for (int c = 0; c < channels; c++)
+        {
+            channelMeans[c] = NumOps.FromDouble(c < means.Length ? means[c] : 0.5);
+            channelStds[c] = NumOps.FromDouble(c < stds.Length ? stds[c] : 0.5);
+        }
+
         for (int b = 0; b < batchSize; b++)
         {
             for (int c = 0; c < channels; c++)
             {
-                T mean = NumOps.FromDouble(c < means.Length ? means[c] : 0.5);
-                T std = NumOps.FromDouble(c < stds.Length ? stds[c] : 0.5);
+                T mean = channelMeans[c];
+                T std = channelStds[c];
 
                 int offset = (b * channels + c) * spatialSize;
 

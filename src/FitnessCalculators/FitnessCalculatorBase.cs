@@ -20,7 +20,7 @@ namespace AiDotNet.FitnessCalculators;
 /// This base class provides the common functionality that all these different "judges" share.
 /// </para>
 /// </remarks>
-public abstract class FitnessCalculatorBase<T, TInput, TOutput> : IFitnessCalculator<T, TInput, TOutput>
+public abstract class FitnessCalculatorBase<T, TInput, TOutput> : IPreferredDataSetFitnessCalculator<T, TInput, TOutput>
 {
     /// <summary>
     /// Indicates whether higher fitness scores represent better performance.
@@ -94,6 +94,9 @@ public abstract class FitnessCalculatorBase<T, TInput, TOutput> : IFitnessCalcul
         _numOps = MathHelper.GetNumericOperations<T>();
         _dataSetType = dataSetType;
     }
+
+    /// <inheritdoc/>
+    public DataSetType PreferredDataSetType => _dataSetType;
 
     /// <summary>
     /// Calculates the fitness score for a model using the specified evaluation data.

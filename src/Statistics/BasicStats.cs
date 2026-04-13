@@ -48,7 +48,8 @@ public class BasicStats<T>
     /// The mean gives you the "center" of your data, but can be pulled in the direction of very large or small values.
     /// </para>
     /// </remarks>
-    public T Mean { get; private set; }
+    private T _mean = default!;
+    public T Mean { get { EnsureFullStatsComputed(); return _mean; } private set { _mean = value; } }
 
     /// <summary>
     /// Gets the variance of the values, a measure of dispersion.
@@ -68,7 +69,8 @@ public class BasicStats<T>
     /// Higher variance means values are more spread out; lower variance means they're more clustered around the mean.
     /// </para>
     /// </remarks>
-    public T Variance { get; private set; }
+    private T _variance = default!;
+    public T Variance { get { EnsureFullStatsComputed(); return _variance; } private set { _variance = value; } }
 
     /// <summary>
     /// Gets the standard deviation of the values, a measure of dispersion.
@@ -91,7 +93,8 @@ public class BasicStats<T>
     /// fall roughly between 70 and 80.
     /// </para>
     /// </remarks>
-    public T StandardDeviation { get; private set; }
+    private T _standardDeviation = default!;
+    public T StandardDeviation { get { EnsureFullStatsComputed(); return _standardDeviation; } private set { _standardDeviation = value; } }
 
     /// <summary>
     /// Gets the skewness of the distribution, a measure of asymmetry.
@@ -113,7 +116,8 @@ public class BasicStats<T>
     /// but a few extremely wealthy individuals pull the right tail out.
     /// </para>
     /// </remarks>
-    public T Skewness { get; private set; }
+    private T _skewness = default!;
+    public T Skewness { get { EnsureFullStatsComputed(); return _skewness; } private set { _skewness = value; } }
 
     /// <summary>
     /// Gets the kurtosis of the distribution, a measure of "tailedness".
@@ -134,7 +138,8 @@ public class BasicStats<T>
     /// but occasionally have extreme movements.
     /// </para>
     /// </remarks>
-    public T Kurtosis { get; private set; }
+    private T _kurtosis = default!;
+    public T Kurtosis { get { EnsureFullStatsComputed(); return _kurtosis; } private set { _kurtosis = value; } }
 
     /// <summary>
     /// Gets the minimum value in the dataset.
@@ -151,7 +156,8 @@ public class BasicStats<T>
     /// or setting valid ranges.
     /// </para>
     /// </remarks>
-    public T Min { get; private set; }
+    private T _min = default!;
+    public T Min { get { EnsureFullStatsComputed(); return _min; } private set { _min = value; } }
 
     /// <summary>
     /// Gets the maximum value in the dataset.
@@ -167,7 +173,8 @@ public class BasicStats<T>
     /// Together with the minimum, it tells you the full range of your data.
     /// </para>
     /// </remarks>
-    public T Max { get; private set; }
+    private T _max = default!;
+    public T Max { get { EnsureFullStatsComputed(); return _max; } private set { _max = value; } }
 
     /// <summary>
     /// Gets the number of values in the dataset.
@@ -184,7 +191,8 @@ public class BasicStats<T>
     /// The sample size is important because larger samples generally give more reliable statistics.
     /// </para>
     /// </remarks>
-    public int N { get; private set; }
+    private int _n;
+    public int N { get { EnsureFullStatsComputed(); return _n; } private set { _n = value; } }
 
     /// <summary>
     /// Gets the median value of the dataset.
@@ -208,7 +216,8 @@ public class BasicStats<T>
     /// The median is often better than the mean for describing "typical" values when your data has outliers.
     /// </para>
     /// </remarks>
-    public T Median { get; private set; }
+    private T _median = default!;
+    public T Median { get { EnsureFullStatsComputed(); return _median; } private set { _median = value; } }
 
     /// <summary>
     /// Gets the first quartile (25th percentile) of the dataset.
@@ -227,7 +236,8 @@ public class BasicStats<T>
     /// scored below and 15 students scored above.
     /// </para>
     /// </remarks>
-    public T FirstQuartile { get; private set; }
+    private T _firstQuartile = default!;
+    public T FirstQuartile { get { EnsureFullStatsComputed(); return _firstQuartile; } private set { _firstQuartile = value; } }
 
     /// <summary>
     /// Gets the third quartile (75th percentile) of the dataset.
@@ -246,7 +256,8 @@ public class BasicStats<T>
     /// scored below and 5 students scored above.
     /// </para>
     /// </remarks>
-    public T ThirdQuartile { get; private set; }
+    private T _thirdQuartile = default!;
+    public T ThirdQuartile { get { EnsureFullStatsComputed(); return _thirdQuartile; } private set { _thirdQuartile = value; } }
 
     /// <summary>
     /// Gets the interquartile range (IQR) of the dataset.
@@ -270,7 +281,8 @@ public class BasicStats<T>
     /// span a 15-point range.
     /// </para>
     /// </remarks>
-    public T InterquartileRange { get; private set; }
+    private T _interquartileRange = default!;
+    public T InterquartileRange { get { EnsureFullStatsComputed(); return _interquartileRange; } private set { _interquartileRange = value; } }
 
     /// <summary>
     /// Gets the median absolute deviation (MAD) of the dataset.
@@ -291,7 +303,8 @@ public class BasicStats<T>
     /// Think of it as measuring the "typical" distance from the center, ignoring extreme values.
     /// </para>
     /// </remarks>
-    public T MAD { get; private set; }
+    private T _mAD = default!;
+    public T MAD { get { EnsureFullStatsComputed(); return _mAD; } private set { _mAD = value; } }
 
     /// <summary>
     /// The numeric operations appropriate for the generic type T.
@@ -356,7 +369,23 @@ public class BasicStats<T>
         InterquartileRange = _numOps.Zero;
         MAD = _numOps.Zero;
 
-        CalculateStats(inputs.Values);
+        _deferredValues = inputs.Values;
+    }
+
+    private Vector<T>? _deferredValues;
+    private bool _fullStatsComputed;
+
+    private void EnsureFullStatsComputed()
+    {
+        if (_fullStatsComputed || _deferredValues is null) return;
+
+        // Run the heavy computation BEFORE marking computed, so a throw inside
+        // CalculateStats lets the next property access retry instead of leaving the
+        // instance permanently stuck with default values.
+        CalculateStats(_deferredValues);
+
+        _fullStatsComputed = true;
+        _deferredValues = null;
     }
 
     /// <summary>

@@ -6,9 +6,9 @@
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.37.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.28.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.37.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.37.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.28.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.37.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.5" />
@@ -75,7 +75,7 @@
     <PackageVersion Include="TorchSharp" Version="0.106.0" />
     <PackageVersion Include="TorchSharp-cuda-windows" Version="0.106.0" />
     <!-- Testing -->
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.4.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageVersion Include="coverlet.collector" Version="8.0.1" />

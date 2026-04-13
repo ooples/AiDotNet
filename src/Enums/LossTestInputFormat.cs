@@ -60,5 +60,13 @@ public enum LossTestInputFormat
     /// Used by: OrdinalRegressionLoss.
     /// Test data: predicted=[0.5, 0.3, 0.8], actual=[1.0, 2.0, 3.0]
     /// </summary>
-    OrdinalCategories
+    OrdinalCategories,
+
+    /// <summary>
+    /// Raw logits (unbounded real values) with one-hot or soft targets.
+    /// Used by: CrossEntropyWithLogitsLoss.
+    /// Test data: predicted=[2.0, -1.0, 0.5], actual=[1.0, 0.0, 0.0]
+    /// The loss function applies LogSoftmax internally.
+    /// </summary>
+    RawLogits
 }

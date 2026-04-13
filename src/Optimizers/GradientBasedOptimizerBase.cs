@@ -37,6 +37,20 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected GradientBasedOptimizerOptions<T, TInput, TOutput> GradientOptions;
 
     /// <summary>
+    /// Gradient-based optimizers skip model.Train() during evaluation AFTER the
+    /// initial training. They already update parameters via UpdateSolution() —
+    /// re-training would overwrite gradient updates. The flag is set to true
+    /// after the first PrepareAndEvaluateSolution call.
+    /// </summary>
+    protected override bool SkipTrainingInEvaluation => _hasCompletedInitialTraining;
+    private bool _hasCompletedInitialTraining;
+
+    protected override void OnInitialTrainingCompleted()
+    {
+        _hasCompletedInitialTraining = true;
+    }
+
+    /// <summary>
     /// The current learning rate used in the optimization process.
     /// </summary>
     private double _currentLearningRate;
@@ -1160,10 +1174,16 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         IFullModel<T, TInput, TOutput> currentSolution,
         Vector<T> gradient)
     {
-        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
+        var parameterizable = InterfaceGuard.Parameterizable(currentSolution);
+        var parameters = parameterizable.GetParameters();
         var newParameters = UpdateParameters(parameters, gradient);
 
-        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newParameters);
+        // In-place update: SetParameters modifies the existing model directly,
+        // avoiding the Clone+Serialize+Deserialize overhead of WithParameters.
+        // WithParameters was called 1600+ times per optimization run, each time
+        // doing a full serialization roundtrip — the dominant training bottleneck.
+        parameterizable.SetParameters(newParameters);
+        return currentSolution;
     }
 
     /// <summary>
