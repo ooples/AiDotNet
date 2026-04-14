@@ -392,70 +392,19 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
 
     private Tensor<T> ComputeStandardAttention(Tensor<T> queries, Tensor<T> keys, Tensor<T> values, out Tensor<T> attentionWeightsOut)
     {
-        int batchSize = queries.Shape[0];
-        int numHeads = queries.Shape[1];
-        int seqLenQ = queries.Shape[2];
-        int seqLenKV = keys.Shape[2];
+        // Standard scaled dot-product attention: softmax(Q·K^T / sqrt(d_k)) · V.
+        // Manual implementation was 6 nested loops doing per-element NumOps
+        // dispatches — O(batch · numHeads · seqLenQ · seqLenKV · headDim) virtual
+        // calls per Q·K^T pass plus the same again for attn·V. Replaced with
+        // Engine.ScaledDotProductAttention which fuses Q·K^T, scale, softmax,
+        // and attn·V into one kernel call (and gives a SIMD/GPU dispatch when
+        // available).
         int headDim = queries.Shape[3];
-
-        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
-        T negInf = NumOps.MinValue;
-
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, numHeads, seqLenQ, headDim });
-        attentionWeightsOut = TensorAllocator.Rent<T>(new[] { batchSize, numHeads, seqLenQ, seqLenKV });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < numHeads; h++)
-            {
-                for (int i = 0; i < seqLenQ; i++)
-                {
-                    var scores = new T[seqLenKV];
-                    T maxScore = negInf;
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        T dot = NumOps.Zero;
-                        for (int d = 0; d < headDim; d++)
-                        {
-                            dot = NumOps.Add(dot, NumOps.Multiply(
-                                queries[new[] { b, h, i, d }],
-                                keys[new[] { b, h, j, d }]));
-                        }
-                        scores[j] = NumOps.Multiply(dot, scale);
-                        if (NumOps.GreaterThan(scores[j], maxScore))
-                            maxScore = scores[j];
-                    }
-
-                    T sumExp = NumOps.Zero;
-                    var weights = new T[seqLenKV];
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        weights[j] = NumOps.Exp(NumOps.Subtract(scores[j], maxScore));
-                        sumExp = NumOps.Add(sumExp, weights[j]);
-                    }
-
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        T w = NumericalStabilityHelper.SafeDiv(weights[j], sumExp);
-                        attentionWeightsOut[new[] { b, h, i, j }] = w;
-                    }
-
-                    for (int d = 0; d < headDim; d++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int j = 0; j < seqLenKV; j++)
-                        {
-                            sum = NumOps.Add(sum, NumOps.Multiply(
-                                attentionWeightsOut[new[] { b, h, i, j }],
-                                values[new[] { b, h, j, d }]));
-                        }
-                        output[new[] { b, h, i, d }] = sum;
-                    }
-                }
-            }
-        }
-
-        return output;
+        return Engine.ScaledDotProductAttention(
+            queries, keys, values,
+            mask: null,
+            scale: 1.0 / Math.Sqrt(headDim),
+            out attentionWeightsOut);
     }
 
     /// <summary>

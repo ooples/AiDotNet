@@ -104,19 +104,12 @@ public class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
         }
 
         int batchSize = _gateCache.Shape[0];
-        var importance = new Vector<T>(_outputDim);
-
-        for (int d = 0; d < _outputDim; d++)
-        {
-            var sum = NumOps.Zero;
-            for (int b = 0; b < batchSize; b++)
-            {
-                sum = NumOps.Add(sum, _gateCache[b * _outputDim + d]);
-            }
-            importance[d] = NumOps.Divide(sum, NumOps.FromDouble(batchSize));
-        }
-
-        return importance;
+        // Mean across the batch axis: ReduceMean over axis 0 of the [B, outputDim]
+        // gate cache. Replaces the per-output-dim scalar accumulation loop with
+        // one Engine call.
+        var gateCache2D = Engine.Reshape(_gateCache, new[] { batchSize, _outputDim });
+        var meanTensor = Engine.ReduceMean(gateCache2D, new[] { 0 }, keepDims: false);
+        return meanTensor.ToVector();
     }
 
     /// <inheritdoc/>
