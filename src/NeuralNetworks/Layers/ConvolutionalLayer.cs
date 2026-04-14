@@ -832,7 +832,14 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         var rng = new SimdRandom();
         var span = _kernels.Data.Span;
         int total = span.Length;
-        if (total == 0) return; // zero-sized kernel tensor: nothing to fill
+        if (total == 0)
+        {
+            // Zero-sized kernel tensor: no weights to fill, but still zero biases so
+            // initialization behavior doesn't depend on tensor-constructor allocator
+            // semantics.
+            _biases.Fill(NumOps.Zero);
+            return;
+        }
 
         // Write via a temp array + array-level reinterpret so the SIMD-batched
         // xoshiro256** fill path still applies. See MultiHeadAttentionLayer for full

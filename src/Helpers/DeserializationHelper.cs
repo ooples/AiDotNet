@@ -673,8 +673,23 @@ public static class DeserializationHelper
         {
             // BottleneckBlock(int inChannels, int baseChannels, int stride, int inputHeight, int inputWidth, bool zeroInitResidual)
             int inChannels = TryGetInt(additionalParams, "InChannels") ?? (inputShape.Length > 0 ? inputShape[0] : 64);
-            int outChannels = outputShape.Length > 0 ? outputShape[0] : inChannels;
-            int baseChannels = outChannels / 4; // Expansion factor is 4 for BottleneckBlock
+            int outChannels = TryGetInt(additionalParams, "OutChannels")
+                              ?? (outputShape.Length > 0 ? outputShape[0] : inChannels);
+            // Prefer the explicit BaseChannels from additionalParams when present; fall
+            // back to the standard expansion=4 derivation otherwise. Blindly dividing by
+            // 4 silently produces wrong constructor arguments when outputShape is empty
+            // or when outChannels isn't divisible by 4.
+            const int BottleneckExpansion = 4;
+            int baseChannels = TryGetInt(additionalParams, "BaseChannels")
+                               ?? (outChannels / BottleneckExpansion);
+            if (baseChannels <= 0)
+                throw new InvalidOperationException(
+                    $"BottleneckBlock baseChannels must be positive (derived {baseChannels} " +
+                    $"from outChannels={outChannels}); provide 'BaseChannels' in additionalParams.");
+            if (baseChannels * BottleneckExpansion != outChannels)
+                throw new InvalidOperationException(
+                    $"BottleneckBlock expansion mismatch: baseChannels={baseChannels} * 4 " +
+                    $"!= outChannels={outChannels}. Populate 'BaseChannels' in additionalParams.");
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             int inputHeight = inputShape.Length > 1 ? inputShape[1] : 56;
             int inputWidth = inputShape.Length > 2 ? inputShape[2] : 56;

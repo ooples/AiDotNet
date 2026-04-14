@@ -268,9 +268,22 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// <remarks>
     /// This includes all weights (inputSize × outputSize) and all biases (outputSize).
     /// </remarks>
-    public override int ParameterCount => _isInitialized
-        ? _weights.Length + _biases.Length
-        : (_inputSize * _outputSize) + _outputSize;
+    public override int ParameterCount
+    {
+        get
+        {
+            if (_isInitialized) return _weights.Length + _biases.Length;
+            // Compute in long to detect overflow for very large layers; int arithmetic
+            // on (_inputSize * _outputSize) + _outputSize can silently wrap to a
+            // negative value and break parameter-shape validation downstream.
+            long count = (long)_inputSize * _outputSize + _outputSize;
+            if (count > int.MaxValue)
+                throw new OverflowException(
+                    $"FeedForwardLayer parameter count {count} exceeds int.MaxValue " +
+                    $"(inputSize={_inputSize}, outputSize={_outputSize}).");
+            return (int)count;
+        }
+    }
     // Note: the source generator (TrainableParameterGenerator) auto-emits
     // GetTrainableParameters() with an EnsureInitialized() trampoline, so
     // tape-based training that calls CollectParameters before the first Forward()

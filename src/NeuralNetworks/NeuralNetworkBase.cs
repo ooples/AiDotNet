@@ -456,31 +456,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual Vector<T> GetParameters()
     {
-        // Collect parameters from every layer — including ones whose ParameterCount
-        // currently reports 0. Lazy layers allocate their parameter vector inside
-        // GetParameters() itself, so reading ParameterCount first (to pre-filter or
-        // pre-size) would skip them or misreport the total. Iterate once, then
-        // concatenate. Length is derived from the returned vectors for the same
-        // reason — pre-call ParameterCount may be stale for any given layer.
-        var collected = new List<Vector<T>>(Layers.Count);
+        // Two-pass to keep peak memory bounded. Retaining every layer's per-layer
+        // vector simultaneously would roughly double peak allocation (final
+        // concatenated vector + sum of all per-layer vectors) and elevate OOM risk
+        // for large models. Here, at most one per-layer vector is live at a time in
+        // addition to the final output.
+        //
+        // We intentionally call GetParameters() twice rather than pre-sizing via
+        // ParameterCount: lazy layers allocate their parameter buffer inside
+        // GetParameters() itself, so ParameterCount can under-report until after the
+        // first call. The first pass both triggers lazy init and measures actual
+        // length; the second pass copies into the final destination.
         int totalParameterCount = 0;
         foreach (var layer in Layers)
         {
-            var layerParameters = layer.GetParameters();
-            if (layerParameters.Length == 0)
-                continue;
-            collected.Add(layerParameters);
-            totalParameterCount += layerParameters.Length;
+            totalParameterCount += layer.GetParameters().Length;
         }
 
         var parameters = new Vector<T>(totalParameterCount);
         var destSpan = parameters.AsWritableSpan();
 
         int currentIndex = 0;
-        foreach (var layerParameters in collected)
+        foreach (var layer in Layers)
         {
+            var layerParameters = layer.GetParameters();
             int copyLength = layerParameters.Length;
-            // Bulk copy via Span instead of element-by-element indexer access.
+            if (copyLength == 0) continue;
             layerParameters.AsSpan().Slice(0, copyLength)
                 .CopyTo(destSpan.Slice(currentIndex, copyLength));
             currentIndex += copyLength;

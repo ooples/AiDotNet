@@ -36,6 +36,22 @@ public class SpiralNetOptions : NeuralNetworkOptions
     public int SpiralLength { get; set; } = 9;
 
     /// <summary>
+    /// Gets or sets the default vertex count used to synthesize fallback spiral
+    /// indices when explicit mesh topology is not provided.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is distinct from <see cref="InputFeatures"/>, which specifies features per
+    /// vertex (e.g., 3 for x/y/z). The fallback indices matrix is shaped
+    /// [NumVertices, SpiralLength] and must use the actual vertex count — using
+    /// InputFeatures here produced an indices matrix whose first dimension had no
+    /// relation to the true mesh size.
+    /// </para>
+    /// </remarks>
+    /// <value>Default is 64 vertices, a reasonable small-mesh fallback.</value>
+    public int NumVertices { get; set; } = 64;
+
+    /// <summary>
     /// Gets or sets the channel sizes for each convolution layer.
     /// </summary>
     /// <value>Default is [32, 64, 128, 256].</value>

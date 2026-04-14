@@ -99,12 +99,9 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
         Random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
 
         // Apply sensible defaults for required properties per facade pattern.
-        // Init-only properties can't be assigned here, so use local fallbacks.
-        var numOps = MathHelper.GetNumericOperations<T>();
-
         LossFunction = options.LossFunction ?? new MeanSquaredErrorLoss<T>();
-        LearningRate = options.LearningRate ?? numOps.FromDouble(0.001);
-        DiscountFactor = options.DiscountFactor ?? numOps.FromDouble(0.99);
+        LearningRate = options.LearningRate ?? NumOps.FromDouble(0.001);
+        DiscountFactor = options.DiscountFactor ?? NumOps.FromDouble(0.99);
         TrainingSteps = 0;
         Episodes = 0;
         LossHistory = new List<T>();

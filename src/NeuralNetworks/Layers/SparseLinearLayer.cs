@@ -101,22 +101,21 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         _weights.NonZeroCount + OutputFeatures;
 
     /// <summary>
-    /// Gets whether this layer supports training. Returns <c>true</c> because the layer
-    /// supports traditional gradient-based training via <see cref="UpdateParameters"/> with
-    /// manually accumulated gradients — that path is what <c>SupportsTraining</c> gates in
-    /// <see cref="AiDotNet.Optimizers.GradientBasedOptimizerBase{T,TInput,TOutput}"/>.
+    /// Gets whether this layer supports training. Returns <c>false</c> because this layer's
+    /// sparse weight tensor is not exposed to the tape-based autodiff path: the layer has no
+    /// <c>[TrainableParameter]</c> fields and never calls <c>RegisterTrainableParameter</c>,
+    /// so <c>TapeTrainingStep.CollectParameters</c> finds zero parameters here. In tape mode
+    /// (the default), the layer would be silently skipped while its peers train — producing
+    /// a partially-trainable network that is almost never the intended behavior.
     /// </summary>
     /// <remarks>
-    /// SparseTensor weights are intentionally NOT exposed to the tape-based autodiff path:
-    /// this layer has no <c>[TrainableParameter]</c> fields and never calls
-    /// <c>RegisterTrainableParameter</c>, so <c>TapeTrainingStep.CollectParameters</c>
-    /// finds zero parameters here and silently skips the layer in tape mode. That is the
-    /// intended behavior — sparse weight tensors don't fit the dense
-    /// <c>ParameterBuffer&lt;T&gt;</c> view contract used by the tape. Setting
-    /// <c>SupportsTraining = true</c> therefore routes only the manual gradient-update
-    /// codepath, never the tape codepath, so the two contracts stay consistent.
+    /// Sparse weight tensors don't fit the dense <c>ParameterBuffer&lt;T&gt;</c> view
+    /// contract used by the tape, so returning <c>false</c> here keeps the layer's inference
+    /// behavior correct while explicitly advertising that no gradient updates flow through
+    /// it. Integrating sparse parameters into the tape (e.g., via a sparse trainable tensor
+    /// view) is the follow-up required before this can flip back to <c>true</c>.
     /// </remarks>
-    public override bool SupportsTraining => true;
+    public override bool SupportsTraining => false;
 
     /// <summary>
     /// Initializes a new instance of the SparseLinearLayer.

@@ -390,9 +390,9 @@ public class VGGNetworkTests
         for (int i = 0; i < input.Length; i++) input[i] = 0.5f;
         target[0] = 1.0f; // One-hot encoded class 0
 
-        // Act & Assert - should not throw, run the synchronous Train on a thread
-        // pool thread so Timeout can actually abort if it hangs.
-        await Task.Run(() => network.Train(input, target));
+        // Act & Assert — should not throw.
+        await Task.Yield();
+        network.Train(input, target);
     }
 
     [Fact(Timeout = 120000)]
@@ -416,16 +416,13 @@ public class VGGNetworkTests
         for (int i = 0; i < input.Length; i++) input[i] = 0.5f;
         target[0] = 1.0f;
 
-        // Act - train for a few iterations on a background thread so the test
-        // can be aborted by xUnit's Timeout if it hangs.
-        var (initialLoss, finalLoss) = await Task.Run(() =>
-        {
+        // Act — train for a few iterations and track initial vs final loss.
+        await Task.Yield();
+        network.Train(input, target);
+        var initialLoss = network.GetLastLoss();
+        for (int i = 0; i < 5; i++)
             network.Train(input, target);
-            var firstLoss = network.GetLastLoss();
-            for (int i = 0; i < 5; i++)
-                network.Train(input, target);
-            return (firstLoss, network.GetLastLoss());
-        });
+        var finalLoss = network.GetLastLoss();
 
         // Assert - loss should decrease (or at least not increase dramatically).
         // Due to randomness, we just check it doesn't explode.

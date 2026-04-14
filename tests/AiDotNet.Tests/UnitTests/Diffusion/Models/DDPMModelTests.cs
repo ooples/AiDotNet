@@ -343,12 +343,11 @@ public class DDPMModelTests
     public async Task SetParameters_ThenGetParameters_ReturnsSetParameters()
     {
         // Arrange — build a parameter vector matching the model's actual ParameterCount
-        // (defaults to the U-Net size). The previous test used a 5-element vector which
-        // would mismatch SetParameters' size validation now that the default model has
-        // a real U-Net.
+        // (defaults to the U-Net size). Use ParameterCount rather than
+        // GetParameters().Length to avoid allocating and copying the full U-Net
+        // parameter vector just to size this test buffer.
         var model = new DDPMModel<double>();
-        var seed = model.GetParameters();
-        var parameters = new Vector<double>(seed.Length);
+        var parameters = new Vector<double>(model.ParameterCount);
         for (int i = 0; i < parameters.Length; i++)
             parameters[i] = (i % 7) * 0.01;
 
@@ -377,10 +376,10 @@ public class DDPMModelTests
     [Fact(Timeout = 120000)]
     public async Task GetParameters_ReturnsCopy_NotReference()
     {
-        // Arrange — same size-matching pattern as SetParameters_ThenGetParameters above.
+        // Arrange — same size-matching pattern as SetParameters_ThenGetParameters above;
+        // ParameterCount avoids the full GetParameters() copy for sizing.
         var model = new DDPMModel<double>();
-        var seed = model.GetParameters();
-        var parameters = new Vector<double>(seed.Length);
+        var parameters = new Vector<double>(model.ParameterCount);
         for (int i = 0; i < parameters.Length; i++)
             parameters[i] = (i % 5) + 1.0;
         model.SetParameters(parameters);
@@ -403,11 +402,10 @@ public class DDPMModelTests
     {
         // Arrange — populate the U-Net with a deterministic parameter pattern sized
         // to the actual ParameterCount, so SaveState/LoadState round-trips a vector
-        // whose shape matches the underlying network. The previous fixture used a
-        // 3-element vector that no longer matches the U-Net default.
+        // whose shape matches the underlying network. ParameterCount is used instead
+        // of GetParameters().Length to avoid the full vector allocation for sizing.
         var model = new DDPMModel<double>();
-        var seed = model.GetParameters();
-        var parameters = new Vector<double>(seed.Length);
+        var parameters = new Vector<double>(model.ParameterCount);
         for (int i = 0; i < parameters.Length; i++)
             parameters[i] = (i % 11) * 0.0125;
         model.SetParameters(parameters);

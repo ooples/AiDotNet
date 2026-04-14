@@ -1,3 +1,4 @@
+using System.Buffers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -439,43 +440,67 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         if (total == 0) return; // zero-sized tensor: nothing to fill
         double scaleD = NumOps.ToDouble(scale);
 
-        // For double/float, write via a temp array + array-level reinterpret so the
-        // SIMD-batched xoshiro256** path still applies. Span<T> can't be reinterpreted
-        // across generic T (MemoryMarshal.Cast needs T:struct; Unsafe.As<Span<T>,...>
-        // rejects the ref-struct; MemoryMarshal.CreateSpan is missing on net471).
-        // Arrays are reference types so Unsafe.As<double[], T[]> is unconstrained and
-        // safe when T == double/float at runtime.
+        // For double/float, write via a rented temp array + array-level reinterpret so
+        // the SIMD-batched xoshiro256** path still applies. Span<T> can't be
+        // reinterpreted across generic T (MemoryMarshal.Cast needs T:struct;
+        // Unsafe.As<Span<T>,...> rejects the ref-struct; MemoryMarshal.CreateSpan is
+        // missing on net471). Arrays are reference types so Unsafe.As<double[], T[]>
+        // is unconstrained and safe when T == double/float at runtime.
+        //
+        // Use ArrayPool to avoid allocating a fresh full-sized buffer on every init
+        // (attention weight tensors can be multi-million elements across many layers).
         if (typeof(T) == typeof(double))
         {
-            var buffer = new double[total];
-            rng.NextDoubles(buffer.AsSpan());
-            for (int i = 0; i < total; i++)
-                buffer[i] = (buffer[i] - 0.5) * scaleD;
-            var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<double[], T[]>(ref buffer);
-            reinterpreted.AsSpan(0, total).CopyTo(span);
+            var buffer = ArrayPool<double>.Shared.Rent(total);
+            try
+            {
+                rng.NextDoubles(buffer.AsSpan(0, total));
+                for (int i = 0; i < total; i++)
+                    buffer[i] = (buffer[i] - 0.5) * scaleD;
+                var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<double[], T[]>(ref buffer);
+                reinterpreted.AsSpan(0, total).CopyTo(span);
+            }
+            finally
+            {
+                ArrayPool<double>.Shared.Return(buffer);
+            }
         }
         else if (typeof(T) == typeof(float))
         {
-            var buffer = new float[total];
-            rng.NextFloats(buffer.AsSpan());
-            float scaleF = (float)scaleD;
-            for (int i = 0; i < total; i++)
-                buffer[i] = (buffer[i] - 0.5f) * scaleF;
-            var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<float[], T[]>(ref buffer);
-            reinterpreted.AsSpan(0, total).CopyTo(span);
+            var buffer = ArrayPool<float>.Shared.Rent(total);
+            try
+            {
+                rng.NextFloats(buffer.AsSpan(0, total));
+                float scaleF = (float)scaleD;
+                for (int i = 0; i < total; i++)
+                    buffer[i] = (buffer[i] - 0.5f) * scaleF;
+                var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<float[], T[]>(ref buffer);
+                reinterpreted.AsSpan(0, total).CopyTo(span);
+            }
+            finally
+            {
+                ArrayPool<float>.Shared.Return(buffer);
+            }
         }
         else
         {
             const int batchSize = 4096;
-            var tempBuf = new double[Math.Min(total, batchSize)];
-            int offset = 0;
-            while (offset < total)
+            var tempBuf = ArrayPool<double>.Shared.Rent(Math.Min(total, batchSize));
+            try
             {
-                int chunk = Math.Min(batchSize, total - offset);
-                rng.NextDoubles(tempBuf.AsSpan(0, chunk));
-                for (int j = 0; j < chunk; j++)
-                    span[offset + j] = NumOps.FromDouble((tempBuf[j] - 0.5) * scaleD);
-                offset += chunk;
+                int offset = 0;
+                while (offset < total)
+                {
+                    int chunk = Math.Min(batchSize, total - offset);
+                    rng.NextDoubles(tempBuf.AsSpan(0, chunk));
+                    for (int j = 0; j < chunk; j++)
+                        span[offset + j] = NumOps.FromDouble((tempBuf[j] - 0.5) * scaleD);
+                    offset += chunk;
+                }
+            }
+            finally
+            {
+                ArrayPool<double>.Shared.Return(tempBuf);
             }
         }
     }

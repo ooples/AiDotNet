@@ -1492,32 +1492,31 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     }
                 }
             }
+            else if (model.Domains.Contains(3) && !model.Tasks.Contains(35))
+            {
+                // Temporal video models (ActionRecognition=22, VideoGeneration=41, etc.)
+                // need a 4D [frames, channels, height, width] input shape, but
+                // NeuralNetworkArchitecture only expresses 3D (height/width/depth).
+                // Rather than silently emit a mismatched 3D architecture alongside a
+                // 4D InputShape, route these to a runtime placeholder until the
+                // architecture type can represent a temporal dimension.
+                constructorExpr = "throw new System.NotImplementedException(" +
+                    $"\"'{GeneratorHelpers.StripGenericSuffix(model.ClassName)}' is a temporal video model; NeuralNetworkArchitecture<T> cannot express its 4D [frames, channels, height, width] input. Implement this factory manually.\")";
+            }
             else
             {
                 // Architecture-only constructor: provide a domain-appropriate NeuralNetworkArchitecture.
-                // Vision/Video/3D models need ThreeDimensional input; Audio needs TwoDimensional;
-                // others default to OneDimensional.
+                // Vision/3D models need ThreeDimensional input; Audio needs TwoDimensional;
+                // others default to OneDimensional. Temporal video is handled above.
                 needsArchitectureUsing = true;
-                bool isVideo = model.Domains.Contains(3); // Video=3
                 bool isVision = model.Domains.Contains(1) || model.Domains.Contains(11); // Vision=1, ThreeD=11
                 bool isAudio = model.Domains.Contains(4); // Audio=4
-
-                // Use ModelTask to distinguish video subtypes:
-                // - FrameInterpolation (35): 2 concatenated RGB frames → [6, H, W] (3D)
-                // - ActionRecognition (22), VideoGeneration (41): temporal → [T, C, H, W] (4D)
-                bool isFrameInterp = model.Tasks.Contains(35); // FrameInterpolation
-                bool isTemporalVideo = isVideo && !isFrameInterp;
+                bool isFrameInterp = model.Tasks.Contains(35); // FrameInterpolation → 3D input
 
                 string inputTypeExpr;
                 string sizeExpr;
 
-                if (isTemporalVideo)
-                {
-                    // 4D temporal video: [frames, channels, height, width]
-                    inputTypeExpr = "AiDotNet.Enums.InputType.ThreeDimensional";
-                    sizeExpr = "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4";
-                }
-                else if (isFrameInterp)
+                if (isFrameInterp)
                 {
                     // Frame interpolation: 2 concatenated RGB frames = 6 channels
                     inputTypeExpr = "AiDotNet.Enums.InputType.ThreeDimensional";
@@ -1545,12 +1544,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     inputTypeExpr = "AiDotNet.Enums.InputType.OneDimensional";
                     sizeExpr = $"inputSize: {inputSize1D}, outputSize: 4";
                 }
-                // Always construct the base NeuralNetworkArchitecture<double> — even for derived
-                // architecture types, the base constructor args are compatible since C# allows
-                // passing a base object to a constructor that accepts a derived type via implicit
-                // conversion (NOT — this doesn't work in C#). Instead, only models whose first
-                // param IS exactly NeuralNetworkArchitecture<T> (not a derived type) can be
-                // auto-constructed. Derived types need manual test classes.
+                // Only models whose first constructor parameter is *exactly*
+                // NeuralNetworkArchitecture<T> are auto-constructed here. Derived
+                // architecture types require manual test classes because a
+                // base-typed argument is not implicitly convertible to a derived
+                // architecture parameter in C#. The caller enforces this by setting
+                // model.HasArchitectureOnlyConstructor (and canConstruct) only when
+                // IsExactlyArchitecture is true.
                 string archTypeName = "NeuralNetworkArchitecture<double>";
                 string archExpr = $"new {archTypeName}(" +
                     $"inputType: {inputTypeExpr}, " +
