@@ -2,8 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "name": "aidotnet-playground-api",
-  "//": "ignoreCommand: only deploy on master/main pushes (production). Skip ALL preview deploys — PR commits don't need a Vercel preview of the playground API and this was burning the daily deployment quota.",
-  "ignoreCommand": "bash -c 'case \"$VERCEL_GIT_COMMIT_REF\" in master|main) exit 1 ;; *) exit 0 ;; esac'",
+  "ignoreCommand": "sh -c 'case \"$VERCEL_GIT_COMMIT_REF\" in master|main) exit 1 ;; *) exit 0 ;; esac'",
   "functions": {
     "api/execute.ts": {
       "maxDuration": 30,

@@ -71,10 +71,13 @@ public sealed class SpeechCommandsDataLoaderOptions
     public int TargetLength { get; set; } = 16000;
 
     /// <summary>
-    /// How many <c>_silence_</c> clips to synthesize from the background-noise
-    /// directory when the core 12-class subset is in use. Default is 2300, which
-    /// matches the per-class ratio in the official 12-class split. Ignored when
-    /// <see cref="UseCoreSubset"/> is false.
+    /// Train-equivalent number of <c>_silence_</c> clips to synthesize from the
+    /// background-noise directory when the core 12-class subset is in use. Default
+    /// is 2300, which matches the per-class ratio in the official 12-class training
+    /// split. The loader scales the emitted silence count by <see cref="Split"/>
+    /// (training ≈ full count, validation ≈ 12%, test ≈ 6%), so Validation/Test
+    /// produce proportionally fewer silence samples than this configured value.
+    /// Ignored when <see cref="UseCoreSubset"/> is false.
     /// </summary>
     public int SilenceSampleCount { get; set; } = 2300;
 

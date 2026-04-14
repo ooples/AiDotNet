@@ -1,6 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "//": "ignoreCommand: always skip Vercel Git-integration deploys. Production deploys of this website go through .github/workflows/deploy-website.yml which calls 'vercel deploy --prod' directly, bypassing ignoreCommand. Skipping here avoids burning the daily Vercel deployment quota on every PR commit.",
   "ignoreCommand": "exit 0"
 }

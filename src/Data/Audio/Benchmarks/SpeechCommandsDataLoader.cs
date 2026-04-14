@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AiDotNet.Data;
 using AiDotNet.Data.Geometry;
 using AiDotNet.Data.Loaders;
@@ -87,6 +88,7 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
     private int _sampleCount;
     private readonly int _numClasses;
     private readonly string[] _wordList;
+    private readonly IReadOnlyList<string> _wordListReadOnly; // cached AsReadOnly wrapper
     private readonly int _silenceClassIndex; // -1 when not in 12-class core mode
     private readonly int _unknownClassIndex; // -1 when not in 12-class core mode
 
@@ -99,7 +101,10 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
     // Lazy cache of fully-decoded background-noise waveforms, keyed by file path.
     // Each entry holds the full native-rate decoded audio as a T[] so synthetic
     // silence samples can be sliced at distinct offsets without reloading from disk.
-    private readonly Dictionary<string, T[]> _backgroundNoiseBuffers = new();
+    // ConcurrentDictionary because ExtractBatch is called from parallel batch
+    // prefetchers and multi-threaded input pipelines — a plain Dictionary would
+    // race between concurrent silence-decode calls.
+    private readonly ConcurrentDictionary<string, T[]> _backgroundNoiseBuffers = new();
 
     // How many native samples we pre-decode from each background-noise WAV. Speech
     // Commands background files are ~60 s at 16 kHz; 30 s is more than enough to
@@ -137,9 +142,10 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
     /// <remarks>
     /// Wrapped via <see cref="Array.AsReadOnly{T}(T[])"/> so callers can't downcast back to
     /// <c>string[]</c> and mutate the canonical class ordering — that would corrupt the
-    /// directory→class-index mapping for every loader instance.
+    /// directory→class-index mapping for every loader instance. The wrapper is cached in
+    /// the constructor so repeated <see cref="WordList"/> access doesn't re-allocate.
     /// </remarks>
-    public IReadOnlyList<string> WordList => Array.AsReadOnly(_wordList);
+    public IReadOnlyList<string> WordList => _wordListReadOnly;
 
     /// <summary>Creates a new Speech Commands data loader.</summary>
     public SpeechCommandsDataLoader(SpeechCommandsDataLoaderOptions? options = null)
@@ -170,6 +176,7 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
             _unknownClassIndex = -1;
         }
         _numClasses = _wordList.Length;
+        _wordListReadOnly = Array.AsReadOnly(_wordList);
     }
 
     /// <inheritdoc/>
@@ -534,14 +541,17 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
     /// </summary>
     private T[] GetOrLoadBackgroundNoiseBuffer(string path)
     {
-        if (_backgroundNoiseBuffers.TryGetValue(path, out var cached))
-            return cached;
-
-        byte[] audioBytes = File.ReadAllBytes(path);
-        var buffer = new T[BackgroundNoisePrefetchSamples];
-        AudioLoaderHelper.LoadAudioSamples(audioBytes, buffer, 0, BackgroundNoisePrefetchSamples, NumOps);
-        _backgroundNoiseBuffers[path] = buffer;
-        return buffer;
+        // GetOrAdd is atomic across concurrent callers; the value factory may run
+        // more than once for the same key under heavy contention, but only one
+        // result is installed. That's acceptable here — duplicate decode work is
+        // bounded (a few MB) and cheaper than holding a lock across file I/O.
+        return _backgroundNoiseBuffers.GetOrAdd(path, p =>
+        {
+            byte[] audioBytes = File.ReadAllBytes(p);
+            var buffer = new T[BackgroundNoisePrefetchSamples];
+            AudioLoaderHelper.LoadAudioSamples(audioBytes, buffer, 0, BackgroundNoisePrefetchSamples, NumOps);
+            return buffer;
+        });
     }
 
     /// <summary>
@@ -596,11 +606,13 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
         {
             double srcPos = nativeOffset + t * rateRatio;
             int floorIdx = (int)Math.Floor(srcPos);
+            // frac = srcPos - floor(srcPos); reuse floorIdx to avoid a second
+            // Math.Floor call per sample in this hot resampling loop.
+            double frac = srcPos - floorIdx;
             int ceilIdx = floorIdx + 1;
             if (floorIdx > lastIdx) floorIdx = lastIdx;
             if (ceilIdx > lastIdx) ceilIdx = lastIdx;
 
-            double frac = srcPos - Math.Floor(srcPos);
             double v0 = NumOps.ToDouble(nativeBuf[floorIdx]);
             double v1 = NumOps.ToDouble(nativeBuf[ceilIdx]);
             dst[dstOffset + t] = NumOps.FromDouble(v0 * (1.0 - frac) + v1 * frac);
