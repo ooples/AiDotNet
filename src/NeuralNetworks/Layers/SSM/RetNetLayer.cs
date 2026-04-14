@@ -464,64 +464,21 @@ public partial class RetNetLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> GroupNormForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(input._shape);
-        T eps = NumOps.FromDouble(1e-6);
+        // GroupNorm per head across the model-dimension axis, independent per
+        // (batch, time) position. Manual implementation was 4 scalar passes
+        // (mean + variance + normalize + scale/bias). Engine.GroupNorm fuses
+        // all of them; mean/variance are captured via out-params for backward.
+        int modelDim = _numHeads * _headDimension;
+        var inputFlat = Engine.Reshape(input, new[] { batchSize * seqLen, modelDim, 1, 1 });
+        var scaleFlat = Engine.Reshape(_groupNormScale, new[] { modelDim });
+        var biasFlat = Engine.Reshape(_groupNormBias, new[] { modelDim });
+        var normed = Engine.GroupNorm(inputFlat, _numHeads, scaleFlat, biasFlat, 1e-6, out var meanFlat, out var varFlat);
+        var output = Engine.Reshape(normed, input._shape);
 
-        // Store mean and variance for backward pass: [batchSize, seqLen, numHeads]
-        var meanTensor = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
-        var varTensor = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int h = 0; h < _numHeads; h++)
-                {
-                    int dimStart = h * _headDimension;
-                    T invHD = NumOps.FromDouble(1.0 / _headDimension);
-
-                    // Compute mean
-                    T mean = NumOps.Zero;
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        int flatD = dimStart + d;
-                        mean = NumOps.Add(mean, input[new[] { bi, t, flatD }]);
-                    }
-                    mean = NumOps.Multiply(mean, invHD);
-
-                    // Compute variance
-                    T variance = NumOps.Zero;
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        int flatD = dimStart + d;
-                        T diff = NumOps.Subtract(input[new[] { bi, t, flatD }], mean);
-                        variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                    }
-                    variance = NumOps.Multiply(variance, invHD);
-
-                    meanTensor[new[] { bi, t, h }] = mean;
-                    varTensor[new[] { bi, t, h }] = variance;
-
-                    // Normalize, scale, and shift
-                    T invStd = NumOps.FromDouble(1.0 / Math.Sqrt(
-                        NumOps.ToDouble(NumOps.Add(variance, eps))));
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        int flatD = dimStart + d;
-                        T normalized = NumOps.Multiply(
-                            NumOps.Subtract(input[new[] { bi, t, flatD }], mean),
-                            invStd);
-                        T scale = _groupNormScale[new[] { h, d }];
-                        T bias = _groupNormBias[new[] { h, d }];
-                        output[new[] { bi, t, flatD }] = NumOps.Add(
-                            NumOps.Multiply(normalized, scale), bias);
-                    }
-                }
-            }
-        }
-
-        _lastGroupNormMean = meanTensor;
-        _lastGroupNormVar = varTensor;
+        // Reshape cached moments to [batchSize, seqLen, numHeads] — the per-
+        // (batch, time, head) shape the backward pass expects.
+        _lastGroupNormMean = Engine.Reshape(meanFlat, new[] { batchSize, seqLen, _numHeads });
+        _lastGroupNormVar = Engine.Reshape(varFlat, new[] { batchSize, seqLen, _numHeads });
         return output;
     }
 

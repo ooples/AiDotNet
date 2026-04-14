@@ -523,41 +523,12 @@ public partial class TTTLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> LayerNormForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        T eps = NumOps.FromDouble(1e-5);
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                // Compute mean
-                T mean = NumOps.Zero;
-                for (int d = 0; d < _modelDimension; d++)
-                    mean = NumOps.Add(mean, input[new[] { bi, t, d }]);
-                mean = NumOps.Divide(mean, NumOps.FromDouble(_modelDimension));
-
-                // Compute variance
-                T variance = NumOps.Zero;
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T diff = NumOps.Subtract(input[new[] { bi, t, d }], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-                variance = NumOps.Divide(variance, NumOps.FromDouble(_modelDimension));
-
-                // Normalize and apply affine
-                T invStd = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(variance, eps)));
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T normalized = NumOps.Multiply(
-                        NumOps.Subtract(input[new[] { bi, t, d }], mean), invStd);
-                    output[new[] { bi, t, d }] = NumOps.Add(
-                        NumOps.Multiply(_lnGamma[d], normalized), _lnBeta[d]);
-                }
-            }
-        }
-
-        return output;
+        // Standard LayerNorm over the last axis (modelDimension). Replaces 4
+        // nested scalar passes (mean + variance + normalize + affine) with a
+        // single fused Engine.LayerNorm call. Backward still has the manual
+        // recompute path below — Engine.LayerNormBackward could fold that in
+        // as a follow-up but leaves a larger refactor behind.
+        return Engine.LayerNorm(input, _lnGamma, _lnBeta, 1e-5, out _, out _);
     }
 
     /// <summary>

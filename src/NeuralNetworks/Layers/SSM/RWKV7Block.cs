@@ -706,45 +706,17 @@ public partial class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ApplyGroupNorm(Tensor<T> input, int batchSize)
     {
-        var output = TensorAllocator.Rent<T>(input._shape);
-        T eps = NumOps.FromDouble(1e-6);
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
-
-                // Compute mean for this head's dimensions
-                T mean = NumOps.Zero;
-                for (int d = 0; d < _headDimension; d++)
-                    mean = NumOps.Add(mean, input[new[] { bi, dimStart + d }]);
-                mean = NumOps.Divide(mean, NumOps.FromDouble(_headDimension));
-
-                // Compute variance
-                T variance = NumOps.Zero;
-                for (int d = 0; d < _headDimension; d++)
-                {
-                    T diff = NumOps.Subtract(input[new[] { bi, dimStart + d }], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-                variance = NumOps.Divide(variance, NumOps.FromDouble(_headDimension));
-                T stdInv = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(variance, eps)));
-
-                // Normalize and apply scale/bias
-                for (int d = 0; d < _headDimension; d++)
-                {
-                    int flatD = dimStart + d;
-                    T normalized = NumOps.Multiply(
-                        NumOps.Subtract(input[new[] { bi, flatD }], mean), stdInv);
-                    output[new[] { bi, flatD }] = NumOps.Add(
-                        NumOps.Multiply(_groupNormGamma[flatD], normalized),
-                        _groupNormBeta[flatD]);
-                }
-            }
-        }
-
-        return output;
+        // Group normalization per head: each head's _headDimension contiguous
+        // channels share a (mean, variance), with independent gamma/beta per
+        // channel. That's exactly Engine.GroupNorm with numGroups=numHeads over
+        // a [batchSize, modelDimension, 1, 1] 4D reshape. The previous manual
+        // loop did 4 × batchSize × numHeads × headDimension scalar NumOps calls
+        // (mean + variance + normalize + scale/bias passes); this is one fused
+        // call.
+        int modelDim = _numHeads * _headDimension;
+        var input4D = Engine.Reshape(input, new[] { batchSize, modelDim, 1, 1 });
+        var output4D = Engine.GroupNorm(input4D, _numHeads, _groupNormGamma, _groupNormBeta, 1e-6, out _, out _);
+        return Engine.Reshape(output4D, input._shape);
     }
 
     /// <summary>

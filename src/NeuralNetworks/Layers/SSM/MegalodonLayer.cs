@@ -540,45 +540,19 @@ public partial class MegalodonLayer<T> : LayerBase<T>
         _lastEmaStatesImag = statesImag;
         _lastEmaOutputPreNorm = outputPreNorm;
 
-        // Timestep normalization: normalize each (batch, time) vector across EMA dimensions
-        var outputNorm = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _emaDimension });
-        var stdInv = TensorAllocator.Rent<T>(new[] { batchSize, seqLen });
-        T eps = NumOps.FromDouble(1e-5);
+        // Timestep normalization: normalize each (batch, time) vector across EMA
+        // dimensions — this is a standard LayerNorm over the last axis.
+        // Engine.LayerNorm fuses the 4 scalar passes (mean + variance + normalize
+        // + scale/bias) into one kernel call.
+        const double eps = 1e-5;
+        var outputNorm = Engine.LayerNorm(outputPreNorm, _tsNormGamma, _tsNormBeta, eps, out _, out var variance);
 
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                // Compute mean
-                T mean = NumOps.Zero;
-                for (int d = 0; d < _emaDimension; d++)
-                    mean = NumOps.Add(mean, outputPreNorm[new[] { bi, t, d }]);
-                mean = NumOps.Divide(mean, NumOps.FromDouble(_emaDimension));
-
-                // Compute variance
-                T variance = NumOps.Zero;
-                for (int d = 0; d < _emaDimension; d++)
-                {
-                    T diff = NumOps.Subtract(outputPreNorm[new[] { bi, t, d }], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-                variance = NumOps.Divide(variance, NumOps.FromDouble(_emaDimension));
-
-                // Normalize: (x - mean) / sqrt(var + eps) * gamma + beta
-                T invStd = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(variance, eps)));
-                stdInv[new[] { bi, t }] = invStd;
-
-                for (int d = 0; d < _emaDimension; d++)
-                {
-                    T normalized = NumOps.Multiply(
-                        NumOps.Subtract(outputPreNorm[new[] { bi, t, d }], mean),
-                        invStd);
-                    outputNorm[new[] { bi, t, d }] = NumOps.Add(
-                        NumOps.Multiply(_tsNormGamma[d], normalized),
-                        _tsNormBeta[d]);
-                }
-            }
-        }
+        // Derive stdInv for backward pass: 1 / sqrt(variance + eps). The variance
+        // tensor has shape [batchSize, seqLen]; compute inv-std via Engine ops so
+        // it's vectorized. The manual loop saved here was only O(B * T) so the
+        // real win is in the norm pass above, but this keeps backward consistent.
+        var varPlusEps = Engine.TensorAddScalar(variance, NumOps.FromDouble(eps));
+        var stdInv = Engine.TensorReciprocal(Engine.TensorSqrt(varPlusEps));
 
         _lastEmaOutputNorm = outputNorm;
         _lastEmaStdInv = stdInv;

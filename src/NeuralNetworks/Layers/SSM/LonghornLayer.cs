@@ -450,54 +450,23 @@ public partial class LonghornLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ApplyGroupNorm(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(input._shape);
-        T epsilon = NumOps.FromDouble(1e-5);
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    int dimStart = hi * _headDimension;
-
-                    // Compute mean for this head
-                    T mean = NumOps.Zero;
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        mean = NumOps.Add(mean, input[new[] { bi, t, flatDi }]);
-                    }
-                    mean = NumOps.Divide(mean, NumOps.FromDouble(_headDimension));
-
-                    // Compute variance for this head
-                    T variance = NumOps.Zero;
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T diff = NumOps.Subtract(input[new[] { bi, t, flatDi }], mean);
-                        variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                    }
-                    variance = NumOps.Divide(variance, NumOps.FromDouble(_headDimension));
-
-                    // Normalize and apply scale/shift
-                    T invStd = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(variance, epsilon)));
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T normalized = NumOps.Multiply(
-                            NumOps.Subtract(input[new[] { bi, t, flatDi }], mean),
-                            invStd);
-                        T gamma = _groupNormGamma[new[] { hi, di }];
-                        T beta = _groupNormBeta[new[] { hi, di }];
-                        output[new[] { bi, t, flatDi }] = NumOps.Add(
-                            NumOps.Multiply(gamma, normalized), beta);
-                    }
-                }
-            }
-        }
-
-        return output;
+        // GroupNorm per head across the model-dimension axis, applied independently
+        // to each (batch, time) position. Manual nested-loop implementation did
+        // 4 passes × batch × seqLen × numHeads × headDim scalar NumOps dispatches
+        // (mean + variance + normalize + scale/bias). Engine.GroupNorm fuses all
+        // four into one kernel call.
+        //
+        // Reshape [B, T, D] → [B*T, D, 1, 1] so every time step becomes its own
+        // 4D batch item, then let GroupNorm partition the D channels into
+        // numHeads groups with (headDim) channels each. _groupNormGamma/beta are
+        // stored as [numHeads, headDim]; their flat row-major layout matches the
+        // [modelDim] ordering Engine.GroupNorm expects via a reshape.
+        int modelDim = _numHeads * _headDimension;
+        var inputFlat = Engine.Reshape(input, new[] { batchSize * seqLen, modelDim, 1, 1 });
+        var gammaFlat = Engine.Reshape(_groupNormGamma, new[] { modelDim });
+        var betaFlat = Engine.Reshape(_groupNormBeta, new[] { modelDim });
+        var normed = Engine.GroupNorm(inputFlat, _numHeads, gammaFlat, betaFlat, 1e-5, out _, out _);
+        return Engine.Reshape(normed, input._shape);
     }
 
     /// <summary>

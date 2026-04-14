@@ -535,38 +535,9 @@ public partial class MesaNetLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> LayerNormForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        T eps = NumOps.FromDouble(1e-5);
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                T mean = NumOps.Zero;
-                for (int d = 0; d < _modelDimension; d++)
-                    mean = NumOps.Add(mean, input[new[] { bi, t, d }]);
-                mean = NumOps.Divide(mean, NumOps.FromDouble(_modelDimension));
-
-                T variance = NumOps.Zero;
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T diff = NumOps.Subtract(input[new[] { bi, t, d }], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-                variance = NumOps.Divide(variance, NumOps.FromDouble(_modelDimension));
-
-                T invStd = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(variance, eps)));
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T normalized = NumOps.Multiply(
-                        NumOps.Subtract(input[new[] { bi, t, d }], mean), invStd);
-                    output[new[] { bi, t, d }] = NumOps.Add(
-                        NumOps.Multiply(_lnGamma[d], normalized), _lnBeta[d]);
-                }
-            }
-        }
-
-        return output;
+        // Same per-(batch, time) LayerNorm pattern as TTTLayer / RetNetLayer:
+        // four scalar passes collapsed to one Engine.LayerNorm call.
+        return Engine.LayerNorm(input, _lnGamma, _lnBeta, 1e-5, out _, out _);
     }
 
     private Tensor<T> LayerNormBackward(Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
