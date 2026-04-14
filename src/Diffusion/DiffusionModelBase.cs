@@ -38,6 +38,27 @@ namespace AiDotNet.Diffusion;
 public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>, IModelShape
 {
     /// <summary>
+    /// Releases resources held by this diffusion model, including any rented weight
+    /// tensors held by the underlying noise predictor / conditioning stacks.
+    /// Subclasses that hold disposable fields (noise predictors, VAE encoders, text
+    /// encoders) should override <see cref="Dispose(bool)"/> and cascade.
+    /// </summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Protected Dispose pattern hook. Default is a no-op; subclasses cascade
+    /// Dispose to their own disposable fields.
+    /// </summary>
+    /// <param name="disposing">True if called from <see cref="Dispose()"/>.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+    }
+
+    /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
     /// </summary>
     protected IEngine Engine => AiDotNetEngine.Current;

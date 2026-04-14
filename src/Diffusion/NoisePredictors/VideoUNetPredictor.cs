@@ -851,29 +851,17 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateSpatialAttention(int channels)
     {
-        return new MultiHeadAttentionLayer<T>(
-            sequenceLength: _inputHeight * _inputWidth,
-            embeddingDimension: channels,
-            headCount: _numHeads,
-            activationFunction: new IdentityActivation<T>());
+        return LazyMHA(_inputHeight * _inputWidth, channels, _numHeads, new IdentityActivation<T>());
     }
 
     private ILayer<T> CreateTemporalAttention(int channels)
     {
-        return new MultiHeadAttentionLayer<T>(
-            sequenceLength: _numFrames,
-            embeddingDimension: channels,
-            headCount: _numHeads,
-            activationFunction: new IdentityActivation<T>());
+        return LazyMHA(_numFrames, channels, _numHeads, new IdentityActivation<T>());
     }
 
     private ILayer<T> CreateCrossAttention(int channels)
     {
-        return new MultiHeadAttentionLayer<T>(
-            sequenceLength: _clipTokenLength,
-            embeddingDimension: channels,
-            headCount: _numHeads,
-            activationFunction: new IdentityActivation<T>());
+        return LazyMHA(_clipTokenLength, channels, _numHeads, new IdentityActivation<T>());
     }
 
     private ILayer<T> CreateDownsample(int channels)

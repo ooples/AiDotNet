@@ -30,7 +30,7 @@ namespace AiDotNet.Interfaces;
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
 [AiDotNet.Configuration.YamlConfigurable("NeuralNetworkModel")]
-public interface INeuralNetworkModel<T> : INeuralNetwork<T>
+public interface INeuralNetworkModel<T> : INeuralNetwork<T>, IDisposable
 {
     /// <summary>
     /// Gets the intermediate activations from each layer when processing the given input with named keys.

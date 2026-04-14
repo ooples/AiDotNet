@@ -216,7 +216,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         return new UViTBlock
         {
             Norm1 = new LayerNormalizationLayer<T>(_hiddenSize),
-            Attention = new SelfAttentionLayer<T>(_maxPatches, _hiddenSize, _numHeads, activationFunction: null),
+            Attention = LazySelfAttention(_maxPatches, _hiddenSize, _numHeads),
             Norm2 = new LayerNormalizationLayer<T>(_hiddenSize),
             MLP1 = LazyDense(_hiddenSize, _hiddenSize * 4, new GELUActivation<T>()),
             MLP2 = LazyDense(_hiddenSize * 4, _hiddenSize)

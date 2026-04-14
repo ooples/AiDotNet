@@ -4309,12 +4309,43 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Protected Dispose pattern implementation.
     /// </summary>
     /// <param name="disposing">True if called from Dispose(), false if called from finalizer.</param>
+    /// <remarks>
+    /// Cascades Dispose to every child layer that implements <see cref="IDisposable"/>.
+    /// Without this, a networkwide <c>using</c> or explicit <c>Dispose()</c> call only
+    /// tore down mixed-precision state and left each layer's pool-rented weight
+    /// buffer (up to multi-GB for production-scale models like VGG16BN or DiT-XL)
+    /// live until GC ran. Cascading lets DenseLayer/ConvolutionalLayer return their
+    /// rented weight tensors to the <c>TensorAllocator</c> pool immediately — the
+    /// main memory win from the Dispose path.
+    /// </remarks>
     protected virtual void Dispose(bool disposing)
     {
         if (disposing)
         {
             // Dispose managed resources
             DisableMixedPrecision();
+
+            // Cascade to child layers. Guard against null because Layers may not be
+            // populated on a partially-constructed network (e.g., if a ctor threw
+            // before InitializeLayers ran).
+            if (Layers is not null)
+            {
+                foreach (var layer in Layers)
+                {
+                    if (layer is IDisposable disposable)
+                    {
+                        try
+                        {
+                            disposable.Dispose();
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // A layer shared between networks may have been disposed
+                            // already — not a bug, don't let it abort the cascade.
+                        }
+                    }
+                }
+            }
         }
     }
 

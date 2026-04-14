@@ -1463,6 +1463,15 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             Engine.InvalidatePersistentTensor(_kernels);
             Engine.InvalidatePersistentTensor(_biases);
 
+            // Return rented kernel tensor to the TensorAllocator pool so it can
+            // be reused by subsequent layer constructors. Skip when the layer was
+            // lazy-initialized — those zero-sized placeholders were not rented.
+            // Mirrors the same pattern in DenseLayer.Dispose.
+            if (_isInitialized && _kernels.Length > 0)
+            {
+                TensorAllocator.Return(_kernels);
+            }
+
             // Clear other managed resources (CPU)
             _kernelsGradient = null;
             _biasesGradient = null;
