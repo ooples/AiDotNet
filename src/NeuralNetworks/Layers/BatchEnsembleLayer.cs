@@ -279,23 +279,13 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>
         int expandedBatchSize = output.Shape[0];
         int batchSize = expandedBatchSize / _numMembers;
 
-        var averaged = TensorAllocator.Rent<T>([batchSize, _outputDim]);
-        var scale = NumOps.FromDouble(1.0 / _numMembers);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int j = 0; j < _outputDim; j++)
-            {
-                var sum = NumOps.Zero;
-                for (int m = 0; m < _numMembers; m++)
-                {
-                    sum = NumOps.Add(sum, output[(b * _numMembers + m) * _outputDim + j]);
-                }
-                averaged[b * _outputDim + j] = NumOps.Multiply(sum, scale);
-            }
-        }
-
-        return averaged;
+        // The output is laid out as [batchSize*numMembers, outputDim] with the
+        // members for one batch item stored in consecutive rows — so reshape to
+        // [batchSize, numMembers, outputDim] and reduce-mean over the member axis
+        // to collapse the ensemble. One Engine call replaces
+        // batchSize × outputDim × numMembers scalar NumOps.Add dispatches.
+        var reshaped = Engine.Reshape(output, [batchSize, _numMembers, _outputDim]);
+        return Engine.ReduceMean(reshaped, new[] { 1 }, keepDims: false);
     }
 
     /// <inheritdoc/>
