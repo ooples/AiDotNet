@@ -400,20 +400,32 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            // Use training series lookback for in-sample, autoregressive for out-of-sample
-            int seriesIdx = i; // position in the original timeline
+            // Per Oreshkin et al. 2020: predict from the end of the observed series.
+            // For position i, use the last LookbackWindow values ending at trainN + i - 1.
+            int endIdx = trainN + i;
             var lookback = new Vector<T>(_options.LookbackWindow);
 
             for (int j = 0; j < _options.LookbackWindow; j++)
             {
-                int idx = seriesIdx - _options.LookbackWindow + 1 + j;
+                int idx = endIdx - _options.LookbackWindow + j;
                 if (idx >= 0 && idx < series.Count)
                     lookback[j] = series[idx];
                 else
                     lookback[j] = NumOps.Zero;
             }
 
-            predictions[i] = PredictSingle(lookback);
+            T predicted = PredictSingle(lookback);
+            predictions[i] = predicted;
+
+            // Autoregressive: always append the model's prediction so subsequent
+            // windows see it. The previous gate "append predicted only if training
+            // series is non-empty, otherwise zero" silently drove forecasts toward
+            // zero whenever we predict from cold-start (no training history) — it
+            // also broke the contract that predictions[i+1] sees predictions[i] as
+            // part of its lookback. If the caller wants different cold-start
+            // behavior, that should be handled before/while computing `predicted`,
+            // not by discarding predictions during the state update.
+            series.Add(predicted);
         }
 
         return predictions;

@@ -44,10 +44,26 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
     private Matrix<T> FittedX => _X ?? throw new InvalidOperationException("GP not fitted. Call Fit() first.");
 
     /// <summary>
-    /// Training output data.
+    /// Training output data, standardized as <c>(y - mean(y)) / std(y)</c>. Both the
+    /// mean (for centering) and the standard deviation (for unit-variance scaling) are
+    /// removed so the zero-mean unit-variance GP prior is well-calibrated regardless of
+    /// the original target scale; <see cref="Predict"/> reverses both transforms before
+    /// returning predictions.
     /// </summary>
     private Vector<T>? _y;
     private Vector<T> FittedY => _y ?? throw new InvalidOperationException("GP not fitted. Call Fit() first.");
+
+    /// <summary>
+    /// Mean of the original training targets, used to de-center predictions.
+    /// Standard GP practice: centering targets makes the zero-mean prior assumption
+    /// valid regardless of target scale, ensuring scaling/translation equivariance.
+    /// </summary>
+    private double _yMean;
+
+    /// <summary>
+    /// Standard deviation of the original training targets for output variance scaling.
+    /// </summary>
+    private double _yStd = 1.0;
 
     /// <summary>
     /// MCMC samples of hyperparameters [lengthscale, outputVariance, noiseVariance].
@@ -205,7 +221,18 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
     {
         if (_samples is null)
             throw new InvalidOperationException("Model not trained.");
-        return _samples.Select(s => (double[])s.Clone()).ToList();
+
+        // Rescale variance components from standardized-target units back to the
+        // original target scale. _samples holds [lengthscale, outputVariance, noiseVariance]
+        // where the variance entries were sampled against y / _yStd, so on the original
+        // scale they each get multiplied by _yStd^2. Lengthscale stays unchanged because
+        // it scales with the input X, not the target y. Without this rescale, callers of
+        // GetSamples() would see variances under-reported by a factor of _yStd^2 — exactly
+        // the discrepancy flagged in PR review.
+        double scale = _yStd * _yStd;
+        return _samples
+            .Select(s => new[] { s[0], s[1] * scale, s[2] * scale })
+            .ToList();
     }
 
     /// <summary>
@@ -234,11 +261,33 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
         Guard.NotNull(X);
         _X = X;
         Guard.NotNull(y);
-        _y = y;
 
         int n = X.Rows;
+        if (n == 0)
+            throw new ArgumentException("Cannot fit a Gaussian Process on an empty training set (X.Rows == 0).", nameof(X));
         if (y.Length != n)
             throw new ArgumentException("X and y must have same number of samples.");
+
+        // Center targets: standard GP practice to make zero-mean prior valid.
+        // This ensures scaling/translation equivariance regardless of MCMC convergence.
+        _yMean = 0;
+        for (int i = 0; i < n; i++)
+            _yMean += _numOps.ToDouble(y[i]);
+        _yMean /= n;
+
+        double sumSqDev = 0;
+        for (int i = 0; i < n; i++)
+        {
+            double d = _numOps.ToDouble(y[i]) - _yMean;
+            sumSqDev += d * d;
+        }
+        _yStd = Math.Max(Math.Sqrt(sumSqDev / Math.Max(n - 1, 1)), 1e-10);
+
+        // Store centered targets
+        var centeredY = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+            centeredY[i] = _numOps.FromDouble((_numOps.ToDouble(y[i]) - _yMean) / _yStd);
+        _y = centeredY;
 
         // Initialize hyperparameters in log-space
         double[] logParams = new double[3];
@@ -351,9 +400,13 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
 
         double totalVariance = meanOfVariances + varianceOfMeans;
 
+        // De-center: transform from standardized space back to original scale
+        double deCenteredMean = meanOfMeans * _yStd + _yMean;
+        double deCenteredVariance = totalVariance * _yStd * _yStd;
+
         return (
-            _numOps.FromDouble(meanOfMeans),
-            _numOps.FromDouble(totalVariance)
+            _numOps.FromDouble(deCenteredMean),
+            _numOps.FromDouble(deCenteredVariance)
         );
     }
 
@@ -419,9 +472,12 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
         if (_samples is null || _samples.Count == 0)
             throw new InvalidOperationException("Model not trained.");
 
+        // Rescale variance components back to the original target scale (see GetSamples()
+        // for the full explanation — _samples are stored in standardized units).
+        double scale = _yStd * _yStd;
         var lengthscales = _samples.Select(s => s[0]).ToArray();
-        var outputVars = _samples.Select(s => s[1]).ToArray();
-        var noiseVars = _samples.Select(s => s[2]).ToArray();
+        var outputVars = _samples.Select(s => s[1] * scale).ToArray();
+        var noiseVars = _samples.Select(s => s[2] * scale).ToArray();
 
         return new Dictionary<string, (double, double)>
         {

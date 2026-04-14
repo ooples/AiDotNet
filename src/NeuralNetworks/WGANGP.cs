@@ -150,6 +150,25 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Creates a WGAN-GP with default generator and critic architectures derived from a single architecture.
+    /// Per Gulrajani et al. 2017: gradient penalty coefficient 10, 5 critic iterations per generator step.
+    /// </summary>
+    /// <param name="architecture">The shared neural network architecture used for both generator and critic.</param>
+    /// <param name="gradientPenaltyCoefficient">The gradient penalty coefficient (lambda). Default is 10.0.</param>
+    /// <param name="criticIterations">Number of critic iterations per generator iteration. Default is 5.</param>
+    /// <param name="options">Optional WGAN-GP options.</param>
+    public WGANGP(
+        NeuralNetworkArchitecture<T> architecture,
+        double gradientPenaltyCoefficient = 10.0,
+        int criticIterations = 5,
+        WGANGPOptions? options = null)
+        : this(architecture, architecture, architecture.InputType,
+               gradientPenaltyCoefficient: gradientPenaltyCoefficient,
+               criticIterations: criticIterations, options: options)
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="WGANGP{T}"/> class.
     /// </summary>
     /// <param name="generatorArchitecture">The neural network architecture for the generator.</param>
@@ -160,6 +179,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     /// <param name="lossFunction">Optional loss function.</param>
     /// <param name="gradientPenaltyCoefficient">The gradient penalty coefficient (lambda). Default is 10.0.</param>
     /// <param name="criticIterations">Number of critic iterations per generator iteration. Default is 5.</param>
+    /// <param name="options">Optional WGAN-GP options.</param>
     /// <remarks>
     /// <para>
     /// The WGAN-GP constructor initializes both the generator and critic networks along with their

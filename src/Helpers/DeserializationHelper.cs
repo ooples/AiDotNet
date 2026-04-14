@@ -610,7 +610,7 @@ public static class DeserializationHelper
             instance = ctor.Invoke(new object[] { inputDepth, inputHeight, inputWidth, poolSize, stride, poolingType });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.MaxPoolingLayer<>) ||
-                 (openGenericType.FullName != null && openGenericType.FullName.Contains("NeuralNetworks.Layers.MaxPoolingLayer")))
+                 (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.MaxPoolingLayer`1")))
         {
             // MaxPoolingLayer(int[] inputShape, int poolSize, int strides)
             int poolSize = TryGetInt(additionalParams, "PoolSize") ?? 2;
@@ -629,7 +629,7 @@ public static class DeserializationHelper
             instance = ctor.Invoke(new object[] { layerInputShape, poolSize, strides });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.DenseBlock<>) ||
-                 (openGenericType.FullName != null && openGenericType.FullName.Contains("NeuralNetworks.Layers.DenseBlock")))
+                 (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.DenseBlock`1")))
         {
             // DenseBlock(int inputChannels, int numLayers, int growthRate, int inputHeight, int inputWidth, double bnMomentum = 0.1)
             int inputChannels = TryGetInt(additionalParams, "InputChannels") ?? (inputShape.Length > 1 ? inputShape[1] : inputShape[0]);
@@ -647,7 +647,7 @@ public static class DeserializationHelper
             instance = ctor.Invoke(new object[] { inputChannels, numLayers, growthRate, inputHeight, inputWidth, bnMomentum });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.InvertedResidualBlock<>) ||
-                 (openGenericType.FullName != null && openGenericType.FullName.Contains("NeuralNetworks.Layers.InvertedResidualBlock")))
+                 (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.InvertedResidualBlock`1")))
         {
             // InvertedResidualBlock(int inChannels, int outChannels, int inputHeight, int inputWidth, int expansionRatio, int stride, bool useSE, int seRatio, IActivationFunction<T>?)
             int inChannels = TryGetInt(additionalParams, "InChannels") ?? (inputShape.Length > 1 ? inputShape[1] : inputShape[0]);
@@ -668,8 +668,56 @@ public static class DeserializationHelper
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { inChannels, outChannels, inputHeight, inputWidth, expansionRatio, stride, useSE, seRatio, activation });
         }
+        else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.BottleneckBlock<>) ||
+                 (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.BottleneckBlock`1")))
+        {
+            // BottleneckBlock(int inChannels, int baseChannels, int stride, int inputHeight, int inputWidth, bool zeroInitResidual)
+            int inChannels = TryGetInt(additionalParams, "InChannels") ?? (inputShape.Length > 0 ? inputShape[0] : 64);
+            int outChannels = TryGetInt(additionalParams, "OutChannels")
+                              ?? (outputShape.Length > 0 ? outputShape[0] : inChannels);
+            // Prefer the explicit BaseChannels from additionalParams when present; fall
+            // back to the standard expansion=4 derivation otherwise. Blindly dividing by
+            // 4 silently produces wrong constructor arguments when outputShape is empty
+            // or when outChannels isn't divisible by 4.
+            const int BottleneckExpansion = 4;
+            int baseChannels = TryGetInt(additionalParams, "BaseChannels")
+                               ?? (outChannels / BottleneckExpansion);
+            if (baseChannels <= 0)
+                throw new InvalidOperationException(
+                    $"BottleneckBlock baseChannels must be positive (derived {baseChannels} " +
+                    $"from outChannels={outChannels}); provide 'BaseChannels' in additionalParams.");
+            if (baseChannels * BottleneckExpansion != outChannels)
+                throw new InvalidOperationException(
+                    $"BottleneckBlock expansion mismatch: baseChannels={baseChannels} * 4 " +
+                    $"!= outChannels={outChannels}. Populate 'BaseChannels' in additionalParams.");
+            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
+            int inputHeight = inputShape.Length > 1 ? inputShape[1] : 56;
+            int inputWidth = inputShape.Length > 2 ? inputShape[2] : 56;
+            bool zeroInitResidual = TryGetBool(additionalParams, "ZeroInitResidual") ?? true;
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool) });
+            if (ctor is null)
+                throw new InvalidOperationException("Cannot find BottleneckBlock constructor.");
+            instance = ctor.Invoke(new object[] { inChannels, baseChannels, stride, inputHeight, inputWidth, zeroInitResidual });
+        }
+        else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.BasicBlock<>) ||
+                 (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.BasicBlock`1")))
+        {
+            // BasicBlock(int inChannels, int outChannels, int stride, int inputHeight, int inputWidth, bool zeroInitResidual)
+            int inChannels = TryGetInt(additionalParams, "InChannels") ?? (inputShape.Length > 0 ? inputShape[0] : 64);
+            int outChannels = TryGetInt(additionalParams, "OutChannels") ?? (outputShape.Length > 0 ? outputShape[0] : inChannels);
+            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
+            int inputHeight = inputShape.Length > 1 ? inputShape[1] : 56;
+            int inputWidth = inputShape.Length > 2 ? inputShape[2] : 56;
+            bool zeroInitResidual = TryGetBool(additionalParams, "ZeroInitResidual") ?? true;
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool) });
+            if (ctor is null)
+                throw new InvalidOperationException("Cannot find BasicBlock constructor.");
+            instance = ctor.Invoke(new object[] { inChannels, outChannels, stride, inputHeight, inputWidth, zeroInitResidual });
+        }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.TransitionLayer<>) ||
-                 (openGenericType.FullName != null && openGenericType.FullName.Contains("NeuralNetworks.Layers.TransitionLayer")))
+                 (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.TransitionLayer`1")))
         {
             // TransitionLayer(int inputChannels, int inputHeight, int inputWidth, double compressionFactor = 0.5)
             int inputChannels = TryGetInt(additionalParams, "InputChannels") ?? (inputShape.Length > 1 ? inputShape[1] : inputShape[0]);
@@ -687,7 +735,7 @@ public static class DeserializationHelper
             instance = ctor.Invoke(new object[] { inputChannels, inputHeight, inputWidth, compressionFactor });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.AdaptiveAveragePoolingLayer<>) ||
-                 (openGenericType.FullName != null && openGenericType.FullName.Contains("NeuralNetworks.Layers.AdaptiveAveragePoolingLayer")))
+                 (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.AdaptiveAveragePoolingLayer`1")))
         {
             // AdaptiveAveragePoolingLayer(int inputChannels, int inputHeight, int inputWidth, int outputHeight = 1, int outputWidth = 1)
             int inputChannels = inputShape.Length > 1 ? inputShape[1] : inputShape[0];
@@ -836,7 +884,7 @@ public static class DeserializationHelper
             object? residualActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = new ResidualLayer<T>(inputShape, innerLayer, residualActivation as IActivationFunction<T>);
         }
-        else if (openGenericType.FullName != null && openGenericType.FullName.Contains("MambaBlock"))
+        else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".MambaBlock`1"))
         {
             // MambaBlock(int sequenceLength, int modelDimension, int stateDimension, int expandFactor, int convKernelSize, int dtRank)
             int sequenceLength = inputShape.Length > 0 ? inputShape[0] : 1;
@@ -875,7 +923,7 @@ public static class DeserializationHelper
                 throw new NotSupportedException($"Cannot find MambaBlock constructor for deserialization.");
             }
         }
-        else if (openGenericType.FullName != null && openGenericType.FullName.Contains("ContinuumMemorySystemLayer"))
+        else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".ContinuumMemorySystemLayer`1"))
         {
             // ContinuumMemorySystemLayer(int[] inputShape, int hiddenDim, ...)
             // All parameters after the first two have default values

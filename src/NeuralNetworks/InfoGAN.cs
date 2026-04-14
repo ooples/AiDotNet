@@ -239,6 +239,24 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Creates an InfoGAN with default architectures derived from a single architecture.
+    /// Per Chen et al. 2016: latent code size 10, mutual info coefficient 1.0.
+    /// </summary>
+    /// <param name="architecture">The shared architecture used for generator, discriminator, and Q network.</param>
+    /// <param name="latentCodeSize">The size of the latent code. Default is 10.</param>
+    /// <param name="mutualInfoCoefficient">The coefficient for mutual information loss. Default is 1.0.</param>
+    /// <param name="options">Optional InfoGAN options.</param>
+    public InfoGAN(
+        NeuralNetworkArchitecture<T> architecture,
+        int latentCodeSize = 10,
+        double mutualInfoCoefficient = 1.0,
+        InfoGANOptions? options = null)
+        : this(architecture, architecture, architecture, latentCodeSize, architecture.InputType,
+               mutualInfoCoefficient: mutualInfoCoefficient, options: options)
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="InfoGAN{T}"/> class with the specified architecture and training parameters.
     /// </summary>
     /// <param name="generatorArchitecture">The architecture for the generator network.</param>
@@ -259,6 +277,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// <param name="mutualInfoCoefficient">
     /// The coefficient for mutual information loss. Higher values prioritize feature learning. Default is 1.0.
     /// </param>
+    /// <param name="options">Optional InfoGAN options.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates an InfoGAN with three networks:

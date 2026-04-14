@@ -456,21 +456,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual Vector<T> GetParameters()
     {
-        // Recompute total to avoid stale cache issues (layers may initialize lazily)
-        int totalParameterCount = Layers.Sum(l => l.ParameterCount);
+        // Two-pass to keep peak memory bounded. Retaining every layer's per-layer
+        // vector simultaneously would roughly double peak allocation (final
+        // concatenated vector + sum of all per-layer vectors) and elevate OOM risk
+        // for large models. Here, at most one per-layer vector is live at a time in
+        // addition to the final output.
+        //
+        // We intentionally call GetParameters() twice rather than pre-sizing via
+        // ParameterCount: lazy layers allocate their parameter buffer inside
+        // GetParameters() itself, so ParameterCount can under-report until after the
+        // first call. The first pass both triggers lazy init and measures actual
+        // length; the second pass copies into the final destination.
+        int totalParameterCount = 0;
+        foreach (var layer in Layers)
+        {
+            totalParameterCount += layer.GetParameters().Length;
+        }
+
         var parameters = new Vector<T>(totalParameterCount);
+        var destSpan = parameters.AsWritableSpan();
 
         int currentIndex = 0;
-        foreach (var layer in Layers.Where(l => l.ParameterCount > 0))
+        foreach (var layer in Layers)
         {
-            int layerParameterCount = layer.ParameterCount;
             var layerParameters = layer.GetParameters();
-            for (int i = 0; i < layerParameterCount; i++)
-            {
-                parameters[currentIndex + i] = layerParameters[i];
-            }
-
-            currentIndex += layerParameterCount;
+            int copyLength = layerParameters.Length;
+            if (copyLength == 0) continue;
+            layerParameters.AsSpan().Slice(0, copyLength)
+                .CopyTo(destSpan.Slice(currentIndex, copyLength));
+            currentIndex += copyLength;
         }
 
         return parameters;
@@ -3891,17 +3905,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         int currentIndex = 0;
+        var srcSpan = parameters.AsSpan();
         foreach (var layer in Layers.Where(l => l.ParameterCount > 0))
         {
             int layerParameterCount = layer.ParameterCount;
-            // Extract parameters for this layer
+            // Bulk copy via Span instead of element-by-element
             var layerParameters = new Vector<T>(layerParameterCount);
-            for (int i = 0; i < layerParameterCount; i++)
-            {
-                layerParameters[i] = parameters[currentIndex + i];
-            }
-
-            // Set the layer's parameters
+            srcSpan.Slice(currentIndex, layerParameterCount)
+                .CopyTo(layerParameters.AsWritableSpan());
             layer.SetParameters(layerParameters);
             currentIndex += layerParameterCount;
         }

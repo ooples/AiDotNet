@@ -141,6 +141,22 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
         _spiralIndicesPerLevel = [];
 
         InitializeLayers();
+
+        // Generate default spiral indices if none provided (facade pattern).
+        // Creates a simple sequential neighbor pattern for spiral_length vertices.
+        // NumVertices is a separate option from InputFeatures — the latter is the
+        // per-vertex feature channel count (e.g., 3 for x/y/z) and would produce an
+        // indices matrix with an incorrect first dimension if used here.
+        if (_spiralIndicesPerLevel.Count == 0)
+        {
+            int spiralLen = options.SpiralLength;
+            int numVertices = options.NumVertices > 0 ? options.NumVertices : 64;
+            var defaultIndices = new int[numVertices, spiralLen];
+            for (int v = 0; v < numVertices; v++)
+                for (int s = 0; s < spiralLen; s++)
+                    defaultIndices[v, s] = (v + s) % numVertices;
+            SetSpiralIndices(defaultIndices);
+        }
     }
 
     /// <summary>

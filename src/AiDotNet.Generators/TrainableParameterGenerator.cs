@@ -231,8 +231,20 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// Returns all trainable parameter tensors marked with [TrainableParameter].");
             sb.AppendLine("    /// Auto-generated — do not modify. Edit the [TrainableParameter] attributes instead.");
             sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    /// <remarks>");
+            sb.AppendLine("    /// Calls EnsureInitialized() up-front so layers with lazy weight allocation");
+            sb.AppendLine("    /// (e.g., FeedForwardLayer) materialize their parameter tensors before the tape");
+            sb.AppendLine("    /// collector reads them. Without this hook, TrainWithTape's");
+            sb.AppendLine("    /// CollectParameters call (which runs BEFORE the first Forward()) would see");
+            sb.AppendLine("    /// empty Tensor&lt;T&gt;.Empty() placeholders and silently train nothing.");
+            sb.AppendLine("    /// EnsureInitialized() is a no-op for layers without lazy init, so this");
+            sb.AppendLine("    /// trampoline costs nothing in the common case.");
+            sb.AppendLine("    /// </remarks>");
             sb.AppendLine($"    public override System.Collections.Generic.IReadOnlyList<Tensor<{GetTypeParamName(classSymbol)}>> GetTrainableParameters()");
-            sb.AppendLine($"        => new Tensor<{GetTypeParamName(classSymbol)}>[] {{ {string.Join(", ", paramFields.Select(f => f.Name))} }};");
+            sb.AppendLine("    {");
+            sb.AppendLine("        EnsureInitialized();");
+            sb.AppendLine($"        return new Tensor<{GetTypeParamName(classSymbol)}>[] {{ {string.Join(", ", paramFields.Select(f => f.Name))} }};");
+            sb.AppendLine("    }");
             sb.AppendLine();
 
             // SetTrainableParameters

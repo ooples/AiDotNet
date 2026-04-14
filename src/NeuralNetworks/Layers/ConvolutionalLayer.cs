@@ -825,13 +825,60 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     {
         // He-uniform initialization: U(-bound, bound) where bound = sqrt(6 / fanIn)
         // per He et al. 2015 "Delving Deep into Rectifiers".
-        // For uniform distribution: Var(W) = bound^2/3, so bound = sqrt(3 * 2/fanIn) = sqrt(6/fanIn)
         int fanIn = InputDepth * KernelSize * KernelSize;
         double bound = Math.Sqrt(6.0 / fanIn);
-        var kernelShape = _kernels._shape;
-        var initData = Engine.TensorRandomUniformRange<T>(kernelShape, NumOps.FromDouble(-bound), NumOps.FromDouble(bound));
-        // Copy into existing tensor to avoid orphaning pre-allocated buffer
-        initData.Data.Span.CopyTo(_kernels.Data.Span);
+
+        // Use SimdRandom for vectorized He-uniform initialization
+        var rng = new SimdRandom();
+        var span = _kernels.Data.Span;
+        int total = span.Length;
+        if (total == 0)
+        {
+            // Zero-sized kernel tensor: no weights to fill, but still zero biases so
+            // initialization behavior doesn't depend on tensor-constructor allocator
+            // semantics.
+            _biases.Fill(NumOps.Zero);
+            return;
+        }
+
+        // Write via a temp array + array-level reinterpret so the SIMD-batched
+        // xoshiro256** fill path still applies. See MultiHeadAttentionLayer for full
+        // rationale (Span<T> can't be reinterpreted across generic T without a struct
+        // constraint, which we don't have, and CreateSpan isn't on net471).
+        if (typeof(T) == typeof(double))
+        {
+            var buffer = new double[total];
+            rng.NextDoubles(buffer.AsSpan());
+            for (int i = 0; i < total; i++)
+                buffer[i] = (buffer[i] * 2.0 - 1.0) * bound;
+            var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<double[], T[]>(ref buffer);
+            reinterpreted.AsSpan(0, total).CopyTo(span);
+        }
+        else if (typeof(T) == typeof(float))
+        {
+            var buffer = new float[total];
+            rng.NextFloats(buffer.AsSpan());
+            float boundF = (float)bound;
+            for (int i = 0; i < total; i++)
+                buffer[i] = (buffer[i] * 2f - 1f) * boundF;
+            var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<float[], T[]>(ref buffer);
+            reinterpreted.AsSpan(0, total).CopyTo(span);
+        }
+        else
+        {
+            const int batchSize = 4096;
+            var tempBuf = new double[Math.Min(total, batchSize)];
+            int offset = 0;
+            while (offset < total)
+            {
+                int chunk = Math.Min(batchSize, total - offset);
+                rng.NextDoubles(tempBuf.AsSpan(0, chunk));
+                for (int j = 0; j < chunk; j++)
+                    span[offset + j] = NumOps.FromDouble((tempBuf[j] * 2.0 - 1.0) * bound);
+                offset += chunk;
+            }
+        }
+
         _biases.Fill(NumOps.Zero);
     }
 

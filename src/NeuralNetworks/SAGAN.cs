@@ -164,6 +164,27 @@ public class SAGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Creates a SAGAN with default architectures derived from a single architecture.
+    /// Per Zhang et al. 2019: self-attention at multiple scales, spectral normalization.
+    /// </summary>
+    /// <param name="architecture">The shared neural network architecture used for both generator and discriminator.</param>
+    /// <param name="latentSize">Size of the latent vector (typically 128).</param>
+    /// <param name="numClasses">Number of classes (0 for unconditional).</param>
+    /// <param name="options">Optional SAGAN options.</param>
+    public SAGAN(
+        NeuralNetworkArchitecture<T> architecture,
+        int latentSize = 128,
+        int numClasses = 0,
+        SAGANOptions? options = null)
+        : this(architecture, architecture, latentSize,
+               architecture.InputDepth > 0 ? architecture.InputDepth : 3,
+               architecture.InputHeight > 0 ? architecture.InputHeight : 64,
+               architecture.InputWidth > 0 ? architecture.InputWidth : 64,
+               numClasses, options: options)
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of Self-Attention GAN.
     /// </summary>
     /// <param name="generatorArchitecture">Architecture for the generator network.</param>
@@ -179,6 +200,7 @@ public class SAGAN<T> : NeuralNetworkBase<T>
     /// <param name="inputType">The type of input.</param>
     /// <param name="lossFunction">Loss function for training (defaults to hinge loss)</param>
     /// <param name="initialLearningRate">Initial learning rate (default 0.0001)</param>
+    /// <param name="options">Optional SAGAN options.</param>
     public SAGAN(
         NeuralNetworkArchitecture<T> generatorArchitecture,
         NeuralNetworkArchitecture<T> discriminatorArchitecture,

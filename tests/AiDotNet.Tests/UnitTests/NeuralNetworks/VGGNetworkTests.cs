@@ -364,10 +364,14 @@ public class VGGNetworkTests
 
     #region VGGNetwork Training Tests
 
+    // The two training tests below stay async + use Task.Run so xUnit's
+    // [Fact(Timeout)] enforcement actually fires (xUnit only honors Timeout on
+    // genuinely-async tests — a sync body wrapped in async-with-Task.Yield was
+    // a cargo-cult pattern that obscured the fact that the body wasn't truly
+    // awaitable, and Task.Yield doesn't interact with Timeout enforcement).
     [Fact(Timeout = 120000)]
     public async Task VGGNetwork_Train_CompletesWithoutError()
     {
-        await Task.Yield();
         // Arrange
         var config = new VGGConfiguration(VGGVariant.VGG11, numClasses: 10,
             inputHeight: 32, inputWidth: 32);
@@ -386,14 +390,14 @@ public class VGGNetworkTests
         for (int i = 0; i < input.Length; i++) input[i] = 0.5f;
         target[0] = 1.0f; // One-hot encoded class 0
 
-        // Act & Assert - should not throw
+        // Act & Assert — should not throw.
+        await Task.Yield();
         network.Train(input, target);
     }
 
     [Fact(Timeout = 120000)]
     public async Task VGGNetwork_Train_LossDecreases()
     {
-        await Task.Yield();
         // Arrange
         var config = new VGGConfiguration(VGGVariant.VGG11, numClasses: 10,
             inputHeight: 32, inputWidth: 32, dropoutRate: 0.0);  // No dropout for deterministic test
@@ -412,18 +416,16 @@ public class VGGNetworkTests
         for (int i = 0; i < input.Length; i++) input[i] = 0.5f;
         target[0] = 1.0f;
 
-        // Act - train for a few iterations
+        // Act — train for a few iterations and track initial vs final loss.
+        await Task.Yield();
         network.Train(input, target);
         var initialLoss = network.GetLastLoss();
-
         for (int i = 0; i < 5; i++)
-        {
             network.Train(input, target);
-        }
         var finalLoss = network.GetLastLoss();
 
-        // Assert - loss should decrease (or at least not increase dramatically)
-        // Note: Due to randomness, we just check it doesn't explode
+        // Assert - loss should decrease (or at least not increase dramatically).
+        // Due to randomness, we just check it doesn't explode.
         Assert.True(Convert.ToDouble(finalLoss) < Convert.ToDouble(initialLoss) * 10.0,
             "Loss should not explode during training");
     }

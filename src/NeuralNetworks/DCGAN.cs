@@ -57,6 +57,30 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
     public override ModelOptions GetOptions() => _options;
 
     /// <summary>
+    /// Creates a DCGAN with default dimensions derived from the architecture.
+    /// Per Radford et al. 2016: latent size 100, 64×64 images, 64 feature maps.
+    /// </summary>
+    /// <param name="architecture">The architecture used to derive image channels/height/width.</param>
+    /// <param name="latentSize">The size of the latent (noise) vector. Default is 100.</param>
+    /// <param name="generatorFeatureMaps">Feature maps in generator's first layer. Default is 64.</param>
+    /// <param name="discriminatorFeatureMaps">Feature maps in discriminator's first layer. Default is 64.</param>
+    /// <param name="options">Optional DCGAN options.</param>
+    public DCGAN(
+        NeuralNetworkArchitecture<T> architecture,
+        int latentSize = 100,
+        int generatorFeatureMaps = 64,
+        int discriminatorFeatureMaps = 64,
+        DCGANOptions? options = null)
+        : this(latentSize,
+               architecture.InputDepth > 0 ? architecture.InputDepth : 3,
+               architecture.InputHeight > 0 ? architecture.InputHeight : 64,
+               architecture.InputWidth > 0 ? architecture.InputWidth : 64,
+               generatorFeatureMaps, discriminatorFeatureMaps,
+               lossFunction: null, options: options)
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="DCGAN{T}"/> class with default DCGAN architecture.
     /// </summary>
     /// <param name="latentSize">The size of the latent (noise) vector input to the generator.</param>
@@ -66,6 +90,7 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
     /// <param name="generatorFeatureMaps">The number of feature maps in the generator's first layer.</param>
     /// <param name="discriminatorFeatureMaps">The number of feature maps in the discriminator's first layer.</param>
     /// <param name="lossFunction">Optional loss function. If not provided, binary cross-entropy will be used.</param>
+    /// <param name="options">Optional DCGAN options.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a DCGAN with the standard architecture following the guidelines

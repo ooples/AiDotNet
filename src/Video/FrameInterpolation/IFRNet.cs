@@ -50,7 +50,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.FrameInterpolation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("IFRNet: Intermediate Feature Refine Network for Efficient Frame Interpolation",

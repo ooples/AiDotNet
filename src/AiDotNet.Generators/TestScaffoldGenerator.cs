@@ -44,6 +44,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private const string IDistillationPrefix = "AiDotNet.Interfaces.IDistillationStrategy<";
     private const string ISafetyModulePrefix = "AiDotNet.Interfaces.ISafetyModule<";
 
+    // Base classes whose descendants cannot be auto-constructed for testing.
+    // These are compositional/wrapper patterns that require a user-provided inner model.
+    private static readonly string[] ExcludedBaseClasses =
+    [
+        "MetaLearnerBase",           // Meta-learning: wraps an IFullModel chosen by the user
+        "MetaLearningModelBase",     // Meta-learning variant with different naming
+        "NeuralProcessBase",         // Neural processes: inherits MetaLearnerBase
+        "ShardedModelBase",          // Distributed training: wraps a model for tensor/data parallelism
+        "NoisePredictorBase",        // Noise predictors: internal diffusion components, not standalone
+        "SSLMethodBase",             // Self-supervised learning: wraps encoder + projector
+        "AudioSafetyModuleBase",     // Audio safety: wraps another model for content moderation
+        "TextSafetyModuleBase",      // Text safety: wraps another model for content moderation
+        "ImageWatermarkerBase",      // Watermarking: wraps images, not a standalone model
+        "SupervisedAutoMLModelBase", // AutoML: wraps other models for hyperparameter search
+    ];
+
     // Attribute metadata names
     private const string ModelDomainAttr = "AiDotNet.Attributes.ModelDomainAttribute";
     private const string ModelCategoryAttr = "AiDotNet.Attributes.ModelCategoryAttribute";
@@ -487,6 +503,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
         var taskAttrSymbol = compilation.GetTypeByMetadataName(ModelTaskAttr);
         var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
+        var architectureSymbol = compilation.GetTypeByMetadataName("AiDotNet.NeuralNetworks.NeuralNetworkArchitecture`1");
 
         // Build test class name set for fast lookup
         var testNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
@@ -507,7 +524,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 continue;
 
             ProcessModelSymbol(modelClass, domainAttrSymbol, categoryAttrSymbol, taskAttrSymbol,
-                exemptAttrSymbol, testNames, testedModels, untestedModels, seen);
+                exemptAttrSymbol, architectureSymbol, testNames, testedModels, untestedModels, seen);
         }
 
         // Detect if we're in the source project (not the test project).
@@ -519,7 +536,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (!modelsFoundFromSource)
         {
             DiscoverModelsFromReferencedAssemblies(compilation, domainAttrSymbol, categoryAttrSymbol,
-                taskAttrSymbol, exemptAttrSymbol, testNames, testedModels, untestedModels, seen);
+                taskAttrSymbol, exemptAttrSymbol, architectureSymbol, testNames, testedModels, untestedModels, seen);
         }
 
         testedModels.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
@@ -554,6 +571,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Use constructor call if the model has a zero-arg constructor and is type-compatible.
                 // For models with architecture-only constructors, emit a default architecture.
                 // Otherwise, emit a throw so the test compiles but fails at runtime with a clear message.
+                // Skip test generation entirely for compositional/wrapper patterns
+                // that can't be auto-constructed (meta-learning, distributed, etc.)
+                if (model.InheritsFromExcludedBase)
+                    continue;
+
                 bool canConstruct = (model.HasParameterlessConstructor || model.HasArchitectureOnlyConstructor) &&
                                     IsCompatibleWithFamily(model, family.Value);
 
@@ -612,6 +634,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         INamedTypeSymbol? categoryAttrSymbol,
         INamedTypeSymbol? taskAttrSymbol,
         INamedTypeSymbol? exemptAttrSymbol,
+        INamedTypeSymbol? architectureSymbol,
         HashSet<string> testNames,
         List<ModelTestInfo> testedModels,
         List<ModelTestInfo> untestedModels,
@@ -872,6 +895,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // either parameterless, or all parameters have default values.
         bool hasParameterlessCtor = false;
         bool hasArchitectureOnlyCtor = false;
+        string? architectureParamTypeName = null;
         foreach (var ctor in modelClass.InstanceConstructors)
         {
             if (ctor.DeclaredAccessibility != Accessibility.Public)
@@ -901,12 +925,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
             // Check if only the first parameter is required and is NeuralNetworkArchitecture<T>.
             // The rest must all have default values. This allows generating a default architecture.
-            if (ctor.Parameters.Length >= 1 && !hasArchitectureOnlyCtor)
+            if (ctor.Parameters.Length >= 1)
             {
                 var firstParam = ctor.Parameters[0];
-                string firstParamTypeName = firstParam.Type.ToDisplayString();
-                bool isArchitectureParam = firstParamTypeName.StartsWith(
-                    "AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<", System.StringComparison.Ordinal);
+                // Check if the first parameter type IS exactly NeuralNetworkArchitecture<T>.
+                // Derived types (CodeSynthesisArchitecture<T>, etc.) have incompatible constructors
+                // and need manual test classes — they stay as NotImplementedException.
+                bool isArchitectureParam = IsExactlyArchitecture(firstParam.Type, architectureSymbol);
 
                 if (isArchitectureParam && !firstParam.HasExplicitDefaultValue)
                 {
@@ -924,6 +949,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     if (restOptional)
                     {
                         hasArchitectureOnlyCtor = true;
+                        // Store the actual param type for derived architectures.
+                        // For generic types, replace the type parameter with 'double'.
+                        string paramTypeName = firstParam.Type.ToDisplayString();
+                        if (firstParam.Type is INamedTypeSymbol { IsGenericType: true } namedParamType)
+                        {
+                            // Get the unbound definition and reconstruct with double
+                            string openName = namedParamType.OriginalDefinition.ToDisplayString();
+                            // Replace the type parameter (e.g., T) with double
+                            architectureParamTypeName = openName.Replace("<T>", "<double>");
+                        }
+                        else
+                        {
+                            architectureParamTypeName = paramTypeName;
+                        }
                     }
                 }
             }
@@ -946,6 +985,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             UsesVectorOutput = usesVectorOutput,
             HasParameterlessConstructor = hasParameterlessCtor,
             HasArchitectureOnlyConstructor = hasArchitectureOnlyCtor,
+            InheritsFromExcludedBase = InheritsFromAnyExcludedBase(modelClass),
+            ArchitectureParamTypeName = architectureParamTypeName,
             ExtendsAudioNeuralNetworkBase = extendsAudioNN,
             ExtendsDocumentNeuralNetworkBase = extendsDocumentNN,
             ExtendsVisionLanguageModelBase = extendsVisionLanguage,
@@ -1009,6 +1050,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         INamedTypeSymbol? categoryAttrSymbol,
         INamedTypeSymbol? taskAttrSymbol,
         INamedTypeSymbol? exemptAttrSymbol,
+        INamedTypeSymbol? architectureSymbol,
         HashSet<string> testNames,
         List<ModelTestInfo> testedModels,
         List<ModelTestInfo> untestedModels,
@@ -1020,7 +1062,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             if (symbol is IAssemblySymbol assembly)
             {
                 CollectModelsFromNamespace(assembly.GlobalNamespace, domainAttrSymbol, categoryAttrSymbol,
-                    taskAttrSymbol, exemptAttrSymbol, testNames, testedModels, untestedModels, seen);
+                    taskAttrSymbol, exemptAttrSymbol, architectureSymbol, testNames, testedModels, untestedModels, seen);
             }
         }
     }
@@ -1034,6 +1076,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         INamedTypeSymbol? categoryAttrSymbol,
         INamedTypeSymbol? taskAttrSymbol,
         INamedTypeSymbol? exemptAttrSymbol,
+        INamedTypeSymbol? architectureSymbol,
         HashSet<string> testNames,
         List<ModelTestInfo> testedModels,
         List<ModelTestInfo> untestedModels,
@@ -1044,7 +1087,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             if (member is INamespaceSymbol childNs)
             {
                 CollectModelsFromNamespace(childNs, domainAttrSymbol, categoryAttrSymbol,
-                    taskAttrSymbol, exemptAttrSymbol, testNames, testedModels, untestedModels, seen);
+                    taskAttrSymbol, exemptAttrSymbol, architectureSymbol, testNames, testedModels, untestedModels, seen);
             }
             else if (member is INamedTypeSymbol type)
             {
@@ -1053,17 +1096,61 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     ImplementsIFullModel(type))
                 {
                     ProcessModelSymbol(type, domainAttrSymbol, categoryAttrSymbol, taskAttrSymbol,
-                        exemptAttrSymbol, testNames, testedModels, untestedModels, seen);
+                        exemptAttrSymbol, architectureSymbol, testNames, testedModels, untestedModels, seen);
                 }
             }
         }
     }
 
     /// <summary>
-    /// Checks whether a type has a [ModelDomain] attribute.
-    /// This enables discovery of algorithms and utilities that don't implement IFullModel
-    /// but still need mathematical invariant testing (e.g., causal discovery, decomposition methods).
+    /// Checks if a type IS exactly <c>NeuralNetworkArchitecture&lt;T&gt;</c> (not a derived type).
+    /// Uses <see cref="SymbolEqualityComparer"/> for cross-assembly robustness, with a
+    /// metadata-name fallback when the resolved compilation symbol is unavailable.
     /// </summary>
+    /// <param name="type">The parameter type to check.</param>
+    /// <param name="architectureSymbol">The resolved open generic
+    /// <c>NeuralNetworkArchitecture`1</c> symbol. Pass <c>null</c> to fall back to
+    /// metadata-name matching.</param>
+    /// <returns><c>true</c> when <paramref name="type"/> is exactly the open generic
+    /// <c>NeuralNetworkArchitecture&lt;T&gt;</c>; <c>false</c> for derived types or
+    /// non-generic types.</returns>
+    private static bool IsExactlyArchitecture(ITypeSymbol type, INamedTypeSymbol? architectureSymbol)
+    {
+        if (type is not INamedTypeSymbol namedType || !namedType.IsGenericType)
+            return false;
+
+        var originalDef = namedType.OriginalDefinition;
+
+        // Primary: use SymbolEqualityComparer against resolved compilation symbol
+        if (architectureSymbol is not null)
+            return SymbolEqualityComparer.Default.Equals(originalDef, architectureSymbol);
+
+        // Fallback: metadata name check if symbol resolution failed
+        return originalDef.MetadataName == "NeuralNetworkArchitecture`1" &&
+               originalDef.ContainingNamespace.ToDisplayString() == "AiDotNet.NeuralNetworks";
+    }
+
+    /// <summary>
+    /// Checks if a type inherits from any base class in <see cref="ExcludedBaseClasses"/>.
+    /// These are compositional patterns (meta-learning, distributed wrappers) that wrap
+    /// a user-provided inner model and cannot be auto-constructed for testing.
+    /// </summary>
+    private static bool InheritsFromAnyExcludedBase(INamedTypeSymbol type)
+    {
+        var current = type.BaseType;
+        while (current is not null)
+        {
+            string baseName = current.Name;
+            foreach (var excluded in ExcludedBaseClasses)
+            {
+                if (baseName == excluded)
+                    return true;
+            }
+            current = current.BaseType;
+        }
+        return false;
+    }
+
     private static bool HasModelDomainAttribute(INamedTypeSymbol type, INamedTypeSymbol? domainAttrSymbol)
     {
         if (domainAttrSymbol is null) return false;
@@ -1405,14 +1492,70 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     }
                 }
             }
+            else if (model.Domains.Contains(3) && !model.Tasks.Contains(35))
+            {
+                // Temporal video models (ActionRecognition=22, VideoGeneration=41, etc.)
+                // need a 4D [frames, channels, height, width] input shape, but
+                // NeuralNetworkArchitecture only expresses 3D (height/width/depth).
+                // Rather than silently emit a mismatched 3D architecture alongside a
+                // 4D InputShape, route these to a runtime placeholder until the
+                // architecture type can represent a temporal dimension.
+                constructorExpr = "throw new System.NotImplementedException(" +
+                    $"\"'{GeneratorHelpers.StripGenericSuffix(model.ClassName)}' is a temporal video model; NeuralNetworkArchitecture<T> cannot express its 4D [frames, channels, height, width] input. Implement this factory manually.\")";
+            }
             else
             {
-                // Architecture-only constructor: provide a default NeuralNetworkArchitecture
+                // Architecture-only constructor: provide a domain-appropriate NeuralNetworkArchitecture.
+                // Vision/3D models need ThreeDimensional input; Audio needs TwoDimensional;
+                // others default to OneDimensional. Temporal video is handled above.
                 needsArchitectureUsing = true;
-                string archExpr = "new NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                bool isVision = model.Domains.Contains(1) || model.Domains.Contains(11); // Vision=1, ThreeD=11
+                bool isAudio = model.Domains.Contains(4); // Audio=4
+                bool isFrameInterp = model.Tasks.Contains(35); // FrameInterpolation → 3D input
+
+                string inputTypeExpr;
+                string sizeExpr;
+
+                if (isFrameInterp)
+                {
+                    // Frame interpolation: 2 concatenated RGB frames = 6 channels
+                    inputTypeExpr = "AiDotNet.Enums.InputType.ThreeDimensional";
+                    sizeExpr = "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 4";
+                }
+                else if (isVision)
+                {
+                    // Standard vision: [C, H, W] with 64x64 to handle large conv kernels
+                    inputTypeExpr = "AiDotNet.Enums.InputType.ThreeDimensional";
+                    sizeExpr = "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4";
+                }
+                else if (isAudio)
+                {
+                    inputTypeExpr = "AiDotNet.Enums.InputType.TwoDimensional";
+                    sizeExpr = "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4";
+                }
+                else
+                {
+                    // Domain-appropriate 1D input size:
+                    // Language/Multimodal models typically use embedding dimensions (768 for BERT-scale)
+                    // General models use smaller defaults
+                    bool isLanguage = model.Domains.Contains(2); // Language=2
+                    bool isMultimodal = model.Domains.Contains(5); // Multimodal=5
+                    int inputSize1D = (isLanguage || isMultimodal) ? 128 : 16;
+                    inputTypeExpr = "AiDotNet.Enums.InputType.OneDimensional";
+                    sizeExpr = $"inputSize: {inputSize1D}, outputSize: 4";
+                }
+                // Only models whose first constructor parameter is *exactly*
+                // NeuralNetworkArchitecture<T> are auto-constructed here. Derived
+                // architecture types require manual test classes because a
+                // base-typed argument is not implicitly convertible to a derived
+                // architecture parameter in C#. The caller enforces this by setting
+                // model.HasArchitectureOnlyConstructor (and canConstruct) only when
+                // IsExactlyArchitecture is true.
+                string archTypeName = "NeuralNetworkArchitecture<double>";
+                string archExpr = $"new {archTypeName}(" +
+                    $"inputType: {inputTypeExpr}, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 16, outputSize: 4)";
+                    $"{sizeExpr})";
 
                 if (model.TypeParameterCount == 0)
                 {
@@ -1477,6 +1620,47 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"public class {testClassName} : {baseClassName}");
         sb.AppendLine("{");
+
+        // Override InputShape/OutputShape for domain-appropriate test data.
+        // Vision/Video/3D models need [C, H, W]; default is [1, 4].
+        bool isVideoModel = model.Domains.Contains(3);
+        bool isFrameInterpModel = model.Tasks.Contains(35); // FrameInterpolation
+        bool isTemporalVideoModel = isVideoModel && !isFrameInterpModel;
+        bool isVisionModel = model.Domains.Contains(1) || model.Domains.Contains(11);
+        bool isAudioModel = model.Domains.Contains(4);
+        if (isTemporalVideoModel)
+        {
+            // Temporal video: [frames, channels, height, width]
+            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 64, 64 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
+        else if (isFrameInterpModel)
+        {
+            // Frame interpolation: 2 concatenated RGB frames = 6 channels
+            sb.AppendLine("    protected override int[] InputShape => new[] { 6, 64, 64 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 64, 64 };");
+        }
+        else if (isVisionModel)
+        {
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 64, 64 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
+        else if (isAudioModel)
+        {
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
+        else if (family == TestFamily.NeuralNetwork || family == TestFamily.GAN ||
+                 family == TestFamily.Embedding || family == TestFamily.GraphNN)
+        {
+            // 1D models in families that support InputShape override:
+            // match the architecture's inputSize
+            bool isLang = model.Domains.Contains(2) || model.Domains.Contains(5);
+            int dim = isLang ? 128 : 16;
+            sb.AppendLine($"    protected override int[] InputShape => new[] {{ {dim} }};");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
+
         sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
         sb.AppendLine(factoryBody);
         sb.AppendLine("}");
@@ -3039,6 +3223,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         /// When true, the generator can emit a default architecture to construct the model.
         /// </summary>
         public bool HasArchitectureOnlyConstructor { get; set; }
+        /// <summary>
+        /// The fully-qualified display name of the architecture parameter type (e.g.,
+        /// "AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture&lt;double&gt;").
+        /// Null when the model uses the base NeuralNetworkArchitecture directly.
+        /// </summary>
+        public string? ArchitectureParamTypeName { get; set; }
+        /// <summary>
+        /// True if the model inherits from a base class in <see cref="ExcludedBaseClasses"/>
+        /// (e.g., MetaLearnerBase, ShardedModelBase). These are compositional patterns
+        /// that require a user-provided inner model and cannot be auto-constructed.
+        /// </summary>
+        public bool InheritsFromExcludedBase { get; set; }
 
         // Base class chain detection (for mid-level hierarchy resolution)
         public bool ExtendsAudioNeuralNetworkBase { get; set; }

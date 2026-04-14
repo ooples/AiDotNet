@@ -365,14 +365,54 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // Initialize embedding tensor with small random values using Engine operations
         T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(1.0), NumOps.FromDouble(embeddingDim)));
 
-        // Initialize in-place: random [0,1] → shift to [-0.5, 0.5] → scale
-        // Uses in-place ops to avoid 3 temporary full-size tensor allocations
-        _embeddingTensor = Tensor<T>.CreateRandom(vocabSize, embeddingDim);
-        var halfTensor = TensorAllocator.Rent<T>([vocabSize, embeddingDim]);
-        halfTensor.Fill(NumOps.FromDouble(0.5));
-        Engine.TensorSubtractInPlace(_embeddingTensor, halfTensor);
-        TensorAllocator.Return(halfTensor);
-        Engine.TensorMultiplyScalarInPlace(_embeddingTensor, scale);
+        // Initialize with SimdRandom: random [0,1] → shift to [-0.5, 0.5] → scale.
+        // For double/float, write directly to avoid NumOps.FromDouble virtual dispatch
+        // on every element (23M elements for BERT vocab). The embedding tensor was
+        // already allocated by the constructor; reuse it in place rather than allocating
+        // a second tensor that shadows the original reference.
+        var rng = new SimdRandom();
+        var span = _embeddingTensor.Data.Span;
+        int total = span.Length;
+        if (total == 0) return; // zero-sized embedding (no vocab or zero dim): nothing to fill
+        double scaleD = NumOps.ToDouble(scale);
+
+        // Write via a temp array + array-level reinterpret so the SIMD-batched
+        // xoshiro256** fill path still applies. See MultiHeadAttentionLayer for full
+        // rationale (Span<T> can't be reinterpreted across generic T without a struct
+        // constraint, which we don't have, and CreateSpan isn't on net471).
+        if (typeof(T) == typeof(double))
+        {
+            var buffer = new double[total];
+            rng.NextDoubles(buffer.AsSpan());
+            for (int i = 0; i < total; i++)
+                buffer[i] = (buffer[i] - 0.5) * scaleD;
+            var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<double[], T[]>(ref buffer);
+            reinterpreted.AsSpan(0, total).CopyTo(span);
+        }
+        else if (typeof(T) == typeof(float))
+        {
+            var buffer = new float[total];
+            rng.NextFloats(buffer.AsSpan());
+            float scaleF = (float)scaleD;
+            for (int i = 0; i < total; i++)
+                buffer[i] = (buffer[i] - 0.5f) * scaleF;
+            var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<float[], T[]>(ref buffer);
+            reinterpreted.AsSpan(0, total).CopyTo(span);
+        }
+        else
+        {
+            const int batchSize = 4096;
+            var tempBuf = new double[Math.Min(total, batchSize)];
+            int offset = 0;
+            while (offset < total)
+            {
+                int chunk = Math.Min(batchSize, total - offset);
+                rng.NextDoubles(tempBuf.AsSpan(0, chunk));
+                for (int j = 0; j < chunk; j++)
+                    span[offset + j] = NumOps.FromDouble((tempBuf[j] - 0.5) * scaleD);
+                offset += chunk;
+            }
+        }
     }
 
     /// <summary>

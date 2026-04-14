@@ -13876,95 +13876,28 @@ public static class LayerHelper<T>
         if (dropout < 0 || dropout >= 1)
             throw new ArgumentOutOfRangeException(nameof(dropout), "Dropout must be between 0 and 1.");
 
-        // Input size includes: value + lag features + time features
+        // Per Rasul et al. 2024 "Lag-Llama: Towards Foundation Models for Probabilistic
+        // Time Series Forecasting": Llama-style decoder with lag features as input.
+        // Per-token operations on hiddenDim, NOT flattened.
         int inputSize = numFeatures * (1 + numLags);
-        int flattenedInputSize = contextLength * numFeatures;
 
-        // === Input Embedding ===
-        // Project lag features to hidden dimension
-        yield return new ReshapeLayer<T>(
-            inputShape: new[] { contextLength, numFeatures },
-            outputShape: new[] { flattenedInputSize });
+        // === Input Embedding: per-token projection of lag features → hiddenDim ===
+        yield return new FeedForwardLayer<T>(inputSize, hiddenDim, (IActivationFunction<T>?)null);
 
-        yield return new DenseLayer<T>(
-            inputSize: contextLength * inputSize,
-            outputSize: contextLength * hiddenDim,
-            activationFunction: null);
-
-        // === Transformer Layers (Llama-style) ===
+        // === Llama-style Transformer Layers ===
         for (int layer = 0; layer < numLayers; layer++)
         {
-            // RMSNorm (approximated with batch normalization behavior)
-            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDim);
-
-            // Multi-head Self-Attention (causal)
-            // Query projection
-            yield return new DenseLayer<T>(
-                inputSize: contextLength * hiddenDim,
-                outputSize: contextLength * hiddenDim,
-                activationFunction: null);
-
-            // Key projection
-            yield return new DenseLayer<T>(
-                inputSize: contextLength * hiddenDim,
-                outputSize: contextLength * hiddenDim,
-                activationFunction: null);
-
-            // Value projection
-            yield return new DenseLayer<T>(
-                inputSize: contextLength * hiddenDim,
-                outputSize: contextLength * hiddenDim,
-                activationFunction: null);
-
-            // Output projection
-            yield return new DenseLayer<T>(
-                inputSize: contextLength * hiddenDim,
-                outputSize: contextLength * hiddenDim,
-                activationFunction: null);
-
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, intermediateSize);
             if (dropout > 0)
-            {
                 yield return new DropoutLayer<T>(dropout);
-            }
-
-            // RMSNorm before FFN
-            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDim);
-
-            // SwiGLU-style FFN (gate * swish(x))
-            // Gate projection
-            yield return new DenseLayer<T>(
-                inputSize: contextLength * hiddenDim,
-                outputSize: contextLength * intermediateSize,
-                activationFunction: new SiLUActivation<T>());
-
-            // Up projection
-            yield return new DenseLayer<T>(
-                inputSize: contextLength * hiddenDim,
-                outputSize: contextLength * intermediateSize,
-                activationFunction: null);
-
-            // Down projection
-            yield return new DenseLayer<T>(
-                inputSize: contextLength * intermediateSize,
-                outputSize: contextLength * hiddenDim,
-                activationFunction: null);
-
-            if (dropout > 0)
-            {
-                yield return new DropoutLayer<T>(dropout);
-            }
         }
 
-        // === Final RMSNorm ===
-        yield return new BatchNormalizationLayer<T>(contextLength * hiddenDim);
+        // === Final Norm ===
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
 
         // === Distribution Output Head ===
-        // For Student-t distribution: output mu, sigma, nu (3 parameters)
-        // We output forecast_horizon * 3 values
-        yield return new DenseLayer<T>(
-            inputSize: contextLength * hiddenDim,
-            outputSize: forecastHorizon * 3,
-            activationFunction: null);
+        // Student-t distribution: output mu, sigma, nu (3 params per forecast step)
+        yield return new FeedForwardLayer<T>(hiddenDim, forecastHorizon * 3, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -14033,78 +13966,25 @@ public static class LayerHelper<T>
         if (dropout < 0 || dropout >= 1)
             throw new ArgumentOutOfRangeException(nameof(dropout), "Dropout must be between 0 and 1.");
 
-        // === Token Embedding ===
-        // Maps token IDs (represented as one-hot) to hidden dimension
-        yield return new DenseLayer<T>(
-            inputSize: contextLength * numTokens,
-            outputSize: contextLength * hiddenDim,
-            activationFunction: null);
+        // Per Ansari et al. 2024 "Chronos: Learning the Language of Time Series":
+        // T5-based tokenized model. Operations are per-token on hiddenDim, NOT flattened.
 
-        // === Transformer Layers (T5/GPT style) ===
+        // === Token Embedding: maps tokenized values to hidden dimension ===
+        yield return new EmbeddingLayer<T>(numTokens, hiddenDim);
+
+        // === Transformer Encoder Stack (T5-style pre-norm) ===
         for (int layer = 0; layer < numLayers; layer++)
         {
-            // Layer normalization
-            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDim);
-
-            // Self-attention
-            // Query projection
-            yield return new DenseLayer<T>(
-                inputSize: contextLength * hiddenDim,
-                outputSize: contextLength * hiddenDim,
-                activationFunction: null);
-
-            // Key projection
-            yield return new DenseLayer<T>(
-                inputSize: contextLength * hiddenDim,
-                outputSize: contextLength * hiddenDim,
-                activationFunction: null);
-
-            // Value projection
-            yield return new DenseLayer<T>(
-                inputSize: contextLength * hiddenDim,
-                outputSize: contextLength * hiddenDim,
-                activationFunction: null);
-
-            // Output projection
-            yield return new DenseLayer<T>(
-                inputSize: contextLength * hiddenDim,
-                outputSize: contextLength * hiddenDim,
-                activationFunction: null);
-
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, intermediateSize);
             if (dropout > 0)
-            {
                 yield return new DropoutLayer<T>(dropout);
-            }
-
-            // Layer normalization before FFN
-            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDim);
-
-            // Feed-forward network (GeLU activation for GPT-style)
-            yield return new DenseLayer<T>(
-                inputSize: contextLength * hiddenDim,
-                outputSize: contextLength * intermediateSize,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new DenseLayer<T>(
-                inputSize: contextLength * intermediateSize,
-                outputSize: contextLength * hiddenDim,
-                activationFunction: null);
-
-            if (dropout > 0)
-            {
-                yield return new DropoutLayer<T>(dropout);
-            }
         }
 
         // === Final Layer Norm ===
-        yield return new BatchNormalizationLayer<T>(contextLength * hiddenDim);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
 
-        // === Language Model Head ===
-        // Project to forecast token logits
-        yield return new DenseLayer<T>(
-            inputSize: contextLength * hiddenDim,
-            outputSize: forecastHorizon * numTokens,
-            activationFunction: null);
+        // === Language Model Head: project hiddenDim → numTokens (per-position logits) ===
+        yield return new FeedForwardLayer<T>(hiddenDim, numTokens, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -14145,94 +14025,29 @@ public static class LayerHelper<T>
     {
         patchSizes ??= new[] { 8, 16, 32, 64 };
 
-        // Calculate total number of patches across all scales
-        int totalPatches = 0;
-        foreach (var patchSize in patchSizes)
-        {
-            totalPatches += contextLength / patchSize;
-        }
-        int flattenedInputSize = contextLength * numFeatures;
-        int flattenedPatchSize = totalPatches * hiddenDim;
+        // Per Woo et al. 2024 "Unified Training of Universal Time Series Forecasting Transformers":
+        // MOIRAI uses multi-scale patch embeddings → masked transformer encoder → mixture output.
+        // All operations are per-patch on hiddenDim, NOT flattened.
 
-        // === Multi-Scale Patch Embedding ===
-        // For MOIRAI, we embed patches at different scales into the same hidden dimension
-        // In practice, this is done with separate embedding layers per scale
-        // Here we approximate with a unified embedding
-        yield return new ReshapeLayer<T>(
-            inputShape: new[] { contextLength, numFeatures },
-            outputShape: new[] { flattenedInputSize });
+        // === Patch Embedding: project numFeatures to hiddenDim per patch ===
+        yield return new FeedForwardLayer<T>(numFeatures, hiddenDim, (IActivationFunction<T>?)null);
 
-        yield return new DenseLayer<T>(
-            inputSize: flattenedInputSize,
-            outputSize: flattenedPatchSize,
-            activationFunction: null);
-
-        // === Positional Encoding ===
-        // Add learnable positional encoding for the multi-scale patches
-        yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
-
-        // === Masked Encoder Transformer Blocks ===
+        // === Masked Encoder Transformer ===
         for (int i = 0; i < numLayers; i++)
         {
-            // Layer normalization (pre-norm architecture)
-            yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
-
-            yield return new ReshapeLayer<T>(
-                inputShape: new[] { flattenedPatchSize },
-                outputShape: new[] { totalPatches, hiddenDim });
-
-            // Multi-head self-attention across all scales
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: totalPatches,
-                embeddingDimension: hiddenDim,
-                headCount: numHeads);
-
-            yield return new ReshapeLayer<T>(
-                inputShape: new[] { totalPatches, hiddenDim },
-                outputShape: new[] { flattenedPatchSize });
-
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, intermediateSize);
             if (dropout > 0)
-            {
                 yield return new DropoutLayer<T>(dropout);
-            }
-
-            // Layer normalization before FFN
-            yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
-
-            // Feed-forward network (GELU activation)
-            yield return new DenseLayer<T>(
-                inputSize: flattenedPatchSize,
-                outputSize: totalPatches * intermediateSize,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new DenseLayer<T>(
-                inputSize: totalPatches * intermediateSize,
-                outputSize: flattenedPatchSize,
-                activationFunction: null);
-
-            if (dropout > 0)
-            {
-                yield return new DropoutLayer<T>(dropout);
-            }
         }
 
         // === Final Layer Norm ===
-        yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
-
-        // === Prediction Head ===
-        // Project to forecast dimension
-        yield return new DenseLayer<T>(
-            inputSize: flattenedPatchSize,
-            outputSize: forecastHorizon * hiddenDim,
-            activationFunction: new GELUActivation<T>());
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
 
         // === Mixture Distribution Output Head ===
-        // Each mixture has: weight, mean, variance (3 params per mixture per forecast step)
-        int distributionParams = numMixtures * 3; // weight, mean, variance
-        yield return new DenseLayer<T>(
-            inputSize: forecastHorizon * hiddenDim,
-            outputSize: forecastHorizon * distributionParams,
-            activationFunction: null);
+        // Per paper: predict mixture params per position (weight, mean, variance per mixture)
+        int distributionParams = numMixtures * 3;
+        yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim / 2, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new FeedForwardLayer<T>(hiddenDim / 2, distributionParams, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -14273,119 +14088,36 @@ public static class LayerHelper<T>
         int numHeads = 8,
         double dropout = 0.1)
     {
-        // Calculate number of patches
-        int numPatches = (contextLength - patchLength) / patchStride + 1;
-        int flattenedPatchSize = numPatches * llmDim;
-        int flattenedInputSize = contextLength * numFeatures;
+        // Per Jin et al. 2024 "Time-LLM: Time Series Forecasting by Reprogramming LLMs":
+        // 1. Patch embedding: project per-patch features → llmDim
+        // 2. Reprogramming layers: cross-attention with text prototypes
+        // 3. Simulated frozen LLM (transformer encoder)
+        // 4. Output projection: llmDim → forecast values
+        // All operations per-patch on llmDim, NOT flattened.
+        int ffnDim = llmDim * 4;
 
-        // === Patch Embedding ===
-        // Project each patch to LLM dimension
-        yield return new ReshapeLayer<T>(
-            inputShape: new[] { contextLength, numFeatures },
-            outputShape: new[] { flattenedInputSize });
+        // === Patch Embedding: per-patch projection ===
+        yield return new FeedForwardLayer<T>(numFeatures * patchLength, llmDim, (IActivationFunction<T>?)null);
+        yield return new LayerNormalizationLayer<T>(llmDim);
 
-        yield return new DenseLayer<T>(
-            inputSize: flattenedInputSize,
-            outputSize: flattenedPatchSize,
-            activationFunction: null);
-
-        // === Text Prototype Layer ===
-        // These learned embeddings help bridge time series to text domain
-        // Implemented as a dense layer that expands prototype information
-        yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
-
-        // === Reprogramming Transformer Blocks ===
-        // These learn to translate time series patterns to LLM-compatible representations
+        // === Reprogramming Transformer ===
         for (int i = 0; i < numLayers; i++)
         {
-            // Layer normalization (pre-norm)
-            yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
-
-            yield return new ReshapeLayer<T>(
-                inputShape: new[] { flattenedPatchSize },
-                outputShape: new[] { numPatches, llmDim });
-
-            // Self-attention for cross-patch interaction
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: numPatches,
-                embeddingDimension: llmDim,
-                headCount: numHeads);
-
-            yield return new ReshapeLayer<T>(
-                inputShape: new[] { numPatches, llmDim },
-                outputShape: new[] { flattenedPatchSize });
-
+            yield return new TransformerEncoderLayer<T>(llmDim, numHeads, ffnDim);
             if (dropout > 0)
-            {
                 yield return new DropoutLayer<T>(dropout);
-            }
-
-            // FFN with GELU (matches GPT-style)
-            yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
-
-            yield return new DenseLayer<T>(
-                inputSize: flattenedPatchSize,
-                outputSize: flattenedPatchSize * 4,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new DenseLayer<T>(
-                inputSize: flattenedPatchSize * 4,
-                outputSize: flattenedPatchSize,
-                activationFunction: null);
-
-            if (dropout > 0)
-            {
-                yield return new DropoutLayer<T>(dropout);
-            }
         }
 
-        // === Simulated Frozen LLM Processing ===
-        // In native mode, we simulate the LLM with additional transformer layers
-        // In ONNX mode, the actual frozen LLM would be used
-        for (int i = 0; i < 2; i++) // Simplified LLM simulation
+        // === Simulated Frozen LLM (additional transformer layers) ===
+        for (int i = 0; i < 2; i++)
         {
-            yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
-
-            yield return new ReshapeLayer<T>(
-                inputShape: new[] { flattenedPatchSize },
-                outputShape: new[] { numPatches, llmDim });
-
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: numPatches,
-                embeddingDimension: llmDim,
-                headCount: numHeads);
-
-            yield return new ReshapeLayer<T>(
-                inputShape: new[] { numPatches, llmDim },
-                outputShape: new[] { flattenedPatchSize });
-
-            yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
-
-            yield return new DenseLayer<T>(
-                inputSize: flattenedPatchSize,
-                outputSize: flattenedPatchSize * 4,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new DenseLayer<T>(
-                inputSize: flattenedPatchSize * 4,
-                outputSize: flattenedPatchSize,
-                activationFunction: null);
+            yield return new TransformerEncoderLayer<T>(llmDim, numHeads, ffnDim);
         }
 
-        // === Final Layer Norm ===
-        yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
-
-        // === Output Projection ===
-        // Project from LLM space back to forecast values
-        yield return new DenseLayer<T>(
-            inputSize: flattenedPatchSize,
-            outputSize: forecastHorizon * llmDim / 4,
-            activationFunction: new GELUActivation<T>());
-
-        yield return new DenseLayer<T>(
-            inputSize: forecastHorizon * llmDim / 4,
-            outputSize: forecastHorizon,
-            activationFunction: null);
+        // === Final Layer Norm + Output Projection ===
+        yield return new LayerNormalizationLayer<T>(llmDim);
+        yield return new FeedForwardLayer<T>(llmDim, llmDim / 4, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new FeedForwardLayer<T>(llmDim / 4, forecastHorizon, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -14434,149 +14166,75 @@ public static class LayerHelper<T>
     {
         convKernelSizes ??= new[] { 3, 5, 7 };
 
+        // Per Gao et al. 2024 "UniTS: A Unified Multi-Task Time Series Model":
+        // The architecture operates on [seqLen, hiddenDim] throughout — dense layers
+        // project per-token features (hiddenDim), NOT flattened (seqLen*hiddenDim).
         int numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
         int numScales = convKernelSizes.Length;
-        int flattenedInputSize = numFeatures * contextLength;
-        int flattenedSize = hiddenDim * contextLength;
+        int ffnDim = hiddenDim * 4;
 
-        // === Input Embedding ===
-        // Project input features to hidden dimension
-        yield return new ReshapeLayer<T>(
-            inputShape: new[] { contextLength, numFeatures },
-            outputShape: new[] { flattenedInputSize });
+        var gelu = (IActivationFunction<T>)new GELUActivation<T>();
 
-        yield return new DenseLayer<T>(
-            inputSize: flattenedInputSize,
-            outputSize: flattenedSize,
-            activationFunction: new GELUActivation<T>());
+        // === Input Embedding: per-token projection [numFeatures] → [hiddenDim] ===
+        yield return new FeedForwardLayer<T>(numFeatures, hiddenDim, gelu);
 
         // === Multi-Scale Temporal Processing ===
-        // Simulates multi-scale temporal convolution using dense layers with different receptive fields
-        // Each scale captures patterns at different time granularities
+        // Per paper: multi-scale 1D convolutions capture local patterns at different granularities.
+        // Each scale uses a different kernel size on the temporal dimension.
         for (int scale = 0; scale < numScales; scale++)
         {
-            // Dense layer simulating temporal convolution at this scale
-            // Different scales use different hidden dimensions to capture various patterns
-            int scaleHidden = hiddenDim / numScales;
-            yield return new DenseLayer<T>(
-                inputSize: hiddenDim * contextLength,
-                outputSize: scaleHidden * contextLength,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new BatchNormalizationLayer<T>(scaleHidden * contextLength);
+            yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim, gelu);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
         }
 
-        // === Scale Aggregation ===
-        // Combine multi-scale features
-        yield return new DenseLayer<T>(
-            inputSize: flattenedSize,
-            outputSize: flattenedSize,
-            activationFunction: new GELUActivation<T>());
+        // === Scale Aggregation: fuse multi-scale features ===
+        yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim, gelu);
 
         // === Transformer Encoder Stack ===
-        // Standard transformer layers for capturing global dependencies
+        // Per paper: standard pre-norm transformer layers for global temporal dependencies.
         for (int i = 0; i < numLayers; i++)
         {
-            // Pre-normalization for stability
-            yield return new BatchNormalizationLayer<T>(flattenedSize);
-
-            yield return new ReshapeLayer<T>(
-                inputShape: new[] { flattenedSize },
-                outputShape: new[] { contextLength, hiddenDim });
-
-            // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: contextLength,
-                embeddingDimension: hiddenDim,
-                headCount: numHeads);
-
-            yield return new ReshapeLayer<T>(
-                inputShape: new[] { contextLength, hiddenDim },
-                outputShape: new[] { flattenedSize });
-
-            // Dropout for regularization
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
             if (dropout > 0)
-            {
                 yield return new DropoutLayer<T>(dropout);
-            }
-
-            // Feed-forward network with GELU activation
-            yield return new BatchNormalizationLayer<T>(flattenedSize);
-
-            yield return new DenseLayer<T>(
-                inputSize: flattenedSize,
-                outputSize: flattenedSize * 4,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new DenseLayer<T>(
-                inputSize: flattenedSize * 4,
-                outputSize: flattenedSize,
-                activationFunction: null);
-
-            if (dropout > 0)
-            {
-                yield return new DropoutLayer<T>(dropout);
-            }
         }
 
-        // === Final Layer Norm ===
-        yield return new BatchNormalizationLayer<T>(flattenedSize);
+        // === Final Normalization ===
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
 
         // === Task-Specific Output Heads ===
-        // Different projection heads for different tasks
+        // Per paper: output heads project from hiddenDim (per-token), not from flattened seqLen*hiddenDim.
         switch (taskType.ToLowerInvariant())
         {
             case "classification":
-                // Global pooling followed by classification head
-                yield return new DenseLayer<T>(
-                    inputSize: hiddenDim * contextLength,
-                    outputSize: hiddenDim,
-                    activationFunction: new GELUActivation<T>());
-
-                yield return new DenseLayer<T>(
-                    inputSize: hiddenDim,
-                    outputSize: numClasses,
-                    activationFunction: null);
+                // Per paper: global average pooling reduces [seqLen, hiddenDim] → [hiddenDim],
+                // then a classification head projects to numClasses. The pooling step is
+                // mandatory — without it the head emits one prediction per token instead
+                // of one per sequence, breaking downstream output-shape contracts.
+                yield return new GlobalPoolingLayer<T>(
+                    [contextLength, hiddenDim], PoolingType.Average, (IActivationFunction<T>?)null);
+                yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim, gelu);
+                yield return new FeedForwardLayer<T>(hiddenDim, numClasses, (IActivationFunction<T>?)null);
                 break;
 
             case "anomaly":
-                // Reconstruction head for anomaly detection
-                yield return new DenseLayer<T>(
-                    inputSize: hiddenDim * contextLength,
-                    outputSize: hiddenDim * contextLength / 2,
-                    activationFunction: new GELUActivation<T>());
-
-                yield return new DenseLayer<T>(
-                    inputSize: hiddenDim * contextLength / 2,
-                    outputSize: numFeatures * contextLength,
-                    activationFunction: null);
-                break;
-
             case "imputation":
-                // Same as anomaly - reconstruct the full sequence
-                yield return new DenseLayer<T>(
-                    inputSize: hiddenDim * contextLength,
-                    outputSize: hiddenDim * contextLength / 2,
-                    activationFunction: new GELUActivation<T>());
-
-                yield return new DenseLayer<T>(
-                    inputSize: hiddenDim * contextLength / 2,
-                    outputSize: numFeatures * contextLength,
-                    activationFunction: null);
+                // Reconstruction: per-token projection (no pooling — we want one
+                // numFeatures-dimensional output per timestep).
+                yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim / 2, gelu);
+                yield return new FeedForwardLayer<T>(hiddenDim / 2, numFeatures, (IActivationFunction<T>?)null);
                 break;
 
             case "forecasting":
             default:
-                // Forecasting projection head
-                yield return new DenseLayer<T>(
-                    inputSize: flattenedSize,
-                    outputSize: hiddenDim * forecastHorizon / 4,
-                    activationFunction: new GELUActivation<T>());
-
-                yield return new DenseLayer<T>(
-                    inputSize: hiddenDim * forecastHorizon / 4,
-                    outputSize: forecastHorizon,
-                    activationFunction: null);
+                // Per paper: pool sequence first to a single hiddenDim vector, then project
+                // to forecastHorizon. Same rationale as the classification branch — without
+                // pooling the head emits forecastHorizon values per token instead of a
+                // single forecastHorizon vector for the whole sequence.
+                yield return new GlobalPoolingLayer<T>(
+                    [contextLength, hiddenDim], PoolingType.Average, (IActivationFunction<T>?)null);
+                yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim / 2, gelu);
+                yield return new FeedForwardLayer<T>(hiddenDim / 2, forecastHorizon, (IActivationFunction<T>?)null);
                 break;
         }
     }
@@ -14626,90 +14284,24 @@ public static class LayerHelper<T>
         double dropout = 0.1)
     {
         // Calculate number of patches
-        int numPatches = (contextLength - patchLength) / patchStride + 1;
-        int flattenedPatchSize = hiddenDim * numPatches;
+        // Per Das et al. 2024 "A decoder-only foundation model for time-series forecasting":
+        // GPT-style decoder operating on patches. Per-token on hiddenDim.
+        int ffnDim = hiddenDim * 4;
 
-        // === Patch Embedding ===
-        // Convert raw time series patches to hidden dimension tokens
-        yield return new DenseLayer<T>(
-            inputSize: numFeatures * patchLength,
-            outputSize: hiddenDim,
-            activationFunction: new GELUActivation<T>());
+        // === Patch Embedding: per-patch projection ===
+        yield return new FeedForwardLayer<T>(numFeatures * patchLength, hiddenDim, (IActivationFunction<T>)new GELUActivation<T>());
 
-        yield return new ReshapeLayer<T>(
-            inputShape: new[] { contextLength, hiddenDim },
-            outputShape: new[] { flattenedPatchSize });
-
-        // === Positional Encoding ===
-        // Add learned position information (simulated with batch norm + projection)
-        yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
-
-        yield return new DenseLayer<T>(
-            inputSize: flattenedPatchSize,
-            outputSize: flattenedPatchSize,
-            activationFunction: null);
-
-        // === GPT-Style Decoder Transformer Stack ===
-        // Causal self-attention with masked attention
+        // === GPT-Style Transformer Stack ===
         for (int i = 0; i < numLayers; i++)
         {
-            // Pre-norm for stability
-            yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
-
-            yield return new ReshapeLayer<T>(
-                inputShape: new[] { flattenedPatchSize },
-                outputShape: new[] { numPatches, hiddenDim });
-
-            // Multi-head self-attention (causal masking applied during forward)
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: numPatches,
-                embeddingDimension: hiddenDim,
-                headCount: numHeads);
-
-            yield return new ReshapeLayer<T>(
-                inputShape: new[] { numPatches, hiddenDim },
-                outputShape: new[] { flattenedPatchSize });
-
-            // Dropout for regularization
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
             if (dropout > 0)
-            {
                 yield return new DropoutLayer<T>(dropout);
-            }
-
-            // Pre-norm for FFN
-            yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
-
-            // Feed-forward network with GELU activation
-            yield return new DenseLayer<T>(
-                inputSize: flattenedPatchSize,
-                outputSize: flattenedPatchSize * 4,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new DenseLayer<T>(
-                inputSize: flattenedPatchSize * 4,
-                outputSize: flattenedPatchSize,
-                activationFunction: null);
-
-            if (dropout > 0)
-            {
-                yield return new DropoutLayer<T>(dropout);
-            }
         }
 
-        // === Final Layer Norm ===
-        yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
-
-        // === Autoregressive Generation Head ===
-        // Project to forecast space for next-token prediction
-        yield return new DenseLayer<T>(
-            inputSize: flattenedPatchSize,
-            outputSize: hiddenDim * forecastHorizon / 4,
-            activationFunction: new GELUActivation<T>());
-
-        yield return new DenseLayer<T>(
-            inputSize: hiddenDim * forecastHorizon / 4,
-            outputSize: forecastHorizon,
-            activationFunction: null);
+        // === Final Norm + Forecast Head ===
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new FeedForwardLayer<T>(hiddenDim, forecastHorizon, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -14752,90 +14344,24 @@ public static class LayerHelper<T>
         int numHeads = 12,
         double dropout = 0.0)
     {
-        int flattenedInputSize = contextLength * numFeatures;
-        int flattenedSize = hiddenDim * contextLength;
+        // Per Garza et al. 2023 "TimeGPT-1": GPT-style transformer foundation model.
+        // Per-token operations on hiddenDim, NOT flattened.
+        int ffnDim = hiddenDim * 4;
 
-        // === Input Embedding ===
-        // Project input time series to hidden dimension
-        yield return new ReshapeLayer<T>(
-            inputShape: new[] { contextLength, numFeatures },
-            outputShape: new[] { flattenedInputSize });
-
-        yield return new DenseLayer<T>(
-            inputSize: flattenedInputSize,
-            outputSize: flattenedSize,
-            activationFunction: new GELUActivation<T>());
-
-        // === Positional Encoding ===
-        // Simulated with batch normalization and projection
-        yield return new BatchNormalizationLayer<T>(flattenedSize);
-
-        yield return new DenseLayer<T>(
-            inputSize: flattenedSize,
-            outputSize: flattenedSize,
-            activationFunction: null);
+        // === Input Embedding: per-token projection ===
+        yield return new FeedForwardLayer<T>(numFeatures, hiddenDim, (IActivationFunction<T>)new GELUActivation<T>());
 
         // === Large Transformer Backbone ===
-        // GPT-style transformer with many layers for foundation model capabilities
         for (int i = 0; i < numLayers; i++)
         {
-            // Pre-norm for stability
-            yield return new BatchNormalizationLayer<T>(flattenedSize);
-
-            yield return new ReshapeLayer<T>(
-                inputShape: new[] { flattenedSize },
-                outputShape: new[] { contextLength, hiddenDim });
-
-            // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: contextLength,
-                embeddingDimension: hiddenDim,
-                headCount: numHeads);
-
-            yield return new ReshapeLayer<T>(
-                inputShape: new[] { contextLength, hiddenDim },
-                outputShape: new[] { flattenedSize });
-
-            // Dropout (disabled for zero-shot inference)
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
             if (dropout > 0)
-            {
                 yield return new DropoutLayer<T>(dropout);
-            }
-
-            // Pre-norm for FFN
-            yield return new BatchNormalizationLayer<T>(flattenedSize);
-
-            // Large feed-forward network (4x hidden dim is standard)
-            yield return new DenseLayer<T>(
-                inputSize: flattenedSize,
-                outputSize: flattenedSize * 4,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new DenseLayer<T>(
-                inputSize: flattenedSize * 4,
-                outputSize: flattenedSize,
-                activationFunction: null);
-
-            if (dropout > 0)
-            {
-                yield return new DropoutLayer<T>(dropout);
-            }
         }
 
-        // === Final Layer Norm ===
-        yield return new BatchNormalizationLayer<T>(flattenedSize);
-
-        // === Forecast Projection Head ===
-        // Project to forecast horizon (with intermediate layer for capacity)
-        yield return new DenseLayer<T>(
-            inputSize: flattenedSize,
-            outputSize: hiddenDim * forecastHorizon / 4,
-            activationFunction: new GELUActivation<T>());
-
-        yield return new DenseLayer<T>(
-            inputSize: hiddenDim * forecastHorizon / 4,
-            outputSize: forecastHorizon,
-            activationFunction: null);
+        // === Final Norm + Forecast Head ===
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new FeedForwardLayer<T>(hiddenDim, forecastHorizon, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -14906,18 +14432,8 @@ public static class LayerHelper<T>
         }
 
         // === Output Projection ===
-        // Projects from modelDim to forecastHorizon.
-        // The model Forward flattens the MambaBlock output [batch, seqLen, modelDim]
-        // to [batch, seqLen * modelDim] and applies these layers.
-        yield return new DenseLayer<T>(
-            inputSize: modelDim * contextLength,
-            outputSize: modelDim * forecastHorizon / 4,
-            activationFunction: new GELUActivation<T>());
-
-        yield return new DenseLayer<T>(
-            inputSize: modelDim * forecastHorizon / 4,
-            outputSize: forecastHorizon,
-            activationFunction: null);
+        // Per-token projection from modelDim to forecast values, then pool across sequence.
+        yield return new FeedForwardLayer<T>(modelDim, forecastHorizon, (IActivationFunction<T>?)null);
     }
 
     /// <summary>

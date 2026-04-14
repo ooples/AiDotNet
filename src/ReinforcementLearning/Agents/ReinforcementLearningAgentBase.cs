@@ -98,17 +98,10 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
         NumOps = MathHelper.GetNumericOperations<T>();
         Random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
 
-        // Ensure required properties are provided
-        if (options.LossFunction is null)
-            throw new ArgumentNullException(nameof(options), "LossFunction must be provided in options.");
-        if (options.LearningRate is null)
-            throw new ArgumentNullException(nameof(options), "LearningRate must be provided in options.");
-        if (options.DiscountFactor is null)
-            throw new ArgumentNullException(nameof(options), "DiscountFactor must be provided in options.");
-
-        LossFunction = options.LossFunction;
-        LearningRate = options.LearningRate;
-        DiscountFactor = options.DiscountFactor;
+        // Apply sensible defaults for required properties per facade pattern.
+        LossFunction = options.LossFunction ?? new MeanSquaredErrorLoss<T>();
+        LearningRate = options.LearningRate ?? NumOps.FromDouble(0.001);
+        DiscountFactor = options.DiscountFactor ?? NumOps.FromDouble(0.99);
         TrainingSteps = 0;
         Episodes = 0;
         LossHistory = new List<T>();

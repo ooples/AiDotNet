@@ -44,7 +44,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.FrameInterpolation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("PerVFI: Perception-Oriented Video Frame Interpolation via Asymmetric Blending",

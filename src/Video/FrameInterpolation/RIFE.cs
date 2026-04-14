@@ -54,7 +54,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.FrameInterpolation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("RIFE: Real-Time Intermediate Flow Estimation for Video Frame Interpolation",

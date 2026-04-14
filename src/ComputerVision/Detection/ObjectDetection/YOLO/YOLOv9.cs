@@ -6,6 +6,7 @@ using AiDotNet.ComputerVision.Detection.PostProcessing;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -47,6 +48,25 @@ public class YOLOv9<T> : ObjectDetectorBase<T>
 
     /// <inheritdoc/>
     public override string Name => $"YOLOv9-{Options.Size}";
+
+    /// <summary>
+    /// Creates a new YOLOv9 detector with default options derived from the architecture.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="size">Model size variant (default: Small for faster construction).</param>
+    /// <param name="numClasses">Number of detection classes (default: 80 for COCO).</param>
+    public YOLOv9(
+        NeuralNetworkArchitecture<T> architecture,
+        ModelSize size = ModelSize.Small,
+        int numClasses = 80)
+        : this(new ObjectDetectionOptions<T>
+        {
+            Size = size,
+            NumClasses = numClasses,
+            InputSize = new[] { architecture.InputHeight > 0 ? architecture.InputHeight : 640, architecture.InputWidth > 0 ? architecture.InputWidth : 640 },
+        })
+    {
+    }
 
     /// <summary>
     /// Creates a new YOLOv9 detector.
