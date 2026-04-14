@@ -12,30 +12,13 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Tests mathematical invariants: training loss decrease, gradient flow,
 /// parameter sensitivity, output stability, and architecture consistency.
 /// </summary>
-public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
+public abstract class NeuralNetworkModelTestBase
 {
     protected abstract INeuralNetworkModel<double> CreateNetwork();
 
     protected virtual int[] InputShape => [1, 4];
     protected virtual int[] OutputShape => [1, 1];
     protected virtual int TrainingIterations => 10;
-
-    /// <inheritdoc />
-    public virtual Task InitializeAsync() => Task.CompletedTask;
-
-    /// <summary>
-    /// Force finalization of the per-test network between tests. Production-default
-    /// neural networks instantiate VGG-16BN / DiT-XL / etc. \u2014 multi-GB weight
-    /// tensor allocations that, without GC pressure between xunit test methods,
-    /// stack up in the shared-process runner and OOM before the job ever finishes.
-    /// </summary>
-    public virtual Task DisposeAsync()
-    {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-        return Task.CompletedTask;
-    }
 
     /// <summary>
     /// Tolerance for the MoreData test. Models with non-continuous outputs
@@ -72,7 +55,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
@@ -108,7 +91,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
@@ -148,7 +131,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
 
         var input1 = CreateConstantTensor(InputShape, 0.1);
         var input2 = CreateConstantTensor(InputShape, 0.9);
@@ -182,7 +165,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
 
         var output = network.Predict(input);
@@ -206,7 +189,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
@@ -234,7 +217,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
 
         var input = CreateRandomTensor(InputShape, rng);
         var scaledInput = new Tensor<double>(InputShape);
@@ -268,7 +251,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
 
         var out1 = network.Predict(input);
@@ -285,13 +268,9 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        var network = CreateNetwork();
-        // Check ParameterCount rather than GetParameters().Length — both answer the
-        // same question ("does the network have learnable parameters?") but
-        // ParameterCount reads the declared count without forcing lazy layers
-        // to materialize their weight tensors (which at VGG16BN / DiT scale is
-        // multi-GB and OOMs CI runners just for an existence check).
-        Assert.True(network.ParameterCount > 0, "Neural network should have learnable parameters.");
+        using var network = CreateNetwork();
+        var parameters = network.GetParameters();
+        Assert.True(parameters.Length > 0, "Neural network should have learnable parameters.");
     }
 
     [Fact(Timeout = 120000)]
@@ -300,7 +279,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
 
         var original = network.Predict(input);
@@ -319,7 +298,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
         network.Train(input, target);
@@ -331,7 +310,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         Assert.NotNull(network.GetArchitecture());
     }
 
@@ -341,7 +320,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
 
         var activations = network.GetNamedLayerActivations(input);
@@ -400,7 +379,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
@@ -433,7 +412,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
@@ -471,7 +450,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
 
         // Single prediction
@@ -499,7 +478,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
 
         var output = network.Predict(input);

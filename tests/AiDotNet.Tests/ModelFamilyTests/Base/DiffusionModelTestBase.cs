@@ -13,31 +13,12 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Tests mathematical invariants: denoising convergence, output sensitivity,
 /// training stability, scheduler consistency, and noise schedule properties.
 /// </summary>
-public abstract class DiffusionModelTestBase : IAsyncLifetime
+public abstract class DiffusionModelTestBase
 {
     protected abstract IDiffusionModel<double> CreateModel();
 
     protected virtual int[] InputShape => [1, 4];
     protected virtual int[] OutputShape => [1, 4];
-
-    /// <inheritdoc />
-    public virtual Task InitializeAsync() => Task.CompletedTask;
-
-    /// <summary>
-    /// Force a full GC between diffusion model tests. Production-default
-    /// diffusion models (SDXL, DiT-XL, ControlNet variants, etc.) allocate
-    /// multi-GB parameter vectors once their lazy layers materialize.
-    /// Without GC pressure between xunit test methods, back-to-back tests
-    /// in a shared-process runner stack up live weight tensors and OOM
-    /// before the shard finishes.
-    /// </summary>
-    public virtual Task DisposeAsync()
-    {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-        return Task.CompletedTask;
-    }
 
     protected Tensor<double> CreateRandomTensor(int[] shape, Random rng)
     {
@@ -67,7 +48,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        var model = CreateModel(); // DiffusionModelBase does not implement IDisposable — GC is the release path
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
@@ -102,7 +83,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        var model = CreateModel(); // DiffusionModelBase does not implement IDisposable — GC is the release path
         var input1 = CreateConstantTensor(InputShape, 0.1);
         var input2 = CreateConstantTensor(InputShape, 0.9);
 
@@ -134,7 +115,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        var model = CreateModel(); // DiffusionModelBase does not implement IDisposable — GC is the release path
 
         var input = CreateRandomTensor(InputShape, rng);
         var scaledInput = new Tensor<double>(InputShape);
@@ -170,7 +151,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        var model = CreateModel(); // DiffusionModelBase does not implement IDisposable — GC is the release path
         var input = CreateRandomTensor(InputShape, rng);
 
         var output = model.Predict(input);
@@ -187,7 +168,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        var model = CreateModel(); // DiffusionModelBase does not implement IDisposable — GC is the release path
         var input = CreateRandomTensor(InputShape, rng);
         var output = model.Predict(input);
 
@@ -205,7 +186,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        var model = CreateModel(); // DiffusionModelBase does not implement IDisposable — GC is the release path
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
@@ -232,7 +213,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        var model = CreateModel(); // DiffusionModelBase does not implement IDisposable — GC is the release path
         var baseInput = CreateRandomTensor(InputShape, rng);
 
         // Predict at different "noise levels" by scaling input
@@ -278,7 +259,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        var model = CreateModel(); // DiffusionModelBase does not implement IDisposable — GC is the release path
         var input = CreateRandomTensor(InputShape, rng);
 
         var output = model.Predict(input);
@@ -301,7 +282,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        var model = CreateModel(); // DiffusionModelBase does not implement IDisposable — GC is the release path
         var input = CreateRandomTensor(InputShape, rng);
 
         var out1 = model.Predict(input);
@@ -317,7 +298,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        var model = CreateModel(); // DiffusionModelBase does not implement IDisposable — GC is the release path
         var input = CreateRandomTensor(InputShape, rng);
 
         var original = model.Predict(input);
@@ -335,7 +316,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        var model = CreateModel(); // DiffusionModelBase does not implement IDisposable — GC is the release path
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
         model.Train(input, target);
@@ -347,13 +328,8 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        var model = CreateModel();
-        // Check ParameterCount rather than GetParameters().Length — both answer the
-        // same question ("does the model have learnable parameters?") but
-        // ParameterCount reads the declared count without forcing lazy layers to
-        // materialize their weight tensors (which at DiT-XL scale is ~4 GB and
-        // OOMs CI runners just for an existence check).
-        Assert.True(model.ParameterCount > 0,
+        var model = CreateModel(); // DiffusionModelBase does not implement IDisposable — GC is the release path
+        Assert.True(model.GetParameters().Length > 0,
             "Diffusion model should have learnable parameters.");
     }
 
@@ -362,7 +338,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        var model = CreateModel();
+        var model = CreateModel(); // DiffusionModelBase does not implement IDisposable — GC is the release path
         Assert.NotNull(model.Scheduler);
     }
 

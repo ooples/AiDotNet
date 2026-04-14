@@ -470,6 +470,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> Forward(Tensor<T> x, Tensor<T> timeEmbed, Tensor<T>? conditioning)
     {
+        // Trigger lazy allocation if not yet done — callers like
+        // PredictNoiseWithEmbedding reach Forward directly on a fresh instance.
+        EnsureLayersInitialized();
+
         if (_patchEmbed == null || _finalNorm == null || _outputProj == null || _adaln_modulation == null)
             throw new InvalidOperationException("Layers not initialized.");
 
