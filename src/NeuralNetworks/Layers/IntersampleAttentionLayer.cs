@@ -171,45 +171,13 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>
         // Residual connection
         var result = Engine.TensorAdd(residual, output);
 
-        // Layer normalization per position
-        var epsilon = NumOps.FromDouble(1e-5);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < numFeatures; f++)
-            {
-                // Compute mean and variance for this position
-                var mean = NumOps.Zero;
-                for (int d = 0; d < embDim; d++)
-                {
-                    int idx = b * numFeatures * embDim + f * embDim + d;
-                    mean = NumOps.Add(mean, result[idx]);
-                }
-                mean = NumOps.Divide(mean, NumOps.FromDouble(embDim));
-
-                var variance = NumOps.Zero;
-                for (int d = 0; d < embDim; d++)
-                {
-                    int idx = b * numFeatures * embDim + f * embDim + d;
-                    var diff = NumOps.Subtract(result[idx], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-                variance = NumOps.Divide(variance, NumOps.FromDouble(embDim));
-
-                // Normalize and apply gamma/beta
-                var stdDev = NumOps.Sqrt(NumOps.Add(variance, epsilon));
-                for (int d = 0; d < embDim; d++)
-                {
-                    int idx = b * numFeatures * embDim + f * embDim + d;
-                    var normalized = NumOps.Divide(NumOps.Subtract(result[idx], mean), stdDev);
-                    result[idx] = NumOps.Add(
-                        NumOps.Multiply(_layerNormGamma[d], normalized),
-                        _layerNormBeta[d]);
-                }
-            }
-        }
-
-        return result;
+        // Layer normalization across the embedding dimension (last axis), one
+        // normalization per (batch, feature) position. The previous manual loop
+        // dispatched 3 × batchSize × numFeatures × embDim virtual NumOps calls
+        // which JIT can't vectorize through IInterface<T>; Engine.LayerNorm runs
+        // it as one fused op with the same semantics.
+        const double epsilon = 1e-5;
+        return Engine.LayerNorm(result, _layerNormGamma, _layerNormBeta, epsilon, out _, out _);
     }
 
     /// <summary>

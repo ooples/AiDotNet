@@ -1094,28 +1094,23 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         int height = input.Shape[1];
         int width = input.Shape[2];
 
-        var output = TensorAllocator.Rent<T>([batchSize, height, width, _outputDepth]);
+        // A 1×1 convolution is equivalent to a matrix multiply over the channel
+        // dimension — for every (b, h, w) spatial position independently we're
+        // computing a linear projection from IC channels to OC channels with the
+        // same weight matrix. Flattening to [B·H·W, IC] @ [IC, OC] lets us
+        // dispatch a single Engine.TensorMatMul instead of the O(B·H·W·OC·IC)
+        // nested-loop scalar NumOps.Multiply dance that was here before.
+        int spatial = batchSize * height * width;
+        var inputFlat = Engine.Reshape(input, new[] { spatial, _inputDepth });
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    for (int oc = 0; oc < _outputDepth; oc++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int ic = 0; ic < _inputDepth; ic++)
-                        {
-                            sum = NumOps.Add(sum, NumOps.Multiply(input[b, h, w, ic], _pointwiseKernels[oc, ic, 0, 0]));
-                        }
-                        output[b, h, w, oc] = sum;
-                    }
-                }
-            }
-        }
+        // Pointwise kernel is [OC, IC, 1, 1]. Reshape to [OC, IC] then transpose
+        // to [IC, OC] so the matmul's right operand aligns with the IC rows of
+        // the flattened input.
+        var kernel2D = Engine.Reshape(_pointwiseKernels, new[] { _outputDepth, _inputDepth });
+        var kernelT = Engine.TensorPermute(kernel2D, new[] { 1, 0 });
 
-        return output;
+        var outputFlat = Engine.TensorMatMul(inputFlat, kernelT);
+        return Engine.Reshape(outputFlat, new[] { batchSize, height, width, _outputDepth });
     }
 
     /// <summary>
