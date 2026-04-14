@@ -258,18 +258,53 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
             }
         }
 
-        // 3c) Synthetic _silence_ class: random crops of the background-noise WAVs,
-        // or pure silence when the directory is missing (degenerate but never crashes).
+        // 3c) Synthetic _silence_ class: split-aware crops of the background-noise
+        // WAVs per Warden 2018 §6 (Speech Commands v2):
+        //  - Train draws overlapping 1-second crops from all background files except
+        //    the one reserved for validation.
+        //  - Validation uses a single designated file (running_tap.wav by convention)
+        //    so the val set stays speaker/noise-source-independent.
+        //  - Test draws from the remaining background files (same pool as train but
+        //    with a proportionally smaller sample count).
+        // The generated silence count is scaled by the split proportion so silence
+        // stays at ~8.3% of samples across splits (the 12-class balanced setting
+        // from the TFDS reference implementation). Previously the same
+        // SilenceSampleCount was emitted regardless of Split, producing test/val
+        // distributions that skewed heavily toward silence.
         if (_options.UseCoreSubset && _silenceClassIndex >= 0 && _options.SilenceSampleCount > 0)
         {
             string bgDir = Path.Combine(_dataPath, BackgroundNoiseDir);
-            _backgroundNoiseFiles = Directory.Exists(bgDir)
+            var allBgFiles = Directory.Exists(bgDir)
                 ? Directory.GetFiles(bgDir, "*.wav").ToList()
                 : new List<string>();
 
-            int silenceCount = _options.MaxSamplesPerClass.HasValue
-                ? Math.Min(_options.SilenceSampleCount, _options.MaxSamplesPerClass.Value)
-                : _options.SilenceSampleCount;
+            const string ValidationBackgroundFile = "running_tap.wav";
+            bool IsValidationBg(string path) => string.Equals(
+                Path.GetFileName(path), ValidationBackgroundFile, StringComparison.OrdinalIgnoreCase);
+
+            _backgroundNoiseFiles = _options.Split switch
+            {
+                DatasetSplit.Validation => allBgFiles.Where(IsValidationBg).ToList(),
+                _                       => allBgFiles.Where(f => !IsValidationBg(f)).ToList(),
+            };
+            // If the designated per-split pool is empty (e.g., running_tap.wav is
+            // missing from the archive), fall back to the full background file list
+            // so we emit silence samples instead of collapsing the class to size 0.
+            if (_backgroundNoiseFiles.Count == 0) _backgroundNoiseFiles = allBgFiles;
+
+            // Split sizes from Warden 2018 §4 (TFDS reference, 12-class benchmark):
+            // train ≈ 85,511, val ≈ 10,102, test ≈ 4,890. Scale silence per split to
+            // preserve the target class ratio across splits.
+            double splitScale = _options.Split switch
+            {
+                DatasetSplit.Validation => 10102.0 / 85511.0,
+                DatasetSplit.Test       => 4890.0 / 85511.0,
+                _                       => 1.0,
+            };
+            int silenceCount = (int)Math.Round(_options.SilenceSampleCount * splitScale);
+            if (_options.MaxSamplesPerClass.HasValue)
+                silenceCount = Math.Min(silenceCount, _options.MaxSamplesPerClass.Value);
+
             for (int i = 0; i < silenceCount; i++)
             {
                 _samples.Add(new SampleEntry(string.Empty, _silenceClassIndex, SampleSource.Silence, syntheticIndex: i));
