@@ -31,8 +31,9 @@ namespace AiDotNet.Data.Audio.Benchmarks;
 /// <see cref="ExtractBatch"/>. This is intentional: the full 35-class dataset would
 /// allocate ~4 GB of float32 features in memory, so eager loading was guaranteed to OOM.
 /// Use <see cref="GetBatches"/> / <see cref="GetBatchesAsync"/> for training; direct
-/// <see cref="Features"/>/<see cref="Labels"/> access on this loader is intentionally
-/// not supported.
+/// <see cref="Features"/> access on this loader is intentionally not supported (features
+/// are decoded lazily per batch). <see cref="Labels"/> is a small <c>[N, numClasses]</c>
+/// one-hot tensor and is materialized during <c>LoadAsync</c>, so it remains available.
 /// </para>
 /// <para>
 /// <b>Class scheme:</b> the "core" 12-class subset (default) follows Warden 2018:
@@ -133,7 +134,12 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
     public int NumClasses => _numClasses;
 
     /// <summary>Gets the word list being used (10/35 word names plus the two synthetic labels in core mode).</summary>
-    public IReadOnlyList<string> WordList => _wordList;
+    /// <remarks>
+    /// Wrapped via <see cref="Array.AsReadOnly{T}(T[])"/> so callers can't downcast back to
+    /// <c>string[]</c> and mutate the canonical class ordering — that would corrupt the
+    /// directory→class-index mapping for every loader instance.
+    /// </remarks>
+    public IReadOnlyList<string> WordList => Array.AsReadOnly(_wordList);
 
     /// <summary>Creates a new Speech Commands data loader.</summary>
     public SpeechCommandsDataLoader(SpeechCommandsDataLoaderOptions? options = null)
@@ -211,7 +217,11 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
             string wordDir = Path.Combine(_dataPath, word);
             if (!Directory.Exists(wordDir)) continue;
 
-            foreach (string wavFile in Directory.GetFiles(wordDir, "*.wav"))
+            // EnumerateFiles so the `break` below can short-circuit the directory
+            // scan once MaxSamplesPerClass is hit; GetFiles would materialize the
+            // entire file list up-front (tens of thousands of paths for some classes)
+            // regardless of how many we actually keep.
+            foreach (string wavFile in Directory.EnumerateFiles(wordDir, "*.wav"))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!IsInRequestedSplit(wavFile, word, testFiles, valFiles))
@@ -221,9 +231,7 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
                     classCounts[c] >= _options.MaxSamplesPerClass.Value)
                 {
                     // Cap reached for this class — stop scanning the rest of the
-                    // directory (tens of thousands of files for some classes).
-                    // `continue` here would keep iterating the full Directory.GetFiles
-                    // result set, wasting IO and startup time for no benefit.
+                    // directory.
                     break;
                 }
 
@@ -242,7 +250,9 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
                 string wordDir = Path.Combine(_dataPath, nonCoreWord);
                 if (!Directory.Exists(wordDir)) continue;
 
-                foreach (string wavFile in Directory.GetFiles(wordDir, "*.wav"))
+                // EnumerateFiles so the cap-reached break can short-circuit, same
+                // rationale as the keyword loop above.
+                foreach (string wavFile in Directory.EnumerateFiles(wordDir, "*.wav"))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     if (!IsInRequestedSplit(wavFile, nonCoreWord, testFiles, valFiles))
@@ -277,6 +287,19 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
             var allBgFiles = Directory.Exists(bgDir)
                 ? Directory.GetFiles(bgDir, "*.wav").ToList()
                 : new List<string>();
+
+            // Fail fast if the whole _background_noise_ pool is missing — silently
+            // emitting zero-filled silence would turn an incomplete dataset into a
+            // different benchmark without the caller noticing. The per-split pool
+            // can still fall back to the full set when one designated file is
+            // missing (handled below); this check only guards the all-empty case.
+            if (allBgFiles.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Speech Commands core mode requires at least one WAV under '{bgDir}' " +
+                    "to synthesize '_silence_' samples. Re-download the dataset or disable " +
+                    "the silence class by setting SilenceSampleCount to 0.");
+            }
 
             const string ValidationBackgroundFile = "running_tap.wav";
             bool IsValidationBg(string path) => string.Equals(
@@ -381,6 +404,10 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
         Indices = null;
         _samples.Clear();
         _backgroundNoiseFiles = null;
+        // Decoded background-noise clips can be ~30s of float32 audio each. Clearing
+        // the cache here ensures Unload() actually releases the largest buffers and
+        // prevents stale audio from being reused if the dataset changes on disk.
+        _backgroundNoiseBuffers.Clear();
         _sampleCount = 0;
     }
 
