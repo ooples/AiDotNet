@@ -1751,6 +1751,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         _parameterBuffer = null;
         Training.TapeTrainingStep<T>.InvalidateCache();
         InvalidateLayerInfoCache();
+        // Layer structure changed — any compiled inference plan captured from the
+        // prior layer graph is stale. Drop the cache so the next Predict call
+        // re-traces and recompiles against the new layer structure.
+        _compiledInferenceCache?.Invalidate();
     }
 
     /// <summary>
@@ -2070,11 +2074,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <param name="input">The input data to process.</param>
     /// <returns>The network's prediction.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> This is the main method you'll use to get results from your trained neural network. 
-    /// You provide some input data (like an image or text), and the network processes it through all its 
+    /// <b>For Beginners:</b> This is the main method you'll use to get results from your trained neural network.
+    /// You provide some input data (like an image or text), and the network processes it through all its
     /// layers to produce an output (like a classification or prediction).
+    /// <para>
+    /// The default implementation routes through the compiled inference path
+    /// (<see cref="PredictCompiled"/>), which auto-compiles the forward pass on the first call and replays
+    /// the compiled plan on subsequent calls for near-zero overhead. On compilation failure it falls back
+    /// to eager execution via <see cref="PredictEager"/>. The call is wrapped in a <see cref="NoGradScope{T}"/>
+    /// so inference never records onto the gradient tape (matches PyTorch <c>torch.no_grad()</c> semantics).
+    /// </para>
+    /// <para>
+    /// Subclasses that need custom inference behavior (e.g., diffusion models that run a multi-step
+    /// denoising loop, GANs that sample from a generator, networks that produce structured outputs) should
+    /// override this method. Subclasses whose inference is just a flat forward pass through Layers should
+    /// leave the default in place to pick up compiled replay automatically.
+    /// </para>
     /// </remarks>
-    public abstract Tensor<T> Predict(Tensor<T> input);
+    public virtual Tensor<T> Predict(Tensor<T> input)
+    {
+        using var _ = new NoGradScope<T>();
+        return PredictCompiled(input);
+    }
 
     /// <summary>
     /// Runs the forward pass through all layers WITHOUT suppressing tape recording.
@@ -2801,6 +2822,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             _parameterBuffer = null;
             _layerStructureVersion++;
+            // Invalidate the compiled inference cache — the layer graph changed
+            // (e.g., lazy init resized a weight tensor), so any plan traced
+            // before is now pointing at dead tensor references.
+            _compiledInferenceCache?.Invalidate();
         }
     }
 
