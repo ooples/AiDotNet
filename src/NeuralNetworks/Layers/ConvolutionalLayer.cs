@@ -1315,11 +1315,14 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// This provides access to all the "knowledge" the layer has learned.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _kernels.Length + _biases.Shape[0];
+    public override int ParameterCount => _isInitialized
+        ? _kernels.Length + _biases.Shape[0]
+        : OutputDepth * InputDepth * KernelSize * KernelSize + OutputDepth;
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
+        EnsureInitialized();
         // Bulk copy from contiguous tensor storage — replaces 4-nested scalar loops
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_kernels.Data),
@@ -1339,6 +1342,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// <returns>A vector containing all parameter gradients (kernel gradients followed by bias gradients).</returns>
     public override Vector<T> GetParameterGradients()
     {
+        EnsureInitialized();
         // If gradients haven't been computed yet, return zero gradients
         if (_kernelsGradient == null || _biasesGradient == null)
         {
@@ -1377,6 +1381,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureInitialized();
         int kernelLen = _kernels.Length;
         int biasLen = _biases.Shape[0];
         if (parameters.Length != kernelLen + biasLen)
