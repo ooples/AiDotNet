@@ -725,6 +725,10 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // Reinitialize _lastInput and _lastOutput
         _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+
+        // Mark as initialized so EnsureInitialized() doesn't re-randomize the
+        // just-deserialized weights on the next Forward/GetParameters call.
+        _isInitialized = true;
     }
 
     /// <summary>
