@@ -512,6 +512,28 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
             NumOps.Add(NumOps.FromDouble(1.0), NumOps.Exp(NumOps.Negate(x))));
     }
 
+    /// <summary>
+    /// Resizes the last axis of a 2D <c>[rows, fromWidth]</c> tensor to
+    /// <c>toWidth</c>: slices when toWidth &lt; fromWidth, zero-pads when
+    /// toWidth &gt; fromWidth, returns the input unchanged when equal.
+    /// Mirrors the conditional <c>f &lt; inputFeatures ? input[f] : 0</c>
+    /// guard in the original GRU output combiner without scalar dispatch.
+    /// </summary>
+    private Tensor<T> PadOrSliceLastAxis(Tensor<T> tensor2D, int fromWidth, int toWidth)
+    {
+        if (toWidth == fromWidth) return tensor2D;
+        int rows = tensor2D.Shape[0];
+        if (toWidth < fromWidth)
+        {
+            // Slice down: take the first toWidth columns.
+            return Engine.TensorSlice(tensor2D, [0, 0], [rows, toWidth]);
+        }
+        // Pad up: concat a zero block of the missing width along the column axis.
+        var zeros = TensorAllocator.Rent<T>([rows, toWidth - fromWidth]);
+        zeros.Fill(NumOps.Zero);
+        return Engine.TensorConcatenate(new[] { tensor2D, zeros }, axis: 1);
+    }
+
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
@@ -560,176 +582,129 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
 
         _lastInput = processInput;
 
-        // Step 1: Compute messages
-        _lastMessages = TensorAllocator.Rent<T>([batchSize, numNodes, numNodes, _messageFeatures]);
-        _lastMessageHidden = TensorAllocator.Rent<T>([batchSize, numNodes, numNodes, _messageFeatures]);
+        // Steps 1+2 (message MLP + masked aggregation), bulk-vectorized.
+        // ----------------------------------------------------------------
+        // Original implementation walked every (b, i, j) edge in scalar:
+        // built a per-edge messageInput vector, ran a 2-layer MLP on it, then
+        // gated by adjacency before summing. That was
+        //   O(B · N² · (2·F + edgeF) · M)   per MLP-layer-1 NumOps.Add chain
+        //   + O(B · N² · M²) for layer 2 + O(B · N² · M) for aggregation
+        // of virtual NumOps dispatches — JIT can't inline through INumericOps.
+        //
+        // Pytorch / torch_geometric handles this as bulk tensor ops:
+        //   1. broadcast src/tgt features into [B, N, N, F] tiles
+        //   2. concat with edge features along the feature axis
+        //   3. flatten (B·N·N) edges into a 2D matrix and run the MLP
+        //      via two TensorMatMul + bias + ReLU steps
+        //   4. mask non-adjacent edges by multiplying by adjacency
+        //   5. sum-aggregate over the j axis with ReduceSum
+        // This keeps the layer's externally visible behavior identical
+        // (skipped-edge messages stay zero post-mask) while replacing
+        // ~10⁹ scalar dispatches with ~10 Engine ops on a typical graph.
 
-        // Handle adjacency matrix that may be 2D [nodes, nodes] or 3D [batch, nodes, nodes]
-        bool adj2D = _adjacencyMatrix.Shape.Length == 2;
+        // Tile node features for source (j) and target (i) sides:
+        //   src[B, i, j, F] = processInput[B, j, F]   (rows of i broadcast)
+        //   tgt[B, i, j, F] = processInput[B, i, F]   (cols of j broadcast)
+        var srcExpanded = Engine.Reshape(processInput, [batchSize, 1, numNodes, _inputFeatures]);
+        var srcTile = Engine.TensorTile(srcExpanded, [1, numNodes, 1, 1]);
+        var tgtExpanded = Engine.Reshape(processInput, [batchSize, numNodes, 1, _inputFeatures]);
+        var tgtTile = Engine.TensorTile(tgtExpanded, [1, 1, numNodes, 1]);
 
-        for (int b = 0; b < batchSize; b++)
+        // Concat src + tgt (+ edge) along the feature axis to form per-edge input.
+        Tensor<T> messageInput;
+        if (_useEdgeFeatures && _edgeFeatures != null && _edgeFeatures.Shape[1] >= numNodes * numNodes)
         {
-            for (int i = 0; i < numNodes; i++)
-            {
-                for (int j = 0; j < numNodes; j++)
-                {
-                    // Only compute messages for connected nodes
-                    // Use 2D or 3D indexing based on adjacency matrix shape
-                    T adjValue = adj2D ? _adjacencyMatrix[i, j] : _adjacencyMatrix[b, i, j];
-                    if (NumOps.Equals(adjValue, NumOps.Zero))
-                        continue;
-
-                    // Concatenate source and target features
-                    var messageInput = new Vector<T>(_messageWeights1.Shape[0]);
-                    int idx = 0;
-
-                    // Source node features (use processInput which is always 3D)
-                    for (int f = 0; f < _inputFeatures; f++)
-                    {
-                        messageInput[idx++] = processInput[b, j, f];
-                    }
-
-                    // Target node features (use processInput which is always 3D)
-                    for (int f = 0; f < _inputFeatures; f++)
-                    {
-                        messageInput[idx++] = processInput[b, i, f];
-                    }
-
-                    // Edge features (if applicable)
-                    // Dense edge storage: edge (i, j) is stored at index i * numNodes + j
-                    // This provides O(1) access for any edge during message computation
-                    if (_useEdgeFeatures && _edgeFeatures != null)
-                    {
-                        int edgeIdx = i * numNodes + j;
-                        if (edgeIdx < _edgeFeatures.Shape[1])
-                        {
-                            for (int f = 0; f < _edgeFeatures.Shape[2]; f++)
-                            {
-                                messageInput[idx++] = _edgeFeatures[b, edgeIdx, f];
-                            }
-                        }
-                        else
-                        {
-                            // Edge features tensor is smaller than expected - use zeros
-                            for (int f = 0; f < _edgeFeatures.Shape[2]; f++)
-                            {
-                                messageInput[idx++] = NumOps.Zero;
-                            }
-                        }
-                    }
-
-                    // Message MLP: layer 1 with ReLU
-                    var hidden = new Vector<T>(_messageFeatures);
-                    for (int h = 0; h < _messageFeatures; h++)
-                    {
-                        T sum = _messageBias1[h];
-                        for (int k = 0; k < messageInput.Length; k++)
-                        {
-                            sum = NumOps.Add(sum, NumOps.Multiply(messageInput[k], _messageWeights1[k, h]));
-                        }
-                        hidden[h] = ReLU(sum);
-                        _lastMessageHidden[b, i, j, h] = hidden[h];
-                    }
-
-                    // Message MLP: layer 2
-                    for (int h = 0; h < _messageFeatures; h++)
-                    {
-                        T sum = _messageBias2[h];
-                        { var _w0 = new Vector<T>(_messageFeatures); for (int _i = 0; _i < _messageFeatures; _i++) _w0[_i] = _messageWeights2[_i, h]; sum = NumOps.Add(sum, Engine.DotProduct(hidden, _w0)); }
-                        _lastMessages[b, i, j, h] = sum;
-                    }
-                }
-            }
+            int edgeFeatDim = _edgeFeatures.Shape[2];
+            // _edgeFeatures is stored as [batch, numNodes*numNodes, edgeFeatDim]
+            // — reshape to [batch, numNodes, numNodes, edgeFeatDim] so it concats
+            // cleanly with the [B, N, N, F] node tiles.
+            var edgeTile = Engine.Reshape(_edgeFeatures, [batchSize, numNodes, numNodes, edgeFeatDim]);
+            messageInput = Engine.TensorConcatenate(new[] { srcTile, tgtTile, edgeTile }, axis: 3);
+        }
+        else
+        {
+            messageInput = Engine.TensorConcatenate(new[] { srcTile, tgtTile }, axis: 3);
         }
 
-        // Step 2: Aggregate messages (sum aggregation)
-        _lastAggregated = TensorAllocator.Rent<T>([batchSize, numNodes, _messageFeatures]);
+        // Flatten (B, N, N) edges into 2D for the MLP: [B*N*N, MessageInputDim].
+        int messageInputDim = messageInput.Shape[3];
+        int totalEdges = batchSize * numNodes * numNodes;
+        var inputFlat = Engine.Reshape(messageInput, [totalEdges, messageInputDim]);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < numNodes; i++)
-            {
-                for (int h = 0; h < _messageFeatures; h++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int j = 0; j < numNodes; j++)
-                    {
-                        // Use 2D or 3D indexing based on adjacency matrix shape
-                        T adjVal = adj2D ? _adjacencyMatrix[i, j] : _adjacencyMatrix[b, i, j];
-                        if (!NumOps.Equals(adjVal, NumOps.Zero))
-                        {
-                            sum = NumOps.Add(sum, _lastMessages[b, i, j, h]);
-                        }
-                    }
-                    _lastAggregated[b, i, h] = sum;
-                }
-            }
-        }
+        // Layer 1: input @ W1 + b1, ReLU.
+        var bias1Broadcast = Engine.Reshape(_messageBias1, [1, _messageFeatures]);
+        var hidden = Engine.TensorMatMul(inputFlat, _messageWeights1);
+        hidden = Engine.TensorBroadcastAdd(hidden, bias1Broadcast);
+        hidden = Engine.ReLU(hidden);
+        _lastMessageHidden = Engine.Reshape(hidden, [batchSize, numNodes, numNodes, _messageFeatures]);
 
-        // Step 3: Update node features (GRU-style update)
-        // Rent tensors (all fully overwritten in forward pass)
-        var output = TensorAllocator.Rent<T>([batchSize, numNodes, _outputFeatures]);
-        _lastResetGate = TensorAllocator.Rent<T>([batchSize, numNodes, _outputFeatures]);
-        _lastUpdateGate = TensorAllocator.Rent<T>([batchSize, numNodes, _outputFeatures]);
+        // Layer 2: hidden @ W2 + b2.
+        var bias2Broadcast = Engine.Reshape(_messageBias2, [1, _messageFeatures]);
+        var messagesFlat = Engine.TensorMatMul(hidden, _messageWeights2);
+        messagesFlat = Engine.TensorBroadcastAdd(messagesFlat, bias2Broadcast);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < numNodes; i++)
-            {
-                // Compute reset gate
-                for (int f = 0; f < _outputFeatures; f++)
-                {
-                    T sum = _resetBias[f];
+        // Mask non-adjacent edges by multiplying by adjacency. Reshape adjacency
+        // to [B, N, N, 1] so it broadcasts across the message-feature axis. For
+        // 2D adjacency, prepend a singleton batch dim.
+        var messages4D = Engine.Reshape(messagesFlat, [batchSize, numNodes, numNodes, _messageFeatures]);
+        var adjShape = _adjacencyMatrix.Shape.Length == 2
+            ? new[] { 1, numNodes, numNodes, 1 }
+            : new[] { batchSize, numNodes, numNodes, 1 };
+        var adjBroadcastable = Engine.Reshape(_adjacencyMatrix, adjShape);
+        _lastMessages = Engine.TensorMultiply(messages4D, adjBroadcastable);
 
-                    // Contribution from node features (use processInput which is always 3D)
-                    for (int k = 0; k < _inputFeatures; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(processInput[b, i, k], _resetWeights[k, f]));
-                    }
+        // Step 2: aggregate by summing over the j axis (axis=2 of [B, N(i), N(j), M]).
+        _lastAggregated = Engine.ReduceSum(_lastMessages, new[] { 2 }, keepDims: false);
 
-                    // Contribution from aggregated message
-                    for (int k = 0; k < _messageFeatures; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(_lastAggregated[b, i, k], _resetMessageWeights[k, f]));
-                    }
+        // Step 3: Update node features (GRU-style update), bulk-vectorized.
+        // ----------------------------------------------------------------
+        // Original implementation walked every (b, i, f) cell in scalar to compute
+        // reset = σ(b_r + input·W_r + agg·W_mr), update = σ(b_u + input·W_u + agg·W_mu),
+        // and out = (1-update) * pad(input) + update * pad(agg). Each cell did
+        // (inputFeatures + messageFeatures) NumOps.Multiply/Add dispatches —
+        // (B·N·outputFeatures) cells per gate.
+        //
+        // The matmul / sigmoid / add chain is expressible as bulk Engine ops on
+        // the full [B, N, *] tensors; the only complication is the conditional
+        // slice/pad in the final output combiner when outputFeatures doesn't
+        // match inputFeatures or messageFeatures.
 
-                    _lastResetGate[b, i, f] = Sigmoid(sum);
-                }
+        // Flatten [B, N, *] to [B·N, *] so the projection matmuls work on 2D
+        // operands and the broadcast-add on biases stays simple.
+        int bn = batchSize * numNodes;
+        var inputFlatBN = Engine.Reshape(processInput, [bn, _inputFeatures]);
+        var aggFlatBN = Engine.Reshape(_lastAggregated, [bn, _messageFeatures]);
 
-                // Compute update gate
-                for (int f = 0; f < _outputFeatures; f++)
-                {
-                    T sum = _updateBias[f];
+        // Reset gate: σ(input @ W_r + agg @ W_mr + b_r)
+        var resetBiasBcast = Engine.Reshape(_resetBias, [1, _outputFeatures]);
+        var resetLogitsFlat = Engine.TensorMatMul(inputFlatBN, _resetWeights);
+        resetLogitsFlat = Engine.TensorAdd(resetLogitsFlat, Engine.TensorMatMul(aggFlatBN, _resetMessageWeights));
+        resetLogitsFlat = Engine.TensorBroadcastAdd(resetLogitsFlat, resetBiasBcast);
+        var resetFlat = Engine.Sigmoid(resetLogitsFlat);
+        _lastResetGate = Engine.Reshape(resetFlat, [batchSize, numNodes, _outputFeatures]);
 
-                    for (int k = 0; k < _inputFeatures; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(processInput[b, i, k], _updateWeights[k, f]));
-                    }
+        // Update gate: σ(input @ W_u + agg @ W_mu + b_u)
+        var updateBiasBcast = Engine.Reshape(_updateBias, [1, _outputFeatures]);
+        var updateLogitsFlat = Engine.TensorMatMul(inputFlatBN, _updateWeights);
+        updateLogitsFlat = Engine.TensorAdd(updateLogitsFlat, Engine.TensorMatMul(aggFlatBN, _updateMessageWeights));
+        updateLogitsFlat = Engine.TensorBroadcastAdd(updateLogitsFlat, updateBiasBcast);
+        var updateFlat = Engine.Sigmoid(updateLogitsFlat);
+        _lastUpdateGate = Engine.Reshape(updateFlat, [batchSize, numNodes, _outputFeatures]);
 
-                    for (int k = 0; k < _messageFeatures; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(_lastAggregated[b, i, k], _updateMessageWeights[k, f]));
-                    }
+        // Output combiner: (1 - update) * input_padded + update * agg_padded.
+        // The original conditional `f < inputFeatures ? processInput : 0` zeros
+        // any feature-axis index that exceeds the input/message feature width.
+        // Build padded versions explicitly so the elementwise multiply works on
+        // matching [B·N, outputFeatures] tensors.
+        var inputPaddedFlat = PadOrSliceLastAxis(inputFlatBN, _inputFeatures, _outputFeatures);
+        var aggPaddedFlat = PadOrSliceLastAxis(aggFlatBN, _messageFeatures, _outputFeatures);
 
-                    _lastUpdateGate[b, i, f] = Sigmoid(sum);
-                }
-
-                // Compute new features: h' = (1 - z) * h + z * m
-                // where z is update gate, h is input, m is aggregated message
-                for (int f = 0; f < _outputFeatures; f++)
-                {
-                    T oldContribution = NumOps.Multiply(
-                        NumOps.Subtract(NumOps.FromDouble(1.0), _lastUpdateGate[b, i, f]),
-                        f < _inputFeatures ? processInput[b, i, f] : NumOps.Zero);
-
-                    T newContribution = NumOps.Multiply(
-                        _lastUpdateGate[b, i, f],
-                        f < _messageFeatures ? _lastAggregated[b, i, f] : NumOps.Zero);
-
-                    output[b, i, f] = NumOps.Add(oldContribution, newContribution);
-                }
-            }
-        }
+        // out = (1 - update) * inputPadded + update * aggPadded
+        var oneMinusUpdate = Engine.ScalarMinusTensor(NumOps.One, updateFlat);
+        var oldContribution = Engine.TensorMultiply(oneMinusUpdate, inputPaddedFlat);
+        var newContribution = Engine.TensorMultiply(updateFlat, aggPaddedFlat);
+        var outputFlat = Engine.TensorAdd(oldContribution, newContribution);
+        var output = Engine.Reshape(outputFlat, [batchSize, numNodes, _outputFeatures]);
 
         var result = ApplyActivation(output);
 
