@@ -1028,38 +1028,45 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         int outputHeight = CalculateOutputDimension(inputHeight, _kernelSize, _stride, _padding);
         int outputWidth = CalculateOutputDimension(inputWidth, _kernelSize, _stride, _padding);
 
-        var output = TensorAllocator.Rent<T>([batchSize, outputHeight, outputWidth, _inputDepth]);
+        // Depthwise = each input channel is convolved with its own [KH, KW] kernel
+        // independently. Engine.Conv2D applies one kernel to all input channels at
+        // once, so depthwise becomes _inputDepth single-channel Conv2D calls plus
+        // one final concat. Each per-channel call dispatches the SIMD/GPU
+        // convolution kernel — vastly faster than the prior O(B·H·W·IC·KH·KW)
+        // scalar NumOps.Multiply nest.
+        //
+        // Layout: input is NHWC [B, H, W, IC]. Permute once to NCHW [B, IC, H, W]
+        // so the per-channel slice is contiguous, then per-channel conv:
+        //   sliceC: [B, 1, H, W]   (the c-th channel for every batch item)
+        //   kernelC: [1, 1, KH, KW] (the c-th depthwise kernel)
+        //   convC: [B, 1, H', W']  (Engine.Conv2D vectorized over batch+spatial)
+        // Concat all per-channel results along the channel axis → [B, IC, H', W'],
+        // permute back to NHWC.
+        var inputNCHW = Engine.TensorPermute(input, new[] { 0, 3, 1, 2 });
+        var perChannelOutputs = new Tensor<T>[_inputDepth];
+        var stride = new[] { _stride, _stride };
+        var padding = new[] { _padding, _padding };
+        var dilation = new[] { 1, 1 };
 
-        for (int b = 0; b < batchSize; b++)
+        for (int c = 0; c < _inputDepth; c++)
         {
-            for (int c = 0; c < _inputDepth; c++)
-            {
-                for (int oh = 0; oh < outputHeight; oh++)
-                {
-                    for (int ow = 0; ow < outputWidth; ow++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int kh = 0; kh < _kernelSize; kh++)
-                        {
-                            for (int kw = 0; kw < _kernelSize; kw++)
-                            {
-                                int ih = oh * _stride + kh - _padding;
-                                int iw = ow * _stride + kw - _padding;
+            // Slice channel c: [B, IC, H, W] → [B, 1, H, W]
+            var sliceStart = new[] { 0, c, 0, 0 };
+            var sliceLen = new[] { batchSize, 1, inputHeight, inputWidth };
+            var channelInput = Engine.TensorSlice(inputNCHW, sliceStart, sliceLen);
 
-                                if (ih >= 0 && ih < inputHeight && iw >= 0 && iw < inputWidth)
-                                {
-                                    sum = NumOps.Add(sum, NumOps.Multiply(input[b, ih, iw, c], _depthwiseKernels[c, 0, kh, kw]));
-                                }
-                            }
-                        }
+            // Slice kernel c: [IC, 1, KH, KW] → [1, 1, KH, KW]
+            var kStart = new[] { c, 0, 0, 0 };
+            var kLen = new[] { 1, 1, _kernelSize, _kernelSize };
+            var channelKernel = Engine.TensorSlice(_depthwiseKernels, kStart, kLen);
 
-                        output[b, oh, ow, c] = sum;
-                    }
-                }
-            }
+            perChannelOutputs[c] = Engine.Conv2D(channelInput, channelKernel, stride, padding, dilation);
         }
 
-        return output;
+        // Concat per-channel outputs along channel axis (axis=1 in NCHW).
+        var outputNCHW = Engine.TensorConcatenate(perChannelOutputs, axis: 1);
+        // Permute back to NHWC [B, H', W', IC]
+        return Engine.TensorPermute(outputNCHW, new[] { 0, 2, 3, 1 });
     }
 
     /// <summary>

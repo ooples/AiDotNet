@@ -936,7 +936,6 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     {
         // Rent attention tensors — all fully overwritten in forward pass
         var headOutputs = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]);
-        // Attention weights need zero init (sparse graphs don't fill all entries)
         _lastAttentionWeights = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, numNodes]);
 
         // Q, K, V are fully overwritten per head — safe to rent
@@ -944,130 +943,83 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         _lastKeys = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]);
         _lastValues = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]);
 
-        T sqrtDk = NumOps.Sqrt(NumOps.FromDouble(_headDim));
+        // Attention scale factor: 1/sqrt(d_k). Compute as a scalar Multiply factor
+        // so we can use Engine.TensorMultiplyScalar instead of per-element Divide.
+        T invSqrtDk = NumOps.FromDouble(1.0 / Math.Sqrt(_headDim));
+        T maskNeg = NumOps.FromDouble(-1e9);
+        T maskScale = NumOps.FromDouble(1e9);
+
+        // Build the additive adjacency mask once if we'll need it. Encoding is
+        // (adj * 1e9 - 1e9): where adj=1 → 0 (no penalty); where adj=0 → -1e9
+        // (drives softmax weight to ~0). Replaces per-element `if adj==0:
+        // score = -inf` branch + softmax-with-skip logic. Engine.TensorBroadcastAdd
+        // handles [1, N, N] → [B, N, N] broadcast for 2D adjacency.
+        Tensor<T>? additiveMask = null;
+        if (_useStructuralEncoding && _adjacencyMatrix != null)
+        {
+            var adj3D = _adjacencyMatrix.Shape.Length == 2
+                ? Engine.Reshape(_adjacencyMatrix, [1, numNodes, numNodes])
+                : _adjacencyMatrix;
+            var adjScaled = Engine.TensorMultiplyScalar(adj3D, maskScale);
+            additiveMask = Engine.TensorAddScalar(adjScaled, NumOps.Negate(maskScale));
+        }
 
         for (int h = 0; h < _numHeads; h++)
         {
             // Compute Q, K, V for this head using batched matmul
-            // Extract weight slices for this head: [inputFeatures, headDim]
             var qWeightSlice = ExtractHeadWeights(_queryWeights, h);
             var kWeightSlice = ExtractHeadWeights(_keyWeights, h);
             var vWeightSlice = ExtractHeadWeights(_valueWeights, h);
 
-            // Compute Q = input @ W_q: [batch, numNodes, inputFeatures] @ [inputFeatures, headDim]
             var queries = BatchedMatMul3Dx2D(input, qWeightSlice, batchSize, numNodes, _inputFeatures, _headDim);
             var keys = BatchedMatMul3Dx2D(input, kWeightSlice, batchSize, numNodes, _inputFeatures, _headDim);
             var values = BatchedMatMul3Dx2D(input, vWeightSlice, batchSize, numNodes, _inputFeatures, _headDim);
 
-            // Store for backward pass
-            for (int b = 0; b < batchSize; b++)
+            // Compute attention scores: Q @ K^T / sqrt(d_k). Replaces the per-
+            // (b, i, j, d) scalar-NumOps inner quad-loop with one batched matmul
+            // and a vectorized scalar multiply.
+            //   queries: [B, N, D],  K^T: [B, D, N]  →  scores: [B, N, N]
+            var keysT = Engine.TensorPermute(keys, [0, 2, 1]);
+            var scores = Engine.TensorMatMul(queries, keysT);
+            scores = Engine.TensorMultiplyScalar(scores, invSqrtDk);
+
+            // Add structural bias for this head: slice [numHeads, N, N] → [1, N, N],
+            // broadcast-add over the batch dim. The previous code added per-element
+            // inside the inner loop.
+            if (_useStructuralEncoding && _structuralBias != null)
             {
-                for (int n = 0; n < numNodes; n++)
-                {
-                    for (int d = 0; d < _headDim; d++)
-                    {
-                        _lastQueries[b, h, n, d] = queries[b, n, d];
-                        _lastKeys[b, h, n, d] = keys[b, n, d];
-                        _lastValues[b, h, n, d] = values[b, n, d];
-                    }
-                }
+                var biasH = Engine.TensorSlice(_structuralBias, [h, 0, 0], [1, numNodes, numNodes]);
+                scores = Engine.TensorBroadcastAdd(scores, biasH);
             }
 
-            // Compute attention scores: Q * K^T / sqrt(d_k)
-            // For each batch, compute: [numNodes, headDim] @ [headDim, numNodes] = [numNodes, numNodes]
-            for (int b = 0; b < batchSize; b++)
+            // Apply adjacency mask via additive penalty (precomputed above).
+            if (additiveMask != null)
             {
-                // Extract Q and K for this batch
-                var qBatch = queries.Reshape([batchSize, numNodes, _headDim]);
-                var kBatch = keys.Reshape([batchSize, numNodes, _headDim]);
+                scores = Engine.TensorBroadcastAdd(scores, additiveMask);
+            }
 
-                // Transpose K: [numNodes, headDim] -> [headDim, numNodes]
+            // Softmax over the last axis (j-dimension) — fused mean/exp/normalize.
+            var attnWeights = Engine.Softmax(scores);
+
+            // attn @ V: [B, N, N] @ [B, N, D] → [B, N, D]. Replaces the per-
+            // (b, i, d, j) scalar accumulation loop with one batched matmul.
+            var headOut = Engine.TensorMatMul(attnWeights, values);
+
+            // Store per-head Q/K/V/attn/output into the 4D caches at slot h.
+            // The scatter into [B, H, N, D] still needs explicit writes since
+            // there's no dest-slice-write Engine op — but this is bounded to
+            // O(B·N·D) per head, vs the O(B·N²·D) attention compute that just
+            // collapsed to two Engine ops above.
+            ScatterHeadSlice(_lastQueries, queries, h, batchSize, numNodes, _headDim);
+            ScatterHeadSlice(_lastKeys, keys, h, batchSize, numNodes, _headDim);
+            ScatterHeadSlice(_lastValues, values, h, batchSize, numNodes, _headDim);
+            ScatterHeadSlice(headOutputs, headOut, h, batchSize, numNodes, _headDim);
+
+            // Attention weights are [B, N, N] not [B, N, D]; separate scatter.
+            for (int b = 0; b < batchSize; b++)
                 for (int i = 0; i < numNodes; i++)
-                {
                     for (int j = 0; j < numNodes; j++)
-                    {
-                        T score = NumOps.Zero;
-                        for (int d = 0; d < _headDim; d++)
-                        {
-                            score = NumOps.Add(score, NumOps.Multiply(qBatch[b, i, d], kBatch[b, j, d]));
-                        }
-
-                        score = NumOps.Divide(score, sqrtDk);
-
-                        // Add structural bias if enabled
-                        if (_useStructuralEncoding && _structuralBias != null)
-                        {
-                            score = NumOps.Add(score, _structuralBias[h, i, j]);
-                        }
-
-                        // Mask non-adjacent nodes (optional - can be commented out for full attention)
-                        if (_useStructuralEncoding && _adjacencyMatrix != null)
-                        {
-                            // Handle both 2D [N, N] and 3D [B, N, N] adjacency matrices
-                            T adjValue = _adjacencyMatrix.Shape.Length == 2
-                                ? _adjacencyMatrix[new int[] { i, j }]
-                                : _adjacencyMatrix[new int[] { b, i, j }];
-                            if (NumOps.Equals(adjValue, NumOps.Zero))
-                            {
-                                score = NumOps.MinValue;
-                            }
-                        }
-
-                        _lastAttentionWeights[b, h, i, j] = score;
-                    }
-
-                    // Softmax over attention scores for row i
-                    T maxScore = NumOps.MinValue;
-                    for (int j = 0; j < numNodes; j++)
-                    {
-                        if (NumOps.GreaterThan(_lastAttentionWeights[b, h, i, j], maxScore))
-                            maxScore = _lastAttentionWeights[b, h, i, j];
-                    }
-
-                    T sumExp = NumOps.Zero;
-                    for (int j = 0; j < numNodes; j++)
-                    {
-                        if (!double.IsNegativeInfinity(NumOps.ToDouble(_lastAttentionWeights[b, h, i, j])))
-                        {
-                            T expVal = NumOps.Exp(NumOps.Subtract(_lastAttentionWeights[b, h, i, j], maxScore));
-                            _lastAttentionWeights[b, h, i, j] = expVal;
-                            sumExp = NumOps.Add(sumExp, expVal);
-                        }
-                        else
-                        {
-                            _lastAttentionWeights[b, h, i, j] = NumOps.Zero;
-                        }
-                    }
-
-                    // Guard against division by zero
-                    if (NumOps.Equals(sumExp, NumOps.Zero))
-                    {
-                        sumExp = NumOps.FromDouble(1e-10);
-                    }
-
-                    for (int j = 0; j < numNodes; j++)
-                    {
-                        _lastAttentionWeights[b, h, i, j] = NumOps.Divide(_lastAttentionWeights[b, h, i, j], sumExp);
-                    }
-                }
-            }
-
-            // Apply attention to values: attn @ V
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int i = 0; i < numNodes; i++)
-                {
-                    for (int d = 0; d < _headDim; d++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int j = 0; j < numNodes; j++)
-                        {
-                            sum = NumOps.Add(sum, NumOps.Multiply(_lastAttentionWeights[b, h, i, j], _lastValues[b, h, j, d]));
-                        }
-                        headOutputs[b, h, i, d] = sum;
-                    }
-                }
-            }
+                        _lastAttentionWeights[b, h, i, j] = attnWeights[b, i, j];
         }
 
         _lastHeadOutputs = headOutputs;
@@ -1121,6 +1073,21 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         var flattened = input3D.Reshape([batch * rows, cols]);
         var result = Engine.TensorMatMul(flattened, weights2D);
         return result.Reshape([batch, rows, outputCols]);
+    }
+
+    /// <summary>
+    /// Writes a per-head [batch, rows, cols] tensor into the h-th slice of a
+    /// 4D destination [batch, numHeads, rows, cols]. There's no Engine
+    /// "set-slice" op; the writes are done element-wise but bounded to
+    /// O(B·rows·cols) per head — small relative to the attention compute that
+    /// the surrounding refactor offloaded to Engine.TensorMatMul.
+    /// </summary>
+    private static void ScatterHeadSlice(Tensor<T> destination4D, Tensor<T> source3D, int headIndex, int batchSize, int rows, int cols)
+    {
+        for (int b = 0; b < batchSize; b++)
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
+                    destination4D[b, headIndex, r, c] = source3D[b, r, c];
     }
 
     private Tensor<T> BroadcastBias(Tensor<T> bias, int batchSize, int numNodes)
