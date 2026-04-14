@@ -2456,10 +2456,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected void TrainWithTape(Tensor<T> input, Tensor<T> expected,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
-        // Initialize parameter buffer — replaces layer tensors with buffer-backed views.
-        // try/finally MUST cover this so views are restored even if setup throws.
-        var initialParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _parameterBuffer is null ? -1 : _layerStructureVersion);
-        var paramBuffer = GetOrCreateParameterBuffer(initialParams);
+        // The parameter walk here exists only to size the buffer on first Train()
+        // call. On every subsequent call the buffer is already the right size, and
+        // GetOrCreateParameterBuffer short-circuits to return it. Skipping the
+        // pre-swap walk in the steady state saves a full recursive layer traversal
+        // per Train() call — non-trivial on DiT-XL with 28 transformer blocks × the
+        // sub-layers in each. Only walk when we actually need sizing info.
+        ParameterBuffer<T>? paramBuffer;
+        if (_parameterBuffer is null)
+        {
+            var initialParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, structureVersion: -1);
+            paramBuffer = GetOrCreateParameterBuffer(initialParams);
+        }
+        else
+        {
+            paramBuffer = _parameterBuffer;
+        }
 
         try
         {
