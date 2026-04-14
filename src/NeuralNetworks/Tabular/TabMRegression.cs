@@ -156,37 +156,21 @@ public class TabMRegression<T> : TabMBase<T>
         int expandedBatchSize = memberPredictions.Shape[0];
         int batchSize = expandedBatchSize / Options.NumEnsembleMembers;
 
-        var predictions = new Tensor<T>([batchSize, _outputDimension]);
-        var uncertainty = new Tensor<T>([batchSize, _outputDimension]);
+        // Reshape [B*M, OutputDim] → [B, M, OutputDim] and compute mean + std
+        // across the member axis using vectorized Engine reductions. The previous
+        // nested-loop version dispatched B × OutputDim × M × 4 scalar NumOps
+        // calls just to derive the per-batch ensemble statistics.
+        int M = Options.NumEnsembleMembers;
+        var members3D = Engine.Reshape(memberPredictions, new[] { batchSize, M, _outputDimension });
+        var predictions = Engine.ReduceMean(members3D, new[] { 1 }, keepDims: false);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int j = 0; j < _outputDimension; j++)
-            {
-                // Compute mean
-                var mean = NumOps.Zero;
-                for (int m = 0; m < Options.NumEnsembleMembers; m++)
-                {
-                    mean = NumOps.Add(mean,
-                        memberPredictions[(b * Options.NumEnsembleMembers + m) * _outputDimension + j]);
-                }
-                mean = NumOps.Divide(mean, NumOps.FromDouble(Options.NumEnsembleMembers));
-
-                // Compute variance
-                var variance = NumOps.Zero;
-                for (int m = 0; m < Options.NumEnsembleMembers; m++)
-                {
-                    var diff = NumOps.Subtract(
-                        memberPredictions[(b * Options.NumEnsembleMembers + m) * _outputDimension + j],
-                        mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-                variance = NumOps.Divide(variance, NumOps.FromDouble(Options.NumEnsembleMembers));
-
-                predictions[b * _outputDimension + j] = mean;
-                uncertainty[b * _outputDimension + j] = NumOps.Sqrt(variance);  // Standard deviation
-            }
-        }
+        // Variance = E[(x - μ)²]. Broadcast μ back to [B, 1, OutputDim], subtract,
+        // square, reduce-mean axis 1, then sqrt for std-dev (uncertainty).
+        var meanBroadcast = Engine.Reshape(predictions, new[] { batchSize, 1, _outputDimension });
+        var centered = Engine.TensorSubtract(members3D, meanBroadcast);
+        var squared = Engine.TensorMultiply(centered, centered);
+        var variance = Engine.ReduceMean(squared, new[] { 1 }, keepDims: false);
+        var uncertainty = Engine.TensorSqrt(variance);
 
         _predictionsCache = predictions;
         return (predictions, uncertainty);
@@ -202,15 +186,12 @@ public class TabMRegression<T> : TabMBase<T>
             throw new ArgumentException("Predictions and targets must have the same size");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
+        // MSE = mean((predictions - targets)²). Three vectorized Engine ops
+        // (subtract, multiply, sum) replace the per-element scalar loop that
+        // dispatched 2 × Length virtual NumOps calls.
+        var diff = Engine.TensorSubtract(predictions, targets);
+        var squared = Engine.TensorMultiply(diff, diff);
+        return NumOps.Divide(Engine.TensorSum(squared), NumOps.FromDouble(predictions.Length));
     }
 
     /// <summary>
@@ -223,15 +204,10 @@ public class TabMRegression<T> : TabMBase<T>
             throw new ArgumentException("Predictions and targets must have the same size");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            totalLoss = NumOps.Add(totalLoss, NumOps.Abs(diff));
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
+        // MAE = mean(|predictions - targets|). Vectorized via Engine ops.
+        var diff = Engine.TensorSubtract(predictions, targets);
+        var absDiff = Engine.TensorAbs(diff);
+        return NumOps.Divide(Engine.TensorSum(absDiff), NumOps.FromDouble(predictions.Length));
     }
 
     /// <summary>
