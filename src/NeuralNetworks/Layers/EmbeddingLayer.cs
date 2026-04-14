@@ -92,6 +92,19 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     private Tensor<T> _embeddingTensor;
 
     /// <summary>
+    /// Cached vocabulary size and embedding dimension. Stored as fields rather
+    /// than read from <see cref="_embeddingTensor"/>'s shape so they remain
+    /// authoritative when the tensor is in its zero-sized lazy-init placeholder
+    /// state. Embedding tensors at transformer scale (e.g., BERT vocab 30,522 ×
+    /// dim 768 = ~187 MB per instance) are by far the largest single allocation
+    /// in BGE/SGPT/Matryoshka model construction; deferring it cuts test-time
+    /// memory by hundreds of MB until the first Forward() pass actually runs.
+    /// </summary>
+    private readonly int _vocabularySize;
+    private readonly int _embeddingDimension;
+    private bool _embeddingInitialized = true;
+
+    /// <summary>
     /// Projection weights for continuous input (lazy initialized).
     /// Used when input contains continuous values instead of integer token indices.
     /// </summary>
@@ -235,7 +248,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// </para>
     /// </remarks>
     public override int ParameterCount
-        => _embeddingTensor.Shape[0] * _embeddingTensor.Shape[1] +
+        => _vocabularySize * _embeddingDimension +
            (_projectionWeights?.Length ?? 0);
 
     /// <summary>
@@ -296,11 +309,36 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         AuxiliaryLossWeight = NumOps.FromDouble(0.0001);
         _lastEmbeddingRegularizationLoss = NumOps.Zero;
 
-        _embeddingTensor = new Tensor<T>([vocabularySize, embeddingDimension]);
-        InitializeParameters();
+        _vocabularySize = vocabularySize;
+        _embeddingDimension = embeddingDimension;
 
-        // Register trainable parameters for GPU memory optimization
-        RegisterTrainableParameter(_embeddingTensor, PersistentTensorRole.Embeddings);
+        // Lazy initialization by default — the embedding tensor for transformer-
+        // scale vocabularies dominates per-instance memory cost (BERT 30K vocab ×
+        // 768 dim ≈ 187 MB). Stays at [0,0] until EnsureEmbeddingInitialized()
+        // runs on the first Forward / GetParameters / SetParameters call.
+        _embeddingTensor = new Tensor<T>([0, 0]);
+        _embeddingInitialized = false;
+    }
+
+    /// <summary>
+    /// Materializes the embedding tensor on first access. Cheap no-op after the
+    /// first call. Initialization runs the same SimdRandom-scaled fill the
+    /// constructor used to do eagerly, then registers the tensor with the
+    /// engine for GPU persistence.
+    /// </summary>
+    private void EnsureEmbeddingInitialized()
+    {
+        if (_embeddingInitialized) return;
+
+        lock (InitializationLock)
+        {
+            if (_embeddingInitialized) return;
+
+            _embeddingTensor = new Tensor<T>([_vocabularySize, _embeddingDimension]);
+            InitializeParameters();
+            RegisterTrainableParameter(_embeddingTensor, PersistentTensorRole.Embeddings);
+            _embeddingInitialized = true;
+        }
     }
 
     /// <inheritdoc/>
@@ -310,6 +348,8 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         {
             throw new ArgumentNullException(nameof(tokenIds));
         }
+
+        EnsureEmbeddingInitialized();
 
         int vocabSize = _embeddingTensor.Shape[0];
         int embeddingDim = _embeddingTensor.Shape[1];
@@ -454,6 +494,11 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Materialize the embedding tensor before any lookup runs. Lazy by default
+        // so unused embedding layers in test construction don't pay the multi-MB
+        // allocation up front.
+        EnsureEmbeddingInitialized();
+
         _lastInput = input;
         _originalInputShape = input._shape;
 
@@ -794,6 +839,10 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        // Materialize lazy embedding before reading its data — otherwise we'd
+        // return an empty vector for a freshly-constructed layer.
+        EnsureEmbeddingInitialized();
+
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         var embeddingParams = Vector<T>.FromMemory(_embeddingTensor.Data);
         if (_projectionWeights == null)
@@ -833,8 +882,12 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int vocabSize = _embeddingTensor.Shape[0];
-        int embeddingDim = _embeddingTensor.Shape[1];
+        // SetParameters writes a fresh embedding tensor below; the lazy-init
+        // placeholder is fine to leave as-is here. We use the cached
+        // _vocabularySize / _embeddingDimension fields to size the new tensor
+        // since the placeholder has shape [0,0].
+        int vocabSize = _vocabularySize;
+        int embeddingDim = _embeddingDimension;
         int expectedParams = vocabSize * embeddingDim;
 
         if (parameters.Length < expectedParams)
@@ -842,8 +895,16 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             throw new ArgumentException($"Expected {expectedParams} parameters, but got {parameters.Length}");
         }
 
-        // Restore embeddings without hot-path conversions
+        // Restore embeddings without hot-path conversions. Constructing the
+        // real-sized tensor here also fulfills the lazy-init contract — register
+        // it with the engine and flip _embeddingInitialized so subsequent
+        // EnsureEmbeddingInitialized() calls become no-ops.
         _embeddingTensor = new Tensor<T>([vocabSize, embeddingDim], parameters.Slice(0, expectedParams));
+        if (!_embeddingInitialized)
+        {
+            RegisterTrainableParameter(_embeddingTensor, PersistentTensorRole.Embeddings);
+            _embeddingInitialized = true;
+        }
 
         int projectionCount = parameters.Length - expectedParams;
         if (projectionCount == 0)
