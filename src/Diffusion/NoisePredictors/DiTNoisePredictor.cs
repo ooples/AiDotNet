@@ -328,27 +328,24 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         var patchDim = _inputChannels * _patchSize * _patchSize;
         var timeEmbedDim = _hiddenSize * 4;
 
-        // Always create patch embedding, time embedding, and final layers
-        _patchEmbed = new DenseLayer<T>(patchDim, _hiddenSize, activationFunction: null);
+        // Always create patch embedding, time embedding, and final layers. Use
+        // LazyDense so weight tensors stay unallocated until the first Forward()
+        // pass — DiT-XL's default 4 GB of weights would otherwise OOM the CI
+        // runner just from `new DiTNoisePredictor()`.
+        _patchEmbed = LazyDense(patchDim, _hiddenSize);
 
-        _timeEmbed1 = new DenseLayer<T>(
-            _hiddenSize,
-            timeEmbedDim,
-            (IActivationFunction<T>)new SiLUActivation<T>());
-        _timeEmbed2 = new DenseLayer<T>(
-            timeEmbedDim,
-            timeEmbedDim,
-            (IActivationFunction<T>)new SiLUActivation<T>());
+        _timeEmbed1 = LazyDense(_hiddenSize, timeEmbedDim, new SiLUActivation<T>());
+        _timeEmbed2 = LazyDense(timeEmbedDim, timeEmbedDim, new SiLUActivation<T>());
 
         // Class embedding (optional)
         if (numClasses > 0)
         {
-            _labelEmbed = new DenseLayer<T>(numClasses, _hiddenSize, activationFunction: null);
+            _labelEmbed = LazyDense(numClasses, _hiddenSize);
         }
 
         _finalNorm = new LayerNormalizationLayer<T>(_hiddenSize);
-        _adaln_modulation = new DenseLayer<T>(timeEmbedDim, _hiddenSize * 2, activationFunction: null);
-        _outputProj = new DenseLayer<T>(_hiddenSize, patchDim, activationFunction: null);
+        _adaln_modulation = LazyDense(timeEmbedDim, _hiddenSize * 2);
+        _outputProj = LazyDense(_hiddenSize, patchDim);
 
         // Priority 1: Use custom blocks passed directly
         if (customBlocks != null && customBlocks.Count > 0)
@@ -367,8 +364,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
                 // Note: if the provided DenseLayer has different dimensions, it will auto-resize
                 // weights on the first forward pass via EnsureWeightShapeForInput.
                 var mlp1 = layer as DenseLayer<T>
-                    ?? new DenseLayer<T>(_hiddenSize, (int)(_hiddenSize * _mlpRatio),
-                        (IActivationFunction<T>)new GELUActivation<T>());
+                    ?? LazyDense(_hiddenSize, (int)(_hiddenSize * _mlpRatio), new GELUActivation<T>());
 
                 _blocks.Add(new DiTBlock
                 {
@@ -376,13 +372,13 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
                     Attention = CreateAttentionLayer(),
                     Norm2 = new LayerNormalizationLayer<T>(_hiddenSize),
                     MLP1 = mlp1,
-                    MLP2 = new DenseLayer<T>((int)(_hiddenSize * _mlpRatio), _hiddenSize, activationFunction: null),
-                    AdaLNModulation = new DenseLayer<T>(timeEmbedDim, _hiddenSize * 6, activationFunction: null),
+                    MLP2 = LazyDense((int)(_hiddenSize * _mlpRatio), _hiddenSize),
+                    AdaLNModulation = LazyDense(timeEmbedDim, _hiddenSize * 6),
                     CrossAttnNorm = new LayerNormalizationLayer<T>(_hiddenSize),
-                    CrossAttnQ = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null),
-                    CrossAttnK = new DenseLayer<T>(_contextDim, _hiddenSize, activationFunction: null),
-                    CrossAttnV = new DenseLayer<T>(_contextDim, _hiddenSize, activationFunction: null),
-                    CrossAttnOut = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null)
+                    CrossAttnQ = LazyDense(_hiddenSize, _hiddenSize),
+                    CrossAttnK = LazyDense(_contextDim, _hiddenSize),
+                    CrossAttnV = LazyDense(_contextDim, _hiddenSize),
+                    CrossAttnOut = LazyDense(_hiddenSize, _hiddenSize)
                 });
             }
             return;
@@ -406,14 +402,14 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
                 Norm1 = new LayerNormalizationLayer<T>(_hiddenSize),
                 Attention = CreateAttentionLayer(),
                 Norm2 = new LayerNormalizationLayer<T>(_hiddenSize),
-                MLP1 = new DenseLayer<T>(_hiddenSize, mlpHidden, (IActivationFunction<T>)new GELUActivation<T>()),
-                MLP2 = new DenseLayer<T>(mlpHidden, _hiddenSize, activationFunction: null),
-                AdaLNModulation = new DenseLayer<T>(timeEmbedDim, _hiddenSize * 6, activationFunction: null),
+                MLP1 = LazyDense(_hiddenSize, mlpHidden, new GELUActivation<T>()),
+                MLP2 = LazyDense(mlpHidden, _hiddenSize),
+                AdaLNModulation = LazyDense(timeEmbedDim, _hiddenSize * 6),
                 CrossAttnNorm = new LayerNormalizationLayer<T>(_hiddenSize),
-                CrossAttnQ = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null),
-                CrossAttnK = new DenseLayer<T>(_contextDim, _hiddenSize, activationFunction: null),
-                CrossAttnV = new DenseLayer<T>(_contextDim, _hiddenSize, activationFunction: null),
-                CrossAttnOut = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null)
+                CrossAttnQ = LazyDense(_hiddenSize, _hiddenSize),
+                CrossAttnK = LazyDense(_contextDim, _hiddenSize),
+                CrossAttnV = LazyDense(_contextDim, _hiddenSize),
+                CrossAttnOut = LazyDense(_hiddenSize, _hiddenSize)
             });
         }
     }

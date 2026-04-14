@@ -170,14 +170,12 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         int timeEmbedDim = _hiddenSize * 4;
         int halfLayers = _numLayers / 2;
 
-        // Patch embedding
-        _patchEmbed = new DenseLayer<T>(patchDim, _hiddenSize, activationFunction: null);
+        // Patch embedding — lazy weight allocation defers ~2+ GB until Forward().
+        _patchEmbed = LazyDense(patchDim, _hiddenSize);
 
         // Time embedding MLP
-        _timeEmbed1 = new DenseLayer<T>(
-            _hiddenSize, timeEmbedDim,
-            (IActivationFunction<T>)new SiLUActivation<T>());
-        _timeEmbed2 = new DenseLayer<T>(timeEmbedDim, _hiddenSize, activationFunction: null);
+        _timeEmbed1 = LazyDense(_hiddenSize, timeEmbedDim, new SiLUActivation<T>());
+        _timeEmbed2 = LazyDense(timeEmbedDim, _hiddenSize);
 
         // Encoder blocks
         for (int i = 0; i < halfLayers; i++)
@@ -193,13 +191,13 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         {
             _decoderBlocks.Add(CreateBlock());
             // Skip projection: [2*hidden] → [hidden]
-            _skipProjections.Add(new DenseLayer<T>(_hiddenSize * 2, _hiddenSize, activationFunction: null));
+            _skipProjections.Add(LazyDense(_hiddenSize * 2, _hiddenSize));
         }
 
         // Final norm and output
         _finalNorm = new LayerNormalizationLayer<T>(_hiddenSize);
         int outPatchDim = _inputChannels * _patchSize * _patchSize;
-        _outputProj = new DenseLayer<T>(_hiddenSize, outPatchDim, activationFunction: null);
+        _outputProj = LazyDense(_hiddenSize, outPatchDim);
 
         // Position embeddings (computed from latent spatial size and patch size)
         var posEmbData = new T[_maxPatches * _hiddenSize];
@@ -220,8 +218,8 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
             Norm1 = new LayerNormalizationLayer<T>(_hiddenSize),
             Attention = new SelfAttentionLayer<T>(_maxPatches, _hiddenSize, _numHeads, activationFunction: null),
             Norm2 = new LayerNormalizationLayer<T>(_hiddenSize),
-            MLP1 = new DenseLayer<T>(_hiddenSize, _hiddenSize * 4, (IActivationFunction<T>)new GELUActivation<T>()),
-            MLP2 = new DenseLayer<T>(_hiddenSize * 4, _hiddenSize, activationFunction: null)
+            MLP1 = LazyDense(_hiddenSize, _hiddenSize * 4, new GELUActivation<T>()),
+            MLP2 = LazyDense(_hiddenSize * 4, _hiddenSize)
         };
     }
 
