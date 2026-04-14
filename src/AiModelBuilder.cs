@@ -184,6 +184,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private KnowledgeDistillationOptions<T, TInput, TOutput>? _knowledgeDistillationOptions;
     private MixedPrecisionConfig? _mixedPrecisionConfig;
     private AiDotNet.Configuration.InferenceOptimizationConfig? _inferenceOptimizationConfig;
+    private AiDotNet.Configuration.JitCompilationConfig? _jitCompilationConfig;
     private RLTrainingOptions<T>? _rlOptions;
     private IAutoMLModel<T, TInput, TOutput>? _autoMLModel;
     private AutoMLOptions<T, TInput, TOutput>? _autoMLOptions;
@@ -264,6 +265,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     internal IOptimizer<T, TInput, TOutput>? ConfiguredOptimizer => _optimizer;
     internal CacheConfig? ConfiguredCaching => _cacheConfig;
     internal AiDotNet.Configuration.InferenceOptimizationConfig? ConfiguredInferenceOptimizations => _inferenceOptimizationConfig;
+    internal AiDotNet.Configuration.JitCompilationConfig? ConfiguredJitCompilation => _jitCompilationConfig;
     internal InterpretabilityOptions? ConfiguredInterpretability => _interpretabilityOptions;
     internal Training.Memory.TrainingMemoryConfig? ConfiguredMemoryManagement => _memoryConfig;
     internal AiDotNetLicenseKey? ConfiguredLicenseKey => _licenseKey;
@@ -888,6 +890,68 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         return this;
     }
 
+    /// <summary>
+    /// Enables JIT (Just-In-Time) compilation for the built model's forward and
+    /// backward passes.
+    /// </summary>
+    /// <param name="config">JIT compilation configuration. If <c>null</c>, uses
+    /// <see cref="AiDotNet.Configuration.JitCompilationConfig.Default"/>.</param>
+    /// <returns>This builder instance for fluent chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation traces the model's computation graph on the first call at
+    /// each input shape and replays the compiled plan on subsequent calls,
+    /// eliminating virtual dispatch, per-op allocation, and bounds-checking
+    /// overhead. Typical gains are 1.5-3× on CPU and up to 10× on GPU.
+    /// </para>
+    /// <para>
+    /// <b>Scope:</b> the flags configured here are written into the thread-local
+    /// <c>TensorCodecOptions</c> during <c>Build()</c>. From that point on the
+    /// built model's <c>Predict</c> (routed through
+    /// <c>NeuralNetworkBase{T}.PredictCompiled</c>) and the tape-based training
+    /// path both pick up the compiled plans via <c>CompiledModelCache</c> in the
+    /// Tensors package — no further per-model wiring is needed. Concrete models
+    /// whose <c>Predict</c> override bypasses the base (e.g., diffusion models
+    /// running multi-step denoising loops) still benefit from the AutoTracer
+    /// auto-compilation layer, which reads the same flags.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> think of this as turning your model from an
+    /// interpreter into a compiled binary. The first prediction is a little
+    /// slower (while the library studies your model). Every prediction after
+    /// that is much faster. If anything goes wrong during compilation, the
+    /// library silently falls back to the original execution path — so enabling
+    /// this is safe.
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// // Simple — enable with library defaults
+    /// var result = await new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureJitCompilation()
+    ///     .BuildAsync();
+    ///
+    /// // Aggressive — all fusion/CSE passes on (good for benchmarking)
+    /// await builder
+    ///     .ConfigureJitCompilation(JitCompilationConfig.Aggressive)
+    ///     .BuildAsync();
+    ///
+    /// // Strict — throw on any compilation failure (good for tests)
+    /// var cfg = JitCompilationConfig.Default;
+    /// cfg.ThrowOnFailure = true;
+    /// await builder.ConfigureJitCompilation(cfg).BuildAsync();
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureJitCompilation(
+        AiDotNet.Configuration.JitCompilationConfig? config = null)
+    {
+        _jitCompilationConfig = config ?? AiDotNet.Configuration.JitCompilationConfig.Default;
+        _jitCompilationConfig.Validate();
+        return this;
+    }
+
     // Uncertainty quantification configuration lives in AiModelBuilder.UncertaintyQuantification.cs to keep this file focused.
 
     /// <summary>
@@ -1100,6 +1164,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // validate during serialize/deserialize operations within BuildAsync.
         using var licenseScope = Helpers.ModelPersistenceGuard.SetActiveLicenseKey(_licenseKey);
 
+        // Apply JIT compilation config FIRST so every subsequent step in BuildAsync
+        // — training, fine-tuning, quantization calibration, cross-validation —
+        // sees the configured TensorCodecOptions. When Enabled=true (default on
+        // library side anyway) the auto-compilation layer + CompiledModelCache
+        // engage automatically; when Enabled=false the entire stack short-circuits
+        // to eager execution for A/B diffing.
+        _jitCompilationConfig?.ApplyToTensorCodec();
+
         // Validate RAG pipeline composition if any RAG components were configured
         bool hasAnyRAG = _ragRetriever != null || _ragReranker != null || _ragGenerator != null
             || _queryProcessors != null || _graphStore != null || _knowledgeGraph != null;
@@ -1242,6 +1314,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            JitCompilationConfig = _jitCompilationConfig,
             AugmentationConfig = _augmentationConfig,
             ReasoningConfig = _reasoningConfig,
             DeploymentConfiguration = deploymentConfig,
@@ -1594,6 +1667,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            JitCompilationConfig = _jitCompilationConfig,
             AugmentationConfig = _augmentationConfig,
             ReasoningConfig = _reasoningConfig,
             DeploymentConfiguration = deploymentConfig,
@@ -2786,6 +2860,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             QuantizationInfo = quantizationInfo,
             JitCompiledFunction = null,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            JitCompilationConfig = _jitCompilationConfig,
             AugmentationConfig = _augmentationConfig,
             ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
@@ -3274,6 +3349,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             AgentConfig = _agentConfig,
             DeploymentConfiguration = deploymentConfig,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            JitCompilationConfig = _jitCompilationConfig,
             ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
             GraphStore = _graphStore,

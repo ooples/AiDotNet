@@ -1347,6 +1347,35 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureInferenceOptimizations(AiDotNet.Configuration.InferenceOptimizationConfig? config = null);
 
     /// <summary>
+    /// Enables JIT (Just-In-Time) compilation for the built model's forward and
+    /// backward passes by installing the configured
+    /// <see cref="AiDotNet.Configuration.JitCompilationConfig"/> into
+    /// <c>TensorCodecOptions</c> during <c>Build()</c>.
+    /// </summary>
+    /// <param name="config">JIT config. <c>null</c> → library defaults (enabled + silent fallback).</param>
+    /// <returns>This builder for fluent chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation traces the model's graph on the first call at each input
+    /// shape and replays the compiled plan on subsequent calls — typical speedup
+    /// is 1.5-3× on CPU. The configured flags are persisted onto the returned
+    /// <c>AiModelResult</c> and re-applied on every Predict call so cross-thread
+    /// usage (request pools) sees the same compilation behavior.
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// await new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    ///     .ConfigureModel(model)
+    ///     .ConfigureJitCompilation()
+    ///     .BuildAsync();
+    /// </code>
+    /// </para>
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureJitCompilation(
+        AiDotNet.Configuration.JitCompilationConfig? config = null);
+
+    /// <summary>
     /// Configures mixed-precision training for faster neural network training with reduced memory usage.
     /// </summary>
     /// <param name="config">Mixed precision configuration (optional, uses defaults if null).</param>

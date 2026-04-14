@@ -641,6 +641,15 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     [JsonProperty]
     private AiDotNet.Configuration.InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
+    /// <summary>
+    /// JIT compilation config carried from the builder. Applied on every
+    /// Predict/Train call so cross-thread invocations (e.g., from a request
+    /// handler pool) see the same compilation behavior the builder was
+    /// configured with. <c>TensorCodecOptions.Current</c> is thread-static.
+    /// </summary>
+    [JsonProperty]
+    private AiDotNet.Configuration.JitCompilationConfig? JitCompilationConfig { get; set; }
+
     [JsonIgnore]
     private readonly object _inferenceOptimizationLock = new();
 
@@ -1269,6 +1278,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         DeploymentConfiguration = options.DeploymentConfiguration;
         JitCompiledFunction = options.JitCompiledFunction;
         InferenceOptimizationConfig = options.InferenceOptimizationConfig;
+        JitCompilationConfig = options.JitCompilationConfig;
         QuantizationInfo = options.QuantizationInfo;
 
         // Layer metadata (populated if the model supports layer-level access)
@@ -1811,6 +1821,12 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         {
             throw new InvalidOperationException("Model is not initialized.");
         }
+
+        // Bridge the builder-configured JIT compilation flags into the current
+        // thread's TensorCodecOptions so CompiledModelCache / AutoTracer pick them
+        // up. TensorCodecOptions.Current is [ThreadStatic] — without this push, a
+        // Predict on a fresh worker thread would see library defaults instead.
+        JitCompilationConfig?.ApplyToTensorCodec();
 
         var dataForPrediction = newData;
         if (SafetyFilter != null && newData is Vector<T> vectorInput && typeof(TInput) == typeof(Vector<T>))
