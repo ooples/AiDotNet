@@ -1156,6 +1156,125 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public Task<AiModelResult<T, TInput, TOutput>> BuildAsync() => BuildAsync(CancellationToken.None);
 
+    /// <summary>
+    /// Wraps a trained model's <c>Predict</c> in a <c>CompiledModelCache</c>-backed
+    /// function matching the <c>JitCompiledFunction</c> shape expected by
+    /// <see cref="AiModelResult{T, TInput, TOutput}"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is how JIT compilation reaches every model whose <c>Predict</c> override
+    /// bypasses the base class. The wrapper traces the model's forward pass under
+    /// GraphMode on the first call at each input shape, compiles it into a flat
+    /// replay plan, and re-executes the plan for subsequent calls.
+    /// </para>
+    /// <para>
+    /// Nested-GraphMode defense: during tracing the wrapper temporarily sets
+    /// <c>TensorCodecOptions.EnableCompilation = false</c> so any call into
+    /// <c>NeuralNetworkBase{T}.PredictCompiled</c> from within the model's own
+    /// <c>Predict</c> falls through to <c>PredictEager</c> instead of opening a
+    /// second, conflicting GraphMode scope.
+    /// </para>
+    /// <para>
+    /// Scope: only wraps <see cref="NeuralNetworks.NeuralNetworkBase{T}"/>
+    /// descendants. Diffusion models (extend <c>DiffusionModelBase</c>, not
+    /// <c>NeuralNetworkBase</c>) and non-neural models (regression, trees) return
+    /// <c>null</c> so the result's Predict path stays on its existing code path.
+    /// Multi-step inference (autoregressive text, RNN unroll) that relies on
+    /// per-step scalar control flow will either trace correctly if the loop is
+    /// unrolled at compile time, or fall through to eager via the try/catch —
+    /// if it traces correctly but produces wrong results on replay (a real risk
+    /// for models with non-Engine tensor access), set
+    /// <see cref="AiDotNet.Configuration.JitCompilationConfig.ThrowOnFailure"/>
+    /// in tests to catch silent divergence.
+    /// </para>
+    /// </remarks>
+    private Func<Tensor<T>[], Tensor<T>[]>? BuildCompiledPredictFunction(
+        IFullModel<T, TInput, TOutput>? model)
+    {
+        if (model is null) return null;
+        if (_jitCompilationConfig is null || !_jitCompilationConfig.Enabled) return null;
+
+        // Only NeuralNetworkBase<T> models go through the Engine-op forward pass
+        // that GraphMode can record. Regression/tree models use scalar math that
+        // wouldn't benefit from graph compilation even if it were traceable.
+        if (model is not NeuralNetworks.NeuralNetworkBase<T> nnModel) return null;
+
+        var cache = new AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>();
+        bool throwOnFailure = _jitCompilationConfig.ThrowOnFailure;
+        var jitConfig = _jitCompilationConfig;
+
+        return (inputs) =>
+        {
+            if (inputs is null || inputs.Length == 0)
+            {
+                throw new ArgumentException(
+                    "JitCompiledFunction requires at least one input tensor.",
+                    nameof(inputs));
+            }
+
+            var input = inputs[0];
+
+            // Each call applies the JIT config to this thread's TensorCodecOptions
+            // — request-pool workers don't inherit the thread-static state set on
+            // the builder thread.
+            jitConfig.ApplyToTensorCodec();
+
+            try
+            {
+                var plan = cache.GetOrCompileInference(input, () =>
+                {
+                    // Guard against nested-GraphMode. When the trace lambda invokes
+                    // nnModel.Predict, any subclass still using the base default
+                    // would re-enter PredictCompiled which opens a second GraphMode
+                    // scope — the inner compile would drop the outer trace's ops.
+                    // Forcing EnableCompilation=false here makes PredictCompiled
+                    // fall through to PredictEager, recording the ops into our
+                    // outer trace instead.
+                    var savedOptions = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+                    var traceOptions = new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions
+                    {
+                        EnableCompilation = false,
+                        EnableDataflowFusion = savedOptions.EnableDataflowFusion,
+                        EnableAlgebraicBackward = savedOptions.EnableAlgebraicBackward,
+                        EnableSpectralDecomposition = savedOptions.EnableSpectralDecomposition,
+                        SpectralErrorTolerance = savedOptions.SpectralErrorTolerance,
+                        DataflowFusionMaxHidden = savedOptions.DataflowFusionMaxHidden,
+                        EnableConvBnFusion = savedOptions.EnableConvBnFusion,
+                        EnableAttentionFusion = savedOptions.EnableAttentionFusion,
+                        EnablePointwiseFusion = savedOptions.EnablePointwiseFusion,
+                        EnableConstantFolding = savedOptions.EnableConstantFolding,
+                        EnableForwardCSE = savedOptions.EnableForwardCSE,
+                        EnableBlasBatch = savedOptions.EnableBlasBatch,
+                        EnableMixedPrecision = savedOptions.EnableMixedPrecision
+                    };
+                    AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(traceOptions);
+                    try
+                    {
+                        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+                        // Discard return: CompiledModelCache treats the last recorded
+                        // op's output tensor as the plan's output.
+                        nnModel.Predict(input);
+                    }
+                    finally
+                    {
+                        AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(savedOptions);
+                    }
+                });
+
+                return new[] { plan.Execute() };
+            }
+            catch when (!throwOnFailure)
+            {
+                // Compilation blew up OR replay couldn't rebind inputs cleanly.
+                // Fall back to eager Predict — the call succeeds, just slower.
+                // Next call retries compilation because the cache didn't store a
+                // plan for the failed shape.
+                return new[] { nnModel.Predict(input) };
+            }
+        };
+    }
+
     public async Task<AiModelResult<T, TInput, TOutput>> BuildAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -2858,7 +2977,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             AgentRecommendation = agentRecommendation,
             DeploymentConfiguration = deploymentConfig,
             QuantizationInfo = quantizationInfo,
-            JitCompiledFunction = null,
+            JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             JitCompilationConfig = _jitCompilationConfig,
             AugmentationConfig = _augmentationConfig,
