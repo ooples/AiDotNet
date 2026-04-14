@@ -463,7 +463,7 @@ jobs:
       - name: Cache SonarCloud packages
         uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v4
         with:
-          path: ~/sonar/cache
+          path: ~/.sonar/cache
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
@@ -546,10 +546,11 @@ jobs:
         run: |
           & "${{ runner.temp }}/scanner/dotnet-sonarscanner" end /d:sonar.token="$env:SONAR_TOKEN"
 
-  # Note: net471 tests removed to save CI resources
+  # Note: net471 tests removed to save CI resources.
   # Build verification for net471 is done in the build job (cross-compiled on Linux
-  # via the modern SDK's auto-included reference assembly pack)
-  # Only net10.0 tests are run as they produce coverage for SonarCloud
+  # via the Microsoft.NETFramework.ReferenceAssemblies NuGet package, which provides
+  # the .NET Framework targeting pack on non-Windows runners).
+  # Only net10.0 tests are run as they produce coverage for SonarCloud.
 
   # Artifact size analysis
   size-check:
