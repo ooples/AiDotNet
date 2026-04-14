@@ -355,18 +355,13 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
 
         if (_useSparseAggregation && _edgeSourceIndices != null && _edgeTargetIndices != null)
         {
-            // Sparse aggregation using Engine.MultiHeadGraphAttention (production-recommended)
-            // Prepare attention weight tensors for the engine operation
-            var attnWeightsSource = new Tensor<T>([_numHeads, _outputFeatures]);
-            var attnWeightsTarget = new Tensor<T>([_numHeads, _outputFeatures]);
-            for (int h = 0; h < _numHeads; h++)
-            {
-                for (int f = 0; f < _outputFeatures; f++)
-                {
-                    attnWeightsSource[h, f] = _attentionWeights[h, f];
-                    attnWeightsTarget[h, f] = _attentionWeights[h, _outputFeatures + f];
-                }
-            }
+            // Sparse aggregation using Engine.MultiHeadGraphAttention (production-recommended).
+            // _attentionWeights is laid out as [numHeads, 2 * outputFeatures] with the
+            // source-half occupying columns [0, outputFeatures) and the target-half
+            // [outputFeatures, 2 * outputFeatures). Engine.TensorSlice returns each half
+            // as a view-style operation in one call instead of the per-(h, f) copy loop.
+            var attnWeightsSource = Engine.TensorSlice(_attentionWeights, [0, 0], [_numHeads, _outputFeatures]);
+            var attnWeightsTarget = Engine.TensorSlice(_attentionWeights, [0, _outputFeatures], [_numHeads, _outputFeatures]);
 
             output = TensorAllocator.Rent<T>([batchSize, numNodes, _outputFeatures]);
             output.Fill(NumOps.Zero);
@@ -454,14 +449,16 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
 
         for (int h = 0; h < _numHeads; h++)
         {
-            // Extract attention weights for this head
-            var attnA = new Tensor<T>([_outputFeatures]); // For source node
-            var attnB = new Tensor<T>([_outputFeatures]); // For target node
-            for (int f = 0; f < _outputFeatures; f++)
-            {
-                attnA[f] = _attentionWeights[h, f];
-                attnB[f] = _attentionWeights[h, _outputFeatures + f];
-            }
+            // Extract attention weights for this head via Engine.TensorSlice — replaces
+            // the per-feature scalar copy loop. _attentionWeights is [numHeads, 2*outputFeatures];
+            // source-half is the first outputFeatures columns of row h, target-half is
+            // the next outputFeatures columns. Reshape to [outputFeatures] for downstream use.
+            var attnA = Engine.Reshape(
+                Engine.TensorSlice(_attentionWeights, [h, 0], [1, _outputFeatures]),
+                [_outputFeatures]);
+            var attnB = Engine.Reshape(
+                Engine.TensorSlice(_attentionWeights, [h, _outputFeatures], [1, _outputFeatures]),
+                [_outputFeatures]);
 
             // Compute attention scores for each batch
             for (int b = 0; b < batchSize; b++)
