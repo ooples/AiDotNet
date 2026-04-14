@@ -247,6 +247,13 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
             foreach (string nonCoreWord in AllWordsArray)
             {
                 if (coreSet.Contains(nonCoreWord)) continue;
+                // Cap already hit from a prior non-core word — stop enumerating
+                // remaining directories entirely rather than opening each one just to
+                // immediately `break` out of its inner loop.
+                if (_options.MaxSamplesPerClass.HasValue &&
+                    classCounts[_unknownClassIndex] >= _options.MaxSamplesPerClass.Value)
+                    break;
+
                 string wordDir = Path.Combine(_dataPath, nonCoreWord);
                 if (!Directory.Exists(wordDir)) continue;
 
@@ -459,8 +466,10 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
             // _silence_ class. Slice a distinct crop of one of the background-noise
             // WAVs using a deterministic per-sample offset (derived from SyntheticIndex)
             // so that consecutive silence samples are NOT duplicate prefixes of the
-            // same waveform. When no background-noise directory is present, leave the
-            // destination zero-filled — pure silence is still a valid training input.
+            // same waveform. Normal loading always populates _backgroundNoiseFiles
+            // (LoadDataCoreAsync fails fast when _background_noise_/ is empty) — the
+            // zero-fill branch below is only a defensive fallback for states where
+            // no silence entries could have been emitted in the first place.
             if (_backgroundNoiseFiles is { Count: > 0 })
             {
                 int fileIdx = entry.SyntheticIndex % _backgroundNoiseFiles.Count;
@@ -487,8 +496,13 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
                 if (noiseBuffer.Length > nativeWindow)
                 {
                     int maxOffset = noiseBuffer.Length - nativeWindow;
+                    // Modulo (maxOffset + 1) — maxOffset is itself a *valid* starting
+                    // offset, so the cohort range must be inclusive of it. Using
+                    // `% maxOffset` excluded the last valid window and biased the
+                    // sampler away from the tail of each background file.
+                    int offsetRange = maxOffset + 1;
                     int cohort = entry.SyntheticIndex / _backgroundNoiseFiles.Count;
-                    cropOffsetNative = (cohort * SilenceCropHopNativeSamples) % Math.Max(1, maxOffset);
+                    cropOffsetNative = (cohort * SilenceCropHopNativeSamples) % offsetRange;
                 }
 
                 ResampleIntoDestination(noiseBuffer, cropOffsetNative, dst, dstOffset, targetLen, nativeRate, targetRate);

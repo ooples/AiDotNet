@@ -52,9 +52,12 @@ public sealed class SpeechCommandsDataLoaderOptions
     /// </summary>
     /// <remarks>
     /// The two synthetic classes follow the Warden 2018 benchmark spec: <c>_silence_</c>
-    /// is sampled from the dataset's <c>_background_noise_/</c> directory (or zero-padded
-    /// when that directory is absent), and <c>_unknown_</c> collapses every non-core word
-    /// directory so the classifier learns an "out-of-vocabulary" bucket.
+    /// is sampled from the dataset's <c>_background_noise_/</c> directory (which is
+    /// required when <see cref="SilenceSampleCount"/> is positive — the loader fails
+    /// fast with <see cref="InvalidOperationException"/> if the directory is missing
+    /// or empty, since a zero-filled silence class would silently create a different
+    /// benchmark than the spec describes). <c>_unknown_</c> collapses every non-core
+    /// word directory so the classifier learns an "out-of-vocabulary" bucket.
     /// </remarks>
     public bool UseCoreSubset { get; set; } = true;
 
