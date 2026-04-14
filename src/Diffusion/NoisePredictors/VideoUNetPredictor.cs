@@ -285,41 +285,35 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private void InitializeLayers()
     {
-        // Input convolution: [inputChannels] -> [baseChannels]
-        // For video: processes each frame spatially
-        _inputConv = new ConvolutionalLayer<T>(
+        // Input convolution: [inputChannels] -> [baseChannels]. LazyConv2D keeps
+        // kernel tensors unallocated until first Forward() — the full video U-Net
+        // is multi-GB at default sizes.
+        _inputConv = LazyConv2D(
             inputDepth: _inputChannels,
-            outputDepth: _baseChannels,
-            kernelSize: 3,
             inputHeight: _inputHeight,
             inputWidth: _inputWidth,
+            outputDepth: _baseChannels,
+            kernelSize: 3,
             stride: 1,
             padding: 1,
-            activationFunction: new IdentityActivation<T>());
+            activation: new IdentityActivation<T>());
 
         // Time embedding MLP
-        _timeEmbedMlp1 = new DenseLayer<T>(
-            _timeEmbeddingDim / 4,
-            _timeEmbeddingDim,
-            (IActivationFunction<T>)new SiLUActivation<T>());
-
-        _timeEmbedMlp2 = new DenseLayer<T>(
-            _timeEmbeddingDim,
-            _timeEmbeddingDim,
-            (IActivationFunction<T>)new SiLUActivation<T>());
+        _timeEmbedMlp1 = LazyDense(_timeEmbeddingDim / 4, _timeEmbeddingDim, new SiLUActivation<T>());
+        _timeEmbedMlp2 = LazyDense(_timeEmbeddingDim, _timeEmbeddingDim, new SiLUActivation<T>());
 
         // Image conditioning projection (for image-to-video)
         if (_supportsImageConditioning)
         {
-            _imageCondProjection = new ConvolutionalLayer<T>(
+            _imageCondProjection = LazyConv2D(
                 inputDepth: _inputChannels,
-                outputDepth: _baseChannels,
-                kernelSize: 1,
                 inputHeight: _inputHeight,
                 inputWidth: _inputWidth,
+                outputDepth: _baseChannels,
+                kernelSize: 1,
                 stride: 1,
                 padding: 0,
-                activationFunction: new IdentityActivation<T>());
+                activation: new IdentityActivation<T>());
         }
 
         // Build encoder
@@ -401,15 +395,15 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         }
 
         // Output convolution
-        _outputConv = new ConvolutionalLayer<T>(
+        _outputConv = LazyConv2D(
             inputDepth: _baseChannels,
-            outputDepth: _outputChannels,
-            kernelSize: 3,
             inputHeight: _inputHeight,
             inputWidth: _inputWidth,
+            outputDepth: _outputChannels,
+            kernelSize: 3,
             stride: 1,
             padding: 1,
-            activationFunction: new IdentityActivation<T>());
+            activation: new IdentityActivation<T>());
     }
 
     /// <inheritdoc />
@@ -847,12 +841,12 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateSpatialResBlock(int inChannels, int outChannels)
     {
-        return new DenseLayer<T>(inChannels, outChannels, (IActivationFunction<T>)new SiLUActivation<T>());
+        return LazyDense(inChannels, outChannels, new SiLUActivation<T>());
     }
 
     private ILayer<T> CreateTemporalResBlock(int channels)
     {
-        return new DenseLayer<T>(channels, channels, (IActivationFunction<T>)new SiLUActivation<T>());
+        return LazyDense(channels, channels, new SiLUActivation<T>());
     }
 
     private ILayer<T> CreateSpatialAttention(int channels)
@@ -884,15 +878,15 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateDownsample(int channels)
     {
-        return new ConvolutionalLayer<T>(
+        return LazyConv2D(
             inputDepth: channels,
-            outputDepth: channels,
-            kernelSize: 3,
             inputHeight: _inputHeight,
             inputWidth: _inputWidth,
+            outputDepth: channels,
+            kernelSize: 3,
             stride: 2,
             padding: 1,
-            activationFunction: new IdentityActivation<T>());
+            activation: new IdentityActivation<T>());
     }
 
     private ILayer<T> CreateUpsample(int channels)

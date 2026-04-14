@@ -115,13 +115,15 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
     private void InitializeLayers(int? seed)
     {
         int patchDim = _inputChannels * _patchSize * _patchSize;
-        _patchEmbed = new DenseLayer<T>(patchDim, _hiddenSize, (IActivationFunction<T>)new GELUActivation<T>());
+        // LazyDense keeps weight tensors unallocated until Forward() — avoids
+        // OOM at construction time under production-scale defaults.
+        _patchEmbed = LazyDense(patchDim, _hiddenSize, new GELUActivation<T>());
 
         _jointBlocks = new DenseLayer<T>[_numJointLayers];
         for (int i = 0; i < _numJointLayers; i++)
-            _jointBlocks[i] = new DenseLayer<T>(_hiddenSize, _hiddenSize, (IActivationFunction<T>)new GELUActivation<T>());
+            _jointBlocks[i] = LazyDense(_hiddenSize, _hiddenSize, new GELUActivation<T>());
 
-        _finalLayer = new DenseLayer<T>(_hiddenSize, patchDim, (IActivationFunction<T>?)null);
+        _finalLayer = LazyDense(_hiddenSize, patchDim);
         _posEmbed = new Vector<T>(1024 * _hiddenSize);
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         for (int i = 0; i < _posEmbed.Length; i++)

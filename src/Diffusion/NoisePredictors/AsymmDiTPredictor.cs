@@ -107,13 +107,14 @@ public class AsymmDiTPredictor<T> : NoisePredictorBase<T>
     private void InitializeLayers(int? seed)
     {
         int patchDim = _inputChannels * 4;
-        _patchEmbed = new DenseLayer<T>(patchDim, _hiddenSize, (IActivationFunction<T>)new GELUActivation<T>());
+        // LazyDense defers weight allocation to first Forward() call.
+        _patchEmbed = LazyDense(patchDim, _hiddenSize, new GELUActivation<T>());
 
         _blocks = new DenseLayer<T>[_numLayers];
         for (int i = 0; i < _numLayers; i++)
-            _blocks[i] = new DenseLayer<T>(_hiddenSize, _hiddenSize, (IActivationFunction<T>)new GELUActivation<T>());
+            _blocks[i] = LazyDense(_hiddenSize, _hiddenSize, new GELUActivation<T>());
 
-        _finalLayer = new DenseLayer<T>(_hiddenSize, patchDim, (IActivationFunction<T>?)null);
+        _finalLayer = LazyDense(_hiddenSize, patchDim);
     }
 
     private int CalculateParameterCount()

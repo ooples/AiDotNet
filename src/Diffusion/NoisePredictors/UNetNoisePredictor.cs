@@ -727,15 +727,16 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateDownsample(int channels, int spatialSize)
     {
-        return new ConvolutionalLayer<T>(
+        // LazyConv2D: kernel tensor stays unallocated until first Forward() call.
+        return LazyConv2D(
             inputDepth: channels,
-            outputDepth: channels,
-            kernelSize: 3,
             inputHeight: spatialSize,
             inputWidth: spatialSize,
+            outputDepth: channels,
+            kernelSize: 3,
             stride: 2,
             padding: 1,
-            activationFunction: new IdentityActivation<T>());
+            activation: new IdentityActivation<T>());
     }
 
     private ILayer<T> CreateUpsample(int channels, int spatialSize)
