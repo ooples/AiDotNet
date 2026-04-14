@@ -178,7 +178,8 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     // Lazy initialization state
     private int _numClasses;
     private List<DiTBlock>? _customBlocks;
-    private bool _layersInitialized;
+    private volatile bool _layersInitialized;
+    private readonly object _initLock = new();
 
     /// <summary>
     /// Position embeddings (learnable).
@@ -296,8 +297,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private void EnsureLayersInitialized()
     {
-        if (!_layersInitialized)
+        if (_layersInitialized) return;
+        lock (_initLock)
         {
+            if (_layersInitialized) return; // double-checked locking
             InitializeLayers(_architecture, _numClasses, _customBlocks);
             _layersInitialized = true;
         }

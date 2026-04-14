@@ -563,9 +563,6 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
-    /// Applies a video block (spatial + temporal processing).
-    /// </summary>
-    /// <summary>
     /// Applies a single video block: spatial ResBlock → FiLM timestep conditioning →
     /// temporal ResBlock → spatial attention → temporal attention → cross-attention.
     /// Per Ho et al. 2022 "Video Diffusion Models" §3.1, timestep conditioning is
@@ -696,9 +693,6 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         return StackFrames(processedFrames);
     }
 
-    /// <summary>
-    /// Applies temporal processing across frames.
-    /// </summary>
     /// <summary>
     /// Applies temporal processing with a residual connection, per Ho et al. 2022 §3.1.
     /// The temporal layer is a learned mixing operation along the frame axis: for each
