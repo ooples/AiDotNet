@@ -210,60 +210,46 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>
         int batchSize = input.Shape[0];
         int expandedBatchSize = batchSize * _numMembers;
 
-        // Expand input for each ensemble member
-        // Input: [batch, input_dim]
-        // Expanded: [batch * members, input_dim]
-        var expandedInput = new Tensor<T>([expandedBatchSize, _inputDim]);
+        // Build expandedInput [B*M, inputDim] = input tiled M times along a
+        // synthetic member axis. Layout matches the original [b*M + m, i]
+        // indexing because the reshape collapses the (b, m) dims in row-major
+        // order. Replaces the per-(b, m, i) scalar copy loop.
+        var input3D = Engine.Reshape(input, [batchSize, 1, _inputDim]);
+        var inputTiled = Engine.TensorTile(input3D, [1, _numMembers, 1]);
+        var expandedInput = Engine.Reshape(inputTiled, [expandedBatchSize, _inputDim]);
 
-        // Apply r-vector scaling and expand
-        var scaledInput = new Tensor<T>([expandedBatchSize, _inputDim]);
+        // Build the per-row r-vector tensor by tiling _rVectors [M, inputDim]
+        // to [B, M, inputDim] then collapsing to [B*M, inputDim]. Each row's
+        // r-vector matches the row's member index.
+        var rVecs3D = Engine.Reshape(_rVectors, [1, _numMembers, _inputDim]);
+        var rVecsTiled = Engine.TensorTile(rVecs3D, [batchSize, 1, 1]);
+        var rVecsFlat = Engine.Reshape(rVecsTiled, [expandedBatchSize, _inputDim]);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int m = 0; m < _numMembers; m++)
-            {
-                int rowIdx = b * _numMembers + m;
-                for (int i = 0; i < _inputDim; i++)
-                {
-                    var inputVal = input[b * _inputDim + i];
-                    var rVal = _rVectors[m * _inputDim + i];
-                    expandedInput[rowIdx * _inputDim + i] = inputVal;
-                    scaledInput[rowIdx * _inputDim + i] = NumOps.Multiply(inputVal, rVal);
-                }
-            }
-        }
+        // scaledInput = expandedInput * rVecsFlat (elementwise, vectorized)
+        var scaledInput = Engine.TensorMultiply(expandedInput, rVecsFlat);
 
         _inputCache = expandedInput;
         _scaledInputCache = scaledInput;
 
-        // Compute output: scaledInput @ weights
-        var output = new Tensor<T>([expandedBatchSize, _outputDim]);
+        // Compute output via batched matmul: [B*M, inputDim] @ [inputDim, outputDim]
+        // = [B*M, outputDim]. Replaces the O(B*M*outputDim*inputDim) scalar
+        // accumulation chain with one Engine.TensorMatMul.
+        var weights2D = Engine.Reshape(_weights, [_inputDim, _outputDim]);
+        var matmul = Engine.TensorMatMul(scaledInput, weights2D);
 
-        for (int row = 0; row < expandedBatchSize; row++)
+        // Apply s-vector scaling per member by broadcasting [M, outputDim] →
+        // [B, M, outputDim] → [B*M, outputDim]. Same tiling pattern used for
+        // r-vectors above.
+        var sVecs3D = Engine.Reshape(_sVectors, [1, _numMembers, _outputDim]);
+        var sVecsTiled = Engine.TensorTile(sVecs3D, [batchSize, 1, 1]);
+        var sVecsFlat = Engine.Reshape(sVecsTiled, [expandedBatchSize, _outputDim]);
+        var output = Engine.TensorMultiply(matmul, sVecsFlat);
+
+        // Add shared bias [outputDim] broadcast across all rows.
+        if (_bias != null)
         {
-            int memberIdx = row % _numMembers;
-
-            for (int j = 0; j < _outputDim; j++)
-            {
-                var sum = NumOps.Zero;
-                for (int i = 0; i < _inputDim; i++)
-                {
-                    sum = NumOps.Add(sum,
-                        NumOps.Multiply(scaledInput[row * _inputDim + i], _weights[i * _outputDim + j]));
-                }
-
-                // Apply s-vector scaling
-                var sVal = _sVectors[memberIdx * _outputDim + j];
-                sum = NumOps.Multiply(sum, sVal);
-
-                // Add bias
-                if (_bias != null)
-                {
-                    sum = NumOps.Add(sum, _bias[j]);
-                }
-
-                output[row * _outputDim + j] = sum;
-            }
+            var biasBcast = Engine.Reshape(_bias, [1, _outputDim]);
+            output = Engine.TensorBroadcastAdd(output, biasBcast);
         }
 
         return output;
