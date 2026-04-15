@@ -123,6 +123,19 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
                 {
                     yield return layer;
                 }
+                else if (value is System.Collections.IDictionary dictionary)
+                {
+                    // Dictionary<K, V>.GetEnumerator yields KeyValuePair<K,V>,
+                    // not the values — so the generic IEnumerable branch below
+                    // would MISS layers held in the values slot. Handle
+                    // IDictionary explicitly so Dictionary<K, ILayer<T>> is
+                    // disposed correctly.
+                    foreach (System.Collections.DictionaryEntry entry in dictionary)
+                    {
+                        if (entry.Value is ILayer<T> nestedLayer && visited.Add(entry.Value))
+                            yield return nestedLayer;
+                    }
+                }
                 else if (value is System.Collections.IEnumerable enumerable && value is not string)
                 {
                     foreach (var item in enumerable)

@@ -112,11 +112,20 @@ internal sealed class CompiledModelHost<T> : IDisposable
             if (!fallToEager)
             {
                 // Layer graph changed since last compile — stale plans would
-                // replay against the old tensor references. Drop them before
-                // compiling again.
+                // replay against the old tensor references. Swap in a FRESH
+                // CompiledModelCache<T> instance rather than invalidating the
+                // existing one in place. Reason: Predict releases _sync before
+                // GetOrCompileInference, so an older in-flight call can
+                // repopulate an invalidated-but-reused cache after a newer
+                // call has already switched versions, letting plans from
+                // version N bleed into version N+1 callers. Replacing the
+                // instance makes the old cache a detached object that the
+                // in-flight call holds onto locally — no cross-version
+                // contamination.
                 if (_cache is not null && structureVersion != _lastCompiledVersion)
                 {
-                    _cache.Invalidate();
+                    _cache.Dispose();
+                    _cache = new CompiledModelCache<T>();
                     _lastCompiledVersion = structureVersion;
                 }
                 cache = _cache ??= new CompiledModelCache<T>();
@@ -150,7 +159,22 @@ internal sealed class CompiledModelHost<T> : IDisposable
             _lastCompiledVersion = structureVersion;
             return plan.Execute();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (
+            // Narrow the fallback so fatal/unrecoverable CLR failures
+            // propagate instead of being masked by the eager fallback.
+            // Allocating again on a poisoned process (OOM, corrupted
+            // managed heap) would just crash a second way. Keep the
+            // fallback for compile/replay bugs (trace-time exceptions,
+            // TensorShapeException, IndexOutOfRange, etc.) which are
+            // the failures this catch was designed to tolerate.
+            ex is not OutOfMemoryException &&
+            ex is not AccessViolationException &&
+            ex is not StackOverflowException &&
+            ex is not BadImageFormatException &&
+            ex is not InvalidProgramException &&
+            ex is not System.Threading.ThreadAbortException &&
+            ex is not AppDomainUnloadedException &&
+            ex is not CannotUnloadAppDomainException)
         {
             // Compilation or replay threw. Invalidate under lock so a concurrent
             // Predict doesn't see a half-torn-down cache. If a broken plan was
