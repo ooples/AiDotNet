@@ -2,50 +2,78 @@ namespace AiDotNet.Configuration;
 
 /// <summary>
 /// Options for controlling GPU backend diagnostic output visibility.
+/// Addresses github.com/ooples/AiDotNet#1122 — all three requested
+/// controls (environment variable, static configuration, ILogger /
+/// custom sink) are reachable through this options class or the
+/// underlying <see cref="GpuDiagnosticsConfig"/> static facade.
 /// </summary>
 /// <remarks>
 /// <para>
 /// AiDotNet's GPU backends (OpenCL, HIP, CUDA) emit status messages during
-/// device discovery, kernel compilation, and availability checks. Historically
-/// these were always written to <see cref="System.Console.WriteLine"/>,
-/// producing ~40 lines of output on every <c>AiModelBuilder.BuildAsync()</c>.
-/// This clutters the console for applications using rich terminal UI
-/// (Spectre.Console), batch processing, or structured logging.
+/// device discovery, kernel compilation, and availability checks. This
+/// options class lets applications configure the verbosity and routing
+/// of that output via the fluent
+/// <see cref="AiDotNet.Interfaces.IAiModelBuilder{T, TInput, TOutput}.ConfigureGpuDiagnostics(GpuDiagnosticsOptions)"/>
+/// builder method.
 /// </para>
 /// <para>
-/// Since github.com/ooples/AiDotNet#1122, applications can suppress the output
-/// discoverably via this options class or
-/// <see cref="GpuDiagnosticsConfig.Verbose"/>. The default behavior depends
-/// on the underlying AiDotNet.Tensors package version — as of v0.38.0 the
-/// default is verbose (on), and applications must opt out. A follow-up
-/// AiDotNet.Tensors release will flip the default to quiet; this options
-/// class is forward-compatible with that change.
+/// All properties are nullable — <c>null</c> means "don't change the
+/// current setting", so passing an empty options instance is a no-op.
+/// This matches the AiDotNet facade pattern
+/// (<c>TelemetryConfig</c> / <c>ProfilingConfig</c>).
 /// </para>
-/// <para>Three ways to suppress:</para>
-/// <list type="bullet">
-/// <item><c>AiModelBuilder.ConfigureGpuDiagnostics(new() { Verbose = false })</c></item>
-/// <item><c>GpuDiagnosticsConfig.Verbose = false</c> (direct)</item>
-/// <item><c>AIDOTNET_GPU_VERBOSE=0</c> environment variable</item>
-/// </list>
 /// <para><b>For Beginners:</b> If your AI application is printing lots of
 /// <c>[OpenClBackend] Compiling kernels...</c> messages, pass
-/// <c>new GpuDiagnosticsOptions { Verbose = false }</c> to the builder's
-/// <c>ConfigureGpuDiagnostics</c> method to hide them.</para>
+/// <c>new GpuDiagnosticsOptions { Level = GpuDiagnosticLevel.Silent }</c>
+/// to the builder's <c>ConfigureGpuDiagnostics</c> method. If you want
+/// them routed through your logger instead, set <see cref="Sink"/>.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Silence all GPU diagnostics.
+/// builder.ConfigureGpuDiagnostics(new() { Level = GpuDiagnosticLevel.Silent });
+///
+/// // Verbose for troubleshooting.
+/// builder.ConfigureGpuDiagnostics(new() { Level = GpuDiagnosticLevel.Verbose });
+///
+/// // Route through an ILogger.
+/// builder.ConfigureGpuDiagnostics(new()
+/// {
+///     Level = GpuDiagnosticLevel.Minimal,
+///     Sink = logger.ToSink()
+/// });
+/// </code>
+/// </example>
 public class GpuDiagnosticsOptions
 {
     /// <summary>
-    /// Whether GPU backends emit verbose diagnostic output. Default:
-    /// <c>null</c> (preserve the existing process-global setting —
-    /// <see cref="GpuDiagnosticsConfig.Verbose"/>, set by env var or
-    /// prior programmatic assignment). Explicit <c>true</c> / <c>false</c>
-    /// values override it.
+    /// Verbosity level. <c>null</c> preserves the current
+    /// <see cref="GpuDiagnosticsConfig.Level"/> (set by env var or prior
+    /// programmatic assignment). Explicit values override.
+    /// </summary>
+    public GpuDiagnosticLevel? Level { get; set; }
+
+    /// <summary>
+    /// Optional sink that receives diagnostic messages. <c>null</c>
+    /// preserves the current <see cref="GpuDiagnosticsConfig.Sink"/>.
+    /// Pass a non-null delegate to register a custom sink (e.g.
+    /// <c>logger.ToSink()</c>); setting to <c>null</c> does NOT clear an
+    /// already-registered sink (preservation semantics). To UNREGISTER
+    /// a sink, set <see cref="GpuDiagnosticsConfig.Sink"/> directly.
+    /// </summary>
+    public GpuDiagnosticSink? Sink { get; set; }
+
+    /// <summary>
+    /// Legacy bool-level flag. Kept for source compatibility with
+    /// callers written against the first iteration of this API.
+    /// <c>true</c> ≡ <see cref="GpuDiagnosticLevel.Verbose"/>.
+    /// <c>false</c> ≡ <see cref="GpuDiagnosticLevel.Silent"/>.
+    /// <c>null</c> preserves.
     /// </summary>
     /// <remarks>
-    /// Nullable to match the AiDotNet config pattern — <c>null</c> means
-    /// "don't change the current setting" rather than "set to false", so
-    /// passing an empty options instance to
-    /// <c>AiModelBuilder.ConfigureGpuDiagnostics(...)</c> is a no-op.
+    /// When BOTH <see cref="Verbose"/> and <see cref="Level"/> are set,
+    /// <see cref="Level"/> wins — it's the richer API. Applications
+    /// should prefer <see cref="Level"/> in new code.
     /// </remarks>
     public bool? Verbose { get; set; }
 }

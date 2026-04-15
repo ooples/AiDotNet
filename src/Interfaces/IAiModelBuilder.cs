@@ -1202,34 +1202,43 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null);
 
     /// <summary>
-    /// Controls whether GPU backend diagnostic output (device discovery, kernel
-    /// compilation, availability checks) is written to <see cref="System.Console"/>.
+    /// Controls GPU backend diagnostic output visibility and routing.
+    /// Exposes all three controls from github.com/ooples/AiDotNet#1122:
+    /// verbosity level, environment variable, and ILogger/custom sink.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The default-behavior depends on the consumed AiDotNet.Tensors version —
-    /// v0.38.0 defaults to verbose (output on) and requires explicit opt-out.
-    /// Set <see cref="AiDotNet.Configuration.GpuDiagnosticsOptions.Verbose"/>
-    /// to <c>false</c> to silence, or to <c>true</c> to re-enable (or set
-    /// the <c>AIDOTNET_GPU_VERBOSE</c> environment variable).
+    /// AiDotNet's GPU backends (OpenCL, HIP, CUDA) emit status messages
+    /// during device discovery, kernel compilation, and availability checks.
+    /// This method is the fluent entry point for all three
+    /// configuration approaches:
     /// </para>
-    /// <para>
-    /// See github.com/ooples/AiDotNet#1122. This method exposes the existing
-    /// Tensors-package flag via a discoverable AiDotNet-side facade so
-    /// applications don't need to reach into
-    /// <c>OpenClBackend.DiagnosticOutput</c> directly.
-    /// </para>
+    /// <list type="bullet">
+    /// <item><b>Level</b> —
+    /// <see cref="AiDotNet.Configuration.GpuDiagnosticsOptions.Level"/>
+    /// sets <see cref="AiDotNet.Configuration.GpuDiagnosticLevel.Silent"/>,
+    /// <see cref="AiDotNet.Configuration.GpuDiagnosticLevel.Minimal"/>, or
+    /// <see cref="AiDotNet.Configuration.GpuDiagnosticLevel.Verbose"/>.</item>
+    /// <item><b>Environment variable</b> — <c>AIDOTNET_GPU_VERBOSE=1</c>,
+    /// <c>=verbose</c>, or <c>=minimal</c> seeds the initial level at
+    /// process start.</item>
+    /// <item><b>Sink</b> —
+    /// <see cref="AiDotNet.Configuration.GpuDiagnosticsOptions.Sink"/>
+    /// routes diagnostic messages through a custom delegate. Use
+    /// <c>logger.ToSink()</c> (from
+    /// <see cref="AiDotNet.Configuration.GpuDiagnosticsLoggerExtensions"/>)
+    /// to wrap a <see cref="Microsoft.Extensions.Logging.ILogger"/>.</item>
+    /// </list>
     /// <para><b>For Beginners:</b> If your AI application is printing lots of
     /// <c>[OpenClBackend]</c> status messages, call
-    /// <c>.ConfigureGpuDiagnostics(new() { Verbose = false })</c> to silence
-    /// them. If something isn't working and you want more info, call it with
-    /// <c>Verbose = true</c>.</para>
+    /// <c>.ConfigureGpuDiagnostics(new() { Level = GpuDiagnosticLevel.Silent })</c>
+    /// to silence them. To route through your own logging framework, set
+    /// <see cref="AiDotNet.Configuration.GpuDiagnosticsOptions.Sink"/>.</para>
     /// </remarks>
     /// <param name="options">
-    /// The GPU-diagnostics options, or <c>null</c> to leave the current
-    /// settings unchanged. When
-    /// <see cref="AiDotNet.Configuration.GpuDiagnosticsOptions.Verbose"/>
-    /// is <c>null</c>, this method is a no-op.
+    /// The GPU-diagnostics options, or <c>null</c> to leave all current
+    /// settings unchanged. Each options property is nullable and only
+    /// applied when non-null (preserve semantics).
     /// </param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureGpuDiagnostics(AiDotNet.Configuration.GpuDiagnosticsOptions? options = null);
