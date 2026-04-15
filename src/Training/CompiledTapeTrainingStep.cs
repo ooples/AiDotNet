@@ -33,18 +33,25 @@ public static class CompiledTapeTrainingStep<T>
     private static CompiledModelCache<T>? _cache;
     [ThreadStatic]
     private static Tensor<T>[]? _cachedParameters;
-    [ThreadStatic]
-    private static object? _lastConfiguredPlan;
 
     /// <summary>
-    /// Snapshot of the optimizer hyperparameters the last <see cref="TryStepWithFusedOptimizer"/>
-    /// call configured on <see cref="_lastConfiguredPlan"/>. Plan identity alone
-    /// is insufficient — the same plan can be configured with SGD then Adam, or
-    /// Adam-with-LR-1e-3 then Adam-with-LR-1e-4. Detecting any drift here forces
-    /// a fallback so the caller doesn't silently train against stale moments.
+    /// Per-plan optimizer configuration tracker. Keyed by plan reference so
+    /// each compiled plan is configured <i>exactly once</i>, even when the
+    /// training loop alternates between multiple plans (e.g., last partial
+    /// batch, variable sequence lengths, or variable {input, target} shape
+    /// pairs). Without this, a single-slot tracker would call
+    /// <c>ConfigureOptimizer</c> again every time control returned to a
+    /// previously-configured plan, resetting Adam's m/v buffers and silently
+    /// corrupting training.
+    /// <para>
+    /// <see cref="ThreadStaticAttribute"/> so the dict is per-thread (no lock
+    /// overhead); <see cref="TensorReferenceComparer{T}"/> gives us reference
+    /// equality in net471-compatible form (no <c>ReferenceEqualityComparer</c>
+    /// dependency).
+    /// </para>
     /// </summary>
     [ThreadStatic]
-    private static (int OptType, float Lr, float B1, float B2, float Eps, float Wd)? _lastOptimizerConfig;
+    private static Dictionary<object, (int OptType, float Lr, float B1, float B2, float Eps, float Wd)>? _planOptimizerConfigs;
 
     /// <summary>
     /// Executes a single compiled training step.
@@ -86,9 +93,24 @@ public static class CompiledTapeTrainingStep<T>
             foreach (var layer in layers)
                 layer.ZeroGrad();
 
-            // Get or compile training plan (cached by shape internally)
+            // Compile key must include BOTH input AND target shapes — the
+            // traced lambda captures target via computeLoss. A plan compiled
+            // for input=[B,D], target=[B,C] would otherwise silently replay
+            // the wrong op graph if the next call arrives with the same
+            // input shape but a different target shape (e.g., a regression
+            // output scalar vs. a classification class-index). Build a
+            // composite synthetic key (input + separator + target) matching
+            // the TryStepWithFusedOptimizer convention so distinct
+            // {input, target} pairs hit distinct cache entries.
+            var inputShape = input._shape;
+            var targetShape = target._shape;
+            var compositeKey = new int[inputShape.Length + 1 + targetShape.Length];
+            Array.Copy(inputShape, 0, compositeKey, 0, inputShape.Length);
+            compositeKey[inputShape.Length] = -1; // separator sentinel (no real dim is negative)
+            Array.Copy(targetShape, 0, compositeKey, inputShape.Length + 1, targetShape.Length);
+
             var plan = cache.GetOrCompileTraining(
-                (int[])input._shape.Clone(),
+                compositeKey,
                 () =>
                 {
                     var predicted = forward(input);
@@ -118,8 +140,7 @@ public static class CompiledTapeTrainingStep<T>
     {
         _cache?.Invalidate();
         _cachedParameters = null;
-        _lastConfiguredPlan = null;
-        _lastOptimizerConfig = null;
+        _planOptimizerConfigs?.Clear();
     }
 
     /// <summary>
@@ -226,14 +247,24 @@ public static class CompiledTapeTrainingStep<T>
             // on the SAME plan re-allocates Adam's m/v buffers — so if the
             // caller changes LR/betas mid-training we MUST NOT silently
             // reconfigure (the resulting reset would corrupt training).
-            // Instead we return false → caller falls back to eager (which
-            // preserves the user's optimizer state via TapeStepContext) and
-            // marks the fused path as drift-incompatible for this run.
+            //
+            // Track configuration per-plan (not single-slot). A training
+            // loop that alternates between multiple compiled plans (e.g.,
+            // full batches and a trailing partial batch, or variable
+            // sequence lengths) would otherwise re-configure every time
+            // control returned to a previously-seen plan. With the
+            // per-plan dictionary, each plan is configured exactly once,
+            // and drift on any one plan triggers the eager fallback for
+            // that plan without disturbing the others.
             var currentConfig = ((int)optimizerType, learningRate, beta1, beta2, epsilon, weightDecay);
-            if (!ReferenceEquals(_lastConfiguredPlan, plan))
+            var planConfigs = _planOptimizerConfigs
+                ??= new Dictionary<object, (int, float, float, float, float, float)>(
+                    AiDotNet.Helpers.TensorReferenceComparer<object>.Instance);
+
+            if (!planConfigs.TryGetValue(plan, out var priorConfig))
             {
-                // New plan (first call OR plan was recompiled after invalidation).
-                // Configuring fresh m/v is correct here.
+                // First time seeing this plan on this thread. Configure
+                // fresh m/v buffers and record the config.
                 plan.ConfigureOptimizer(
                     optimizerType,
                     learningRate,
@@ -241,11 +272,9 @@ public static class CompiledTapeTrainingStep<T>
                     beta2,
                     epsilon,
                     weightDecay);
-                _lastConfiguredPlan = plan;
-                _lastOptimizerConfig = currentConfig;
+                planConfigs[plan] = currentConfig;
             }
-            else if (_lastOptimizerConfig is null
-                || !_lastOptimizerConfig.Value.Equals(currentConfig))
+            else if (!priorConfig.Equals(currentConfig))
             {
                 // Same plan but optimizer config drifted between steps.
                 // Reconfiguring would reset m/v buffers and silently corrupt
@@ -264,13 +293,13 @@ public static class CompiledTapeTrainingStep<T>
         catch (Exception ex)
         {
             // Trace the failure so fused-path regressions are observable in
-            // production telemetry. Clear the configured-plan cache so next
-            // attempt reconfigures fresh.
+            // production telemetry. Clear the per-plan config cache so any
+            // next attempt reconfigures fresh — we can't know which plan
+            // (if any) ended up in a partial state, so drop them all.
             System.Diagnostics.Trace.TraceWarning(
                 $"CompiledTapeTrainingStep.TryStepWithFusedOptimizer failed, falling back to eager: " +
                 $"{ex.GetType().Name}: {ex.Message}");
-            _lastConfiguredPlan = null;
-            _lastOptimizerConfig = null;
+            _planOptimizerConfigs?.Clear();
             return false;
         }
     }
