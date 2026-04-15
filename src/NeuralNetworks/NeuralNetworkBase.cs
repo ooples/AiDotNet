@@ -2116,8 +2116,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 var fns = new Func<Tensor<T>, Tensor<T>>[Layers.Count];
                 for (int i = 0; i < Layers.Count; i++)
                 {
-                    var captured = Layers[i];
-                    fns[i] = x => captured.Forward(x);
+                    // Use the method group directly so the delegate binds to the
+                    // layer instance's Forward method with no captured local —
+                    // no per-layer closure allocation. The delegate holds a
+                    // reference to the layer (its implicit Target) but no
+                    // extra heap closure is created.
+                    fns[i] = Layers[i].Forward;
                 }
                 _checkpointLayerFunctions = fns;
                 _checkpointFunctionsVersion = _layerStructureVersion;
@@ -2143,8 +2147,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     /// <remarks>
     /// Writable via <see cref="SetGradientCheckpointingSegmentSize"/> so
-    /// <c>AiModelResult</c> can push the builder's config through after
-    /// deserialization or when <see cref="Predict"/> is called from a new thread.
+    /// <c>AiModelResult</c> can re-apply the builder-derived training-memory
+    /// configuration after deserialization. This is a training-time setting;
+    /// inference paths (<see cref="Predict"/>) are unaffected by it.
     /// </remarks>
     internal int GradientCheckpointingSegmentSize { get; private set; }
 
