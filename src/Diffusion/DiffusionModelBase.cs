@@ -122,12 +122,23 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                 {
                     yield return disposable;
                 }
+                else if (value is System.Collections.IDictionary dictionary)
+                {
+                    // Dictionary<K, V>.GetEnumerator yields KeyValuePair<K,V>,
+                    // not the values — so the generic IEnumerable branch below
+                    // would MISS disposables held in the values slot. Handle
+                    // IDictionary explicitly by walking values through
+                    // DictionaryEntry, which gives us the value directly.
+                    foreach (System.Collections.DictionaryEntry entry in dictionary)
+                    {
+                        if (entry.Value is IDisposable nested && visited.Add(entry.Value))
+                            yield return nested;
+                    }
+                }
                 else if (value is System.Collections.IEnumerable enumerable && value is not string)
                 {
-                    // Walk collections that hold disposables (e.g., List<IDisposable>,
-                    // Dictionary<K, IDisposable>) — matches ReflectInstanceLayers'
-                    // enumerable-traversal behavior so the two Dispose paths behave
-                    // consistently.
+                    // Walk collections that hold disposables (e.g.,
+                    // List<IDisposable>). Dictionary is handled above.
                     foreach (var item in enumerable)
                     {
                         if (item is IDisposable nested && visited.Add(item))
