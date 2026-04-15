@@ -1200,6 +1200,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // wouldn't benefit from graph compilation even if it were traceable.
         if (model is not NeuralNetworks.NeuralNetworkBase<T> nnModel) return null;
 
+        // Thread strict-mode through to the model-instance flag so the lower-level
+        // PredictCompiled path (called from the model's own Predict default) ALSO
+        // honors ThrowOnFailure. Without this, the wrapper would throw on the
+        // outer trace while the inner PredictCompiled would silently fall back —
+        // inconsistent strict-mode behavior for the same configured policy.
+        nnModel.ThrowOnJitFailure = _jitCompilationConfig.ThrowOnFailure;
+
         var cache = new AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>();
         bool throwOnFailure = _jitCompilationConfig.ThrowOnFailure;
         var jitConfig = _jitCompilationConfig;

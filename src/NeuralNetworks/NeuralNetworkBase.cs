@@ -2122,6 +2122,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>? _compiledInferenceCache;
 
     /// <summary>
+    /// JIT strict-mode flag — when <c>true</c>, <see cref="PredictCompiled"/>
+    /// rethrows compile/replay exceptions instead of falling back to eager.
+    /// Set by <see cref="AiModelBuilder{T,TInput,TOutput}"/> when the user
+    /// configures <c>JitCompilationConfig.ThrowOnFailure = true</c>. Default
+    /// <c>false</c> for production safety (Trace warning logged on fallback).
+    /// </summary>
+    internal bool ThrowOnJitFailure { get; set; }
+
+    /// <summary>
     /// Executes the forward pass using a compiled plan for maximum performance.
     /// First call traces and compiles; subsequent calls replay the compiled plan.
     /// Falls back to eager execution if compilation fails.
@@ -2139,12 +2148,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 () => PredictEager(input)); // Use same path as eager for consistency
             return plan.Execute();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (!ThrowOnJitFailure)
         {
             // Emit a Trace warning so the JIT regression is observable in production
             // telemetry — silent fallback would let perf surveys be the first signal.
             // Then run eager so the call still succeeds. The cache didn't store a
             // plan for the failed shape, so the next call will retry compilation.
+            // Strict-mode (ThrowOnJitFailure=true, set by AiModelBuilder when the
+            // user configures JitCompilationConfig.ThrowOnFailure) skips this catch
+            // entirely so tests catch regressions instead of silently degrading.
             System.Diagnostics.Trace.TraceWarning(
                 $"PredictCompiled fallback for {GetType().FullName} " +
                 $"with input shape [{string.Join(", ", input.Shape)}]: {ex.GetType().Name}: {ex.Message}");
