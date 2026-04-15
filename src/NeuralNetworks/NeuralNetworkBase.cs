@@ -2870,12 +2870,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // rebuild cost every iteration — critical for large models like VideoCLIP.
         if (anyStructureChanged)
         {
-            _parameterBuffer = null;
-            _layerStructureVersion++;
-            // Invalidate the compiled inference cache — the layer graph changed
-            // (e.g., lazy init resized a weight tensor), so any plan traced
-            // before is now pointing at dead tensor references.
-            _compiledInferenceCache?.Invalidate();
+            // Reuse the full structural invalidation path so every cache that
+            // depends on layer structure (parameter count, parameter buffer,
+            // tape collector, layer-info, compiled inference plans, known-bad
+            // compile shapes) is reset together. Maintaining a partial path
+            // here would let _knownBadCompileShapes / _cachedParameterCount
+            // stay stale after a lazy-init resize and lock the model into
+            // permanently-eager Predict for shapes that previously failed.
+            InvalidateParameterCountCache();
         }
     }
 
