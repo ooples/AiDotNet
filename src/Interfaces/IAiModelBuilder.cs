@@ -1202,6 +1202,29 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null);
 
     /// <summary>
+    /// Controls whether GPU backend diagnostic output (device discovery, kernel
+    /// compilation, availability checks) is written to <see cref="System.Console"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Defaults to quiet — AiDotNet suppresses GPU init output by default as of
+    /// github.com/ooples/AiDotNet#1122. Set <see cref="AiDotNet.Configuration.GpuDiagnosticsOptions.Verbose"/>
+    /// to <c>true</c> when troubleshooting GPU driver/OpenCL issues, or
+    /// equivalently set the <c>AIDOTNET_GPU_VERBOSE=1</c> environment variable.
+    /// </para>
+    /// <para><b>For Beginners:</b> If you're building a model and want to see the
+    /// detailed GPU init messages (useful if something isn't working), call
+    /// <c>.ConfigureGpuDiagnostics(new() { Verbose = true })</c>. Otherwise leave
+    /// it alone — the library runs quietly by default.</para>
+    /// </remarks>
+    /// <param name="options">
+    /// The GPU-diagnostics options, or <c>null</c> to leave the current
+    /// settings unchanged.
+    /// </param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureGpuDiagnostics(AiDotNet.Configuration.GpuDiagnosticsOptions? options = null);
+
+    /// <summary>
     /// Configures the comprehensive safety pipeline for input validation and output filtering.
     /// </summary>
     /// <param name="configure">Action to configure safety settings. If null, safety is enabled with defaults.</param>

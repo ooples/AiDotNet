@@ -4748,6 +4748,32 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     }
 
     /// <summary>
+    /// Controls whether GPU backend diagnostic output is written to Console.
+    /// </summary>
+    /// <remarks>
+    /// Forwards to <see cref="AiDotNet.Configuration.GpuDiagnosticsConfig.Verbose"/>
+    /// which in turn forwards to the underlying Tensors-package flag. The flag
+    /// is process-global — setting it here affects every AiDotNet call in the
+    /// process. Default is <c>false</c> (quiet); env var
+    /// <c>AIDOTNET_GPU_VERBOSE=1</c> also enables it.
+    /// </remarks>
+    /// <param name="options">
+    /// The GPU-diagnostics options, or <c>null</c> to leave the current
+    /// settings unchanged. When <see cref="AiDotNet.Configuration.GpuDiagnosticsOptions.Verbose"/>
+    /// is <c>null</c>, this method is a no-op (preserves env-var / prior setting).
+    /// </param>
+    /// <returns>The builder instance for method chaining.</returns>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureGpuDiagnostics(
+        AiDotNet.Configuration.GpuDiagnosticsOptions? options = null)
+    {
+        if (options?.Verbose is bool verbose)
+        {
+            AiDotNet.Configuration.GpuDiagnosticsConfig.Verbose = verbose;
+        }
+        return this;
+    }
+
+    /// <summary>
     /// Configures benchmarking to run standardized benchmark suites and attach a structured report to the built model.
     /// </summary>
     /// <param name="options">Benchmarking options (suites, sampling, failure policy). If null, sensible defaults are used.</param>
