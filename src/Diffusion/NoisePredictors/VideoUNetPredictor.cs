@@ -285,36 +285,24 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private void InitializeLayers()
     {
-        // Input convolution + time-embedding MLPs + image-conditioning projection
-        // all use Lazy factories so their weight tensors stay at shape [0,0]
-        // until first Forward(). Per-instance memory at construction drops from
-        // ~(inputChannels*baseChannels*9 + 2*timeEmbeddingDim^2 +
-        // inputChannels*baseChannels) parameters to zero. Critical for the
-        // cancelled CI shards — these layers were the long-tail of OOM after
-        // the earlier lazy-init pass covered blocks but missed the preamble.
+        // Input convolution: [inputChannels] -> [baseChannels]
+        // For video: processes each frame spatially. Lazy so we don't allocate
+        // the kernel tensor at construction time.
         _inputConv = LazyConv2D(
-            inputDepth: _inputChannels,
-            inputHeight: _inputHeight,
-            inputWidth: _inputWidth,
-            outputDepth: _baseChannels,
-            kernelSize: 3,
-            stride: 1,
-            padding: 1,
+            inputDepth: _inputChannels, inputHeight: _inputHeight, inputWidth: _inputWidth,
+            outputDepth: _baseChannels, kernelSize: 3, stride: 1, padding: 1,
             activation: new IdentityActivation<T>());
 
+        // Time embedding MLP — lazy so constructor-time memory stays flat.
         _timeEmbedMlp1 = LazyDense(_timeEmbeddingDim / 4, _timeEmbeddingDim, new SiLUActivation<T>());
         _timeEmbedMlp2 = LazyDense(_timeEmbeddingDim, _timeEmbeddingDim, new SiLUActivation<T>());
 
+        // Image conditioning projection (for image-to-video)
         if (_supportsImageConditioning)
         {
             _imageCondProjection = LazyConv2D(
-                inputDepth: _inputChannels,
-                inputHeight: _inputHeight,
-                inputWidth: _inputWidth,
-                outputDepth: _baseChannels,
-                kernelSize: 1,
-                stride: 1,
-                padding: 0,
+                inputDepth: _inputChannels, inputHeight: _inputHeight, inputWidth: _inputWidth,
+                outputDepth: _baseChannels, kernelSize: 1, stride: 1, padding: 0,
                 activation: new IdentityActivation<T>());
         }
 
@@ -400,15 +388,10 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             }
         }
 
-        // Output convolution — lazy for same OOM-pressure reasons as _inputConv.
+        // Output convolution (lazy).
         _outputConv = LazyConv2D(
-            inputDepth: _baseChannels,
-            inputHeight: _inputHeight,
-            inputWidth: _inputWidth,
-            outputDepth: _outputChannels,
-            kernelSize: 3,
-            stride: 1,
-            padding: 1,
+            inputDepth: _baseChannels, inputHeight: _inputHeight, inputWidth: _inputWidth,
+            outputDepth: _outputChannels, kernelSize: 3, stride: 1, padding: 1,
             activation: new IdentityActivation<T>());
     }
 
@@ -633,40 +616,44 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private Tensor<T> ApplyFiLMConditioning(
         DenseLayer<T> projection, Tensor<T> x, Tensor<T> timeEmbed, bool isVideo)
     {
+        // Ground truth for dimensions is the feature map `x`, not the projection
+        // output — we want to fail loudly if the projection was constructed with
+        // the wrong channel count rather than silently slicing the projection
+        // vector and producing an out-of-shape broadcast.
+        int batchSize = x.Shape[0];
+        int channels = x.Shape[1];
+
         // timeEmbed: [B, timeEmbedDim] → project → [B, channels*2]
         var condVec = projection.Forward(timeEmbed);
-        int channels = condVec.Shape[^1] / 2;
-        int batchSize = condVec.Shape[0];
-
-        // Validate that the projection's output channels match x's channel
-        // dimension — FiLM modulation broadcasts scale/shift along spatial
-        // (and temporal) axes of x, so x must have EXACTLY `channels` on its
-        // channel axis. A misconfigured projection would silently produce
-        // wrong-shape broadcasts or broadcast into the wrong axis.
-        // x layout: [B, C, H, W] (isVideo=false) or [B, C, F, H, W] (isVideo=true).
-        int xChannels = x.Shape[1];
-        if (xChannels != channels)
+        if (condVec.Shape[0] != batchSize)
         {
             throw new InvalidOperationException(
-                $"FiLM projection misconfigured: produced {channels} channels per side " +
-                $"(condVec last dim = {channels * 2}), but x has {xChannels} channels. " +
-                $"Projection output width must be 2 × x.Shape[1].");
+                $"FiLM conditioning batch-size mismatch: feature map has batch {batchSize} " +
+                $"but projection output has batch {condVec.Shape[0]}.");
+        }
+        int expectedCondWidth = channels * 2;
+        if (condVec.Shape[^1] != expectedCondWidth)
+        {
+            throw new InvalidOperationException(
+                $"FiLM conditioning projection width mismatch: expected {expectedCondWidth} " +
+                $"(2 * channels for [scale, shift]), got {condVec.Shape[^1]}. " +
+                "This indicates the VideoBlock's TimeCondProjection was sized for a different channel count.");
         }
 
-        // Split [B, channels*2] → scale [B, channels] and shift [B, channels]
-        // via tape-tracked Engine ops. The previous implementation copied data
-        // into raw managed arrays via AsSpan() and built fresh Tensor<T>
-        // instances from them — that detaches the autograd tape, so gradients
-        // wouldn't flow back into projection's weights and the FiLM layer
-        // never learned. TensorSlice keeps the split inside the Engine graph.
-        var scale2D = Engine.TensorSlice(
-            condVec,
-            start: new[] { 0, 0 },
-            length: new[] { batchSize, channels });
-        var shift2D = Engine.TensorSlice(
-            condVec,
-            start: new[] { 0, channels },
-            length: new[] { batchSize, channels });
+        // Split into scale [B, C] and shift [B, C]
+        var scaleData = new T[batchSize * channels];
+        var shiftData = new T[batchSize * channels];
+        var condSpan = condVec.AsSpan();
+        for (int b = 0; b < batchSize; b++)
+        {
+            int srcBase = b * channels * 2;
+            int dstBase = b * channels;
+            for (int c = 0; c < channels; c++)
+            {
+                scaleData[dstBase + c] = condSpan[srcBase + c];
+                shiftData[dstBase + c] = condSpan[srcBase + channels + c];
+            }
+        }
 
         // Reshape scale/shift to broadcast over spatial (+ temporal) dims.
         // Image: x is [B, C, H, W] → scale/shift [B, C, 1, 1]
@@ -675,8 +662,8 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             ? new[] { batchSize, channels, 1, 1, 1 }
             : new[] { batchSize, channels, 1, 1 };
 
-        var scaleTensor = Engine.Reshape(scale2D, broadcastShape);
-        var shiftTensor = Engine.Reshape(shift2D, broadcastShape);
+        var scaleTensor = new Tensor<T>(scaleData, broadcastShape);
+        var shiftTensor = new Tensor<T>(shiftData, broadcastShape);
 
         // x = x * (1 + scale) + shift
         var onePlusScale = Engine.TensorBroadcastAdd(
@@ -723,37 +710,26 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </remarks>
     private Tensor<T> ApplyTemporalProcessing(ILayer<T> temporalLayer, Tensor<T> video)
     {
-        // Video shape: [B, C, F, H, W]. Use the public Shape accessor instead
-        // of the internal _shape field — that decouples this predictor from
-        // Tensor<T>'s internal storage layout. Shape already returns a safe
-        // read-only view that cannot mutate the tensor's backing array.
-        var shape = video.Shape;
+        // Video shape: [B, C, F, H, W]. Use the public Shape API and materialize
+        // an independent int[] so we don't couple to Tensor<T>'s internal backing
+        // field (which could be refactored) or share mutable shape storage with
+        // the source tensor.
+        var shape = video.Shape.ToArray();
         int batch = shape[0];
         int channels = shape[1];
         int frames = shape[2];
         int height = shape[3];
         int width = shape[4];
 
-        // Move F to the innermost axis BEFORE flattening — without this permute,
-        // a direct Reshape of [B, C, F, H, W] to [B*C*H*W, F] groups contiguous
-        // spatial elements into the F slot instead of one temporal vector per
-        // (b, c, h, w) position. The temporal Dense would then mix the wrong
-        // values (spatial neighbors instead of frames). Layout after permute:
-        //   [B, C, F, H, W]  → permute(0,1,3,4,2) → [B, C, H, W, F]
-        // → reshape → [B*C*H*W, F] (now correctly one temporal vector per row).
-        var permuted = Engine.TensorPermute(video, new[] { 0, 1, 3, 4, 2 });
-
+        // Reshape to [B*C*H*W, F] — each row is a temporal vector at one spatial-channel position.
         int spatialChannelPositions = batch * channels * height * width;
-        var flat = Engine.Reshape(permuted, new[] { spatialChannelPositions, frames });
+        var flat = Engine.Reshape(video, new[] { spatialChannelPositions, frames });
 
         // Apply temporal mixing layer: [B*C*H*W, F] → [B*C*H*W, F]
         var mixed = temporalLayer.Forward(flat);
 
-        // Reshape back to [B, C, H, W, F] then permute axes back to [B, C, F, H, W]
-        // — must invert the earlier permute so the residual add lines up with
-        // the original frame ordering.
-        var mixedPermuted = Engine.Reshape(mixed, new[] { batch, channels, height, width, frames });
-        var mixedVideo = Engine.TensorPermute(mixedPermuted, new[] { 0, 1, 4, 2, 3 });
+        // Reshape back to [B, C, F, H, W]
+        var mixedVideo = Engine.Reshape(mixed, shape);
 
         // Residual connection: output = input + temporalDelta
         // Per the paper, the residual ensures the temporal block only needs to learn
@@ -771,10 +747,8 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </remarks>
     private Tensor<T> ApplyTemporalAttention(ILayer<T> temporalAttention, Tensor<T> video)
     {
-        // Video shape: [batch, channels, frames, height, width] (NCFHW).
-        // Use the public Shape accessor — decouples this predictor from
-        // Tensor<T>'s internal storage layout.
-        var shape = video.Shape;
+        // Video shape: [batch, channels, frames, height, width] (NCFHW)
+        var shape = video._shape;
         int batch = shape[0];
         int channels = shape[1];
         int frames = shape[2];
@@ -991,10 +965,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         // The layer operates on the temporal axis (numFrames), not the channel axis.
         // Each spatial-channel position has its own numFrames-long vector that this
         // layer learns to mix — analogous to a depthwise-temporal 1x1 convolution
-        // in the time dimension. LazyDense defers weight allocation until first
-        // Forward — critical because TimeCondProjection + TemporalResBlock are
-        // added to EVERY encoder, middle, and decoder block, multiplying the
-        // memory pressure that lazy init was meant to relieve.
+        // in the time dimension. Lazy-allocated.
         return LazyDense(_numFrames, _numFrames, new SiLUActivation<T>());
     }
 
@@ -1004,9 +975,6 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private DenseLayer<T> CreateTimeCondProjection(int channels)
     {
-        // LazyDense — see CreateTemporalResBlock comment. Without lazy init this
-        // factory eagerly allocates timeEmbeddingDim*(channels*2) parameters per
-        // block × N blocks per VideoUNet, defeating the PR's lazy-init goal.
         return LazyDense(_timeEmbeddingDim, channels * 2, activation: null);
     }
 
@@ -1040,13 +1008,8 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private ILayer<T> CreateDownsample(int channels)
     {
         return LazyConv2D(
-            inputDepth: channels,
-            inputHeight: _inputHeight,
-            inputWidth: _inputWidth,
-            outputDepth: channels,
-            kernelSize: 3,
-            stride: 2,
-            padding: 1,
+            inputDepth: channels, inputHeight: _inputHeight, inputWidth: _inputWidth,
+            outputDepth: channels, kernelSize: 3, stride: 2, padding: 1,
             activation: new IdentityActivation<T>());
     }
 
@@ -1142,11 +1105,6 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         AddLayerParameters(parameters, block.SpatialAttention);
         AddLayerParameters(parameters, block.TemporalAttention);
         AddLayerParameters(parameters, block.CrossAttention);
-        // TimeCondProjection is a trainable DenseLayer added to every block —
-        // omitting it from the param/grad/serialize plumbing would mean its
-        // weights silently miss optimizer updates and don't survive
-        // Save/Load/Clone round-trips.
-        AddLayerParameters(parameters, block.TimeCondProjection);
         AddLayerParameters(parameters, block.Downsample);
         AddLayerParameters(parameters, block.Upsample);
     }
@@ -1198,10 +1156,6 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         SetLayerParameters(block.SpatialAttention, parameters, ref index);
         SetLayerParameters(block.TemporalAttention, parameters, ref index);
         SetLayerParameters(block.CrossAttention, parameters, ref index);
-        // Same plumbing rationale as AddBlockParameters — TimeCondProjection
-        // must round-trip through SetParameters or weights are silently lost
-        // on Clone/Load.
-        SetLayerParameters(block.TimeCondProjection, parameters, ref index);
         SetLayerParameters(block.Downsample, parameters, ref index);
         SetLayerParameters(block.Upsample, parameters, ref index);
     }
@@ -1280,10 +1234,6 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         AddLayerGradients(gradients, block.SpatialAttention);
         AddLayerGradients(gradients, block.TemporalAttention);
         AddLayerGradients(gradients, block.CrossAttention);
-        // Match Add/Set parameter ordering — TimeCondProjection grads must
-        // appear at the same index in the flattened gradient vector or the
-        // optimizer maps them onto the wrong weights.
-        AddLayerGradients(gradients, block.TimeCondProjection);
         AddLayerGradients(gradients, block.Downsample);
         AddLayerGradients(gradients, block.Upsample);
     }
