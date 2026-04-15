@@ -48,7 +48,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
@@ -83,7 +83,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input1 = CreateConstantTensor(InputShape, 0.1);
         var input2 = CreateConstantTensor(InputShape, 0.9);
 
@@ -115,7 +115,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
 
         var input = CreateRandomTensor(InputShape, rng);
         var scaledInput = new Tensor<double>(InputShape);
@@ -151,7 +151,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
 
         var output = model.Predict(input);
@@ -168,7 +168,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
         var output = model.Predict(input);
 
@@ -186,7 +186,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
@@ -213,7 +213,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var baseInput = CreateRandomTensor(InputShape, rng);
 
         // Predict at different "noise levels" by scaling input
@@ -259,7 +259,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
 
         var output = model.Predict(input);
@@ -282,7 +282,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
 
         var out1 = model.Predict(input);
@@ -298,7 +298,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
 
         var original = model.Predict(input);
@@ -316,7 +316,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
         model.Train(input, target);
@@ -328,7 +328,7 @@ public abstract class DiffusionModelTestBase
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        var model = CreateModel();
+        using var model = CreateModel();
         Assert.True(model.GetParameters().Length > 0,
             "Diffusion model should have learnable parameters.");
     }
@@ -338,7 +338,7 @@ public abstract class DiffusionModelTestBase
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        var model = CreateModel();
+        using var model = CreateModel();
         Assert.NotNull(model.Scheduler);
     }
 
