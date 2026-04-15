@@ -208,18 +208,18 @@ public static class CompiledTapeTrainingStep<T>
                 },
                 parameters);
 
-            // Configure the fused optimizer when EITHER the plan changed
-            // (recompile) OR any optimizer hyperparameter drifted from the last
-            // call. Plan identity alone is insufficient — the same plan can be
-            // configured with SGD then Adam, or Adam-with-different-LR. Detecting
-            // drift forces reconfigure (which resets m/v buffers — necessary
-            // when the math changed) instead of silently running stale moments.
+            // Configure once per fresh plan. Re-calling ConfigureOptimizer
+            // on the SAME plan re-allocates Adam's m/v buffers — so if the
+            // caller changes LR/betas mid-training we MUST NOT silently
+            // reconfigure (the resulting reset would corrupt training).
+            // Instead we return false → caller falls back to eager (which
+            // preserves the user's optimizer state via TapeStepContext) and
+            // marks the fused path as drift-incompatible for this run.
             var currentConfig = ((int)optimizerType, learningRate, beta1, beta2, epsilon, weightDecay);
-            bool needsReconfigure = !ReferenceEquals(_lastConfiguredPlan, plan)
-                || _lastOptimizerConfig is null
-                || !_lastOptimizerConfig.Value.Equals(currentConfig);
-            if (needsReconfigure)
+            if (!ReferenceEquals(_lastConfiguredPlan, plan))
             {
+                // New plan (first call OR plan was recompiled after invalidation).
+                // Configuring fresh m/v is correct here.
                 plan.ConfigureOptimizer(
                     optimizerType,
                     learningRate,
@@ -229,6 +229,17 @@ public static class CompiledTapeTrainingStep<T>
                     weightDecay);
                 _lastConfiguredPlan = plan;
                 _lastOptimizerConfig = currentConfig;
+            }
+            else if (_lastOptimizerConfig is null
+                || !_lastOptimizerConfig.Value.Equals(currentConfig))
+            {
+                // Same plan but optimizer config drifted between steps.
+                // Reconfiguring would reset m/v buffers and silently corrupt
+                // Adam training. Fall back to eager so the caller's pluggable
+                // optimizer (which owns its state) handles the LR change
+                // correctly. The caller's sticky-disable will keep subsequent
+                // steps on eager so we don't oscillate between the two.
+                return false;
             }
 
             // Execute forward + backward + fused parameter update in one replay.

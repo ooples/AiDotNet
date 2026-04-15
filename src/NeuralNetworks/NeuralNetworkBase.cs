@@ -2636,29 +2636,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var loss = LossFunction as LossFunctions.LossFunctionBase<T>;
         if (loss is null) return false;
 
-        // Mirror the eager path's bidirectional shape alignment — handle BOTH
-        // (a) forward output has extra leading batch dim vs target, AND
-        // (b) target has extra leading batch dim vs forward output.
-        // Fused path failures abandon optimizer state, so triggering one of
-        // these via missing-direction reshape would be costlier than the extra
-        // branch here.
-        Tensor<T> AlignShape(Tensor<T> fwd, Tensor<T> tgt)
-        {
-            if (fwd.Rank > tgt.Rank && fwd.Shape[0] == 1 && fwd.Length == tgt.Length)
-                return Engine.Reshape(fwd, tgt._shape);
-            // Note: when target has the extra dim we reshape the FORWARD output
-            // to match the target's shape so loss broadcast works either way.
-            if (tgt.Rank > fwd.Rank && tgt.Shape[0] == 1 && tgt.Length == fwd.Length)
-                return Engine.Reshape(fwd, tgt._shape);
-            return fwd;
-        }
-
+        // Mirror the eager path's bidirectional shape alignment exactly:
+        // (a) forward has extra leading dim → reshape FORWARD to target shape
+        // (b) target has extra leading dim → reshape TARGET to forward shape
+        // The eager path at TrainWithTape reshapes target down to forward's
+        // shape in branch (b); doing it the other way (reshape forward up to
+        // target's shape) makes the loss compute in a different space and
+        // produces different gradients. Apply the same direction-aware fix
+        // inside computeLoss where both tensors are in scope.
         var ran = Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
             trainableLayers,
             input,
             expected,
-            forward: inp => AlignShape(ForwardForTraining(inp), expected),
-            computeLoss: (pred, tgt) => loss.ComputeTapeLoss(pred, tgt),
+            forward: inp =>
+            {
+                var fwd = ForwardForTraining(inp);
+                // Branch (a): fwd has extra leading batch dim.
+                if (fwd.Rank > expected.Rank && fwd.Shape[0] == 1 && fwd.Length == expected.Length)
+                    return Engine.Reshape(fwd, expected._shape);
+                return fwd;
+            },
+            computeLoss: (pred, tgt) =>
+            {
+                // Branch (b): target has extra leading batch dim → reshape TARGET
+                // (matches the eager path's direction at TrainWithTape:2509-2512).
+                if (tgt.Rank > pred.Rank && tgt.Shape[0] == 1 && tgt.Length == pred.Length)
+                    tgt = Engine.Reshape(tgt, pred._shape);
+                return loss.ComputeTapeLoss(pred, tgt);
+            },
             optimizerType: fusedType,
             learningRate: lr,
             beta1: b1,
@@ -3044,6 +3049,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             layer.ResetState();
         }
+        // Give the fused-training path a fresh chance after ResetState — the
+        // user typically calls this between training runs, which is exactly
+        // when the sticky-disable from a prior fallback should be cleared.
+        _fusedTrainingDisabled = false;
     }
 
     /// <summary>
