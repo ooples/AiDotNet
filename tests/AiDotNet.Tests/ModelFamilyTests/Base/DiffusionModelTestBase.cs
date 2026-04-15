@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Runtime;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -30,18 +31,34 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
     public Task InitializeAsync() => Task.CompletedTask;
 
     /// <summary>
-    /// After-test hook. Forces a full two-pass GC to reclaim weight tensors
-    /// that the <c>using var model</c> Dispose released back into the
-    /// TensorAllocator pool. Without this hint, pool entries stay pinned by
-    /// gen-2 references across hundreds of sequential diffusion tests —
-    /// GC waits for memory pressure but the 45-min CI wall clock runs out
-    /// first. See <see cref="DiffusionModelTestBase"/> remarks.
+    /// After-test hook. Forces a blocking compacting Gen-2 GC (with explicit
+    /// Large Object Heap compaction) to reclaim weight tensors that the
+    /// <c>using var model</c> Dispose released AND defragment the LOH
+    /// between tests.
     /// </summary>
+    /// <remarks>
+    /// Diffusion model weight tensors are typically several hundred MB each,
+    /// well above the 85KB LOH threshold. Plain <see cref="GC.Collect"/> sweeps
+    /// the LOH but does NOT compact it — over hundreds of sequential tests,
+    /// LOH fragmentation accumulates until the next allocation can't find a
+    /// contiguous region even when total free bytes remain large, producing
+    /// <see cref="OutOfMemoryException"/>. Setting
+    /// <see cref="GCLargeObjectHeapCompactionMode.CompactOnce"/> on the next
+    /// Gen-2 pass forces LOH compaction; the mode auto-resets to Default
+    /// after each use, so this is scoped per-teardown.
+    /// </remarks>
     public Task DisposeAsync()
     {
-        GC.Collect();
+        // First pass: compacting Gen-2 + LOH reclaims everything unreachable
+        // including the just-Disposed model's weight tensors.
+        GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+        GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
         GC.WaitForPendingFinalizers();
-        GC.Collect();
+
+        // Second pass: finalizer-released memory (e.g. GPU-pool return paths)
+        // and any LOH allocations from finalizers.
+        GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+        GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
         return Task.CompletedTask;
     }
 
