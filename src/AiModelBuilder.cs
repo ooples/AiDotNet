@@ -1093,6 +1093,29 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public Task<AiModelResult<T, TInput, TOutput>> BuildAsync() => BuildAsync(CancellationToken.None);
 
+    /// <summary>
+    /// Pushes the configured gradient-checkpointing segment size onto the
+    /// current model. Called from <c>BuildAsync</c> at the top of the build
+    /// flow AND after any code path that reassigns <c>_model</c> (e.g., the
+    /// AutoML path that selects the best candidate).
+    /// </summary>
+    private void ApplyGradientCheckpointingFromMemoryConfig()
+    {
+        if (_model is not NeuralNetworks.NeuralNetworkBase<T> checkpointingTarget)
+            return;
+
+        int effective = 0; // default: disabled
+        if (_memoryConfig is { UseGradientCheckpointing: true } memCfg)
+        {
+            int layerCount = checkpointingTarget.Layers.Count;
+            effective = memCfg.CheckpointEveryNLayers > 0
+                ? memCfg.CheckpointEveryNLayers
+                : Math.Max(1, (int)Math.Sqrt(Math.Max(1, layerCount)));
+        }
+
+        checkpointingTarget.SetGradientCheckpointingSegmentSize(effective);
+    }
+
     public async Task<AiModelResult<T, TInput, TOutput>> BuildAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -1110,23 +1133,19 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // O(sqrt(N)) peak activation memory. CheckpointEveryNLayers <= 0
         // gets auto-computed as sqrt(layer count) so users who enable without
         // tuning get a reasonable default.
+        //
         // Always assert the checkpointing state — both directions explicitly.
         // If a model instance is reused across multiple BuildAsync calls with
         // different memory configs, only setting the non-zero case would let
         // a previously-enabled segment size remain active when the user
-        // disables checkpointing on a subsequent build. Setting to 0 in the
-        // disable branch resets to the standard O(N) activation storage path.
-        if (_model is NeuralNetworks.NeuralNetworkBase<T> checkpointingTarget)
-        {
-            int effective = 0; // default: disabled
-            if (_memoryConfig is { UseGradientCheckpointing: true } memCfg)
-            {
-                effective = memCfg.CheckpointEveryNLayers > 0
-                    ? memCfg.CheckpointEveryNLayers
-                    : Math.Max(1, (int)Math.Sqrt(checkpointingTarget.Layers.Count));
-            }
-            checkpointingTarget.SetGradientCheckpointingSegmentSize(effective);
-        }
+        // disables checkpointing on a subsequent build. The helper sets to 0
+        // in the disable branch resetting to the standard O(N) activation
+        // storage path.
+        //
+        // Re-applied later (after AutoML model assignment) so AutoML-selected
+        // models also pick up the user's UseGradientCheckpointing=true setting
+        // — without that re-application AutoML paths silently skip checkpointing.
+        ApplyGradientCheckpointingFromMemoryConfig();
 
         // Validate RAG pipeline composition if any RAG components were configured
         bool hasAnyRAG = _ragRetriever != null || _ragReranker != null || _ragGenerator != null
@@ -1849,6 +1868,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 CancellationToken.None);
 
             _model = bestModel;
+            // Re-apply checkpointing config now that AutoML has selected the
+            // model — the BuildAsync entry-point applied it once against the
+            // pre-AutoML _model (often null), so the AutoML-chosen model would
+            // otherwise miss the user's UseGradientCheckpointing=true setting.
+            ApplyGradientCheckpointingFromMemoryConfig();
 
             var searchEndedUtc = DateTimeOffset.UtcNow;
             autoMLSummary = CreateAutoMLRunSummary(searchStartedUtc, searchEndedUtc);
