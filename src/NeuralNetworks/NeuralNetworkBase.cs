@@ -2130,8 +2130,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// short-circuits to <see cref="PredictEager"/> without re-attempting
     /// compilation — re-trying every Predict would re-burn the same trace cost
     /// for no benefit and re-emit the same Trace warning on every call.
+    /// Uses <see cref="System.Collections.Concurrent.ConcurrentDictionary{TKey, TValue}"/>
+    /// (value type <see cref="byte"/> is unused) so concurrent Predict calls
+    /// on the same model instance (request-pool sharing) can safely add and
+    /// read without external synchronization.
     /// </summary>
-    private readonly HashSet<long> _knownBadCompileShapes = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<long, byte> _knownBadCompileShapes = new();
 
     /// <summary>
     /// Computes a deterministic 64-bit shape key (FNV-1a) for the bad-compile
@@ -2169,7 +2173,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return PredictEager(input);
 
         var shapeKey = ComputeShapeKey(input._shape);
-        if (_knownBadCompileShapes.Contains(shapeKey))
+        if (_knownBadCompileShapes.ContainsKey(shapeKey))
             return PredictEager(input);
 
         try
@@ -2187,7 +2191,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // observable in production telemetry — silent fallback would let
             // perf surveys be the first signal. Finally run eager so the call
             // succeeds.
-            _knownBadCompileShapes.Add(shapeKey);
+            _knownBadCompileShapes.TryAdd(shapeKey, 0);
             System.Diagnostics.Trace.TraceWarning(
                 $"PredictCompiled fallback for {GetType().FullName} " +
                 $"with input shape [{string.Join(", ", input.Shape)}]: {ex.GetType().Name}: {ex.Message}");
@@ -4400,8 +4404,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// Neural networks support JIT compilation for accelerated inference.
-    /// The computation graph represents the forward pass through all layers.
+    /// Default is <c>true</c> because the base class's <see cref="Predict"/> now
+    /// routes through <see cref="PredictCompiled"/>, which auto-compiles when
+    /// <c>TensorCodecOptions.EnableCompilation</c> is on AND the model's op
+    /// graph is traceable, falling back to eager otherwise. So every
+    /// <see cref="NeuralNetworkBase{T}"/> subclass is "JIT-capable" in the
+    /// effective sense: JIT is attempted, and failures degrade gracefully
+    /// to eager without the user noticing.
+    /// </para>
+    /// <para>
+    /// Subclasses whose forward path is known to be incompatible with graph
+    /// capture (non-Engine tensor access, scalar control flow that bakes at
+    /// trace time, layers whose outputs depend on mutable instance state)
+    /// should override this to return <c>false</c> — that signals "don't even
+    /// try" so tooling can short-circuit and users know to expect eager-only
+    /// performance.
     /// </para>
     /// <para><b>For Beginners:</b> JIT (Just-In-Time) compilation optimizes neural networks for faster predictions.
     ///
@@ -4415,12 +4432,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// - Production deployment (real-time predictions)
     /// - Batch inference (processing many examples)
     /// - Edge devices (mobile, embedded systems)
-    ///
-    /// Note: Not all layer types support JIT compilation yet. The SupportsJitCompilation
-    /// property indicates whether this specific network configuration can be JIT compiled.
     /// </para>
     /// </remarks>
-    public virtual bool SupportsJitCompilation => false;
+    public virtual bool SupportsJitCompilation => true;
 
     /// <inheritdoc/>
     /// <remarks>
