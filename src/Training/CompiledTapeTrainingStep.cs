@@ -33,6 +33,8 @@ public static class CompiledTapeTrainingStep<T>
     private static CompiledModelCache<T>? _cache;
     [ThreadStatic]
     private static Tensor<T>[]? _cachedParameters;
+    [ThreadStatic]
+    private static object? _lastConfiguredPlan;
 
     /// <summary>
     /// Executes a single compiled training step.
@@ -101,6 +103,117 @@ public static class CompiledTapeTrainingStep<T>
     {
         _cache?.Invalidate();
         _cachedParameters = null;
+        _lastConfiguredPlan = null;
+    }
+
+    /// <summary>
+    /// Compiled training step with <b>fused optimizer</b> — forward + backward +
+    /// parameter update all run in one compiled kernel. No materialized gradient
+    /// tensors between backward and the optimizer step. SIMD-accelerated update
+    /// via <see cref="FusedOptimizer"/> (float-only).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is faster than <see cref="Step"/> even for SGD because the parameter
+    /// update happens inside the compiled plan's replay kernel — zero allocation,
+    /// zero dispatch between backward and update, tight SIMD inner loop.
+    /// </para>
+    /// <para>
+    /// <b>Constraints:</b>
+    /// <list type="bullet">
+    /// <item>Only <c>T = float</c> is supported (Tensors-side limitation — the
+    /// fused optimizer kernels operate on <c>float*</c> directly).</item>
+    /// <item>Only SGD, Adam, and AdamW are supported by
+    /// <see cref="CompiledTrainingPlan{T}.ConfigureOptimizer"/>. Other optimizer
+    /// types must use the plain <see cref="Step"/> method or the eager tape path.</item>
+    /// <item>Hyperparameters (LR, betas, eps, weight decay) are <b>baked at the
+    /// first configure call per compile</b>. Re-calling with different LR would
+    /// reset the Adam momentum buffers — so callers that use learning-rate
+    /// schedulers or adaptive rates should use <see cref="Step"/> instead.</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// The method returns <c>false</c> on compilation failure OR when the fused
+    /// path isn't applicable, letting the caller fall through to the eager path.
+    /// The out <paramref name="lossValue"/> is meaningful only when the return
+    /// is <c>true</c>.
+    /// </para>
+    /// </remarks>
+    /// <returns><c>true</c> when the fused compiled step ran successfully.</returns>
+    public static bool TryStepWithFusedOptimizer(
+        IReadOnlyList<ITrainableLayer<T>> layers,
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
+        AiDotNet.Tensors.Engines.Compilation.OptimizerType optimizerType,
+        float learningRate,
+        float beta1,
+        float beta2,
+        float epsilon,
+        float weightDecay,
+        out T lossValue)
+    {
+        lossValue = MathHelper.GetNumericOperations<T>().Zero;
+
+        if (!TensorCodecOptions.Current.EnableCompilation) return false;
+        // Fused optimizer kernels are float-only on the Tensors side.
+        if (typeof(T) != typeof(float)) return false;
+        // Only SGD, Adam, AdamW are wired through ConfigureOptimizer.
+        if (optimizerType is not (AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdamW))
+            return false;
+
+        try
+        {
+            var cache = _cache ??= new CompiledModelCache<T>();
+
+            // Force layer initialization before collecting parameters — DenseLayer
+            // replaces _weights with a new tensor on first Forward.
+            if (_cachedParameters is null)
+                forward(input);
+
+            var parameters = _cachedParameters ??= CollectParameterArray(layers);
+
+            foreach (var layer in layers)
+                layer.ZeroGrad();
+
+            var plan = cache.GetOrCompileTraining(
+                (int[])input._shape.Clone(),
+                () =>
+                {
+                    var predicted = forward(input);
+                    computeLoss(predicted, target);
+                },
+                parameters);
+
+            // Configure the fused optimizer exactly once per compiled plan.
+            // Re-calling ConfigureOptimizer resets the Adam m/v buffers — we must
+            // not do that per step. Track plan identity via ThreadStatic.
+            if (!ReferenceEquals(_lastConfiguredPlan, plan))
+            {
+                plan.ConfigureOptimizer(
+                    optimizerType,
+                    learningRate,
+                    beta1,
+                    beta2,
+                    epsilon,
+                    weightDecay);
+                _lastConfiguredPlan = plan;
+            }
+
+            // Execute forward + backward + fused parameter update in one replay.
+            var lossOutput = plan.Step();
+            lossValue = lossOutput.Length > 0 ? lossOutput[0] : MathHelper.GetNumericOperations<T>().Zero;
+            return true;
+        }
+        catch
+        {
+            // Clear the configured-plan cache so next attempt reconfigures fresh.
+            _lastConfiguredPlan = null;
+            return false;
+        }
     }
 
     private static Tensor<T>[] CollectParameterArray(IReadOnlyList<ITrainableLayer<T>> layers)

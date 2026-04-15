@@ -2456,6 +2456,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected void TrainWithTape(Tensor<T> input, Tensor<T> expected,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
+        var resolvedOptimizer = optimizer ?? GetOrCreateBaseOptimizer();
+
+        // Fused-compiled fast path: forward + backward + parameter update all
+        // in one compiled kernel, SIMD-accelerated, zero materialized gradient
+        // tensors between backward and the optimizer step. Engages when the
+        // optimizer is a plain Adam/AdamW/SGD with constant hyperparameters
+        // AND the numeric type is float (Tensors-side fused optimizer kernels
+        // operate on float* directly). Returns false if any condition isn't
+        // met or tracing fails; we then fall through to the eager tape path
+        // below with behavior unchanged.
+        if (TryTrainWithFusedOptimizer(input, expected, resolvedOptimizer))
+            return;
+
         // Initialize parameter buffer — replaces layer tensors with buffer-backed views.
         // try/finally MUST cover this so views are restored even if setup throws.
         var initialParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _parameterBuffer is null ? -1 : _layerStructureVersion);
@@ -2549,6 +2562,151 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         // Use the default optimizer (which respects configured LR) rather than creating a throwaway one
         TrainWithTape(input, expected, optimizer: null);
+    }
+
+    /// <summary>
+    /// Attempts the fused-compiled training path — forward + backward + fused
+    /// optimizer update all in one compiled kernel. Engages when conditions
+    /// permit, returns <c>false</c> to signal the caller to fall back to the
+    /// eager tape path otherwise.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Conditions for fused path:
+    /// <list type="bullet">
+    /// <item><c>TensorCodecOptions.Current.EnableCompilation</c> is true (user
+    /// opted into JIT via <see cref="AiModelBuilder{T,TInput,TOutput}.ConfigureJitCompilation"/>).</item>
+    /// <item><c>T</c> is <see cref="float"/> — the Tensors-side fused optimizer
+    /// operates on <c>float*</c> buffers directly.</item>
+    /// <item>The resolved optimizer is a plain <see cref="AdamOptimizer{T,TInput,TOutput}"/>,
+    /// <see cref="AdamWOptimizer{T,TInput,TOutput}"/>, or
+    /// <see cref="StochasticGradientDescentOptimizer{T,TInput,TOutput}"/> without
+    /// adaptive-rate machinery that would mutate hyperparameters between steps.
+    /// LR schedulers and adaptive rates fall back to the eager path — the fused
+    /// kernel bakes hyperparameters into the compiled plan and reconfiguring
+    /// them per step would reset Adam's moment buffers, destroying training.</item>
+    /// <item>At least one trainable layer participates in the graph (no-op models fall back).</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// When all hold, <see cref="Training.CompiledTapeTrainingStep{T}.TryStepWithFusedOptimizer"/>
+    /// runs the compiled fwd+bwd+update kernel and updates <see cref="LastLoss"/>.
+    /// Behavior matches eager Adam/AdamW/SGD closely enough that training converges
+    /// identically on standard benchmarks (the fused kernels use the same formulas).
+    /// </para>
+    /// </remarks>
+    private bool TryTrainWithFusedOptimizer(
+        Tensor<T> input,
+        Tensor<T> expected,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> resolvedOptimizer)
+    {
+        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
+            return false;
+        if (typeof(T) != typeof(float))
+            return false;
+
+        if (!TryMapToFusedOptimizerConfig(
+                resolvedOptimizer, out var fusedType, out float lr, out float b1, out float b2, out float eps, out float wd))
+            return false;
+
+        var trainableLayers = new List<ITrainableLayer<T>>();
+        foreach (var layer in Layers)
+            if (layer is ITrainableLayer<T> trainable)
+                trainableLayers.Add(trainable);
+        if (trainableLayers.Count == 0) return false;
+
+        var loss = LossFunction as LossFunctions.LossFunctionBase<T>;
+        if (loss is null) return false;
+
+        Tensor<T> AlignShape(Tensor<T> fwd, Tensor<T> tgt)
+        {
+            if (fwd.Rank > tgt.Rank && fwd.Shape[0] == 1 && fwd.Length == tgt.Length)
+                return Engine.Reshape(fwd, tgt._shape);
+            return fwd;
+        }
+
+        var ran = Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
+            trainableLayers,
+            input,
+            expected,
+            forward: inp => AlignShape(ForwardForTraining(inp), expected),
+            computeLoss: (pred, tgt) => loss.ComputeTapeLoss(pred, tgt),
+            optimizerType: fusedType,
+            learningRate: lr,
+            beta1: b1,
+            beta2: b2,
+            epsilon: eps,
+            weightDecay: wd,
+            out T lossValue);
+
+        if (ran)
+            LastLoss = lossValue;
+        return ran;
+    }
+
+    /// <summary>
+    /// Inspects a pluggable optimizer and maps it onto the fixed set supported
+    /// by the Tensors-side fused kernel (<c>SGD</c>, <c>Adam</c>, <c>AdamW</c>).
+    /// Returns <c>false</c> for any optimizer type outside that set, for any
+    /// optimizer with a learning-rate scheduler attached, or for any
+    /// configuration that mutates hyperparameters between steps (adaptive rates).
+    /// </summary>
+    private static bool TryMapToFusedOptimizerConfig(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        out AiDotNet.Tensors.Engines.Compilation.OptimizerType optimizerType,
+        out float learningRate,
+        out float beta1,
+        out float beta2,
+        out float epsilon,
+        out float weightDecay)
+    {
+        optimizerType = default;
+        learningRate = 0f;
+        beta1 = 0f;
+        beta2 = 0f;
+        epsilon = 0f;
+        weightDecay = 0f;
+
+        switch (optimizer)
+        {
+            case Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>> adam:
+            {
+                if (adam.GetOptions() is not Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> opts)
+                    return false;
+                if (opts.UseAdaptiveLearningRate) return false;
+                optimizerType = AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam;
+                learningRate = (float)adam.GetCurrentLearningRate();
+                beta1 = (float)opts.Beta1;
+                beta2 = (float)opts.Beta2;
+                epsilon = (float)opts.Epsilon;
+                weightDecay = 0f;
+                return true;
+            }
+            case Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>> adamW:
+            {
+                if (adamW.GetOptions() is not Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> opts)
+                    return false;
+                if (opts.UseAdaptiveLearningRate) return false;
+                optimizerType = AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdamW;
+                learningRate = (float)adamW.GetCurrentLearningRate();
+                beta1 = (float)opts.Beta1;
+                beta2 = (float)opts.Beta2;
+                epsilon = (float)opts.Epsilon;
+                weightDecay = (float)opts.WeightDecay;
+                return true;
+            }
+            case Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>> sgd:
+            {
+                if (sgd.GetOptions() is not Models.Options.StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>> opts)
+                    return false;
+                if (opts.UseAdaptiveLearningRate) return false;
+                optimizerType = AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD;
+                learningRate = (float)sgd.GetCurrentLearningRate();
+                return true;
+            }
+            default:
+                return false;
+        }
     }
 
     /// <summary>
