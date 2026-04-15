@@ -295,12 +295,25 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <summary>
     /// Ensures layers are initialized (lazy init on first use).
     /// </summary>
+    /// <remarks>
+    /// Retry-safe: if <see cref="InitializeLayers"/> throws after partially
+    /// populating <c>_blocks</c>, the next call must rebuild from a clean
+    /// slate. Without the pre-clear, a retry would append a second set of
+    /// blocks on top of the partial state, doubling the layer graph.
+    /// <c>_layersInitialized = true</c> is the LAST step inside the lock so
+    /// observers never see a partially-built graph.
+    /// </remarks>
     private void EnsureLayersInitialized()
     {
         if (_layersInitialized) return;
         lock (_initLock)
         {
             if (_layersInitialized) return; // double-checked locking
+            // Clear any partial state from a prior failed init attempt.
+            // _blocks is the only mutable collection touched by InitializeLayers;
+            // other fields (_patchEmbed, _timeEmbed1, etc.) are reassigned
+            // wholesale by InitializeLayers so partial state there isn't a hazard.
+            _blocks.Clear();
             InitializeLayers(_architecture, _numClasses, _customBlocks);
             _layersInitialized = true;
         }

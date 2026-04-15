@@ -329,7 +329,12 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var model = CreateModel(); // DiffusionModelBase does not implement IDisposable — GC is the release path
-        Assert.True(model.GetParameters().Length > 0,
+        // Use ParameterCount instead of GetParameters().Length — GetParameters
+        // forces full lazy-init allocation just to measure the length, defeating
+        // the lazy-allocation work in this PR. ParameterCount asks the same
+        // semantic question ("does the model have learnable parameters?") via
+        // the lazy-friendly metadata API.
+        Assert.True(model.ParameterCount > 0,
             "Diffusion model should have learnable parameters.");
     }
 

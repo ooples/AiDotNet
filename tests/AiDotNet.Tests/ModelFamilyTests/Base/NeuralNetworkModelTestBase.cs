@@ -269,8 +269,12 @@ public abstract class NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         using var network = CreateNetwork();
-        var parameters = network.GetParameters();
-        Assert.True(parameters.Length > 0, "Neural network should have learnable parameters.");
+        // Use ParameterCount instead of GetParameters().Length — GetParameters
+        // materializes the full flat parameter vector just to measure existence,
+        // forcing all lazy-init layers to allocate. ParameterCount answers the
+        // same question ("does the network have learnable parameters?") without
+        // the allocation, preserving the lazy-init memory savings.
+        Assert.True(network.ParameterCount > 0, "Neural network should have learnable parameters.");
     }
 
     [Fact(Timeout = 120000)]

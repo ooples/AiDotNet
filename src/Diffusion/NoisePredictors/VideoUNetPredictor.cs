@@ -642,20 +642,20 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         int channels = condVec.Shape[^1] / 2;
         int batchSize = condVec.Shape[0];
 
-        // Split into scale [B, C] and shift [B, C]
-        var scaleData = new T[batchSize * channels];
-        var shiftData = new T[batchSize * channels];
-        var condSpan = condVec.AsSpan();
-        for (int b = 0; b < batchSize; b++)
-        {
-            int srcBase = b * channels * 2;
-            int dstBase = b * channels;
-            for (int c = 0; c < channels; c++)
-            {
-                scaleData[dstBase + c] = condSpan[srcBase + c];
-                shiftData[dstBase + c] = condSpan[srcBase + channels + c];
-            }
-        }
+        // Split [B, channels*2] → scale [B, channels] and shift [B, channels]
+        // via tape-tracked Engine ops. The previous implementation copied data
+        // into raw managed arrays via AsSpan() and built fresh Tensor<T>
+        // instances from them — that detaches the autograd tape, so gradients
+        // wouldn't flow back into projection's weights and the FiLM layer
+        // never learned. TensorSlice keeps the split inside the Engine graph.
+        var scale2D = Engine.TensorSlice(
+            condVec,
+            start: new[] { 0, 0 },
+            length: new[] { batchSize, channels });
+        var shift2D = Engine.TensorSlice(
+            condVec,
+            start: new[] { 0, channels },
+            length: new[] { batchSize, channels });
 
         // Reshape scale/shift to broadcast over spatial (+ temporal) dims.
         // Image: x is [B, C, H, W] → scale/shift [B, C, 1, 1]
@@ -664,8 +664,8 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             ? new[] { batchSize, channels, 1, 1, 1 }
             : new[] { batchSize, channels, 1, 1 };
 
-        var scaleTensor = new Tensor<T>(scaleData, broadcastShape);
-        var shiftTensor = new Tensor<T>(shiftData, broadcastShape);
+        var scaleTensor = Engine.Reshape(scale2D, broadcastShape);
+        var shiftTensor = Engine.Reshape(shift2D, broadcastShape);
 
         // x = x * (1 + scale) + shift
         var onePlusScale = Engine.TensorBroadcastAdd(
@@ -712,23 +712,36 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </remarks>
     private Tensor<T> ApplyTemporalProcessing(ILayer<T> temporalLayer, Tensor<T> video)
     {
-        // Video shape: [B, C, F, H, W]
-        var shape = video._shape;
+        // Video shape: [B, C, F, H, W]. Clone the shape array — video._shape is
+        // the tensor's mutable backing storage, sharing it would let downstream
+        // mutations corrupt the source tensor.
+        var shape = (int[])video._shape.Clone();
         int batch = shape[0];
         int channels = shape[1];
         int frames = shape[2];
         int height = shape[3];
         int width = shape[4];
 
-        // Reshape to [B*C*H*W, F] — each row is a temporal vector at one spatial-channel position.
+        // Move F to the innermost axis BEFORE flattening — without this permute,
+        // a direct Reshape of [B, C, F, H, W] to [B*C*H*W, F] groups contiguous
+        // spatial elements into the F slot instead of one temporal vector per
+        // (b, c, h, w) position. The temporal Dense would then mix the wrong
+        // values (spatial neighbors instead of frames). Layout after permute:
+        //   [B, C, F, H, W]  → permute(0,1,3,4,2) → [B, C, H, W, F]
+        // → reshape → [B*C*H*W, F] (now correctly one temporal vector per row).
+        var permuted = Engine.TensorPermute(video, new[] { 0, 1, 3, 4, 2 });
+
         int spatialChannelPositions = batch * channels * height * width;
-        var flat = Engine.Reshape(video, new[] { spatialChannelPositions, frames });
+        var flat = Engine.Reshape(permuted, new[] { spatialChannelPositions, frames });
 
         // Apply temporal mixing layer: [B*C*H*W, F] → [B*C*H*W, F]
         var mixed = temporalLayer.Forward(flat);
 
-        // Reshape back to [B, C, F, H, W]
-        var mixedVideo = Engine.Reshape(mixed, shape);
+        // Reshape back to [B, C, H, W, F] then permute axes back to [B, C, F, H, W]
+        // — must invert the earlier permute so the residual add lines up with
+        // the original frame ordering.
+        var mixedPermuted = Engine.Reshape(mixed, new[] { batch, channels, height, width, frames });
+        var mixedVideo = Engine.TensorPermute(mixedPermuted, new[] { 0, 1, 4, 2, 3 });
 
         // Residual connection: output = input + temporalDelta
         // Per the paper, the residual ensures the temporal block only needs to learn
@@ -1109,6 +1122,11 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         AddLayerParameters(parameters, block.SpatialAttention);
         AddLayerParameters(parameters, block.TemporalAttention);
         AddLayerParameters(parameters, block.CrossAttention);
+        // TimeCondProjection is a trainable DenseLayer added to every block —
+        // omitting it from the param/grad/serialize plumbing would mean its
+        // weights silently miss optimizer updates and don't survive
+        // Save/Load/Clone round-trips.
+        AddLayerParameters(parameters, block.TimeCondProjection);
         AddLayerParameters(parameters, block.Downsample);
         AddLayerParameters(parameters, block.Upsample);
     }
@@ -1160,6 +1178,10 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         SetLayerParameters(block.SpatialAttention, parameters, ref index);
         SetLayerParameters(block.TemporalAttention, parameters, ref index);
         SetLayerParameters(block.CrossAttention, parameters, ref index);
+        // Same plumbing rationale as AddBlockParameters — TimeCondProjection
+        // must round-trip through SetParameters or weights are silently lost
+        // on Clone/Load.
+        SetLayerParameters(block.TimeCondProjection, parameters, ref index);
         SetLayerParameters(block.Downsample, parameters, ref index);
         SetLayerParameters(block.Upsample, parameters, ref index);
     }
@@ -1238,6 +1260,10 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         AddLayerGradients(gradients, block.SpatialAttention);
         AddLayerGradients(gradients, block.TemporalAttention);
         AddLayerGradients(gradients, block.CrossAttention);
+        // Match Add/Set parameter ordering — TimeCondProjection grads must
+        // appear at the same index in the flattened gradient vector or the
+        // optimizer maps them onto the wrong weights.
+        AddLayerGradients(gradients, block.TimeCondProjection);
         AddLayerGradients(gradients, block.Downsample);
         AddLayerGradients(gradients, block.Upsample);
     }
