@@ -285,41 +285,37 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private void InitializeLayers()
     {
-        // Input convolution: [inputChannels] -> [baseChannels]
-        // For video: processes each frame spatially
-        _inputConv = new ConvolutionalLayer<T>(
+        // Input convolution + time-embedding MLPs + image-conditioning projection
+        // all use Lazy factories so their weight tensors stay at shape [0,0]
+        // until first Forward(). Per-instance memory at construction drops from
+        // ~(inputChannels*baseChannels*9 + 2*timeEmbeddingDim^2 +
+        // inputChannels*baseChannels) parameters to zero. Critical for the
+        // cancelled CI shards — these layers were the long-tail of OOM after
+        // the earlier lazy-init pass covered blocks but missed the preamble.
+        _inputConv = LazyConv2D(
             inputDepth: _inputChannels,
-            outputDepth: _baseChannels,
-            kernelSize: 3,
             inputHeight: _inputHeight,
             inputWidth: _inputWidth,
+            outputDepth: _baseChannels,
+            kernelSize: 3,
             stride: 1,
             padding: 1,
-            activationFunction: new IdentityActivation<T>());
+            activation: new IdentityActivation<T>());
 
-        // Time embedding MLP
-        _timeEmbedMlp1 = new DenseLayer<T>(
-            _timeEmbeddingDim / 4,
-            _timeEmbeddingDim,
-            (IActivationFunction<T>)new SiLUActivation<T>());
+        _timeEmbedMlp1 = LazyDense(_timeEmbeddingDim / 4, _timeEmbeddingDim, new SiLUActivation<T>());
+        _timeEmbedMlp2 = LazyDense(_timeEmbeddingDim, _timeEmbeddingDim, new SiLUActivation<T>());
 
-        _timeEmbedMlp2 = new DenseLayer<T>(
-            _timeEmbeddingDim,
-            _timeEmbeddingDim,
-            (IActivationFunction<T>)new SiLUActivation<T>());
-
-        // Image conditioning projection (for image-to-video)
         if (_supportsImageConditioning)
         {
-            _imageCondProjection = new ConvolutionalLayer<T>(
+            _imageCondProjection = LazyConv2D(
                 inputDepth: _inputChannels,
-                outputDepth: _baseChannels,
-                kernelSize: 1,
                 inputHeight: _inputHeight,
                 inputWidth: _inputWidth,
+                outputDepth: _baseChannels,
+                kernelSize: 1,
                 stride: 1,
                 padding: 0,
-                activationFunction: new IdentityActivation<T>());
+                activation: new IdentityActivation<T>());
         }
 
         // Build encoder
@@ -404,16 +400,16 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             }
         }
 
-        // Output convolution
-        _outputConv = new ConvolutionalLayer<T>(
+        // Output convolution — lazy for same OOM-pressure reasons as _inputConv.
+        _outputConv = LazyConv2D(
             inputDepth: _baseChannels,
-            outputDepth: _outputChannels,
-            kernelSize: 3,
             inputHeight: _inputHeight,
             inputWidth: _inputWidth,
+            outputDepth: _outputChannels,
+            kernelSize: 3,
             stride: 1,
             padding: 1,
-            activationFunction: new IdentityActivation<T>());
+            activation: new IdentityActivation<T>());
     }
 
     /// <inheritdoc />
@@ -642,6 +638,21 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         int channels = condVec.Shape[^1] / 2;
         int batchSize = condVec.Shape[0];
 
+        // Validate that the projection's output channels match x's channel
+        // dimension — FiLM modulation broadcasts scale/shift along spatial
+        // (and temporal) axes of x, so x must have EXACTLY `channels` on its
+        // channel axis. A misconfigured projection would silently produce
+        // wrong-shape broadcasts or broadcast into the wrong axis.
+        // x layout: [B, C, H, W] (isVideo=false) or [B, C, F, H, W] (isVideo=true).
+        int xChannels = x.Shape[1];
+        if (xChannels != channels)
+        {
+            throw new InvalidOperationException(
+                $"FiLM projection misconfigured: produced {channels} channels per side " +
+                $"(condVec last dim = {channels * 2}), but x has {xChannels} channels. " +
+                $"Projection output width must be 2 × x.Shape[1].");
+        }
+
         // Split [B, channels*2] → scale [B, channels] and shift [B, channels]
         // via tape-tracked Engine ops. The previous implementation copied data
         // into raw managed arrays via AsSpan() and built fresh Tensor<T>
@@ -712,10 +723,11 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </remarks>
     private Tensor<T> ApplyTemporalProcessing(ILayer<T> temporalLayer, Tensor<T> video)
     {
-        // Video shape: [B, C, F, H, W]. Clone the shape array — video._shape is
-        // the tensor's mutable backing storage, sharing it would let downstream
-        // mutations corrupt the source tensor.
-        var shape = (int[])video._shape.Clone();
+        // Video shape: [B, C, F, H, W]. Use the public Shape accessor instead
+        // of the internal _shape field — that decouples this predictor from
+        // Tensor<T>'s internal storage layout. Shape already returns a safe
+        // read-only view that cannot mutate the tensor's backing array.
+        var shape = video.Shape;
         int batch = shape[0];
         int channels = shape[1];
         int frames = shape[2];
@@ -759,8 +771,10 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </remarks>
     private Tensor<T> ApplyTemporalAttention(ILayer<T> temporalAttention, Tensor<T> video)
     {
-        // Video shape: [batch, channels, frames, height, width] (NCFHW)
-        var shape = video._shape;
+        // Video shape: [batch, channels, frames, height, width] (NCFHW).
+        // Use the public Shape accessor — decouples this predictor from
+        // Tensor<T>'s internal storage layout.
+        var shape = video.Shape;
         int batch = shape[0];
         int channels = shape[1];
         int frames = shape[2];
@@ -960,7 +974,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateSpatialResBlock(int inChannels, int outChannels)
     {
-        return new DenseLayer<T>(inChannels, outChannels, (IActivationFunction<T>)new SiLUActivation<T>());
+        return LazyDense(inChannels, outChannels, new SiLUActivation<T>());
     }
 
     /// <summary>
@@ -1025,15 +1039,15 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateDownsample(int channels)
     {
-        return new ConvolutionalLayer<T>(
+        return LazyConv2D(
             inputDepth: channels,
-            outputDepth: channels,
-            kernelSize: 3,
             inputHeight: _inputHeight,
             inputWidth: _inputWidth,
+            outputDepth: channels,
+            kernelSize: 3,
             stride: 2,
             padding: 1,
-            activationFunction: new IdentityActivation<T>());
+            activation: new IdentityActivation<T>());
     }
 
     private ILayer<T> CreateUpsample(int channels)
