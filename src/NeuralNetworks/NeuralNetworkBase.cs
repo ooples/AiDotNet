@@ -4315,16 +4315,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // (pool-rented weight tensors, GPU handles, native buffers). Catch
             // ObjectDisposedException so a shared-layer graph — the same
             // ILayer instance used by multiple networks — doesn't abort the
-            // cascade when a previous owner already disposed it.
+            // cascade when a previous owner already disposed it. We log the
+            // (rare) double-dispose event to aid diagnosis rather than fully
+            // swallowing it.
             foreach (var layer in _layers)
             {
                 if (layer is IDisposable disposable)
                 {
                     try { disposable.Dispose(); }
-                    catch (ObjectDisposedException) { }
+                    catch (ObjectDisposedException ex)
+                    {
+                        System.Diagnostics.Trace.TraceWarning(
+                            $"NeuralNetworkBase.Dispose: layer {layer.GetType().Name} already disposed: {ex.Message}");
+                    }
                 }
             }
 
+            // Release activation pool / gradient checkpoint state before
+            // mixed-precision teardown — the memory manager may hold pooled
+            // buffers that mixed-precision teardown wants to recycle.
+            DisableMemoryManagement();
             DisableMixedPrecision();
         }
     }
