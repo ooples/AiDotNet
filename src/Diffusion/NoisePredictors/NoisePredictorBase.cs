@@ -52,13 +52,65 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     private bool _disposed;
 
     /// <summary>
-    /// Concrete predictors override to expose their <see cref="ILayer{T}"/>
+    /// Concrete predictors can override to expose their <see cref="ILayer{T}"/>
     /// instances for (a) Dispose cascade — pool-rented weight tensors return to
     /// the allocator, and (b) future compilation features (plan serialization,
-    /// CUDA Graph capture) that need visibility into the layer graph. Default:
-    /// none — the Dispose cascade is a no-op until a concrete predictor opts in.
+    /// CUDA Graph capture) that need visibility into the layer graph.
     /// </summary>
-    protected virtual IEnumerable<ILayer<T>> EnumerateLayers() => Array.Empty<ILayer<T>>();
+    /// <remarks>
+    /// <b>Default behavior</b>: when a subclass does NOT override this, the base
+    /// performs a reflection walk over its own and the subclass's instance fields
+    /// and yields anything that implements <see cref="ILayer{T}"/> (including
+    /// inside collection fields such as <c>List&lt;ILayer&lt;T&gt;&gt;</c>). This
+    /// catches the common predictor layout (private layer fields like
+    /// <c>_timeEmbed1</c>, <c>_blocks</c>, <c>_patchEmbed</c>) without forcing
+    /// every concrete predictor to override. Explicit overrides remain preferred
+    /// in performance-sensitive code where reflection overhead matters.
+    /// </remarks>
+    protected virtual IEnumerable<ILayer<T>> EnumerateLayers() =>
+        ReflectInstanceLayers(this);
+
+    /// <summary>
+    /// Walks an object's instance fields and yields anything that implements
+    /// <see cref="ILayer{T}"/>, including layers stored in collection fields.
+    /// Used as the default fallback for <see cref="EnumerateLayers"/> so concrete
+    /// predictors don't need to override just to get correct cleanup.
+    /// </summary>
+    private static IEnumerable<ILayer<T>> ReflectInstanceLayers(object root)
+    {
+        var visited = new HashSet<object>(AiDotNet.Helpers.TensorReferenceComparer<object>.Instance);
+        if (!visited.Add(root)) yield break;
+
+        var type = root.GetType();
+        const System.Reflection.BindingFlags fieldFlags =
+            System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.Public |
+            System.Reflection.BindingFlags.NonPublic;
+        for (var t = type; t != null && t != typeof(object); t = t.BaseType)
+        {
+            foreach (var field in t.GetFields(fieldFlags | System.Reflection.BindingFlags.DeclaredOnly))
+            {
+                if (field.FieldType.IsValueType || field.FieldType == typeof(string)) continue;
+                object? value;
+                try { value = field.GetValue(root); }
+                catch { continue; }
+                if (value is null || !visited.Add(value)) continue;
+
+                if (value is ILayer<T> layer)
+                {
+                    yield return layer;
+                }
+                else if (value is System.Collections.IEnumerable enumerable && value is not string)
+                {
+                    foreach (var item in enumerable)
+                    {
+                        if (item is ILayer<T> nestedLayer && visited.Add(item))
+                            yield return nestedLayer;
+                    }
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// Runs <paramref name="eagerFallback"/> under the compile host — traces on
@@ -611,12 +663,27 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
 
         _compileHost.Dispose();
 
+        // Release tensor handles cached per integer timestep — these are
+        // owned exclusively by this predictor and have no other Dispose path.
+        foreach (var embedding in _timestepEmbeddingCache.Values)
+        {
+            if (embedding is IDisposable d) d.Dispose();
+        }
+        _timestepEmbeddingCache.Clear();
+
         foreach (var layer in EnumerateLayers())
         {
             if (layer is IDisposable disposable)
             {
                 try { disposable.Dispose(); }
-                catch (ObjectDisposedException) { }
+                catch (ObjectDisposedException ex)
+                {
+                    // Trace the (rare) double-dispose so it's diagnosable
+                    // instead of fully hidden — happens when the same layer
+                    // instance is shared across predictors.
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"NoisePredictorBase.Dispose: {layer.GetType().Name} already disposed: {ex.Message}");
+                }
             }
         }
     }

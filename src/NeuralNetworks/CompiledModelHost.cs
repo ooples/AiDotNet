@@ -44,7 +44,7 @@ namespace AiDotNet.NeuralNetworks;
 /// longer matches the ops the plan captured.
 /// </para>
 /// </remarks>
-public sealed class CompiledModelHost<T> : IDisposable
+internal sealed class CompiledModelHost<T> : IDisposable
 {
     /// <summary>
     /// Lazily-allocated Tensors-package compile cache. Keyed internally by input
@@ -111,11 +111,21 @@ public sealed class CompiledModelHost<T> : IDisposable
             _lastCompiledVersion = structureVersion;
             return plan.Execute();
         }
-        catch
+        catch (Exception ex)
         {
-            // Compilation or replay threw — run eager so the call still succeeds.
-            // Next call will retry compilation since the cache didn't store a
-            // plan for the failed shape.
+            // Compilation or replay threw. If a broken plan was already cached
+            // (replay path failed mid-execute), invalidate the entire cache so
+            // the next call recompiles instead of re-entering the same crash
+            // every time. Reset the version watermark so the next call is a
+            // fresh compile-attempt rather than a no-op cache lookup.
+            _cache?.Invalidate();
+            _lastCompiledVersion = -1;
+            // Trace the failure so the regression is observable in production
+            // telemetry — silent fallback would let perf surveys be the first
+            // signal that compiled inference stopped working.
+            System.Diagnostics.Trace.TraceWarning(
+                $"CompiledModelHost falling back to eager after compile/replay failure: " +
+                $"{ex.GetType().Name}: {ex.Message}");
             return eagerForward();
         }
     }
