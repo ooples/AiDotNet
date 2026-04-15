@@ -984,32 +984,27 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
         // Always dispose the scheduler we own — schedulers may hold buffers
         // (precomputed alpha/beta arrays, native handles for accelerated
-        // sampling) that survive model disposal otherwise.
+        // sampling) that survive model disposal otherwise. Route through the
+        // guard so the scheduler instance is disposed at most once even if
+        // another owner also cascades into it.
         if (_scheduler is IDisposable disposableScheduler)
         {
-            try { disposableScheduler.Dispose(); }
-            catch (ObjectDisposedException ex)
-            {
-                System.Diagnostics.Trace.TraceWarning(
-                    $"DiffusionModelBase.Dispose: scheduler already disposed: {ex.Message}");
-            }
+            AiDotNet.Helpers.DisposeOnceGuard.TryDispose(disposableScheduler);
         }
 
         // Cascade to every disposable component the concrete model exposes via
         // EnumerateDisposableComponents (default: reflection walk over instance
-        // fields). The catch prevents a shared component (e.g., a predictor
-        // reused across two diffusion wrappers for ensembling) from aborting
-        // the cascade when a previous owner already disposed it. Trace the
-        // (rare) double-dispose so it's diagnosable instead of fully hidden.
+        // fields). Shared components (a predictor reused across two diffusion
+        // wrappers for ensembling, a VAE loaded once and injected into several
+        // models) are common — the guard ensures each instance is disposed
+        // exactly once regardless of how many cascades reach it. Many
+        // components aren't idempotent on double-Dispose (they'd double-return
+        // pooled buffers or crash on null derefs), which is why a plain
+        // try/catch around ObjectDisposedException is insufficient.
         foreach (var component in EnumerateDisposableComponents())
         {
             if (component is null) continue;
-            try { component.Dispose(); }
-            catch (ObjectDisposedException ex)
-            {
-                System.Diagnostics.Trace.TraceWarning(
-                    $"DiffusionModelBase.Dispose: {component.GetType().Name} already disposed: {ex.Message}");
-            }
+            AiDotNet.Helpers.DisposeOnceGuard.TryDispose(component);
         }
     }
 

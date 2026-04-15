@@ -4324,22 +4324,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             _compileHost.Dispose();
 
             // Cascade Dispose into every layer that owns releasable state
-            // (pool-rented weight tensors, GPU handles, native buffers). Catch
-            // ObjectDisposedException so a shared-layer graph — the same
-            // ILayer instance used by multiple networks — doesn't abort the
-            // cascade when a previous owner already disposed it. We log the
-            // (rare) double-dispose event to aid diagnosis rather than fully
-            // swallowing it.
+            // (pool-rented weight tensors, GPU handles, native buffers).
+            //
+            // Shared-layer graphs can cause the same ILayer instance to
+            // appear in multiple networks (or multiple times in one graph).
+            // Relying on ObjectDisposedException is NOT safe — many layer
+            // Dispose implementations are not idempotent (e.g., DenseLayer
+            // returns rented tensors to TensorAllocator with no guard) and
+            // a second Dispose would silently double-return pooled buffers.
+            //
+            // Route each layer through DisposeOnceGuard so the same instance
+            // is disposed at most once process-wide, regardless of how many
+            // owners cascade into it.
             foreach (var layer in _layers)
             {
                 if (layer is IDisposable disposable)
                 {
-                    try { disposable.Dispose(); }
-                    catch (ObjectDisposedException ex)
-                    {
-                        System.Diagnostics.Trace.TraceWarning(
-                            $"NeuralNetworkBase.Dispose: layer {layer.GetType().Name} already disposed: {ex.Message}");
-                    }
+                    AiDotNet.Helpers.DisposeOnceGuard.TryDispose(disposable);
                 }
             }
 
