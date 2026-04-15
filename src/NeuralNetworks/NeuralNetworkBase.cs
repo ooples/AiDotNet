@@ -2570,6 +2570,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Sticky disable for the fused training path on this model instance. Set
+    /// when <see cref="TryTrainWithFusedOptimizer"/> falls back so subsequent
+    /// steps stay on the eager path. Mixing fused (closure-captured m/v) and
+    /// eager (optimizer-instance state) updates within one training run would
+    /// reset Adam moments at the next successful fused step. Stickiness keeps
+    /// optimizer state consistent for the rest of the run. Cleared in
+    /// <see cref="ResetState"/> and <see cref="InvalidateParameterCountCache"/>.
+    /// </summary>
+    private bool _fusedTrainingDisabled;
+
+    /// <summary>
     /// Attempts the fused-compiled training path — forward + backward + fused
     /// optimizer update all in one compiled kernel. Engages when conditions
     /// permit, returns <c>false</c> to signal the caller to fall back to the
@@ -2600,16 +2611,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// identically on standard benchmarks (the fused kernels use the same formulas).
     /// </para>
     /// </remarks>
-    /// <summary>
-    /// Sticky disable for the fused training path on this model instance. Set
-    /// when <see cref="TryTrainWithFusedOptimizer"/> falls back so subsequent
-    /// steps stay on the eager path. Mixing fused (closure-captured m/v) and
-    /// eager (optimizer-instance state) updates within one training run would
-    /// reset Adam moments at the next successful fused step. Stickiness keeps
-    /// optimizer state consistent for the rest of the run.
-    /// </summary>
-    private bool _fusedTrainingDisabled;
-
     private bool TryTrainWithFusedOptimizer(
         Tensor<T> input,
         Tensor<T> expected,

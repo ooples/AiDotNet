@@ -199,8 +199,22 @@ public static class CompiledTapeTrainingStep<T>
             foreach (var layer in layers)
                 layer.ZeroGrad();
 
+            // Compile key must include BOTH input AND target shapes. The traced
+            // lambda captures target shape via computeLoss — a plan compiled for
+            // input=[B,D], target=[B,C] would silently replay wrong ops if the
+            // next call arrives with input=[B,D], target=[1,B,C] (different
+            // reshape/loss graph). Concatenate input + separator + target into
+            // one synthetic shape key so distinct {input, target} pairs hit
+            // distinct cache entries.
+            var inputShape = input._shape;
+            var targetShape = target._shape;
+            var compositeKey = new int[inputShape.Length + 1 + targetShape.Length];
+            Array.Copy(inputShape, 0, compositeKey, 0, inputShape.Length);
+            compositeKey[inputShape.Length] = -1; // separator sentinel (no real dim is negative)
+            Array.Copy(targetShape, 0, compositeKey, inputShape.Length + 1, targetShape.Length);
+
             var plan = cache.GetOrCompileTraining(
-                (int[])input._shape.Clone(),
+                compositeKey,
                 () =>
                 {
                     var predicted = forward(input);
