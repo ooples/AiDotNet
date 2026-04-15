@@ -1200,12 +1200,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // wouldn't benefit from graph compilation even if it were traceable.
         if (model is not NeuralNetworks.NeuralNetworkBase<T> nnModel) return null;
 
-        // Thread strict-mode through to the model-instance flag so the lower-level
-        // PredictCompiled path (called from the model's own Predict default) ALSO
-        // honors ThrowOnFailure. Without this, the wrapper would throw on the
-        // outer trace while the inner PredictCompiled would silently fall back —
-        // inconsistent strict-mode behavior for the same configured policy.
-        nnModel.ThrowOnJitFailure = _jitCompilationConfig.ThrowOnFailure;
+        // ThrowOnFailure is enforced at THIS wrapper level (the catch below).
+        // We deliberately do NOT push it onto the model instance — multiple
+        // results may share one model with different strict-mode policies, and
+        // writing per-result config onto a shared instance would race. The
+        // lower-level NeuralNetworkBase.PredictCompiled keeps its own silent-
+        // fallback-with-Trace behavior; strict mode applies only to the
+        // builder-wrapped path that consults ThrowOnFailure here.
 
         var cache = new AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>();
         bool throwOnFailure = _jitCompilationConfig.ThrowOnFailure;
@@ -3177,6 +3178,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             MetaLearner = _metaLearner,
             MetaTrainingResult = metaResult,
+            // Propagate JIT config to meta-learning results so
+            // ConfigureJitCompilation is honored consistently across all builder
+            // paths (supervised / inference-only / RL / meta-learning). The
+            // compiled-Predict wrapper isn't built here because IMetaLearner
+            // doesn't expose an IFullModel surface — meta-learning Predict
+            // routes through the meta-learner's own dispatch, which has its
+            // own opportunities for compilation in a follow-up.
+            JitCompilationConfig = _jitCompilationConfig,
             LoRAConfiguration = _loraConfiguration,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,

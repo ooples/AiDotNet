@@ -1753,8 +1753,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         InvalidateLayerInfoCache();
         // Layer structure changed — any compiled inference plan captured from the
         // prior layer graph is stale. Drop the cache so the next Predict call
-        // re-traces and recompiles against the new layer structure.
+        // re-traces and recompiles against the new layer structure. Also clear
+        // the bad-compile cache so shapes that previously failed get a fresh
+        // chance against the new graph.
         _compiledInferenceCache?.Invalidate();
+        _knownBadCompileShapes.Clear();
     }
 
     /// <summary>
@@ -2122,22 +2125,51 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>? _compiledInferenceCache;
 
     /// <summary>
-    /// JIT strict-mode flag — when <c>true</c>, <see cref="PredictCompiled"/>
-    /// rethrows compile/replay exceptions instead of falling back to eager.
-    /// Set by <see cref="AiModelBuilder{T,TInput,TOutput}"/> when the user
-    /// configures <c>JitCompilationConfig.ThrowOnFailure = true</c>. Default
-    /// <c>false</c> for production safety (Trace warning logged on fallback).
+    /// Tracks input shapes whose compilation has previously failed on this
+    /// model instance. Once a shape is in this set, <see cref="PredictCompiled"/>
+    /// short-circuits to <see cref="PredictEager"/> without re-attempting
+    /// compilation — re-trying every Predict would re-burn the same trace cost
+    /// for no benefit and re-emit the same Trace warning on every call.
     /// </summary>
-    internal bool ThrowOnJitFailure { get; set; }
+    private readonly HashSet<long> _knownBadCompileShapes = new();
+
+    /// <summary>
+    /// Computes a deterministic 64-bit shape key (FNV-1a) for the bad-compile
+    /// cache. Using a numeric key keeps the set entries cheap to hash without
+    /// allocating a wrapper object per Predict call.
+    /// </summary>
+    private static long ComputeShapeKey(int[] shape)
+    {
+        long hash = unchecked((long)0xcbf29ce484222325L);
+        for (int i = 0; i < shape.Length; i++)
+        {
+            hash ^= shape[i];
+            hash *= unchecked((long)0x100000001b3L);
+        }
+        return hash;
+    }
 
     /// <summary>
     /// Executes the forward pass using a compiled plan for maximum performance.
     /// First call traces and compiles; subsequent calls replay the compiled plan.
-    /// Falls back to eager execution if compilation fails.
+    /// Falls back to eager execution if compilation fails. Shapes that have
+    /// already failed compilation are skipped on subsequent calls (no retry
+    /// loop) so a known-bad shape doesn't burn the trace cost on every Predict.
     /// </summary>
+    /// <remarks>
+    /// Strict-mode (rethrow on compile failure) is provided by the
+    /// <c>AiModelBuilder.BuildCompiledPredictFunction</c> wrapper which honors
+    /// <c>JitCompilationConfig.ThrowOnFailure</c>. This lower-level path always
+    /// falls back silently with a Trace warning so direct
+    /// (non-builder) callers don't get surprised by exceptions.
+    /// </remarks>
     protected Tensor<T> PredictCompiled(Tensor<T> input)
     {
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
+            return PredictEager(input);
+
+        var shapeKey = ComputeShapeKey(input._shape);
+        if (_knownBadCompileShapes.Contains(shapeKey))
             return PredictEager(input);
 
         try
@@ -2148,15 +2180,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 () => PredictEager(input)); // Use same path as eager for consistency
             return plan.Execute();
         }
-        catch (Exception ex) when (!ThrowOnJitFailure)
+        catch (Exception ex)
         {
-            // Emit a Trace warning so the JIT regression is observable in production
-            // telemetry — silent fallback would let perf surveys be the first signal.
-            // Then run eager so the call still succeeds. The cache didn't store a
-            // plan for the failed shape, so the next call will retry compilation.
-            // Strict-mode (ThrowOnJitFailure=true, set by AiModelBuilder when the
-            // user configures JitCompilationConfig.ThrowOnFailure) skips this catch
-            // entirely so tests catch regressions instead of silently degrading.
+            // Mark this shape as known-bad so the next Predict skips the retry
+            // entirely. Then Trace.TraceWarning so the JIT regression is
+            // observable in production telemetry — silent fallback would let
+            // perf surveys be the first signal. Finally run eager so the call
+            // succeeds.
+            _knownBadCompileShapes.Add(shapeKey);
             System.Diagnostics.Trace.TraceWarning(
                 $"PredictCompiled fallback for {GetType().FullName} " +
                 $"with input shape [{string.Join(", ", input.Shape)}]: {ex.GetType().Name}: {ex.Message}");

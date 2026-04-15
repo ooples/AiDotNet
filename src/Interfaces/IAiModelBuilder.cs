@@ -1350,7 +1350,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// Enables JIT (Just-In-Time) compilation for the built model's forward-pass
     /// replay by installing the configured
     /// <see cref="AiDotNet.Configuration.JitCompilationConfig"/> into
-    /// <c>TensorCodecOptions</c> during <c>Build()</c>.
+    /// <c>TensorCodecOptions</c> during <c>BuildAsync()</c>.
     /// </summary>
     /// <param name="config">JIT config. <c>null</c> → library defaults (enabled + silent fallback).</param>
     /// <returns>This builder for fluent chaining.</returns>

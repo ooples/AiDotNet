@@ -176,10 +176,16 @@ public sealed class JitCompilationConfig
     /// <exception cref="InvalidOperationException">Thrown when values are out of range.</exception>
     public void Validate()
     {
-        if (SpectralErrorTolerance < 0f || SpectralErrorTolerance >= 1f)
+        // NaN passes both `< 0` and `>= 1` comparisons (NaN is unordered with
+        // every value), so the explicit IsNaN check is required to reject it.
+        // Without this guard a NaN tolerance would silently become the SVD
+        // energy threshold and corrupt every spectral compilation downstream.
+        if (float.IsNaN(SpectralErrorTolerance)
+            || SpectralErrorTolerance < 0f
+            || SpectralErrorTolerance >= 1f)
         {
             throw new InvalidOperationException(
-                $"SpectralErrorTolerance must be in [0, 1). Got: {SpectralErrorTolerance}");
+                $"SpectralErrorTolerance must be in [0, 1) and not NaN. Got: {SpectralErrorTolerance}");
         }
 
         if (DataflowFusionMaxHidden <= 0)
