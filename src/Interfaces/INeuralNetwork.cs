@@ -30,7 +30,8 @@ namespace AiDotNet.Interfaces;
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
 [AiDotNet.Configuration.YamlConfigurable("NeuralNetwork")]
 public interface INeuralNetwork<T> : IFullModel<T, Tensor<T>, Tensor<T>>, ILayeredModel<T>,
-    IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>
+    IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>,
+    System.IDisposable
 {
     /// <summary>
     /// Updates the internal parameters (weights and biases) of the neural network.
