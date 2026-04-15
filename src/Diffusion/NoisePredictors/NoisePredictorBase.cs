@@ -1,4 +1,5 @@
-﻿using AiDotNet.Autodiff;
+﻿using System.Linq;
+using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -59,30 +60,32 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Default behavior</b>: when a subclass does NOT override this, the base
-    /// performs a reflection walk over its own and the subclass's instance fields
-    /// and yields field values that implement <see cref="ILayer{T}"/>, plus
-    /// collection elements that implement <see cref="ILayer{T}"/> (for example,
-    /// <c>List&lt;ILayer&lt;T&gt;&gt;</c>). This catches predictor layouts where
-    /// layers are stored directly in fields (<c>_timeEmbed1</c>, <c>_patchEmbed</c>)
-    /// or in flat layer collections (<c>_layers</c>).
+    /// <b>Default behavior</b>: returns an empty enumeration. Reflection-
+    /// based discovery is NOT the default because it would dispose layers
+    /// the predictor doesn't own (e.g., injected/shared cross-attention
+    /// layers from a shared encoder, a VAE reference passed in by the
+    /// caller). Ownership is expressed by what a predictor explicitly
+    /// enumerates, not by what reflection happens to find.
     /// </para>
     /// <para>
-    /// <b>Limitation</b>: the reflector does <b>not</b> recursively traverse
-    /// arbitrary nested reference-type objects, nor container types whose
-    /// elements are not themselves <see cref="ILayer{T}"/> instances. For
-    /// example, <c>DiTNoisePredictor</c>'s <c>List&lt;DiTBlock&gt;</c> holds
-    /// <c>DiTBlock</c> structs/classes that only expose layer <i>properties</i> —
-    /// the walker reaches the list but the elements don't implement
-    /// <c>ILayer&lt;T&gt;</c>, so their nested layers are not discovered.
-    /// Predictors with that layout must override <see cref="EnumerateLayers"/>
-    /// to yield the nested layers explicitly. Explicit overrides are also
-    /// preferred in performance-sensitive code where reflection overhead
-    /// matters.
+    /// Concrete predictors that own their layers and want Dispose-time
+    /// cleanup can either:
     /// </para>
+    /// <list type="number">
+    /// <item>Override and yield specific field references explicitly
+    /// (recommended — zero reflection cost, explicit ownership).</item>
+    /// <item>Opt in to <see cref="ReflectInstanceLayers"/> explicitly via
+    /// <c>protected override IEnumerable&lt;ILayer&lt;T&gt;&gt; EnumerateLayers() =&gt; ReflectInstanceLayers(this);</c>.
+    /// The reflector walks fields plus <see cref="System.Collections.IEnumerable"/>
+    /// and <see cref="System.Collections.IDictionary"/> elements that
+    /// implement <see cref="ILayer{T}"/>, but does NOT recurse into
+    /// arbitrary nested reference-type objects — a
+    /// <c>List&lt;DiTBlock&gt;</c> where <c>DiTBlock</c> only holds layer
+    /// <i>properties</i> is not discovered.</item>
+    /// </list>
     /// </remarks>
     protected virtual IEnumerable<ILayer<T>> EnumerateLayers() =>
-        ReflectInstanceLayers(this);
+        Enumerable.Empty<ILayer<T>>();
 
     /// <summary>
     /// Walks an object's instance fields and yields anything that implements
@@ -90,7 +93,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// Used as the default fallback for <see cref="EnumerateLayers"/> so concrete
     /// predictors don't need to override just to get correct cleanup.
     /// </summary>
-    private static IEnumerable<ILayer<T>> ReflectInstanceLayers(object root)
+    protected static IEnumerable<ILayer<T>> ReflectInstanceLayers(object root)
     {
         var visited = new HashSet<object>(AiDotNet.Helpers.TensorReferenceComparer<object>.Instance);
         if (!visited.Add(root)) yield break;
