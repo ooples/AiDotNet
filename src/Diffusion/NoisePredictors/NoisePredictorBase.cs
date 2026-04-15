@@ -25,12 +25,62 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// extend this base class.
 /// </para>
 /// </remarks>
-public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
+public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, IDisposable
 {
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
     /// </summary>
     protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
+    /// Composable inference-compilation helper. Concrete predictors route their
+    /// <see cref="PredictNoiseWithEmbedding"/> through <see cref="PredictCompiled"/>
+    /// to get compiled-plan replay across the 50+ denoising steps in the diffusion
+    /// loop. First call traces, subsequent calls replay. Falls back to eager when
+    /// compilation is disabled or fails.
+    /// </summary>
+    private readonly AiDotNet.NeuralNetworks.CompiledModelHost<T> _compileHost = new();
+
+    /// <summary>
+    /// Monotonic layer-graph version. Concrete predictors bump this via
+    /// <see cref="InvalidateCompiledPlans"/> after lazy-init expands tensor shapes
+    /// or after <see cref="SetParameters"/> swaps weights. The host drops stale
+    /// plans automatically when the version changes.
+    /// </summary>
+    private int _layerStructureVersion;
+
+    private bool _disposed;
+
+    /// <summary>
+    /// Concrete predictors override to expose their <see cref="ILayer{T}"/>
+    /// instances for (a) Dispose cascade — pool-rented weight tensors return to
+    /// the allocator, and (b) future compilation features (plan serialization,
+    /// CUDA Graph capture) that need visibility into the layer graph. Default:
+    /// none — the Dispose cascade is a no-op until a concrete predictor opts in.
+    /// </summary>
+    protected virtual IEnumerable<ILayer<T>> EnumerateLayers() => Array.Empty<ILayer<T>>();
+
+    /// <summary>
+    /// Runs <paramref name="eagerFallback"/> under the compile host — traces on
+    /// first call at each input shape, replays the compiled plan on subsequent
+    /// calls. Concrete predictors call this from hot forward paths (e.g., the
+    /// per-step <see cref="Forward"/> during the diffusion denoising loop) to
+    /// get near-zero-overhead replay after the first trace.
+    /// </summary>
+    /// <param name="input">Shape key for the compile cache.</param>
+    /// <param name="eagerFallback">The eager forward pass (traced, replayed, or fallback).</param>
+    protected Tensor<T> PredictCompiled(Tensor<T> input, Func<Tensor<T>> eagerFallback) =>
+        _compileHost.Predict(input, _layerStructureVersion, eagerFallback);
+
+    /// <summary>
+    /// Bump to signal the layer graph has changed — lazy init expanded a tensor,
+    /// weights were reassigned, a sub-layer was replaced. The compile host drops
+    /// any plan captured against the prior graph on the next <see cref="PredictCompiled"/>.
+    /// </summary>
+    protected void InvalidateCompiledPlans()
+    {
+        _layerStructureVersion++;
+    }
 
     /// <summary>
     /// Provides numeric operations for the specific type T.
@@ -528,6 +578,47 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
         }
 
         return noise;
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases managed resources — compiled plans first (so pooled tensor
+    /// buffers the plans captured are freed before layers Dispose and return
+    /// their weights), then every <see cref="ILayer{T}"/> exposed by
+    /// <see cref="EnumerateLayers"/> that implements <see cref="IDisposable"/>.
+    /// </summary>
+    /// <remarks>
+    /// Concrete predictors override <see cref="EnumerateLayers"/> to opt into
+    /// the cascade. The <see cref="ObjectDisposedException"/> catch prevents a
+    /// shared-layer graph — the same <see cref="ILayer{T}"/> instance used by
+    /// multiple predictors or networks — from aborting the cascade when a
+    /// previous owner already disposed it.
+    /// </remarks>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed || !disposing) return;
+        _disposed = true;
+
+        _compileHost.Dispose();
+
+        foreach (var layer in EnumerateLayers())
+        {
+            if (layer is IDisposable disposable)
+            {
+                try { disposable.Dispose(); }
+                catch (ObjectDisposedException) { }
+            }
+        }
     }
 
     #endregion
