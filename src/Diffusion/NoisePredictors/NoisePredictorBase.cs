@@ -58,14 +58,28 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// CUDA Graph capture) that need visibility into the layer graph.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <b>Default behavior</b>: when a subclass does NOT override this, the base
     /// performs a reflection walk over its own and the subclass's instance fields
-    /// and yields anything that implements <see cref="ILayer{T}"/> (including
-    /// inside collection fields such as <c>List&lt;ILayer&lt;T&gt;&gt;</c>). This
-    /// catches the common predictor layout (private layer fields like
-    /// <c>_timeEmbed1</c>, <c>_blocks</c>, <c>_patchEmbed</c>) without forcing
-    /// every concrete predictor to override. Explicit overrides remain preferred
-    /// in performance-sensitive code where reflection overhead matters.
+    /// and yields field values that implement <see cref="ILayer{T}"/>, plus
+    /// collection elements that implement <see cref="ILayer{T}"/> (for example,
+    /// <c>List&lt;ILayer&lt;T&gt;&gt;</c>). This catches predictor layouts where
+    /// layers are stored directly in fields (<c>_timeEmbed1</c>, <c>_patchEmbed</c>)
+    /// or in flat layer collections (<c>_layers</c>).
+    /// </para>
+    /// <para>
+    /// <b>Limitation</b>: the reflector does <b>not</b> recursively traverse
+    /// arbitrary nested reference-type objects, nor container types whose
+    /// elements are not themselves <see cref="ILayer{T}"/> instances. For
+    /// example, <c>DiTNoisePredictor</c>'s <c>List&lt;DiTBlock&gt;</c> holds
+    /// <c>DiTBlock</c> structs/classes that only expose layer <i>properties</i> —
+    /// the walker reaches the list but the elements don't implement
+    /// <c>ILayer&lt;T&gt;</c>, so their nested layers are not discovered.
+    /// Predictors with that layout must override <see cref="EnumerateLayers"/>
+    /// to yield the nested layers explicitly. Explicit overrides are also
+    /// preferred in performance-sensitive code where reflection overhead
+    /// matters.
+    /// </para>
     /// </remarks>
     protected virtual IEnumerable<ILayer<T>> EnumerateLayers() =>
         ReflectInstanceLayers(this);
@@ -689,19 +703,17 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         }
         _timestepEmbeddingCache.Clear();
 
+        // Route layer Dispose through DisposeOnceGuard — shared layers
+        // between predictors (ensemble predictors, cross-attention layers
+        // reused from a shared encoder, VAE layers injected into multiple
+        // wrappers) are common. Relying on ObjectDisposedException is
+        // unsafe because many layer Dispose implementations double-return
+        // pooled tensor buffers on a second Dispose call without throwing.
         foreach (var layer in EnumerateLayers())
         {
             if (layer is IDisposable disposable)
             {
-                try { disposable.Dispose(); }
-                catch (ObjectDisposedException ex)
-                {
-                    // Trace the (rare) double-dispose so it's diagnosable
-                    // instead of fully hidden — happens when the same layer
-                    // instance is shared across predictors.
-                    System.Diagnostics.Trace.TraceWarning(
-                        $"NoisePredictorBase.Dispose: {layer.GetType().Name} already disposed: {ex.Message}");
-                }
+                AiDotNet.Helpers.DisposeOnceGuard.TryDispose(disposable);
             }
         }
     }

@@ -132,9 +132,16 @@ internal sealed class CompiledModelHost<T> : IDisposable
 
         try
         {
+            // Preserve the Tensor<T> return from eagerForward so the compile
+            // pass can explicitly identify the output tensor. Discarding the
+            // return (previously `() => { eagerForward(); }`) can select a
+            // different GetOrCompileInference overload / leave the output
+            // tensor ambiguous to the tracer, producing wrong outputs on
+            // replay. Keep the expression-bodied lambda so the value threads
+            // through unchanged.
             var plan = cache.GetOrCompileInference(
                 (int[])input._shape.Clone(),
-                () => { eagerForward(); });
+                () => eagerForward());
 
             // Safe to write _lastCompiledVersion outside the lock — int writes
             // are atomic in .NET, and the value is only used as a hint by the
