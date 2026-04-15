@@ -27,6 +27,17 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </remarks>
 public abstract class DiffusionModelTestBase : IAsyncLifetime
 {
+    /// <summary>
+    /// Static lock serializing concurrent teardowns. xunit parallelizes across
+    /// test-classes by default, so two derived test classes can hit
+    /// <see cref="DisposeAsync"/> concurrently on different threads.
+    /// <see cref="GCSettings.LargeObjectHeapCompactionMode"/> is process-
+    /// global, so concurrent toggles race. Serializing the whole
+    /// mode-set → collect → wait → mode-set → collect sequence keeps LOH
+    /// compaction deterministic per teardown.
+    /// </summary>
+    private static readonly object _lohCompactionGate = new();
+
     /// <summary>Before-test hook. No-op — the base has no ambient state to initialize.</summary>
     public Task InitializeAsync() => Task.CompletedTask;
 
@@ -45,20 +56,25 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
     /// <see cref="OutOfMemoryException"/>. Setting
     /// <see cref="GCLargeObjectHeapCompactionMode.CompactOnce"/> on the next
     /// Gen-2 pass forces LOH compaction; the mode auto-resets to Default
-    /// after each use, so this is scoped per-teardown.
+    /// after each use, so this is scoped per-teardown. The entire sequence
+    /// runs under <see cref="_lohCompactionGate"/> so parallel teardowns
+    /// don't race on the process-global flag.
     /// </remarks>
     public Task DisposeAsync()
     {
-        // First pass: compacting Gen-2 + LOH reclaims everything unreachable
-        // including the just-Disposed model's weight tensors.
-        GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-        GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
-        GC.WaitForPendingFinalizers();
+        lock (_lohCompactionGate)
+        {
+            // First pass: compacting Gen-2 + LOH reclaims everything unreachable
+            // including the just-Disposed model's weight tensors.
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
 
-        // Second pass: finalizer-released memory (e.g. GPU-pool return paths)
-        // and any LOH allocations from finalizers.
-        GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-        GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+            // Second pass: finalizer-released memory (e.g. GPU-pool return paths)
+            // and any LOH allocations from finalizers.
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+        }
         return Task.CompletedTask;
     }
 
