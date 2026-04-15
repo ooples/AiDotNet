@@ -1163,15 +1163,24 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         // Deterministic-by-default: force bitwise-reproducible kernels unless the
         // caller opted out via AllowNondeterminism(). Applied BEFORE training +
-        // quantization + JIT compile, so every subsequent step records into the
-        // same deterministic kernel universe. Tensors' deterministic matmul
-        // (landed in #136) is no slower than the non-deterministic path, so
-        // making this the default is a category win — PyTorch's `deterministic`
-        // mode is opt-in AND slower; ours is default AND free.
-        if (!_allowNondeterminism)
-        {
-            AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(true);
-        }
+        // quantization + JIT compile, so every subsequent SYNCHRONOUS step
+        // records into the same deterministic kernel universe. Always assert
+        // BOTH directions explicitly — if a previous build on this thread set
+        // deterministic=true and the user calls AllowNondeterminism() now,
+        // we need to actively flip it off, not just skip the set-true call.
+        // Tensors' deterministic matmul (landed in #136) is no slower than the
+        // non-deterministic path, so making this the default is a category win
+        // — PyTorch's `deterministic` mode is opt-in AND slower; ours is
+        // default AND free.
+        //
+        // Cross-await caveat: AiDotNetEngine.DeterministicMode is thread-local
+        // on the Tensors side and does NOT flow across `await` continuations —
+        // async steps resumed on a different worker thread see whatever the
+        // thread had before. AiModelResult.Predict re-asserts on every call
+        // to bridge across thread boundaries. A follow-up Tensors-side
+        // migration to AsyncLocal<T> would close this gap globally (tracked
+        // as ooples/AiDotNet.Tensors#164).
+        AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(!_allowNondeterminism);
 
         // Validate RAG pipeline composition if any RAG components were configured
         bool hasAnyRAG = _ragRetriever != null || _ragReranker != null || _ragGenerator != null
@@ -3018,6 +3027,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             MetaLearner = _metaLearner,
             MetaTrainingResult = metaResult,
+            // Propagate determinism policy so meta-learning results re-assert
+            // the same policy as supervised/RL paths — without this, callers
+            // who opt out via AllowNondeterminism() silently get deterministic
+            // behavior back on meta-learning Predict.
+            AllowNondeterminism = _allowNondeterminism,
             LoRAConfiguration = _loraConfiguration,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,

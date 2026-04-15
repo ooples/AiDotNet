@@ -1823,13 +1823,12 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Re-assert the builder's determinism policy on this thread. Engine
         // determinism state is thread-local; without this bridge a Predict on
         // a fresh request-pool worker would use whatever the thread happened
-        // to have (usually non-deterministic). Only call when the builder set
-        // AllowNondeterminism=false (the default) — otherwise we respect the
-        // caller's explicit opt-out.
-        if (!AllowNondeterminism)
-        {
-            AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(true);
-        }
+        // to have. Always assert BOTH directions explicitly — when the user
+        // opted into AllowNondeterminism=true we need to ACTIVELY clear any
+        // previous deterministic=true left by an earlier deterministic call
+        // on the same thread; just skipping the set-true call would leak the
+        // prior policy and silently make the opt-out ineffective.
+        AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(!AllowNondeterminism);
 
         var dataForPrediction = newData;
         if (SafetyFilter != null && newData is Vector<T> vectorInput && typeof(TInput) == typeof(Vector<T>))
@@ -2905,6 +2904,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             DeploymentConfiguration = DeploymentConfiguration,
             // JIT compilation is parameter-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
+            // Propagate the determinism policy through clone paths so the
+            // copy honors the same opt-out as the original — without this,
+            // a model the user opted out via AllowNondeterminism() silently
+            // flips back to deterministic at WithParameters/DeepCopy.
+            AllowNondeterminism = AllowNondeterminism,
             ReasoningConfig = ReasoningConfig,
             KnowledgeGraph = KnowledgeGraph,
             GraphStore = GraphStore,
@@ -4642,6 +4646,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             DeploymentConfiguration = DeploymentConfiguration,
             // JIT compilation is model-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
+            // Propagate the determinism policy through clone paths so the
+            // copy honors the same opt-out as the original — without this,
+            // a model the user opted out via AllowNondeterminism() silently
+            // flips back to deterministic at WithParameters/DeepCopy.
+            AllowNondeterminism = AllowNondeterminism,
             ReasoningConfig = ReasoningConfig,
             KnowledgeGraph = KnowledgeGraph,
             GraphStore = GraphStore,
@@ -4831,6 +4840,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 BiasDetector = deserializedObject.BiasDetector;
                 FairnessEvaluator = deserializedObject.FairnessEvaluator;
                 InferenceOptimizationConfig = deserializedObject.InferenceOptimizationConfig;
+                // Restore determinism policy so a saved-and-reloaded result
+                // keeps re-asserting on every Predict — without this assignment
+                // a model saved with AllowNondeterminism() loads as deterministic.
+                AllowNondeterminism = deserializedObject.AllowNondeterminism;
                 SerializedModelData = deserializedObject.SerializedModelData;
 
                 // Model is intentionally facade-hidden and is not serialized directly.
