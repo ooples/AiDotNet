@@ -75,7 +75,12 @@ public static class CompiledTapeTrainingStep<T>
             if (_cachedParameters is null)
                 forward(input);
 
-            var parameters = _cachedParameters ??= CollectParameterArray(layers);
+            // Use the dedup-aware collector here too so the cached array is
+            // safe to reuse if a subsequent caller routes through
+            // TryStepWithFusedOptimizer. Shared/tied weights would otherwise
+            // appear twice in the array — wrong for both eager-SGD here AND
+            // wrong for the fused kernel's m/v buffers downstream.
+            var parameters = _cachedParameters ??= CollectDeduplicatedParameters(layers);
 
             // Zero gradients before forward pass
             foreach (var layer in layers)
