@@ -318,7 +318,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
                 _encoderBlocks.Add(new VideoBlock
                 {
                     SpatialResBlock = CreateSpatialResBlock(inChannels, outChannels),
-                    TemporalResBlock = CreateTemporalResBlock(outChannels),
+                    TemporalResBlock = CreateTemporalMixingBlock(),
                     SpatialAttention = useAttention ? CreateSpatialAttention(outChannels) : null,
                     TemporalAttention = useAttention ? CreateTemporalAttention(outChannels) : null,
                     CrossAttention = useAttention && _contextDim > 0 ? CreateCrossAttention(outChannels) : null,
@@ -341,7 +341,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         _middleBlocks.Add(new VideoBlock
         {
             SpatialResBlock = CreateSpatialResBlock(inChannels, inChannels),
-            TemporalResBlock = CreateTemporalResBlock(inChannels),
+            TemporalResBlock = CreateTemporalMixingBlock(),
             SpatialAttention = CreateSpatialAttention(inChannels),
             TemporalAttention = CreateTemporalAttention(inChannels),
             CrossAttention = _contextDim > 0 ? CreateCrossAttention(inChannels) : null,
@@ -350,7 +350,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         _middleBlocks.Add(new VideoBlock
         {
             SpatialResBlock = CreateSpatialResBlock(inChannels, inChannels),
-            TemporalResBlock = CreateTemporalResBlock(inChannels),
+            TemporalResBlock = CreateTemporalMixingBlock(),
             TimeCondProjection = CreateTimeCondProjection(inChannels)
         });
 
@@ -369,7 +369,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
                 _decoderBlocks.Add(new VideoBlock
                 {
                     SpatialResBlock = CreateSpatialResBlock(inChannels + skipChannels, outChannels),
-                    TemporalResBlock = CreateTemporalResBlock(outChannels),
+                    TemporalResBlock = CreateTemporalMixingBlock(),
                     SpatialAttention = useAttention ? CreateSpatialAttention(outChannels) : null,
                     TemporalAttention = useAttention ? CreateTemporalAttention(outChannels) : null,
                     CrossAttention = useAttention && _contextDim > 0 ? CreateCrossAttention(outChannels) : null,
@@ -721,15 +721,28 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         int height = shape[3];
         int width = shape[4];
 
-        // Reshape to [B*C*H*W, F] — each row is a temporal vector at one spatial-channel position.
+        // A plain reshape from [B,C,F,H,W] to [B*C*H*W, F] does NOT produce
+        // rows that hold one spatial-channel position's frame vector — F is
+        // not the innermost dimension in the source, so neighboring elements
+        // along the flattened last axis span multiple H/W/F indices. Rows of
+        // the naive reshape would therefore mix values across H and W, and
+        // the DenseLayer would learn a meaningless cross-spatial mixing
+        // instead of temporal mixing.
+        //
+        // Correct layout: permute [B,C,F,H,W] → [B,C,H,W,F] so F is the
+        // innermost axis. Then reshape to [B*C*H*W, F] yields rows that ARE
+        // the per-(b,c,h,w) frame vectors. Apply the temporal mixing and
+        // reverse the permute so the caller sees [B,C,F,H,W] again.
+        var permuted = Engine.TensorPermute(video, new[] { 0, 1, 3, 4, 2 });
         int spatialChannelPositions = batch * channels * height * width;
-        var flat = Engine.Reshape(video, new[] { spatialChannelPositions, frames });
+        var flat = Engine.Reshape(permuted, new[] { spatialChannelPositions, frames });
 
         // Apply temporal mixing layer: [B*C*H*W, F] → [B*C*H*W, F]
         var mixed = temporalLayer.Forward(flat);
 
-        // Reshape back to [B, C, F, H, W]
-        var mixedVideo = Engine.Reshape(mixed, shape);
+        // Reshape back to [B, C, H, W, F] then un-permute to [B, C, F, H, W].
+        var mixedPermuted = Engine.Reshape(mixed, new[] { batch, channels, height, width, frames });
+        var mixedVideo = Engine.TensorPermute(mixedPermuted, new[] { 0, 1, 4, 2, 3 });
 
         // Residual connection: output = input + temporalDelta
         // Per the paper, the residual ensures the temporal block only needs to learn
@@ -952,20 +965,23 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
-    /// Creates a temporal residual block that mixes information along the frame axis.
-    /// Per Ho et al. 2022 §3.1: temporal processing is a learned 1D convolution along T.
-    /// Since we don't have a 1D temporal conv primitive, we approximate with a DenseLayer
-    /// that maps [numFrames] → [numFrames] at each (batch, channel, height, width) position.
-    /// The actual temporal mixing happens in <see cref="ApplyTemporalProcessing"/> which
-    /// reshapes the 5D video tensor to expose the temporal axis, applies this layer, and
-    /// adds a residual connection.
+    /// Creates a temporal mixing block that learns a frame-axis transform.
+    /// Per Ho et al. 2022 §3.1 the paper uses a 1D convolution along T; since
+    /// this codebase has no 1D temporal conv primitive we approximate with a
+    /// DenseLayer mapping <c>[numFrames] → [numFrames]</c>, applied per
+    /// (batch, channel, height, width) position (analogous to a depthwise
+    /// temporal 1×1 conv). The reshape+layer+reshape pipeline lives in
+    /// <see cref="ApplyTemporalProcessing"/>; a residual add connects input
+    /// and output so this layer only needs to learn the temporal refinement.
     /// </summary>
-    private ILayer<T> CreateTemporalResBlock(int channels)
+    /// <remarks>
+    /// Takes no parameters: the block's shape depends solely on
+    /// <see cref="_numFrames"/>, not on the channel count. The earlier
+    /// signature <c>CreateTemporalResBlock(int channels)</c> mislead callers
+    /// into sizing the block by channel count — now removed per review.
+    /// </remarks>
+    private ILayer<T> CreateTemporalMixingBlock()
     {
-        // The layer operates on the temporal axis (numFrames), not the channel axis.
-        // Each spatial-channel position has its own numFrames-long vector that this
-        // layer learns to mix — analogous to a depthwise-temporal 1x1 convolution
-        // in the time dimension. Lazy-allocated.
         return LazyDense(_numFrames, _numFrames, new SiLUActivation<T>());
     }
 
