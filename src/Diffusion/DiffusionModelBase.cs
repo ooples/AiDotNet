@@ -101,9 +101,21 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             foreach (var field in t.GetFields(fieldFlags | System.Reflection.BindingFlags.DeclaredOnly))
             {
                 if (field.FieldType.IsValueType || field.FieldType == typeof(string)) continue;
+                // Skip _scheduler — Dispose(bool) handles it explicitly. Yielding
+                // it here would cause a double-dispose attempt on the cascade.
+                if (field.Name == "_scheduler") continue;
                 object? value;
                 try { value = field.GetValue(root); }
-                catch { continue; }
+                catch (Exception ex)
+                {
+                    // Trace the read failure rather than silently skip — without
+                    // this a private field whose getter throws would leak its
+                    // disposable resource without any diagnostic trail.
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"DiffusionModelBase.Dispose: skipping field '{field.Name}' " +
+                        $"on {t.Name} due to reflection read failure: {ex.GetType().Name}: {ex.Message}");
+                    continue;
+                }
                 if (value is null) continue;
                 if (!visited.Add(value)) continue;
                 if (value is IDisposable disposable) yield return disposable;

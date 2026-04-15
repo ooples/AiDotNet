@@ -93,7 +93,16 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
                 if (field.FieldType.IsValueType || field.FieldType == typeof(string)) continue;
                 object? value;
                 try { value = field.GetValue(root); }
-                catch { continue; }
+                catch (Exception ex)
+                {
+                    // Trace rather than silently skip — without this a private
+                    // field whose getter throws would leak its layer's resources
+                    // without any diagnostic trail at Dispose time.
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"NoisePredictorBase.Dispose: skipping field '{field.Name}' " +
+                        $"on {t.Name} due to reflection read failure: {ex.GetType().Name}: {ex.Message}");
+                    continue;
+                }
                 if (value is null || !visited.Add(value)) continue;
 
                 if (value is ILayer<T> layer)
@@ -132,6 +141,11 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     protected void InvalidateCompiledPlans()
     {
         _layerStructureVersion++;
+        // Drop the cache eagerly rather than wait for the next PredictCompiled
+        // to detect the version mismatch. This releases captured tensor buffers
+        // immediately — important when the caller is invalidating because the
+        // old graph holds memory we want to reclaim now.
+        _compileHost.Invalidate();
     }
 
     /// <summary>

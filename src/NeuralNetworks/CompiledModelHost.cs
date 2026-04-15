@@ -60,6 +60,14 @@ internal sealed class CompiledModelHost<T> : IDisposable
     private bool _disposed;
 
     /// <summary>
+    /// Synchronizes lifecycle mutations on <c>_cache</c>, <c>_lastCompiledVersion</c>,
+    /// and <c>_disposed</c>. Without it a concurrent <c>Dispose</c>/<c>Invalidate</c>
+    /// racing with <c>Predict</c> on the same model instance can tear down the
+    /// cache mid-call (model serving in a request pool is the typical scenario).
+    /// </summary>
+    private readonly object _sync = new();
+
+    /// <summary>
     /// Attempts to compile-and-replay the forward pass. Falls back to
     /// <paramref name="eagerForward"/> when compilation is disabled
     /// (<see cref="TensorCodecOptions.EnableCompilation"/> is false) or
@@ -90,36 +98,51 @@ internal sealed class CompiledModelHost<T> : IDisposable
         if (eagerForward is null)
             throw new ArgumentNullException(nameof(eagerForward));
 
-        if (_disposed || !TensorCodecOptions.Current.EnableCompilation)
-            return eagerForward();
-
-        // Layer graph changed since last compile — stale plans would replay
-        // against the old tensor references. Drop them before compiling again.
-        if (_cache is not null && structureVersion != _lastCompiledVersion)
+        // Quick state checks + cache acquisition under lock; the actual
+        // compile/replay runs OUTSIDE the lock because it can be slow and
+        // blocking other threads on it would defeat the throughput win.
+        // CompiledModelCache itself is thread-safe so concurrent compiles for
+        // distinct shapes are fine.
+        CompiledModelCache<T>? cache;
+        lock (_sync)
         {
-            _cache.Invalidate();
-            _lastCompiledVersion = structureVersion;
+            if (_disposed || !TensorCodecOptions.Current.EnableCompilation)
+                return eagerForward();
+
+            // Layer graph changed since last compile — stale plans would replay
+            // against the old tensor references. Drop them before compiling again.
+            if (_cache is not null && structureVersion != _lastCompiledVersion)
+            {
+                _cache.Invalidate();
+                _lastCompiledVersion = structureVersion;
+            }
+            cache = _cache ??= new CompiledModelCache<T>();
         }
 
         try
         {
-            var cache = _cache ??= new CompiledModelCache<T>();
             var plan = cache.GetOrCompileInference(
                 (int[])input._shape.Clone(),
                 () => { eagerForward(); });
 
+            // Safe to write _lastCompiledVersion outside the lock — int writes
+            // are atomic in .NET, and the value is only used as a hint by the
+            // next Predict's version-mismatch check (which itself runs under
+            // the lock and will recover from any race).
             _lastCompiledVersion = structureVersion;
             return plan.Execute();
         }
         catch (Exception ex)
         {
-            // Compilation or replay threw. If a broken plan was already cached
-            // (replay path failed mid-execute), invalidate the entire cache so
-            // the next call recompiles instead of re-entering the same crash
-            // every time. Reset the version watermark so the next call is a
-            // fresh compile-attempt rather than a no-op cache lookup.
-            _cache?.Invalidate();
-            _lastCompiledVersion = -1;
+            // Compilation or replay threw. Invalidate under lock so a concurrent
+            // Predict doesn't see a half-torn-down cache. If a broken plan was
+            // already cached (replay path failed mid-execute), this drops it so
+            // the next call recompiles instead of re-entering the same crash.
+            lock (_sync)
+            {
+                _cache?.Invalidate();
+                _lastCompiledVersion = -1;
+            }
             // Trace the failure so the regression is observable in production
             // telemetry — silent fallback would let perf surveys be the first
             // signal that compiled inference stopped working.
@@ -137,8 +160,11 @@ internal sealed class CompiledModelHost<T> : IDisposable
     /// </summary>
     public void Invalidate()
     {
-        _cache?.Invalidate();
-        _lastCompiledVersion = -1;
+        lock (_sync)
+        {
+            _cache?.Invalidate();
+            _lastCompiledVersion = -1;
+        }
     }
 
     /// <summary>
@@ -148,9 +174,12 @@ internal sealed class CompiledModelHost<T> : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        _cache?.Dispose();
-        _cache = null;
+        lock (_sync)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _cache?.Dispose();
+            _cache = null;
+        }
     }
 }
