@@ -3910,6 +3910,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             layer.SetParameters(layerParameters);
             currentIndex += layerParameterCount;
         }
+
+        // Some ITrainableLayer implementations swap their parameter tensors
+        // wholesale during SetParameters rather than mutating in place. When
+        // they do, any compiled plan captured against the prior tensor
+        // references is stale — replay would write into freed buffers. Drop
+        // the host's cache so the next Predict re-traces against the new refs.
+        _compileHost.Invalidate();
     }
 
     /// <summary>
