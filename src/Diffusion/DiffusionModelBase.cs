@@ -35,8 +35,40 @@ namespace AiDotNet.Diffusion;
 /// Specific diffusion models (like DDPM, Latent Diffusion) extend this base to implement
 /// their unique noise prediction architectures.</para>
 /// </remarks>
-public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>, IModelShape
+public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>, IModelShape, IDisposable
 {
+    /// <summary>
+    /// Concrete diffusion models opt in to the Dispose cascade by overriding this
+    /// method to yield the components they own that hold disposable resources —
+    /// typically the noise predictor (DiT, UNet, MMDiT) plus, for latent diffusion,
+    /// the VAE and conditioner. Default yields nothing so existing concrete
+    /// diffusion subclasses (249 of them) keep working unchanged until each opts in.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// We use a method-based opt-in rather than a <c>NoisePredictor</c> property
+    /// to avoid name collision with <see cref="ILatentDiffusionModel{T}.NoisePredictor"/>
+    /// (which returns the non-nullable interface type and is part of an existing
+    /// contract). Subclasses of <c>LatentDiffusionModelBase</c> can override
+    /// this method to surface the same predictor for Dispose cleanup without
+    /// changing their interface obligations.
+    /// </para>
+    /// <example>
+    /// <code>
+    /// public class DDPMModel&lt;T&gt; : DiffusionModelBase&lt;T&gt; {
+    ///     private readonly UNetNoisePredictor&lt;T&gt; _unet;
+    ///     protected override IEnumerable&lt;IDisposable&gt; EnumerateDisposableComponents() {
+    ///         yield return _unet;
+    ///     }
+    /// }
+    /// </code>
+    /// </example>
+    /// </remarks>
+    protected virtual IEnumerable<IDisposable> EnumerateDisposableComponents() =>
+        Array.Empty<IDisposable>();
+
+    private bool _disposed;
+
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
     /// </summary>
@@ -851,6 +883,42 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         }
 
         return noise;
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Cascades Dispose to the composed <see cref="NoisePredictor"/> when it's
+    /// exposed via override. Concrete diffusion models that hold additional
+    /// disposable composites (VAE, text encoder, scheduler with state) override
+    /// this method to dispose them too — calling <c>base.Dispose(disposing)</c>
+    /// to chain the predictor cleanup.
+    /// </summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed || !disposing) return;
+        _disposed = true;
+
+        // Cascade to every disposable component the concrete model exposes via
+        // EnumerateDisposableComponents — typically the noise predictor, plus
+        // VAE/conditioner for latent diffusion. The catch prevents a shared
+        // component (e.g., a predictor reused across two diffusion wrappers
+        // for ensembling) from aborting the cascade when a previous owner
+        // already disposed it.
+        foreach (var component in EnumerateDisposableComponents())
+        {
+            try { component?.Dispose(); }
+            catch (ObjectDisposedException) { }
+        }
     }
 
     #endregion
