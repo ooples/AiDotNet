@@ -1207,19 +1207,29 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Defaults to quiet — AiDotNet suppresses GPU init output by default as of
-    /// github.com/ooples/AiDotNet#1122. Set <see cref="AiDotNet.Configuration.GpuDiagnosticsOptions.Verbose"/>
-    /// to <c>true</c> when troubleshooting GPU driver/OpenCL issues, or
-    /// equivalently set the <c>AIDOTNET_GPU_VERBOSE=1</c> environment variable.
+    /// The default-behavior depends on the consumed AiDotNet.Tensors version —
+    /// v0.38.0 defaults to verbose (output on) and requires explicit opt-out.
+    /// Set <see cref="AiDotNet.Configuration.GpuDiagnosticsOptions.Verbose"/>
+    /// to <c>false</c> to silence, or to <c>true</c> to re-enable (or set
+    /// the <c>AIDOTNET_GPU_VERBOSE</c> environment variable).
     /// </para>
-    /// <para><b>For Beginners:</b> If you're building a model and want to see the
-    /// detailed GPU init messages (useful if something isn't working), call
-    /// <c>.ConfigureGpuDiagnostics(new() { Verbose = true })</c>. Otherwise leave
-    /// it alone — the library runs quietly by default.</para>
+    /// <para>
+    /// See github.com/ooples/AiDotNet#1122. This method exposes the existing
+    /// Tensors-package flag via a discoverable AiDotNet-side facade so
+    /// applications don't need to reach into
+    /// <c>OpenClBackend.DiagnosticOutput</c> directly.
+    /// </para>
+    /// <para><b>For Beginners:</b> If your AI application is printing lots of
+    /// <c>[OpenClBackend]</c> status messages, call
+    /// <c>.ConfigureGpuDiagnostics(new() { Verbose = false })</c> to silence
+    /// them. If something isn't working and you want more info, call it with
+    /// <c>Verbose = true</c>.</para>
     /// </remarks>
     /// <param name="options">
     /// The GPU-diagnostics options, or <c>null</c> to leave the current
-    /// settings unchanged.
+    /// settings unchanged. When
+    /// <see cref="AiDotNet.Configuration.GpuDiagnosticsOptions.Verbose"/>
+    /// is <c>null</c>, this method is a no-op.
     /// </param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureGpuDiagnostics(AiDotNet.Configuration.GpuDiagnosticsOptions? options = null);
