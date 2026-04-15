@@ -286,23 +286,13 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         _mlpRatio = mlpRatio;
         _latentSpatialSize = latentSpatialSize;
 
-        // Class-conditional DiT is not yet wired end-to-end: _labelEmbed is
-        // created when numClasses > 0 and participates in param/grad/serialize
-        // plumbing, but no call path injects the class index into the forward
-        // pass, so the embedding weights would train against zero gradient
-        // signal. Fail fast here with a clear error rather than silently
-        // storing weights that never learn. The dead-branch plumbing stays
-        // so a future PR can wire the class-injection path (add classIndex
-        // to PredictNoise, fuse into projected time embedding like the DiT
-        // paper §3.2) without re-adding the infrastructure.
-        if (numClasses > 0)
-        {
-            throw new NotSupportedException(
-                $"DiTNoisePredictor: class-conditional generation (numClasses={numClasses}) is not " +
-                "yet wired into the forward pass. Use numClasses=0 (text-conditional or unconditional) " +
-                "or open an issue to prioritize class-conditional support.");
-        }
-
+        // Class-conditional DiT is fully wired end-to-end per Peebles & Xie 2022
+        // §3.2: when numClasses > 0, _labelEmbed projects one-hot class labels
+        // [B, numClasses] into the time-embedding space and the Forward() path
+        // sums (timeEmbed + classEmbed) into adaLnEmbed, which feeds every
+        // block-level AdaLN modulation and the final-layer AdaLN. See Forward()
+        // for the routing. When numClasses == 0, the `conditioning` argument
+        // instead feeds cross-attention (text-conditional path).
         _blocks = new List<DiTBlock>();
         _numClasses = numClasses;
         // Defensive copy of the caller-owned list — without this, a caller who
@@ -376,10 +366,16 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         _timeEmbed1 = LazyDense(_hiddenSize, timeEmbedDim, new SiLUActivation<T>());
         _timeEmbed2 = LazyDense(timeEmbedDim, timeEmbedDim, new SiLUActivation<T>());
 
-        // Class embedding (optional)
+        // Class conditioning embedding (Peebles & Xie 2022 §3.2 / Appendix C).
+        // LabelEmbedder: one-hot class labels [B, numClasses] → [B, timeEmbedDim],
+        // added to the projected time embedding in Forward(). The paper's reference
+        // code keeps class and time embeddings in the same space (hidden_size there,
+        // timeEmbedDim here since our time MLP projects up to timeEmbedDim).
+        // Classifier-free guidance reserves an additional "null" class — the caller
+        // is expected to pass a zero one-hot to represent the unconditional token.
         if (numClasses > 0)
         {
-            _labelEmbed = LazyDense(numClasses, _hiddenSize);
+            _labelEmbed = LazyDense(numClasses, timeEmbedDim);
         }
 
         _finalNorm = new LayerNormalizationLayer<T>(_hiddenSize);
@@ -517,7 +513,6 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             throw new InvalidOperationException("Layers not initialized.");
 
         var shape = x._shape;
-        var batch = shape[0];
         var height = shape[2];
         var width = shape[3];
 
@@ -531,17 +526,43 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         // Add position embeddings
         hidden = AddPositionEmbedding(hidden, numPatches);
 
-        // Get conditioning embedding if available
-        var condEmbed = conditioning;
-
-        // Process through transformer blocks
-        foreach (var block in _blocks)
+        // Class conditioning (Peebles & Xie 2022 §3.2): when the model was
+        // constructed with numClasses > 0, `conditioning` is the class-label
+        // tensor (one-hot, shape [B, numClasses]). We project it through the
+        // label embedder and ADD it to the time embedding — the sum feeds
+        // every AdaLN modulation in every block AND the final-layer AdaLN.
+        //
+        // When numClasses == 0 (non-class-conditional DiT), `conditioning` is
+        // instead used for cross-attention inside each block — that's the
+        // text/free-form conditioning path used by Stable-Diffusion-style
+        // variants. The two roles are mutually exclusive in the original
+        // DiT paper (class-conditional ImageNet DiT had no text path).
+        var adaLnEmbed = timeEmbed;
+        Tensor<T>? crossAttnCond = conditioning;
+        if (_numClasses > 0 && conditioning != null)
         {
-            hidden = ForwardBlock(hidden, timeEmbed, condEmbed, block);
+            if (_labelEmbed == null)
+                throw new InvalidOperationException("Class embedding layer not initialized despite numClasses > 0.");
+            if (conditioning.Shape.Length < 2 || conditioning.Shape[^1] != _numClasses)
+                throw new ArgumentException(
+                    $"Class-conditional DiT expects `conditioning` to be one-hot class labels with last dim {_numClasses}; got shape [{string.Join(",", conditioning.Shape)}].",
+                    nameof(conditioning));
+
+            var classEmbed = _labelEmbed.Forward(conditioning);
+            adaLnEmbed = Engine.TensorAdd(timeEmbed, classEmbed);
+            // Class conditioning consumed as class labels — don't also pass into cross-attention.
+            crossAttnCond = null;
         }
 
-        // Final norm and projection with AdaLN
-        hidden = FinalLayerWithAdaLN(hidden, timeEmbed);
+        // Process through transformer blocks — every block's AdaLN reads
+        // `adaLnEmbed` (= timeEmbed + classEmbed when class-conditional).
+        foreach (var block in _blocks)
+        {
+            hidden = ForwardBlock(hidden, adaLnEmbed, crossAttnCond, block);
+        }
+
+        // Final norm and projection with AdaLN (also uses the combined embedding)
+        hidden = FinalLayerWithAdaLN(hidden, adaLnEmbed);
 
         // Unpatchify back to image
         var output = Unpatchify(hidden, height, width);
