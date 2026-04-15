@@ -3915,8 +3915,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // wholesale during SetParameters rather than mutating in place. When
         // they do, any compiled plan captured against the prior tensor
         // references is stale — replay would write into freed buffers. Drop
-        // the host's cache so the next Predict re-traces against the new refs.
+        // BOTH the inference compile cache AND the tape-training caches that
+        // also key off the captured tensor references (TapeTrainingStep's
+        // collected-parameter cache + CompiledTapeTrainingStep's compiled
+        // plans). Without invalidating the tape side, the next training step
+        // would replay against parameters that no longer exist.
         _compileHost.Invalidate();
+        Training.TapeTrainingStep<T>.InvalidateCache();
     }
 
     /// <summary>
