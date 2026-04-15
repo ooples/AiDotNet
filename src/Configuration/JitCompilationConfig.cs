@@ -97,10 +97,26 @@ public sealed class JitCompilationConfig
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// When <c>true</c>, a compilation failure propagates as an exception instead of
-    /// silently falling back to the eager path. Use in tests to catch regressions;
-    /// leave <c>false</c> in production so a misbehaving op doesn't take down inference.
+    /// When <c>true</c>, a compilation failure in the builder's <c>JitCompiledFunction</c>
+    /// wrapper (the one populated by <c>AiModelBuilder.BuildCompiledPredictFunction</c>)
+    /// propagates as an exception instead of silently falling back to the eager
+    /// Predict path. Use in tests to catch regressions.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Scope: this flag is currently consulted only by the builder-level wrapper
+    /// — the lower-level <c>NeuralNetworkBase{T}.PredictCompiled</c> and
+    /// <c>CompiledTapeTrainingStep{T}.Step</c> have their own catch-all fallbacks
+    /// (with Trace warnings logged on the wrapper). Threading strict-mode through
+    /// those internal helpers is tracked as a follow-up; for tests, exercising
+    /// the wrapper path (built via <c>AiModelBuilder</c>) is sufficient.
+    /// </para>
+    /// <para>
+    /// Leave <c>false</c> in production so a misbehaving op doesn't take down
+    /// inference — fallback runs eager + emits a <c>Trace.TraceWarning</c> so
+    /// the regression is observable in telemetry.
+    /// </para>
+    /// </remarks>
     public bool ThrowOnFailure { get; set; }
 
     /// <summary>
@@ -185,6 +201,14 @@ public sealed class JitCompilationConfig
     /// </remarks>
     public void ApplyToTensorCodec()
     {
+        // Validate at the boundary — we're about to install these values into
+        // thread-static codec options where a bad value (negative
+        // DataflowFusionMaxHidden, out-of-range SpectralErrorTolerance) would
+        // silently corrupt compilation paths instead of failing fast. Running
+        // Validate() on every Apply is cheap (simple range checks) and catches
+        // deserialized or mutated config before any plan is compiled against it.
+        Validate();
+
         var opts = new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions
         {
             EnableCompilation = Enabled,

@@ -1347,8 +1347,8 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureInferenceOptimizations(AiDotNet.Configuration.InferenceOptimizationConfig? config = null);
 
     /// <summary>
-    /// Enables JIT (Just-In-Time) compilation for the built model's forward and
-    /// backward passes by installing the configured
+    /// Enables JIT (Just-In-Time) compilation for the built model's forward-pass
+    /// replay by installing the configured
     /// <see cref="AiDotNet.Configuration.JitCompilationConfig"/> into
     /// <c>TensorCodecOptions</c> during <c>Build()</c>.
     /// </summary>

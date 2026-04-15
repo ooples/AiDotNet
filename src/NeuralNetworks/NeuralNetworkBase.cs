@@ -2139,8 +2139,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 () => PredictEager(input)); // Use same path as eager for consistency
             return plan.Execute();
         }
-        catch
+        catch (Exception ex)
         {
+            // Emit a Trace warning so the JIT regression is observable in production
+            // telemetry — silent fallback would let perf surveys be the first signal.
+            // Then run eager so the call still succeeds. The cache didn't store a
+            // plan for the failed shape, so the next call will retry compilation.
+            System.Diagnostics.Trace.TraceWarning(
+                $"PredictCompiled fallback for {GetType().FullName} " +
+                $"with input shape [{string.Join(", ", input.Shape)}]: {ex.GetType().Name}: {ex.Message}");
             return PredictEager(input);
         }
     }

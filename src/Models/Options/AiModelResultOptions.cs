@@ -595,16 +595,19 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
 
     /// <summary>
     /// Gets or sets the JIT compilation configuration applied on every
-    /// Predict/Train call made through the result.
+    /// <c>Predict</c> call made through the result. (<c>Train</c> on
+    /// <c>AiModelResult</c> always throws — the result is a frozen snapshot —
+    /// so JIT config is only re-asserted on inference entrypoints.)
     /// </summary>
     /// <remarks>
     /// <para>
     /// When set, the result pushes these flags onto <c>TensorCodecOptions.Current</c>
-    /// at the top of each Predict/Train so subsequent cross-thread calls (e.g., from
-    /// a request handler pool) see the same compilation behavior the builder was
-    /// configured with. <c>TensorCodecOptions.Current</c> is <c>[ThreadStatic]</c>,
-    /// so without this bridge a call on a fresh worker thread would execute against
-    /// the Tensors-package defaults instead of the builder's configured flags.
+    /// at the top of each <c>Predict</c> so cross-thread inference calls (e.g.,
+    /// from a request handler pool) see the same compilation behavior the
+    /// builder was configured with. <c>TensorCodecOptions.Current</c> is
+    /// <c>[ThreadStatic]</c>, so without this bridge a Predict on a fresh
+    /// worker thread would execute against whatever a previous unrelated caller
+    /// left on the thread instead of the builder's configured flags.
     /// </para>
     /// </remarks>
     public AiDotNet.Configuration.JitCompilationConfig? JitCompilationConfig { get; set; }

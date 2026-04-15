@@ -1264,12 +1264,21 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
                 return new[] { plan.Execute() };
             }
-            catch when (!throwOnFailure)
+            catch (Exception ex) when (!throwOnFailure)
             {
                 // Compilation blew up OR replay couldn't rebind inputs cleanly.
-                // Fall back to eager Predict — the call succeeds, just slower.
-                // Next call retries compilation because the cache didn't store a
-                // plan for the failed shape.
+                // Log via Trace so the failure is observable in production telemetry
+                // — silent fallback would make JIT regressions invisible until perf
+                // surveys catch them. Then fall back to eager Predict so the call
+                // succeeds. Wrap the fallback in NoGradScope to match the trace's
+                // inference semantics (no tape recording during Predict). Next call
+                // retries compilation since the cache didn't store a plan for the
+                // failed shape.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"JIT fallback for {nnModel.GetType().FullName} " +
+                    $"with input shape [{string.Join(", ", input.Shape)}]: {ex.GetType().Name}: {ex.Message}");
+
+                using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
                 return new[] { nnModel.Predict(input) };
             }
         };
@@ -1283,12 +1292,20 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // validate during serialize/deserialize operations within BuildAsync.
         using var licenseScope = Helpers.ModelPersistenceGuard.SetActiveLicenseKey(_licenseKey);
 
-        // Apply JIT compilation config FIRST so every subsequent step in BuildAsync
-        // — training, fine-tuning, quantization calibration, cross-validation —
-        // sees the configured TensorCodecOptions. When Enabled=true (default on
-        // library side anyway) the auto-compilation layer + CompiledModelCache
-        // engage automatically; when Enabled=false the entire stack short-circuits
-        // to eager execution for A/B diffing.
+        // Apply JIT compilation config FIRST so every subsequent SYNCHRONOUS step
+        // in BuildAsync sees the configured TensorCodecOptions. When Enabled=true
+        // (default on library side anyway) the auto-compilation layer +
+        // CompiledModelCache engage automatically; when Enabled=false the entire
+        // stack short-circuits to eager execution for A/B diffing.
+        //
+        // Cross-await caveat: TensorCodecOptions.Current is [ThreadStatic] on the
+        // Tensors side and does NOT flow across `await` continuations — async work
+        // resumed on a different worker thread will see the thread's previous
+        // codec state. This Apply gives the synchronous setup phase the right
+        // options; downstream consumers that need cross-thread persistence
+        // (AiModelResult.Predict re-asserts on every call) bridge it themselves.
+        // A follow-up Tensors-side change to migrate Current to AsyncLocal<T>
+        // would close this gap globally — tracked as a separate issue.
         _jitCompilationConfig?.ApplyToTensorCodec();
 
         // Validate RAG pipeline composition if any RAG components were configured
@@ -1434,6 +1451,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             JitCompilationConfig = _jitCompilationConfig,
+            // Build the compiled-Predict wrapper at every result-creation site —
+            // not just the supervised path. Without this, RL/inference-only/streaming
+            // results that persist JitCompilationConfig still bypass the wrapper for
+            // models that override Predict, defeating ConfigureJitCompilation() for
+            // those build paths.
+            JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
             AugmentationConfig = _augmentationConfig,
             ReasoningConfig = _reasoningConfig,
             DeploymentConfiguration = deploymentConfig,
@@ -1787,6 +1810,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             JitCompilationConfig = _jitCompilationConfig,
+            // Build the compiled-Predict wrapper at every result-creation site —
+            // not just the supervised path. Without this, RL/inference-only/streaming
+            // results that persist JitCompilationConfig still bypass the wrapper for
+            // models that override Predict, defeating ConfigureJitCompilation() for
+            // those build paths.
+            JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
             AugmentationConfig = _augmentationConfig,
             ReasoningConfig = _reasoningConfig,
             DeploymentConfiguration = deploymentConfig,
@@ -2977,9 +3006,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             AgentRecommendation = agentRecommendation,
             DeploymentConfiguration = deploymentConfig,
             QuantizationInfo = quantizationInfo,
-            JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             JitCompilationConfig = _jitCompilationConfig,
+            // Build the compiled-Predict wrapper at every result-creation site —
+            // not just the supervised path. Without this, RL/inference-only/streaming
+            // results that persist JitCompilationConfig still bypass the wrapper for
+            // models that override Predict, defeating ConfigureJitCompilation() for
+            // those build paths.
+            JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
             AugmentationConfig = _augmentationConfig,
             ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
@@ -3469,6 +3503,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             DeploymentConfiguration = deploymentConfig,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             JitCompilationConfig = _jitCompilationConfig,
+            // Build the compiled-Predict wrapper at every result-creation site —
+            // not just the supervised path. Without this, RL/inference-only/streaming
+            // results that persist JitCompilationConfig still bypass the wrapper for
+            // models that override Predict, defeating ConfigureJitCompilation() for
+            // those build paths.
+            JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
             ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
             GraphStore = _graphStore,
