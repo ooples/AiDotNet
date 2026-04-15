@@ -664,11 +664,15 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <see cref="EnumerateLayers"/> that implements <see cref="IDisposable"/>.
     /// </summary>
     /// <remarks>
-    /// Concrete predictors override <see cref="EnumerateLayers"/> to opt into
-    /// the cascade. The <see cref="ObjectDisposedException"/> catch prevents a
-    /// shared-layer graph — the same <see cref="ILayer{T}"/> instance used by
-    /// multiple predictors or networks — from aborting the cascade when a
-    /// previous owner already disposed it.
+    /// <see cref="EnumerateLayers"/> defaults to a reflection walk over
+    /// instance fields, so subclasses get the cascade automatically. Concrete
+    /// predictors that want to constrain WHAT gets disposed (e.g., skip a
+    /// shared layer injected via constructor that the predictor doesn't own)
+    /// override <see cref="EnumerateLayers"/> to return an explicit allow-list.
+    /// The <see cref="ObjectDisposedException"/> catch prevents a shared-layer
+    /// graph — the same <see cref="ILayer{T}"/> instance used by multiple
+    /// predictors or networks — from aborting the cascade when a previous
+    /// owner already disposed it.
     /// </remarks>
     protected virtual void Dispose(bool disposing)
     {

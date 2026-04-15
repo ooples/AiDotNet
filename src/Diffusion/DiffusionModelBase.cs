@@ -118,7 +118,22 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                 }
                 if (value is null) continue;
                 if (!visited.Add(value)) continue;
-                if (value is IDisposable disposable) yield return disposable;
+                if (value is IDisposable disposable)
+                {
+                    yield return disposable;
+                }
+                else if (value is System.Collections.IEnumerable enumerable && value is not string)
+                {
+                    // Walk collections that hold disposables (e.g., List<IDisposable>,
+                    // Dictionary<K, IDisposable>) — matches ReflectInstanceLayers'
+                    // enumerable-traversal behavior so the two Dispose paths behave
+                    // consistently.
+                    foreach (var item in enumerable)
+                    {
+                        if (item is IDisposable nested && visited.Add(item))
+                            yield return nested;
+                    }
+                }
             }
         }
     }
@@ -953,11 +968,14 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     }
 
     /// <summary>
-    /// Cascades Dispose to the composed <see cref="NoisePredictor"/> when it's
-    /// exposed via override. Concrete diffusion models that hold additional
-    /// disposable composites (VAE, text encoder, scheduler with state) override
-    /// this method to dispose them too — calling <c>base.Dispose(disposing)</c>
-    /// to chain the predictor cleanup.
+    /// Cascades Dispose to every disposable component the concrete model exposes
+    /// via <see cref="EnumerateDisposableComponents"/> (default: reflection walk
+    /// over instance fields), plus the owned <c>_scheduler</c>. Concrete diffusion
+    /// models that want to constrain WHAT gets disposed (e.g., skip injected
+    /// dependencies they don't own) override <see cref="EnumerateDisposableComponents"/>
+    /// to return an explicit allow-list. Models that hold additional disposable
+    /// composites beyond reflection-walk reach can also override this method and
+    /// call <c>base.Dispose(disposing)</c>.
     /// </summary>
     protected virtual void Dispose(bool disposing)
     {
