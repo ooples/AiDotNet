@@ -2094,35 +2094,29 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
-    /// Compiled inference cache — auto-compiles forward pass on first call,
-    /// replays compiled plan on subsequent calls. Per-instance to prevent
-    /// cross-model cache hits (different models produce different graphs).
+    /// Composable inference-compilation helper — traces the forward pass on first
+    /// call at each input shape and replays the compiled plan on subsequent calls.
+    /// Falls back to eager execution on failure. Invalidated automatically when
+    /// <see cref="_layerStructureVersion"/> changes (lazy-init resize, layer
+    /// mutation, weight swap).
     /// </summary>
-    private AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>? _compiledInferenceCache;
+    /// <remarks>
+    /// Single attachment point for future compilation features: AOT plan
+    /// serialization, CUDA Graph capture, symbolic shape plans, persistent
+    /// autotune. All of those attach to <see cref="CompiledModelHost{T}"/>
+    /// rather than re-implementing the compile+cache+fallback dance per
+    /// model family.
+    /// </remarks>
+    private readonly CompiledModelHost<T> _compileHost = new();
 
     /// <summary>
     /// Executes the forward pass using a compiled plan for maximum performance.
     /// First call traces and compiles; subsequent calls replay the compiled plan.
-    /// Falls back to eager execution if compilation fails.
+    /// Falls back to eager execution if compilation fails. Plans auto-invalidate
+    /// when <see cref="_layerStructureVersion"/> changes.
     /// </summary>
-    protected Tensor<T> PredictCompiled(Tensor<T> input)
-    {
-        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
-            return PredictEager(input);
-
-        try
-        {
-            var cache = _compiledInferenceCache ??= new AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>();
-            var plan = cache.GetOrCompileInference(
-                (int[])input._shape.Clone(),
-                () => PredictEager(input)); // Use same path as eager for consistency
-            return plan.Execute();
-        }
-        catch
-        {
-            return PredictEager(input);
-        }
-    }
+    protected Tensor<T> PredictCompiled(Tensor<T> input) =>
+        _compileHost.Predict(input, _layerStructureVersion, () => PredictEager(input));
 
     /// <summary>
     /// Eager forward pass through all layers. Used as fallback when compilation fails.
@@ -4313,7 +4307,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         if (disposing)
         {
-            // Dispose managed resources
+            // Release compiled plans first so pooled tensor buffers the plans
+            // captured are freed before layers Dispose and return their weights.
+            _compileHost.Dispose();
+
+            // Cascade Dispose into every layer that owns releasable state
+            // (pool-rented weight tensors, GPU handles, native buffers). Catch
+            // ObjectDisposedException so a shared-layer graph — the same
+            // ILayer instance used by multiple networks — doesn't abort the
+            // cascade when a previous owner already disposed it.
+            foreach (var layer in _layers)
+            {
+                if (layer is IDisposable disposable)
+                {
+                    try { disposable.Dispose(); }
+                    catch (ObjectDisposedException) { }
+                }
+            }
+
             DisableMixedPrecision();
         }
     }
