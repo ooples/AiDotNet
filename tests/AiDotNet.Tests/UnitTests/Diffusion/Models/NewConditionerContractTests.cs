@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 /// <summary>
 /// Contract tests for Phase 1 conditioning infrastructure: text conditioners and noise predictors.
 /// </summary>
-public class NewConditionerContractTests
+public class NewConditionerContractTests : DiffusionUnitTestBase
 {
     #region Text Conditioner Constructor Tests
 

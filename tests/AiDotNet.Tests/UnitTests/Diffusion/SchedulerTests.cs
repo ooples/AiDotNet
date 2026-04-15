@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion;
 /// <summary>
 /// Tests for diffusion model schedulers.
 /// </summary>
-public class SchedulerTests
+public class SchedulerTests : DiffusionUnitTestBase
 {
     #region DDIM Scheduler Tests
 
