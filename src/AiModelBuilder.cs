@@ -185,7 +185,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private MixedPrecisionConfig? _mixedPrecisionConfig;
     private AiDotNet.Configuration.InferenceOptimizationConfig? _inferenceOptimizationConfig;
 
-
     private RLTrainingOptions<T>? _rlOptions;
     private IAutoMLModel<T, TInput, TOutput>? _autoMLModel;
     private AutoMLOptions<T, TInput, TOutput>? _autoMLOptions;
@@ -1111,12 +1110,21 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // O(sqrt(N)) peak activation memory. CheckpointEveryNLayers <= 0
         // gets auto-computed as sqrt(layer count) so users who enable without
         // tuning get a reasonable default.
-        if (_memoryConfig is { UseGradientCheckpointing: true } memCfg
-            && _model is NeuralNetworks.NeuralNetworkBase<T> checkpointingTarget)
+        // Always assert the checkpointing state — both directions explicitly.
+        // If a model instance is reused across multiple BuildAsync calls with
+        // different memory configs, only setting the non-zero case would let
+        // a previously-enabled segment size remain active when the user
+        // disables checkpointing on a subsequent build. Setting to 0 in the
+        // disable branch resets to the standard O(N) activation storage path.
+        if (_model is NeuralNetworks.NeuralNetworkBase<T> checkpointingTarget)
         {
-            int effective = memCfg.CheckpointEveryNLayers > 0
-                ? memCfg.CheckpointEveryNLayers
-                : Math.Max(1, (int)Math.Sqrt(checkpointingTarget.Layers.Count));
+            int effective = 0; // default: disabled
+            if (_memoryConfig is { UseGradientCheckpointing: true } memCfg)
+            {
+                effective = memCfg.CheckpointEveryNLayers > 0
+                    ? memCfg.CheckpointEveryNLayers
+                    : Math.Max(1, (int)Math.Sqrt(checkpointingTarget.Layers.Count));
+            }
             checkpointingTarget.SetGradientCheckpointingSegmentSize(effective);
         }
 

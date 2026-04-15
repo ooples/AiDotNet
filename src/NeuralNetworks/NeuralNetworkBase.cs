@@ -2086,9 +2086,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     public virtual Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         // Gradient checkpointing opt-in path. When the caller has requested
-        // memory-efficient backprop (ConfigureGradientCheckpointing on the
-        // builder, persisted via GradientCheckpointingSegmentSize), route the
-        // forward through AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing.
+        // memory-efficient backprop via
+        // ConfigureMemoryManagement(TrainingMemoryConfig) on the builder
+        // (UseGradientCheckpointing=true, persisted into the per-instance
+        // GradientCheckpointingSegmentSize), route the forward through
+        // AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing.
         // The helper runs segments under NoGradScope to skip activation
         // storage, then registers a single "checkpoint op" per segment whose
         // backward recomputes the segment's forward-with-tape and threads the
@@ -2097,14 +2099,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         int segmentSize = GradientCheckpointingSegmentSize;
         if (segmentSize > 0 && Layers.Count > segmentSize)
         {
-            var functions = new Func<Tensor<T>, Tensor<T>>[Layers.Count];
-            for (int i = 0; i < Layers.Count; i++)
+            // Cache the layer-forward delegate array so checkpointed training
+            // doesn't allocate N closures + a delegate array on every call.
+            // Rebuild only when the layer graph changes (structure version
+            // bump). Saves ~Layers.Count delegate allocations per training step.
+            if (_checkpointLayerFunctions is null
+                || _checkpointFunctionsVersion != _layerStructureVersion)
             {
-                var captured = Layers[i];
-                functions[i] = x => captured.Forward(x);
+                var fns = new Func<Tensor<T>, Tensor<T>>[Layers.Count];
+                for (int i = 0; i < Layers.Count; i++)
+                {
+                    var captured = Layers[i];
+                    fns[i] = x => captured.Forward(x);
+                }
+                _checkpointLayerFunctions = fns;
+                _checkpointFunctionsVersion = _layerStructureVersion;
             }
             return AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(
-                functions, input, segmentSize);
+                _checkpointLayerFunctions, input, segmentSize);
         }
 
         var current = input;
@@ -2117,7 +2129,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     /// <summary>
     /// Per-instance gradient-checkpointing segment size, set from the builder's
-    /// <c>ConfigureGradientCheckpointing</c>. <c>0</c> means disabled (standard
+    /// <c>ConfigureMemoryManagement(TrainingMemoryConfig)</c> with
+    /// <c>UseGradientCheckpointing = true</c>. <c>0</c> means disabled (standard
     /// O(N) activation storage). Positive values route <see cref="ForwardForTraining"/>
     /// through <c>GradientCheckpointing&lt;T&gt;.Checkpoint</c> with this segment size.
     /// </summary>
@@ -2127,6 +2140,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// deserialization or when <see cref="Predict"/> is called from a new thread.
     /// </remarks>
     internal int GradientCheckpointingSegmentSize { get; private set; }
+
+    /// <summary>
+    /// Cached layer-forward delegate array for checkpointed training. Built
+    /// once per layer-graph version (see <see cref="_layerStructureVersion"/>)
+    /// to avoid re-allocating N closures on every call.
+    /// </summary>
+    private Func<Tensor<T>, Tensor<T>>[]? _checkpointLayerFunctions;
+
+    /// <summary>Version stamp of the cache above; rebuild when it lags _layerStructureVersion.</summary>
+    private int _checkpointFunctionsVersion = -1;
 
     /// <summary>
     /// Sets the gradient-checkpointing segment size used by
