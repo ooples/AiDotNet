@@ -623,14 +623,17 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         int batchSize = x.Shape[0];
         int channels = x.Shape[1];
 
-        // timeEmbed: [B, timeEmbedDim] → project → [B, channels*2]
+        // timeEmbed shape depends on the caller:
+        //   (a) 1D [timeEmbedDim] when GetTimestepEmbedding returns an unbatched
+        //       sinusoidal embedding (the shared-across-batch case — standard
+        //       path when batch originates from PredictNoise on a single int).
+        //   (b) 2D [B, timeEmbedDim] when the caller pre-batched timeEmbed
+        //       (e.g., PredictNoiseWithEmbedding on a [B, D] tensor).
+        // After projection:
+        //   (a) → 1D [channels*2]     — broadcast scale/shift across all batches.
+        //   (b) → 2D [B, channels*2]  — per-batch scale/shift.
         var condVec = projection.Forward(timeEmbed);
-        if (condVec.Shape[0] != batchSize)
-        {
-            throw new InvalidOperationException(
-                $"FiLM conditioning batch-size mismatch: feature map has batch {batchSize} " +
-                $"but projection output has batch {condVec.Shape[0]}.");
-        }
+        bool condIsBatched = condVec.Shape.Length >= 2;
         int expectedCondWidth = channels * 2;
         if (condVec.Shape[^1] != expectedCondWidth)
         {
@@ -639,14 +642,26 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
                 $"(2 * channels for [scale, shift]), got {condVec.Shape[^1]}. " +
                 "This indicates the VideoBlock's TimeCondProjection was sized for a different channel count.");
         }
+        if (condIsBatched && condVec.Shape[0] != batchSize)
+        {
+            throw new InvalidOperationException(
+                $"FiLM conditioning batch-size mismatch: feature map has batch {batchSize} " +
+                $"but projection output has batch {condVec.Shape[0]}. " +
+                "Pass a 1D timeEmbed to broadcast across all batches, or a 2D [B, timeEmbedDim] " +
+                "timeEmbed where B matches the feature map's batch size.");
+        }
 
-        // Split into scale [B, C] and shift [B, C]
+        // Split projection into scale and shift. When condVec is 1D, we
+        // broadcast the single [channels*2] vector across all batches. When
+        // 2D, we split per-batch.
         var scaleData = new T[batchSize * channels];
         var shiftData = new T[batchSize * channels];
         var condSpan = condVec.AsSpan();
         for (int b = 0; b < batchSize; b++)
         {
-            int srcBase = b * channels * 2;
+            // When condVec is 1D, all batches read from the same [channels*2]
+            // block at offset 0. When 2D, batch b reads from offset b*(channels*2).
+            int srcBase = condIsBatched ? b * channels * 2 : 0;
             int dstBase = b * channels;
             for (int c = 0; c < channels; c++)
             {
@@ -741,13 +756,18 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         var mixed = temporalLayer.Forward(flat);
 
         // Reshape back to [B, C, H, W, F] then un-permute to [B, C, F, H, W].
+        // The final .Contiguous() materializes the permuted view — downstream
+        // ops (ExtractFrame, AsSpan callers) require contiguous backing buffers,
+        // and permutation views don't materialize automatically.
         var mixedPermuted = Engine.Reshape(mixed, new[] { batch, channels, height, width, frames });
-        var mixedVideo = Engine.TensorPermute(mixedPermuted, new[] { 0, 1, 4, 2, 3 });
+        var mixedVideo = Engine.TensorPermute(mixedPermuted, new[] { 0, 1, 4, 2, 3 }).Contiguous();
 
         // Residual connection: output = input + temporalDelta
-        // Per the paper, the residual ensures the temporal block only needs to learn
-        // the temporal refinement, not reconstruct the full signal from scratch.
-        return Engine.TensorAdd(video, mixedVideo);
+        // Per the paper, the residual ensures the temporal block only needs to
+        // learn the temporal refinement, not reconstruct the full signal from
+        // scratch. .Contiguous() on the result — TensorAdd can return a view
+        // in some engine paths.
+        return Engine.TensorAdd(video, mixedVideo).Contiguous();
     }
 
     /// <summary>
@@ -795,7 +815,9 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
         // Step 5: Permute back from NHWFC to NCFHW
         // [batch, height, width, frames, channels] -> [batch, channels, frames, height, width]
-        var result = Engine.TensorPermute(reshapedBack, new[] { 0, 4, 3, 1, 2 });
+        // .Contiguous() materializes the permuted view — downstream ops
+        // (ExtractFrame, AsSpan callers) require a contiguous backing buffer.
+        var result = Engine.TensorPermute(reshapedBack, new[] { 0, 4, 3, 1, 2 }).Contiguous();
 
         return result;
     }
