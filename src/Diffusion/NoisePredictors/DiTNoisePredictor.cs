@@ -288,7 +288,13 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
 
         _blocks = new List<DiTBlock>();
         _numClasses = numClasses;
-        _customBlocks = customBlocks;
+        // Defensive copy of the caller-owned list — without this, a caller who
+        // mutates customBlocks after construction would silently change this
+        // model's block graph at the deferred init point. The lazy-init shift
+        // turned a constructor-time read into a first-use read, so the list
+        // contents must be snapshotted here to preserve construction-time
+        // semantics.
+        _customBlocks = customBlocks == null ? null : new List<DiTBlock>(customBlocks);
         // Defer heavy layer allocation to first use (lazy initialization)
     }
 
