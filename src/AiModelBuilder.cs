@@ -184,6 +184,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private KnowledgeDistillationOptions<T, TInput, TOutput>? _knowledgeDistillationOptions;
     private MixedPrecisionConfig? _mixedPrecisionConfig;
     private AiDotNet.Configuration.InferenceOptimizationConfig? _inferenceOptimizationConfig;
+
+
     private RLTrainingOptions<T>? _rlOptions;
     private IAutoMLModel<T, TInput, TOutput>? _autoMLModel;
     private AutoMLOptions<T, TInput, TOutput>? _autoMLOptions;
@@ -1099,6 +1101,24 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // Propagate the builder's license key to ModelPersistenceGuard so it can
         // validate during serialize/deserialize operations within BuildAsync.
         using var licenseScope = Helpers.ModelPersistenceGuard.SetActiveLicenseKey(_licenseKey);
+
+        // Apply gradient checkpointing to the model BEFORE any training runs
+        // inside this Build (quantization calibration, cross-validation,
+        // fine-tuning). The existing TrainingMemoryConfig on ConfigureMemoryManagement
+        // already exposes UseGradientCheckpointing + CheckpointEveryNLayers —
+        // we just wire those through to NeuralNetworkBase.ForwardForTraining,
+        // which routes through GradientCheckpointing<T>.Checkpoint for
+        // O(sqrt(N)) peak activation memory. CheckpointEveryNLayers <= 0
+        // gets auto-computed as sqrt(layer count) so users who enable without
+        // tuning get a reasonable default.
+        if (_memoryConfig is { UseGradientCheckpointing: true } memCfg
+            && _model is NeuralNetworks.NeuralNetworkBase<T> checkpointingTarget)
+        {
+            int effective = memCfg.CheckpointEveryNLayers > 0
+                ? memCfg.CheckpointEveryNLayers
+                : Math.Max(1, (int)Math.Sqrt(checkpointingTarget.Layers.Count));
+            checkpointingTarget.SetGradientCheckpointingSegmentSize(effective);
+        }
 
         // Validate RAG pipeline composition if any RAG components were configured
         bool hasAnyRAG = _ragRetriever != null || _ragReranker != null || _ragGenerator != null

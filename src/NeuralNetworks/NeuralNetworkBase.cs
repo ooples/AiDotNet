@@ -2085,12 +2085,61 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <inheritdoc />
     public virtual Tensor<T> ForwardForTraining(Tensor<T> input)
     {
+        // Gradient checkpointing opt-in path. When the caller has requested
+        // memory-efficient backprop (ConfigureGradientCheckpointing on the
+        // builder, persisted via GradientCheckpointingSegmentSize), route the
+        // forward through AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing.
+        // The helper runs segments under NoGradScope to skip activation
+        // storage, then registers a single "checkpoint op" per segment whose
+        // backward recomputes the segment's forward-with-tape and threads the
+        // gradients through. Memory drops from O(layers) to O(sqrt(layers))
+        // at the cost of ~33% more compute per backward pass.
+        int segmentSize = GradientCheckpointingSegmentSize;
+        if (segmentSize > 0 && Layers.Count > segmentSize)
+        {
+            var functions = new Func<Tensor<T>, Tensor<T>>[Layers.Count];
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                var captured = Layers[i];
+                functions[i] = x => captured.Forward(x);
+            }
+            return AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(
+                functions, input, segmentSize);
+        }
+
         var current = input;
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
         return current;
+    }
+
+    /// <summary>
+    /// Per-instance gradient-checkpointing segment size, set from the builder's
+    /// <c>ConfigureGradientCheckpointing</c>. <c>0</c> means disabled (standard
+    /// O(N) activation storage). Positive values route <see cref="ForwardForTraining"/>
+    /// through <c>GradientCheckpointing&lt;T&gt;.Checkpoint</c> with this segment size.
+    /// </summary>
+    /// <remarks>
+    /// Writable via <see cref="SetGradientCheckpointingSegmentSize"/> so
+    /// <c>AiModelResult</c> can push the builder's config through after
+    /// deserialization or when <see cref="Predict"/> is called from a new thread.
+    /// </remarks>
+    internal int GradientCheckpointingSegmentSize { get; private set; }
+
+    /// <summary>
+    /// Sets the gradient-checkpointing segment size used by
+    /// <see cref="ForwardForTraining"/>. <c>0</c> disables checkpointing.
+    /// Positive values trade ~33% more backward compute for O(sqrt(N)) peak
+    /// activation memory.
+    /// </summary>
+    internal void SetGradientCheckpointingSegmentSize(int segmentSize)
+    {
+        if (segmentSize < 0)
+            throw new ArgumentOutOfRangeException(nameof(segmentSize),
+                "Segment size must be non-negative. Use 0 to disable checkpointing.");
+        GradientCheckpointingSegmentSize = segmentSize;
     }
 
     /// <summary>
