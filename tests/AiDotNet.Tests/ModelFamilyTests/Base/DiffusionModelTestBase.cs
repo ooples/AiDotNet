@@ -13,8 +13,39 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Tests mathematical invariants: denoising convergence, output sensitivity,
 /// training stability, scheduler consistency, and noise schedule properties.
 /// </summary>
-public abstract class DiffusionModelTestBase
+/// <remarks>
+/// Implements <see cref="IAsyncLifetime"/> to force a full GC cycle between
+/// tests. Without this hint, sequential Diffusion tests on 16 GB Windows CI
+/// runners accumulate undisposed weight-tensor backing arrays that sit in
+/// gen-2 heap — the ~255-test Diffusion shards hit OOM within 45 min
+/// wall-clock because GC never has time to run a compacting collection.
+/// See issue #1136. The forced <c>GC.Collect → WaitForPendingFinalizers → GC.Collect</c>
+/// sequence (standard two-pass pattern) runs AFTER each test disposes its
+/// model (via <c>using var model = CreateModel()</c>), reclaiming the rented
+/// weight buffers returned to the TensorAllocator pool on Dispose.
+/// </remarks>
+public abstract class DiffusionModelTestBase : IAsyncLifetime
 {
+    /// <summary>Before-test hook. No-op — the base has no ambient state to initialize.</summary>
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    /// <summary>
+    /// After-test hook. Forces a full two-pass GC to reclaim weight tensors
+    /// that the <c>using var model</c> Dispose released back into the
+    /// TensorAllocator pool. Without this hint, pool entries stay pinned by
+    /// gen-2 references across hundreds of sequential diffusion tests —
+    /// GC waits for memory pressure but the 45-min CI wall clock runs out
+    /// first. See <see cref="DiffusionModelTestBase"/> remarks.
+    /// </summary>
+    public Task DisposeAsync()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        return Task.CompletedTask;
+    }
+
+
     protected abstract IDiffusionModel<double> CreateModel();
 
     protected virtual int[] InputShape => [1, 4];
