@@ -1751,6 +1751,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         _parameterBuffer = null;
         Training.TapeTrainingStep<T>.InvalidateCache();
         InvalidateLayerInfoCache();
+        // Layer graph mutated — drop any compiled fused training plans cached
+        // against the old structure. Also clear the sticky-disable so the next
+        // training run gets a fresh chance at the fused path with the new graph.
+        Training.CompiledTapeTrainingStep<T>.Invalidate();
+        _fusedTrainingDisabled = false;
     }
 
     /// <summary>
@@ -2595,11 +2600,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// identically on standard benchmarks (the fused kernels use the same formulas).
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Sticky disable for the fused training path on this model instance. Set
+    /// when <see cref="TryTrainWithFusedOptimizer"/> falls back so subsequent
+    /// steps stay on the eager path. Mixing fused (closure-captured m/v) and
+    /// eager (optimizer-instance state) updates within one training run would
+    /// reset Adam moments at the next successful fused step. Stickiness keeps
+    /// optimizer state consistent for the rest of the run.
+    /// </summary>
+    private bool _fusedTrainingDisabled;
+
     private bool TryTrainWithFusedOptimizer(
         Tensor<T> input,
         Tensor<T> expected,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> resolvedOptimizer)
     {
+        if (_fusedTrainingDisabled) return false;
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
             return false;
         if (typeof(T) != typeof(float))
@@ -2609,18 +2625,30 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 resolvedOptimizer, out var fusedType, out float lr, out float b1, out float b2, out float eps, out float wd))
             return false;
 
-        var trainableLayers = new List<ITrainableLayer<T>>();
-        foreach (var layer in Layers)
-            if (layer is ITrainableLayer<T> trainable)
-                trainableLayers.Add(trainable);
-        if (trainableLayers.Count == 0) return false;
+        // Use the existing recursive trainable-layer collector instead of the
+        // top-level-only scan — composite layers with trainable children (e.g.,
+        // residual blocks, transformer layers) expose those children via
+        // GetSubLayers() but aren't ITrainableLayer themselves. Without
+        // recursion the fused path silently stops updating part of the model.
+        var trainableLayers = Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers, _layerStructureVersion);
+        if (trainableLayers.Length == 0) return false;
 
         var loss = LossFunction as LossFunctions.LossFunctionBase<T>;
         if (loss is null) return false;
 
+        // Mirror the eager path's bidirectional shape alignment — handle BOTH
+        // (a) forward output has extra leading batch dim vs target, AND
+        // (b) target has extra leading batch dim vs forward output.
+        // Fused path failures abandon optimizer state, so triggering one of
+        // these via missing-direction reshape would be costlier than the extra
+        // branch here.
         Tensor<T> AlignShape(Tensor<T> fwd, Tensor<T> tgt)
         {
             if (fwd.Rank > tgt.Rank && fwd.Shape[0] == 1 && fwd.Length == tgt.Length)
+                return Engine.Reshape(fwd, tgt._shape);
+            // Note: when target has the extra dim we reshape the FORWARD output
+            // to match the target's shape so loss broadcast works either way.
+            if (tgt.Rank > fwd.Rank && tgt.Shape[0] == 1 && tgt.Length == fwd.Length)
                 return Engine.Reshape(fwd, tgt._shape);
             return fwd;
         }
@@ -2640,16 +2668,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             out T lossValue);
 
         if (ran)
+        {
             LastLoss = lossValue;
+        }
+        else
+        {
+            // Sticky disable: subsequent training steps in this run stay on the
+            // eager path so we don't reset Adam moments by re-engaging fused
+            // mid-run. Cleared on next ResetState/InvalidateParameterCountCache.
+            _fusedTrainingDisabled = true;
+        }
         return ran;
     }
 
     /// <summary>
     /// Inspects a pluggable optimizer and maps it onto the fixed set supported
     /// by the Tensors-side fused kernel (<c>SGD</c>, <c>Adam</c>, <c>AdamW</c>).
-    /// Returns <c>false</c> for any optimizer type outside that set, for any
-    /// optimizer with a learning-rate scheduler attached, or for any
-    /// configuration that mutates hyperparameters between steps (adaptive rates).
+    /// Returns <c>false</c> when the optimizer is outside that set OR when
+    /// per-step hyperparameter mutation would defeat the fused plan's
+    /// configure-once contract: adaptive learning rates, attached LR schedulers,
+    /// or AMSGrad mode (which the fused kernel doesn't model).
     /// </summary>
     private static bool TryMapToFusedOptimizerConfig(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
@@ -2666,6 +2704,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         beta2 = 0f;
         epsilon = 0f;
         weightDecay = 0f;
+
+        // Reject when an LR scheduler is attached — GetCurrentLearningRate()
+        // would change between steps but the fused plan bakes the LR at first
+        // ConfigureOptimizer, so subsequent rate changes silently disappear.
+        if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradBase
+            && gradBase.LearningRateScheduler is not null)
+            return false;
 
         switch (optimizer)
         {
@@ -2687,6 +2732,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 if (adamW.GetOptions() is not Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> opts)
                     return false;
                 if (opts.UseAdaptiveLearningRate) return false;
+                // Fused AdamW kernel does not implement AMSGrad's max-of-second-moment
+                // update rule. If the user enabled it, fall back to eager so the
+                // configured update rule isn't silently swapped for standard AdamW.
+                if (adamW.UseAMSGrad) return false;
                 optimizerType = AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdamW;
                 learningRate = (float)adamW.GetCurrentLearningRate();
                 beta1 = (float)opts.Beta1;

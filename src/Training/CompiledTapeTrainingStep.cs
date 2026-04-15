@@ -37,6 +37,16 @@ public static class CompiledTapeTrainingStep<T>
     private static object? _lastConfiguredPlan;
 
     /// <summary>
+    /// Snapshot of the optimizer hyperparameters the last <see cref="TryStepWithFusedOptimizer"/>
+    /// call configured on <see cref="_lastConfiguredPlan"/>. Plan identity alone
+    /// is insufficient — the same plan can be configured with SGD then Adam, or
+    /// Adam-with-LR-1e-3 then Adam-with-LR-1e-4. Detecting any drift here forces
+    /// a fallback so the caller doesn't silently train against stale moments.
+    /// </summary>
+    [ThreadStatic]
+    private static (int OptType, float Lr, float B1, float B2, float Eps, float Wd)? _lastOptimizerConfig;
+
+    /// <summary>
     /// Executes a single compiled training step.
     /// First call traces and compiles; subsequent calls replay the compiled plan.
     /// Falls back to eager execution if compilation fails.
@@ -104,6 +114,7 @@ public static class CompiledTapeTrainingStep<T>
         _cache?.Invalidate();
         _cachedParameters = null;
         _lastConfiguredPlan = null;
+        _lastOptimizerConfig = null;
     }
 
     /// <summary>
@@ -140,7 +151,7 @@ public static class CompiledTapeTrainingStep<T>
     /// </para>
     /// </remarks>
     /// <returns><c>true</c> when the fused compiled step ran successfully.</returns>
-    public static bool TryStepWithFusedOptimizer(
+    internal static bool TryStepWithFusedOptimizer(
         IReadOnlyList<ITrainableLayer<T>> layers,
         Tensor<T> input,
         Tensor<T> target,
@@ -174,7 +185,11 @@ public static class CompiledTapeTrainingStep<T>
             if (_cachedParameters is null)
                 forward(input);
 
-            var parameters = _cachedParameters ??= CollectParameterArray(layers);
+            // Use the dedup-aware collector for the fused path. Shared/tied
+            // weights (same Tensor<T> instance referenced by multiple layers)
+            // would otherwise drive the fused kernel's m/v buffers to update
+            // the same parameter twice per step, breaking Adam's moment math.
+            var parameters = _cachedParameters ??= CollectDeduplicatedParameters(layers);
 
             foreach (var layer in layers)
                 layer.ZeroGrad();
@@ -188,10 +203,17 @@ public static class CompiledTapeTrainingStep<T>
                 },
                 parameters);
 
-            // Configure the fused optimizer exactly once per compiled plan.
-            // Re-calling ConfigureOptimizer resets the Adam m/v buffers — we must
-            // not do that per step. Track plan identity via ThreadStatic.
-            if (!ReferenceEquals(_lastConfiguredPlan, plan))
+            // Configure the fused optimizer when EITHER the plan changed
+            // (recompile) OR any optimizer hyperparameter drifted from the last
+            // call. Plan identity alone is insufficient — the same plan can be
+            // configured with SGD then Adam, or Adam-with-different-LR. Detecting
+            // drift forces reconfigure (which resets m/v buffers — necessary
+            // when the math changed) instead of silently running stale moments.
+            var currentConfig = ((int)optimizerType, learningRate, beta1, beta2, epsilon, weightDecay);
+            bool needsReconfigure = !ReferenceEquals(_lastConfiguredPlan, plan)
+                || _lastOptimizerConfig is null
+                || !_lastOptimizerConfig.Value.Equals(currentConfig);
+            if (needsReconfigure)
             {
                 plan.ConfigureOptimizer(
                     optimizerType,
@@ -201,6 +223,7 @@ public static class CompiledTapeTrainingStep<T>
                     epsilon,
                     weightDecay);
                 _lastConfiguredPlan = plan;
+                _lastOptimizerConfig = currentConfig;
             }
 
             // Execute forward + backward + fused parameter update in one replay.
@@ -208,12 +231,38 @@ public static class CompiledTapeTrainingStep<T>
             lossValue = lossOutput.Length > 0 ? lossOutput[0] : MathHelper.GetNumericOperations<T>().Zero;
             return true;
         }
-        catch
+        catch (Exception ex)
         {
-            // Clear the configured-plan cache so next attempt reconfigures fresh.
+            // Trace the failure so fused-path regressions are observable in
+            // production telemetry. Clear the configured-plan cache so next
+            // attempt reconfigures fresh.
+            System.Diagnostics.Trace.TraceWarning(
+                $"CompiledTapeTrainingStep.TryStepWithFusedOptimizer failed, falling back to eager: " +
+                $"{ex.GetType().Name}: {ex.Message}");
             _lastConfiguredPlan = null;
+            _lastOptimizerConfig = null;
             return false;
         }
+    }
+
+    /// <summary>
+    /// Deduplicates trainable parameter tensors by reference identity. The eager
+    /// <see cref="TapeTrainingStep{T}"/> path also dedupes (shared/tied weights
+    /// must be updated once per step, not once per layer that holds the alias).
+    /// </summary>
+    private static Tensor<T>[] CollectDeduplicatedParameters(IReadOnlyList<ITrainableLayer<T>> layers)
+    {
+        var seen = new HashSet<Tensor<T>>(AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        var result = new List<Tensor<T>>();
+        foreach (var layer in layers)
+        {
+            foreach (var p in layer.GetTrainableParameters())
+            {
+                if (p is not null && seen.Add(p))
+                    result.Add(p);
+            }
+        }
+        return result.ToArray();
     }
 
     private static Tensor<T>[] CollectParameterArray(IReadOnlyList<ITrainableLayer<T>> layers)
