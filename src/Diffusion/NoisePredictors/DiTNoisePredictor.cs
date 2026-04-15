@@ -286,6 +286,23 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         _mlpRatio = mlpRatio;
         _latentSpatialSize = latentSpatialSize;
 
+        // Class-conditional DiT is not yet wired end-to-end: _labelEmbed is
+        // created when numClasses > 0 and participates in param/grad/serialize
+        // plumbing, but no call path injects the class index into the forward
+        // pass, so the embedding weights would train against zero gradient
+        // signal. Fail fast here with a clear error rather than silently
+        // storing weights that never learn. The dead-branch plumbing stays
+        // so a future PR can wire the class-injection path (add classIndex
+        // to PredictNoise, fuse into projected time embedding like the DiT
+        // paper §3.2) without re-adding the infrastructure.
+        if (numClasses > 0)
+        {
+            throw new NotSupportedException(
+                $"DiTNoisePredictor: class-conditional generation (numClasses={numClasses}) is not " +
+                "yet wired into the forward pass. Use numClasses=0 (text-conditional or unconditional) " +
+                "or open an issue to prioritize class-conditional support.");
+        }
+
         _blocks = new List<DiTBlock>();
         _numClasses = numClasses;
         // Defensive copy of the caller-owned list — without this, a caller who
