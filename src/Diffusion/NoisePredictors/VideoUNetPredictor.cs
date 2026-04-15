@@ -977,8 +977,11 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         // The layer operates on the temporal axis (numFrames), not the channel axis.
         // Each spatial-channel position has its own numFrames-long vector that this
         // layer learns to mix — analogous to a depthwise-temporal 1x1 convolution
-        // in the time dimension.
-        return new DenseLayer<T>(_numFrames, _numFrames, (IActivationFunction<T>)new SiLUActivation<T>());
+        // in the time dimension. LazyDense defers weight allocation until first
+        // Forward — critical because TimeCondProjection + TemporalResBlock are
+        // added to EVERY encoder, middle, and decoder block, multiplying the
+        // memory pressure that lazy init was meant to relieve.
+        return LazyDense(_numFrames, _numFrames, new SiLUActivation<T>());
     }
 
     /// <summary>
@@ -987,7 +990,10 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private DenseLayer<T> CreateTimeCondProjection(int channels)
     {
-        return new DenseLayer<T>(_timeEmbeddingDim, channels * 2, activationFunction: null);
+        // LazyDense — see CreateTemporalResBlock comment. Without lazy init this
+        // factory eagerly allocates timeEmbeddingDim*(channels*2) parameters per
+        // block × N blocks per VideoUNet, defeating the PR's lazy-init goal.
+        return LazyDense(_timeEmbeddingDim, channels * 2, activation: null);
     }
 
     private ILayer<T> CreateSpatialAttention(int channels)
