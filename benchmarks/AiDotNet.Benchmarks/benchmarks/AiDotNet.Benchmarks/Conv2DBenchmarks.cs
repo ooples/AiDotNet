@@ -14,7 +14,7 @@ namespace AiDotNet.Benchmarks;
 [RankColumn]
 public class Conv2DBenchmarks
 {
-    private readonly IEngine _engine = AiDotNetEngine.GetEngine();
+    private readonly IEngine _engine = AiDotNetEngine.Current;
 
     // Small (early UNet levels)
     private Tensor<double> _input64x32 = null!;
@@ -42,21 +42,21 @@ public class Conv2DBenchmarks
         var rng = new Random(42);
 
         // Double precision
-        _input64x32 = CreateRandom<double>(1, 64, 32, 32, rng);
-        _kernel64 = CreateRandom<double>(64, 64, 3, 3, rng);
+        _input64x32 = CreateRandomDouble(1, 64, 32, 32, rng);
+        _kernel64 = CreateRandomDouble(64, 64, 3, 3, rng);
         _output64x32 = new Tensor<double>([1, 64, 32, 32]);
 
-        _input256x16 = CreateRandom<double>(1, 256, 16, 16, rng);
-        _kernel256 = CreateRandom<double>(256, 256, 3, 3, rng);
+        _input256x16 = CreateRandomDouble(1, 256, 16, 16, rng);
+        _kernel256 = CreateRandomDouble(256, 256, 3, 3, rng);
         _output256x16 = new Tensor<double>([1, 256, 16, 16]);
 
-        _input1280x8 = CreateRandom<double>(1, 1280, 8, 8, rng);
-        _kernel1280 = CreateRandom<double>(1280, 1280, 3, 3, rng);
+        _input1280x8 = CreateRandomDouble(1, 1280, 8, 8, rng);
+        _kernel1280 = CreateRandomDouble(1280, 1280, 3, 3, rng);
         _output1280x8 = new Tensor<double>([1, 1280, 8, 8]);
 
         // Float precision
-        _inputF256x16 = CreateRandom<float>(1, 256, 16, 16, rng);
-        _kernelF256 = CreateRandom<float>(256, 256, 3, 3, rng);
+        _inputF256x16 = CreateRandomFloat(1, 256, 16, 16, rng);
+        _kernelF256 = CreateRandomFloat(256, 256, 3, 3, rng);
         _outputF256x16 = new Tensor<float>([1, 256, 16, 16]);
     }
 
@@ -92,22 +92,23 @@ public class Conv2DBenchmarks
     public void Conv2DInto_256ch_16x16_Float()
         => _engine.Conv2DInto(_outputF256x16, _inputF256x16, _kernelF256, stride: 1, padding: 1);
 
-    private static Tensor<TNum> CreateRandom<TNum>(int b, int c, int h, int w, Random rng)
+    private static Tensor<double> CreateRandomDouble(int b, int c, int h, int w, Random rng)
     {
-        var tensor = new Tensor<TNum>([b, c, h, w]);
-        var span = tensor.AsWritableSpan();
-        if (typeof(TNum) == typeof(double))
-        {
-            var dSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<TNum, double>(span);
-            for (int i = 0; i < dSpan.Length; i++)
-                dSpan[i] = rng.NextDouble() - 0.5;
-        }
-        else if (typeof(TNum) == typeof(float))
-        {
-            var fSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<TNum, float>(span);
-            for (int i = 0; i < fSpan.Length; i++)
-                fSpan[i] = (float)(rng.NextDouble() - 0.5);
-        }
+        var tensor = new Tensor<double>([b, c, h, w]);
+        var data = new double[tensor.Length];
+        for (int i = 0; i < data.Length; i++)
+            data[i] = rng.NextDouble() - 0.5;
+        tensor.CopyFromArray(data);
+        return tensor;
+    }
+
+    private static Tensor<float> CreateRandomFloat(int b, int c, int h, int w, Random rng)
+    {
+        var tensor = new Tensor<float>([b, c, h, w]);
+        var data = new float[tensor.Length];
+        for (int i = 0; i < data.Length; i++)
+            data[i] = (float)(rng.NextDouble() - 0.5);
+        tensor.CopyFromArray(data);
         return tensor;
     }
 }

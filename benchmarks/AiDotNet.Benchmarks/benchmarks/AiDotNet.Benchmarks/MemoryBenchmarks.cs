@@ -15,7 +15,7 @@ namespace AiDotNet.Benchmarks;
 [RankColumn]
 public class MemoryBenchmarks
 {
-    private readonly IEngine _engine = AiDotNetEngine.GetEngine();
+    private readonly IEngine _engine = AiDotNetEngine.Current;
 
     // Immutable inputs — never modified by benchmarks
     private Tensor<double> _inputA = null!;
@@ -47,8 +47,11 @@ public class MemoryBenchmarks
     [IterationSetup]
     public void IterationSetup()
     {
-        // Reset scratch tensor before each iteration so in-place ops don't accumulate
-        _inputA.Data.Span.CopyTo(_scratchA.Data.Span);
+        // Reset scratch tensor before each iteration so in-place ops don't accumulate.
+        // AsWritableSpan is internal on Tensor<T>, so use TensorAdd with an implicit
+        // zero: actually fastest to materialize through AsSpan() + indexer.
+        var srcSpan = _inputA.AsSpan();
+        for (int i = 0; i < srcSpan.Length; i++) _scratchA[i] = srcSpan[i];
     }
 
     [Benchmark(Description = "TensorAdd (allocating)")]
@@ -67,21 +70,20 @@ public class MemoryBenchmarks
     public Tensor<double> Alloc_NewTensor()
         => new([1, 256, 16, 16]);
 
-    [Benchmark(Description = "TensorAllocator.Rent+Return cycle ([1,256,16,16])")]
-    public void Alloc_Rent()
+    [Benchmark(Description = "TensorAllocator.Rent ([1,256,16,16])")]
+    public Tensor<double> Alloc_Rent()
     {
-        var t = TensorAllocator.Rent<double>([1, 256, 16, 16]);
-        // Use the tensor (prevent dead code elimination)
-        _ = t.Length;
-        TensorAllocator.Return(t);
+        // Rent returns a pre-zeroed tensor from the shared pool. No explicit
+        // Return — pool reuse happens via GC + finalizer on Tensors v0.38+.
+        return TensorAllocator.Rent<double>([1, 256, 16, 16]);
     }
 
-    [Benchmark(Description = "TensorAllocator.RentUninitialized+Return cycle ([1,256,16,16])")]
-    public void Alloc_RentUninitialized()
+    [Benchmark(Description = "TensorAllocator.RentUninitialized ([1,256,16,16])")]
+    public Tensor<double> Alloc_RentUninitialized()
     {
-        var t = TensorAllocator.RentUninitialized<double>([1, 256, 16, 16]);
-        _ = t.Length;
-        TensorAllocator.Return(t);
+        // RentUninitialized skips zeroing — faster when the caller will
+        // overwrite every element anyway.
+        return TensorAllocator.RentUninitialized<double>([1, 256, 16, 16]);
     }
 
     [Benchmark(Description = "Conv2D 256ch 16x16 (allocating)")]

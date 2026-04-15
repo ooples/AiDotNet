@@ -2125,6 +2125,81 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Eagerly traces and compiles the forward pass for the given input shape,
+    /// storing the compiled plan in the per-instance cache. Subsequent calls to
+    /// <see cref="Predict"/> / <see cref="PredictCompiled"/> with the same
+    /// input shape replay the plan with zero re-compile overhead.
+    /// </summary>
+    /// <param name="sampleInput">
+    /// A sample input tensor whose shape keys the compiled plan. The tensor's
+    /// values are used during tracing but are not persisted; any tensor of
+    /// the target inference shape works.
+    /// </param>
+    /// <returns>
+    /// <c>true</c> when compilation succeeds and the plan is cached. <c>false</c>
+    /// when compilation is disabled via
+    /// <see cref="AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.EnableCompilation"/>
+    /// or when tracing throws (in which case <see cref="Predict"/> transparently
+    /// falls back to eager execution).
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// Addresses the "NeuralNetworkBase.CompileForward()" checklist item on
+    /// github.com/ooples/AiDotNet#1015. Gives applications an explicit pre-warm
+    /// hook so the first production inference doesn't pay the one-time trace +
+    /// compile cost. Call once at startup with a representative input shape
+    /// for lowest-latency first-inference.
+    /// </para>
+    /// <para>
+    /// Multiple calls with different shapes pre-warm multiple plans in the
+    /// same cache — useful for applications that accept variable batch sizes
+    /// or sequence lengths.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of this like a "pre-heat the oven"
+    /// step. The first time you ask the model to predict something, it spends
+    /// extra time analyzing the network and building an optimized plan.
+    /// Calling this method does that work up-front, so the real predictions
+    /// are fast from the very first call.</para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var network = new MyNetwork(...);
+    /// var warmupInput = new Tensor&lt;float&gt;(new[] { 1, 3, 224, 224 }); // batch=1, RGB 224x224
+    /// if (network.CompileForward(warmupInput))
+    /// {
+    ///     // Pre-warmed — first real Predict is zero-overhead replay.
+    /// }
+    /// // Otherwise compilation is off / failed; Predict transparently falls back.
+    /// </code>
+    /// </example>
+    public bool CompileForward(Tensor<T> sampleInput)
+    {
+        if (sampleInput is null)
+            throw new ArgumentNullException(nameof(sampleInput));
+        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
+            return false;
+
+        try
+        {
+            var cache = _compiledInferenceCache ??= new AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>();
+            // GetOrCompileInference either traces-and-compiles or returns the
+            // existing plan. Executing once confirms the plan replays correctly
+            // and warms the downstream workspace buffers.
+            var plan = cache.GetOrCompileInference(
+                (int[])sampleInput._shape.Clone(),
+                () => PredictEager(sampleInput));
+            _ = plan.Execute();
+            return true;
+        }
+        catch
+        {
+            // Trace/compile failed — fall back to lazy-compile-on-first-Predict.
+            // PredictCompiled still handles the eager fallback transparently.
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Eager forward pass through all layers. Used as fallback when compilation fails.
     /// </summary>
     protected virtual Tensor<T> PredictEager(Tensor<T> input)
