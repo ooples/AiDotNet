@@ -641,6 +641,13 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     [JsonProperty]
     private AiDotNet.Configuration.InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
+    /// <summary>
+    /// Builder's determinism policy, re-asserted on every Predict to bridge the
+    /// engine's thread-local state across request-pool workers.
+    /// </summary>
+    [JsonProperty]
+    private bool AllowNondeterminism { get; set; }
+
     [JsonIgnore]
     private readonly object _inferenceOptimizationLock = new();
 
@@ -1269,6 +1276,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         DeploymentConfiguration = options.DeploymentConfiguration;
         JitCompiledFunction = options.JitCompiledFunction;
         InferenceOptimizationConfig = options.InferenceOptimizationConfig;
+        AllowNondeterminism = options.AllowNondeterminism;
         QuantizationInfo = options.QuantizationInfo;
 
         // Layer metadata (populated if the model supports layer-level access)
@@ -1810,6 +1818,17 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (Model == null)
         {
             throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        // Re-assert the builder's determinism policy on this thread. Engine
+        // determinism state is thread-local; without this bridge a Predict on
+        // a fresh request-pool worker would use whatever the thread happened
+        // to have (usually non-deterministic). Only call when the builder set
+        // AllowNondeterminism=false (the default) — otherwise we respect the
+        // caller's explicit opt-out.
+        if (!AllowNondeterminism)
+        {
+            AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(true);
         }
 
         var dataForPrediction = newData;
