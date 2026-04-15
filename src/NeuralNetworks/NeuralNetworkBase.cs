@@ -2085,18 +2085,25 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <inheritdoc />
     public virtual Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        // Gradient checkpointing opt-in path. When the caller has requested
-        // memory-efficient backprop via
-        // ConfigureMemoryManagement(TrainingMemoryConfig) on the builder
-        // (UseGradientCheckpointing=true, persisted into the per-instance
-        // GradientCheckpointingSegmentSize), route the forward through
-        // AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing.
-        // The helper runs segments under NoGradScope to skip activation
-        // storage, then registers a single "checkpoint op" per segment whose
-        // backward recomputes the segment's forward-with-tape and threads the
-        // gradients through. Memory drops from O(layers) to O(sqrt(layers))
-        // at the cost of ~33% more compute per backward pass.
+        // Gradient checkpointing opt-in path. Unify on a single source of
+        // truth by consulting BOTH:
+        //   (a) the builder-set GradientCheckpointingSegmentSize (populated by
+        //       ConfigureMemoryManagement with UseGradientCheckpointing=true), and
+        //   (b) the existing _memoryManager (populated by the public
+        //       EnableMemoryManagement method for direct-model usage)
+        // If either path says checkpointing is active, use it — resolving the
+        // "two sources disagree" reviewer concern. Precedence: builder flag
+        // wins when both specify a segment size; the memory-manager fallback
+        // preserves behavior for users who configured via EnableMemoryManagement
+        // directly without touching the builder.
         int segmentSize = GradientCheckpointingSegmentSize;
+        if (segmentSize <= 0 && _memoryManager is not null && _memoryManager.IsCheckpointingEnabled)
+        {
+            // Memory-manager-enabled but builder-set size is 0 → derive a
+            // reasonable default from the memory manager's config, or fall
+            // back to sqrt(N) if it doesn't expose one.
+            segmentSize = Math.Max(1, (int)Math.Sqrt(Math.Max(1, Layers.Count)));
+        }
         if (segmentSize > 0 && Layers.Count > segmentSize)
         {
             // Cache the layer-forward delegate array so checkpointed training
