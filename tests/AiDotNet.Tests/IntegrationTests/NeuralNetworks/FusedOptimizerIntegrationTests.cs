@@ -21,10 +21,22 @@ using Xunit;
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
 /// <summary>
+/// Collection definition that groups integration tests mutating the
+/// thread-static <see cref="TensorCodecOptions.Current"/>/fused-step
+/// counter into a single non-parallel sequence. xUnit's default
+/// per-class parallelization would race SetCurrent / Invalidate across
+/// tests, producing flaky results (one test's EnableCompilation=true
+/// would leak into another's EnableCompilation=false assertions).
+/// </summary>
+[CollectionDefinition("FusedOptimizerGlobalState", DisableParallelization = true)]
+public sealed class FusedOptimizerCollection { }
+
+/// <summary>
 /// Integration tests for the fused forward+backward+optimizer compiled training path
 /// wired through <see cref="NeuralNetworkBase{T}.TrainWithTape(Tensor{T}, Tensor{T}, IGradientBasedOptimizer{T, Tensor{T}, Tensor{T}}?)"/>.
 /// Exercises the <c>TryTrainWithFusedOptimizer</c> engage/fallback decision tree end-to-end.
 /// </summary>
+[Collection("FusedOptimizerGlobalState")]
 public class FusedOptimizerIntegrationTests
 {
     /// <summary>
@@ -52,6 +64,7 @@ public class FusedOptimizerIntegrationTests
         {
             TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
             CompiledTapeTrainingStep<float>.Invalidate();
+            CompiledTapeTrainingStep<float>.ResetFusedStepCount();
 
             var losses = new List<float>();
             for (int step = 0; step < 10; step++)
@@ -65,6 +78,15 @@ public class FusedOptimizerIntegrationTests
                 Assert.False(float.IsNaN(loss), "Fused path produced NaN loss");
                 Assert.False(float.IsInfinity(loss), "Fused path produced Inf loss");
             }
+
+            // Observable signal that the fused compiled kernel actually ran.
+            // Without this assertion, a silent fallback to the eager path
+            // would produce finite loss too and the "fused" test would pass
+            // against the wrong code path. Require that at least one fused
+            // step ran; in a healthy config on a supported MLP this should
+            // be all 10.
+            Assert.True(CompiledTapeTrainingStep<float>.GetFusedStepCount() > 0,
+                "Fused path never engaged — the test was silently falling back to eager.");
         }
         finally
         {

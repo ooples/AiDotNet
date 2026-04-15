@@ -63,6 +63,22 @@ public static class CompiledTapeTrainingStep<T>
     private static (int OptType, float Lr, float B1, float B2, float Eps, float Wd)? _configuredOptimizerConfig;
 
     /// <summary>
+    /// Counter of successful fused-step executions on this thread. Exposed
+    /// via <see cref="GetFusedStepCount"/>/<see cref="ResetFusedStepCount"/>
+    /// so integration tests can assert that the fused compiled path
+    /// <i>actually engaged</i> rather than silently falling back to eager
+    /// (a test that only checks "finite loss" cannot distinguish the two).
+    /// </summary>
+    [ThreadStatic]
+    private static long _fusedStepCount;
+
+    /// <summary>Gets the count of successful fused-step executions on the calling thread.</summary>
+    public static long GetFusedStepCount() => _fusedStepCount;
+
+    /// <summary>Resets the fused-step counter on the calling thread to zero.</summary>
+    public static void ResetFusedStepCount() { _fusedStepCount = 0; }
+
+    /// <summary>
     /// Executes a single compiled training step.
     /// First call traces and compiles; subsequent calls replay the compiled plan.
     /// Falls back to eager execution if compilation fails.
@@ -151,6 +167,10 @@ public static class CompiledTapeTrainingStep<T>
         _cachedParameters = null;
         _configuredPlan = null;
         _configuredOptimizerConfig = null;
+        // Reset the fused-engagement counter — from this point on, any
+        // assertion about "fused ran at least N times" should reflect the
+        // new lifecycle.
+        _fusedStepCount = 0;
     }
 
     /// <summary>
@@ -304,17 +324,23 @@ public static class CompiledTapeTrainingStep<T>
             // Execute forward + backward + fused parameter update in one replay.
             var lossOutput = plan.Step();
             lossValue = lossOutput.Length > 0 ? lossOutput[0] : MathHelper.GetNumericOperations<T>().Zero;
+            // Signal successful fused engagement so tests/diagnostics can
+            // assert the compiled path actually ran — distinguishing it from
+            // a silent fallback to the eager path.
+            _fusedStepCount++;
             return true;
         }
         catch (Exception ex)
         {
             // Trace the failure so fused-path regressions are observable in
-            // production telemetry. Clear the per-plan config cache so any
-            // next attempt reconfigures fresh — we can't know which plan
-            // (if any) ended up in a partial state, so drop them all.
+            // production telemetry. Include ex.ToString() so stack trace +
+            // inner exceptions reach telemetry — without these, diagnosing
+            // a fused-path regression from logs requires reproducing the
+            // failure locally. Clear the single-slot config state so any
+            // next attempt reconfigures fresh.
             System.Diagnostics.Trace.TraceWarning(
                 $"CompiledTapeTrainingStep.TryStepWithFusedOptimizer failed, falling back to eager: " +
-                $"{ex.GetType().Name}: {ex.Message}");
+                $"{ex}");
             _configuredPlan = null;
             _configuredOptimizerConfig = null;
             return false;
