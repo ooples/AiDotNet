@@ -99,25 +99,36 @@ internal sealed class CompiledModelHost<T> : IDisposable
             throw new ArgumentNullException(nameof(eagerForward));
 
         // Quick state checks + cache acquisition under lock; the actual
-        // compile/replay runs OUTSIDE the lock because it can be slow and
-        // blocking other threads on it would defeat the throughput win.
-        // CompiledModelCache itself is thread-safe so concurrent compiles for
-        // distinct shapes are fine.
+        // compile/replay AND the eager fallback run OUTSIDE the lock because
+        // they can be slow and blocking other threads on them would defeat
+        // the throughput win. CompiledModelCache itself is thread-safe so
+        // concurrent compiles for distinct shapes are fine.
         CompiledModelCache<T>? cache;
+        bool fallToEager;
         lock (_sync)
         {
-            if (_disposed || !TensorCodecOptions.Current.EnableCompilation)
-                return eagerForward();
+            fallToEager = _disposed || !TensorCodecOptions.Current.EnableCompilation;
 
-            // Layer graph changed since last compile — stale plans would replay
-            // against the old tensor references. Drop them before compiling again.
-            if (_cache is not null && structureVersion != _lastCompiledVersion)
+            if (!fallToEager)
             {
-                _cache.Invalidate();
-                _lastCompiledVersion = structureVersion;
+                // Layer graph changed since last compile — stale plans would
+                // replay against the old tensor references. Drop them before
+                // compiling again.
+                if (_cache is not null && structureVersion != _lastCompiledVersion)
+                {
+                    _cache.Invalidate();
+                    _lastCompiledVersion = structureVersion;
+                }
+                cache = _cache ??= new CompiledModelCache<T>();
             }
-            cache = _cache ??= new CompiledModelCache<T>();
+            else
+            {
+                cache = null;
+            }
         }
+
+        if (fallToEager || cache is null)
+            return eagerForward();
 
         try
         {
