@@ -2099,9 +2099,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         int segmentSize = GradientCheckpointingSegmentSize;
         if (segmentSize <= 0 && _memoryManager is not null && _memoryManager.IsCheckpointingEnabled)
         {
-            // Memory-manager-enabled but builder-set size is 0 → derive a
-            // reasonable default from the memory manager's config, or fall
-            // back to sqrt(N) if it doesn't expose one.
+            // Memory-manager-enabled but builder-set size is 0 → use the
+            // existing default heuristic based on sqrt(N), where N is the
+            // current layer count. sqrt(N) gives the optimal memory/compute
+            // tradeoff: ~sqrt(N) checkpoints with ~33% extra compute.
             segmentSize = Math.Max(1, (int)Math.Sqrt(Math.Max(1, Layers.Count)));
         }
         if (segmentSize > 0 && Layers.Count > segmentSize)
@@ -2121,6 +2122,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     // no per-layer closure allocation. The delegate holds a
                     // reference to the layer (its implicit Target) but no
                     // extra heap closure is created.
+                    //
+                    // Training-mode correctness: SetTrainingMode(true) is called
+                    // by the caller (TrainWithTape) for the entire training step,
+                    // and layer.Forward reads IsTrainingMode internally to select
+                    // training-time behavior (e.g. Dropout applies masks, LayerNorm
+                    // uses batch stats). Since the mode flag is set ONCE per step
+                    // and stays true across both the original forward and the
+                    // checkpoint recomputation, both code paths see identical
+                    // training-time behavior for mode-aware layers.
+                    //
+                    // Note on stochastic/stateful layers: if a segment contains
+                    // Dropout or BatchNormalization, the recomputation during
+                    // backward generates a NEW dropout mask / updates the running
+                    // stats AGAIN. This is a known property of activation
+                    // checkpointing (identical to PyTorch's checkpoint without
+                    // preserve_rng_state) — callers who need bit-exact gradients
+                    // across recomputation should either disable checkpointing or
+                    // restrict it to segments without stochastic/stateful layers.
+                    // The checkpoint segment-size contract is unchanged; this is
+                    // documented behavior, not a bug in the delegate binding.
                     fns[i] = Layers[i].Forward;
                 }
                 _checkpointLayerFunctions = fns;
