@@ -590,12 +590,27 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             x = ApplyTemporalAttention(block.TemporalAttention, x);
         }
 
-        // Cross-attention with text conditioning
+        // Cross-attention with text conditioning: query=spatial features,
+        // key=value=conditioning (text embedding). Cast to LayerBase to
+        // access the params Forward(query, kv) overload — ILayer only
+        // exposes Forward(single input).
         if (block.CrossAttention != null && conditioning != null)
         {
-            x = isVideo
-                ? ProcessVideoFrames(x, frame => block.CrossAttention.Forward(frame))
-                : block.CrossAttention.Forward(x);
+            if (block.CrossAttention is LayerBase<T> crossAttnBase)
+            {
+                x = isVideo
+                    ? ProcessVideoFrames(x, frame => crossAttnBase.Forward(frame, conditioning))
+                    : crossAttnBase.Forward(x, conditioning);
+            }
+            else
+            {
+                // Fallback: self-attention on the features (loses conditioning
+                // but doesn't crash). Only hit if CrossAttention isn't a
+                // MultiHeadAttentionLayer — shouldn't happen with current factories.
+                x = isVideo
+                    ? ProcessVideoFrames(x, frame => block.CrossAttention.Forward(frame))
+                    : block.CrossAttention.Forward(x);
+            }
         }
 
         return x;
@@ -624,10 +639,24 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> ApplyTemporalProcessing(ILayer<T> temporalLayer, Tensor<T> video)
     {
-        // Apply temporal layer to the video tensor
-        var result = new Tensor<T>(video._shape);
-        video.AsSpan().CopyTo(result.AsWritableSpan());
-        return result;
+        // Video shape: [B, C, F, H, W]. Permute to [B, C, H, W, F] so F is the
+        // innermost (row-major last) dimension, then reshape to [B*C*H*W, F] so
+        // the temporal layer mixes values across the frame axis (not H/W).
+        var shape = video.Shape.ToArray();
+        int batch = shape[0], channels = shape[1], frames = shape[2];
+        int height = shape[3], width = shape[4];
+
+        var permuted = Engine.TensorPermute(video, new[] { 0, 1, 3, 4, 2 });
+        int spatialChannelPositions = batch * channels * height * width;
+        var flat = Engine.Reshape(permuted, new[] { spatialChannelPositions, frames });
+
+        var mixed = temporalLayer.Forward(flat);
+
+        var mixedPermuted = Engine.Reshape(mixed, new[] { batch, channels, height, width, frames });
+        var mixedVideo = Engine.TensorPermute(mixedPermuted, new[] { 0, 1, 4, 2, 3 }).Contiguous();
+
+        // Residual connection: output = input + temporalDelta
+        return Engine.TensorAdd(video, mixedVideo).Contiguous();
     }
 
     /// <summary>

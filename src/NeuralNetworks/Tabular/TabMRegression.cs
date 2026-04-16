@@ -183,7 +183,9 @@ public class TabMRegression<T> : TabMBase<T>
     {
         if (predictions.Length != targets.Length)
         {
-            throw new ArgumentException("Predictions and targets must have the same size");
+            throw new ArgumentException(
+                $"Predictions length ({predictions.Length}, shape [{string.Join(",", predictions.Shape)}]) " +
+                $"must match targets length ({targets.Length}, shape [{string.Join(",", targets.Shape)}]).");
         }
 
         // MSE = mean((predictions - targets)²). Three vectorized Engine ops
@@ -201,7 +203,9 @@ public class TabMRegression<T> : TabMBase<T>
     {
         if (predictions.Length != targets.Length)
         {
-            throw new ArgumentException("Predictions and targets must have the same size");
+            throw new ArgumentException(
+                $"Predictions length ({predictions.Length}, shape [{string.Join(",", predictions.Shape)}]) " +
+                $"must match targets length ({targets.Length}, shape [{string.Join(",", targets.Shape)}]).");
         }
 
         // MAE = mean(|predictions - targets|). Vectorized via Engine ops.
