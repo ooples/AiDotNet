@@ -641,18 +641,13 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     [JsonProperty]
     private AiDotNet.Configuration.InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
-    /// <summary>
-    /// JIT compilation config carried from the builder. Applied on every
-    /// <see cref="Predict"/> call so cross-thread inference invocations (e.g.,
-    /// from a request handler pool) see the same compilation behavior the
-    /// builder was configured with. <c>Train</c> on <c>AiModelResult</c> always
-    /// throws (the result is a snapshot), so there's no Train entrypoint to
-    /// bridge. <c>TensorCodecOptions.Current</c> is <c>[ThreadStatic]</c> —
-    /// without this bridge a fresh worker thread inherits whatever a prior
-    /// caller left on it.
-    /// </summary>
+    /// <summary>JIT compilation config carried from the builder.</summary>
     [JsonProperty]
     private AiDotNet.Configuration.JitCompilationConfig? JitCompilationConfig { get; set; }
+
+    /// <summary>Builder's determinism policy, re-asserted on every Predict.</summary>
+    [JsonProperty]
+    private bool AllowNondeterminism { get; set; }
 
     [JsonIgnore]
     private readonly object _inferenceOptimizationLock = new();
@@ -1283,6 +1278,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         JitCompiledFunction = options.JitCompiledFunction;
         InferenceOptimizationConfig = options.InferenceOptimizationConfig;
         JitCompilationConfig = options.JitCompilationConfig;
+        AllowNondeterminism = options.AllowNondeterminism;
         QuantizationInfo = options.QuantizationInfo;
 
         // Layer metadata (populated if the model supports layer-level access)
@@ -1826,13 +1822,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new InvalidOperationException("Model is not initialized.");
         }
 
-        // Bridge the builder-configured JIT compilation flags into the current
-        // thread's TensorCodecOptions so CompiledModelCache / AutoTracer pick them
-        // up. TensorCodecOptions.Current is [ThreadStatic] — without this push, a
-        // Predict on a fresh worker thread would see whatever a previous caller
-        // left behind. When the result has no explicit JIT config, install the
-        // library default to give a known-good baseline rather than silently
-        // inheriting stale codec options from a prior unrelated configuration.
+        // Bridge builder-configured JIT compilation flags into this thread's
+        // TensorCodecOptions so CompiledModelCache engages correctly.
         if (JitCompilationConfig is { } jit)
         {
             jit.ApplyToTensorCodec();
@@ -1842,6 +1833,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(
                 AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Default);
         }
+
+        // Re-assert the builder's determinism policy on this thread.
+        AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(!AllowNondeterminism);
 
         var dataForPrediction = newData;
         if (SafetyFilter != null && newData is Vector<T> vectorInput && typeof(TInput) == typeof(Vector<T>))
@@ -2917,11 +2911,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             DeploymentConfiguration = DeploymentConfiguration,
             // JIT compilation is parameter-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
-            // Propagate builder-time JIT config through clone paths so the copy
-            // re-applies the same TensorCodecOptions on its own Predict calls
-            // — without this the original keeps JIT but the clone falls back to
-            // library defaults silently.
             JitCompilationConfig = JitCompilationConfig,
+            AllowNondeterminism = AllowNondeterminism,
             ReasoningConfig = ReasoningConfig,
             KnowledgeGraph = KnowledgeGraph,
             GraphStore = GraphStore,
@@ -4659,11 +4650,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             DeploymentConfiguration = DeploymentConfiguration,
             // JIT compilation is model-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
-            // Propagate builder-time JIT config through clone paths so the copy
-            // re-applies the same TensorCodecOptions on its own Predict calls
-            // — without this the original keeps JIT but the clone falls back to
-            // library defaults silently.
             JitCompilationConfig = JitCompilationConfig,
+            AllowNondeterminism = AllowNondeterminism,
             ReasoningConfig = ReasoningConfig,
             KnowledgeGraph = KnowledgeGraph,
             GraphStore = GraphStore,
@@ -4853,11 +4841,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 BiasDetector = deserializedObject.BiasDetector;
                 FairnessEvaluator = deserializedObject.FairnessEvaluator;
                 InferenceOptimizationConfig = deserializedObject.InferenceOptimizationConfig;
-                // Restore JIT config so a saved-and-reloaded result keeps re-applying
-                // its builder-time JIT flags on every Predict — without this assignment
-                // the [JsonProperty] field is populated on `deserializedObject` but
-                // never copied onto `this`, and post-load behavior silently diverges.
                 JitCompilationConfig = deserializedObject.JitCompilationConfig;
+                AllowNondeterminism = deserializedObject.AllowNondeterminism;
                 SerializedModelData = deserializedObject.SerializedModelData;
 
                 // Model is intentionally facade-hidden and is not serialized directly.

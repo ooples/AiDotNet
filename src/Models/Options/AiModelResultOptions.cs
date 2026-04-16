@@ -594,35 +594,15 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     public InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
     /// <summary>
-    /// Gets or sets the JIT compilation configuration applied on every
-    /// <c>Predict</c> call made through the result. (<c>Train</c> on
-    /// <c>AiModelResult</c> always throws — the result is a frozen snapshot —
-    /// so JIT config is only re-asserted on inference entrypoints.)
+    /// JIT compilation configuration applied on every Predict call.
     /// </summary>
-    /// <value>
-    /// The <see cref="AiDotNet.Configuration.JitCompilationConfig"/> instance
-    /// the builder produced via <c>ConfigureJitCompilation</c>, or <c>null</c>
-    /// if the user never opted in (in which case <c>Predict</c> installs the
-    /// library's default <c>TensorCodecOptions</c> on the calling thread).
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// When set, the result pushes these flags onto <c>TensorCodecOptions.Current</c>
-    /// at the top of each <c>Predict</c> so cross-thread inference calls (e.g.,
-    /// from a request handler pool) see the same compilation behavior the
-    /// builder was configured with. <c>TensorCodecOptions.Current</c> is
-    /// <c>[ThreadStatic]</c>, so without this bridge a Predict on a fresh
-    /// worker thread would execute against whatever a previous unrelated caller
-    /// left on the thread instead of the builder's configured flags.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> JIT compilation is turned on or off via the
-    /// builder's <c>ConfigureJitCompilation</c>. This property carries that
-    /// choice with the trained model so predictions on any thread behave the
-    /// same way.
-    /// </para>
-    /// </remarks>
     public AiDotNet.Configuration.JitCompilationConfig? JitCompilationConfig { get; set; }
+
+    /// <summary>
+    /// Determinism policy. When false (default), Predict re-asserts deterministic
+    /// mode on the calling thread. When true, allows nondeterministic kernels.
+    /// </summary>
+    public bool AllowNondeterminism { get; set; }
 
     // ============================================================================
     // Augmentation Properties

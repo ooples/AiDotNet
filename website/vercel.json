@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- website/src/ website/public/ website/package.json website/package-lock.json website/vercel.json website/astro.config.mjs website/tailwind.config.mjs website/tsconfig.json 2>/dev/null || exit 1"
+  "ignoreCommand": "exit 0"
 }

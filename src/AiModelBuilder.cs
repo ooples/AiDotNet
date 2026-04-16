@@ -185,6 +185,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private MixedPrecisionConfig? _mixedPrecisionConfig;
     private AiDotNet.Configuration.InferenceOptimizationConfig? _inferenceOptimizationConfig;
     private AiDotNet.Configuration.JitCompilationConfig? _jitCompilationConfig;
+
+    /// <summary>
+    /// When <c>true</c>, <see cref="BuildAsync"/> does NOT force deterministic
+    /// math on the engine. Default <c>false</c> — the builder makes the model
+    /// deterministic-by-default (matches bitwise across runs) and users opt out
+    /// via <see cref="AllowNondeterminism"/> for throughput gains on workloads
+    /// where reproducibility doesn't matter.
+    /// </summary>
+    private bool _allowNondeterminism;
     private RLTrainingOptions<T>? _rlOptions;
     private IAutoMLModel<T, TInput, TOutput>? _autoMLModel;
     private AutoMLOptions<T, TInput, TOutput>? _autoMLOptions;
@@ -902,18 +911,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// JIT compilation traces the model's computation graph on the first call at
     /// each input shape and replays the compiled plan on subsequent calls,
     /// eliminating virtual dispatch, per-op allocation, and bounds-checking
-    /// overhead. Typical gains are 1.5-3× on CPU and up to 10× on GPU.
-    /// </para>
-    /// <para>
-    /// <b>Scope:</b> the flags configured here are written into the thread-local
-    /// <c>TensorCodecOptions</c> during <c>Build()</c>. From that point on the
-    /// built model's <c>Predict</c> (routed through
-    /// <c>NeuralNetworkBase{T}.PredictCompiled</c>) and the tape-based training
-    /// path both pick up the compiled plans via <c>CompiledModelCache</c> in the
-    /// Tensors package — no further per-model wiring is needed. Concrete models
-    /// whose <c>Predict</c> override bypasses the base (e.g., diffusion models
-    /// running multi-step denoising loops) still benefit from the AutoTracer
-    /// auto-compilation layer, which reads the same flags.
+    /// overhead. Typical gains are 1.5-3x on CPU and up to 10x on GPU.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> think of this as turning your model from an
@@ -923,32 +921,36 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// library silently falls back to the original execution path — so enabling
     /// this is safe.
     /// </para>
-    /// <para>
-    /// Example:
-    /// <code>
-    /// // Simple — enable with library defaults
-    /// var result = await new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
-    ///     .ConfigureModel(myModel)
-    ///     .ConfigureJitCompilation()
-    ///     .BuildAsync();
-    ///
-    /// // Aggressive — all fusion/CSE passes on (good for benchmarking)
-    /// await builder
-    ///     .ConfigureJitCompilation(JitCompilationConfig.Aggressive)
-    ///     .BuildAsync();
-    ///
-    /// // Strict — throw on any compilation failure (good for tests)
-    /// var cfg = JitCompilationConfig.Default;
-    /// cfg.ThrowOnFailure = true;
-    /// await builder.ConfigureJitCompilation(cfg).BuildAsync();
-    /// </code>
-    /// </para>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureJitCompilation(
         AiDotNet.Configuration.JitCompilationConfig? config = null)
     {
         _jitCompilationConfig = config ?? AiDotNet.Configuration.JitCompilationConfig.Default;
         _jitCompilationConfig.Validate();
+        return this;
+    }
+
+    /// <summary>
+    /// Opts out of the builder's deterministic-by-default policy. Call this when
+    /// you want the engine to pick the fastest available kernels even if they
+    /// produce slightly different floating-point results across runs or hardware.
+    /// </summary>
+    /// <returns>This builder for fluent chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// By default, <see cref="BuildAsync"/> calls
+    /// <c>AiDotNetEngine.SetDeterministicMode(true)</c> so every model built by
+    /// this library produces bitwise-identical results across runs on the same
+    /// hardware.
+    /// </para>
+    /// <para>
+    /// <b>Do NOT call this in production serving</b> where reproducibility
+    /// matters for debugging, regression tests, or regulatory compliance.
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> AllowNondeterminism()
+    {
+        _allowNondeterminism = true;
         return this;
     }
 
@@ -1300,21 +1302,16 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // validate during serialize/deserialize operations within BuildAsync.
         using var licenseScope = Helpers.ModelPersistenceGuard.SetActiveLicenseKey(_licenseKey);
 
-        // Apply JIT compilation config FIRST so every subsequent SYNCHRONOUS step
-        // in BuildAsync sees the configured TensorCodecOptions. When Enabled=true
-        // (default on library side anyway) the auto-compilation layer +
-        // CompiledModelCache engage automatically; when Enabled=false the entire
-        // stack short-circuits to eager execution for A/B diffing.
-        //
-        // Cross-await caveat: TensorCodecOptions.Current is [ThreadStatic] on the
-        // Tensors side and does NOT flow across `await` continuations — async work
-        // resumed on a different worker thread will see the thread's previous
-        // codec state. This Apply gives the synchronous setup phase the right
-        // options; downstream consumers that need cross-thread persistence
-        // (AiModelResult.Predict re-asserts on every call) bridge it themselves.
-        // A follow-up Tensors-side change to migrate Current to AsyncLocal<T>
-        // would close this gap globally — tracked as a separate issue.
+        // Apply JIT compilation config so every subsequent step in BuildAsync
+        // sees the configured TensorCodecOptions. CompiledModelCache engages
+        // automatically when Enabled=true; Enabled=false short-circuits to eager.
         _jitCompilationConfig?.ApplyToTensorCodec();
+
+        // Deterministic-by-default: force bitwise-reproducible kernels unless the
+        // caller opted out via AllowNondeterminism(). Applied BEFORE training +
+        // quantization + JIT compile, so every subsequent SYNCHRONOUS step
+        // records into the same deterministic kernel universe.
+        AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(!_allowNondeterminism);
 
         // Validate RAG pipeline composition if any RAG components were configured
         bool hasAnyRAG = _ragRetriever != null || _ragReranker != null || _ragGenerator != null
@@ -1459,12 +1456,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             JitCompilationConfig = _jitCompilationConfig,
-            // Build the compiled-Predict wrapper at every result-creation site —
-            // not just the supervised path. Without this, RL/inference-only/streaming
-            // results that persist JitCompilationConfig still bypass the wrapper for
-            // models that override Predict, defeating ConfigureJitCompilation() for
-            // those build paths.
             JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
+            AllowNondeterminism = _allowNondeterminism,
             AugmentationConfig = _augmentationConfig,
             ReasoningConfig = _reasoningConfig,
             DeploymentConfiguration = deploymentConfig,
@@ -1818,12 +1811,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             JitCompilationConfig = _jitCompilationConfig,
-            // Build the compiled-Predict wrapper at every result-creation site —
-            // not just the supervised path. Without this, RL/inference-only/streaming
-            // results that persist JitCompilationConfig still bypass the wrapper for
-            // models that override Predict, defeating ConfigureJitCompilation() for
-            // those build paths.
             JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
+            AllowNondeterminism = _allowNondeterminism,
             AugmentationConfig = _augmentationConfig,
             ReasoningConfig = _reasoningConfig,
             DeploymentConfiguration = deploymentConfig,
@@ -3016,12 +3005,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             QuantizationInfo = quantizationInfo,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             JitCompilationConfig = _jitCompilationConfig,
-            // Build the compiled-Predict wrapper at every result-creation site —
-            // not just the supervised path. Without this, RL/inference-only/streaming
-            // results that persist JitCompilationConfig still bypass the wrapper for
-            // models that override Predict, defeating ConfigureJitCompilation() for
-            // those build paths.
             JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
+            AllowNondeterminism = _allowNondeterminism,
             AugmentationConfig = _augmentationConfig,
             ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
@@ -3178,14 +3163,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             MetaLearner = _metaLearner,
             MetaTrainingResult = metaResult,
-            // Propagate JIT config to meta-learning results so
-            // ConfigureJitCompilation is honored consistently across all builder
-            // paths (supervised / inference-only / RL / meta-learning). The
-            // compiled-Predict wrapper isn't built here because IMetaLearner
-            // doesn't expose an IFullModel surface — meta-learning Predict
-            // routes through the meta-learner's own dispatch, which has its
-            // own opportunities for compilation in a follow-up.
             JitCompilationConfig = _jitCompilationConfig,
+            AllowNondeterminism = _allowNondeterminism,
             LoRAConfiguration = _loraConfiguration,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
@@ -3519,12 +3498,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             DeploymentConfiguration = deploymentConfig,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             JitCompilationConfig = _jitCompilationConfig,
-            // Build the compiled-Predict wrapper at every result-creation site —
-            // not just the supervised path. Without this, RL/inference-only/streaming
-            // results that persist JitCompilationConfig still bypass the wrapper for
-            // models that override Predict, defeating ConfigureJitCompilation() for
-            // those build paths.
             JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
+            AllowNondeterminism = _allowNondeterminism,
             ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
             GraphStore = _graphStore,
