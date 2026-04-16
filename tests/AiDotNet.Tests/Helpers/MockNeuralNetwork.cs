@@ -325,4 +325,10 @@ public class MockNeuralNetwork : INeuralNetwork<double>
     public double GetLastLoss() => 0.0;
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+    /// <summary>
+    /// No-op Dispose — the mock holds no unmanaged resources. Satisfies the
+    /// INeuralNetwork : IDisposable contract.
+    /// </summary>
+    public void Dispose() { }
 }

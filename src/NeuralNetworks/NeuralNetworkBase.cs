@@ -1751,14 +1751,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         _parameterBuffer = null;
         Training.TapeTrainingStep<T>.InvalidateCache();
         InvalidateLayerInfoCache();
-        // Layer graph mutated — drop any compiled fused training plans cached
-        // against the old structure. Also clear the sticky-disable so the next
-        // training run gets a fresh chance at the fused path with the new graph.
+        // Layer structure changed — drop stale compiled inference plans.
+        _compileHost.Invalidate();
+        // Also drop compiled fused training plans and reset sticky-disable
+        // so the next training run gets a fresh chance at the fused path.
         Training.CompiledTapeTrainingStep<T>.Invalidate();
         _fusedTrainingDisabled = false;
-        // Structure change invalidates the compiled plan and its embedded
-        // optimizer state, so the fused-commitment is also cleared — the
-        // next training session starts fresh with either path available.
         _fusedTrainingCommitted = false;
     }
 
@@ -2079,11 +2077,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <param name="input">The input data to process.</param>
     /// <returns>The network's prediction.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> This is the main method you'll use to get results from your trained neural network. 
-    /// You provide some input data (like an image or text), and the network processes it through all its 
+    /// <b>For Beginners:</b> This is the main method you'll use to get results from your trained neural network.
+    /// You provide some input data (like an image or text), and the network processes it through all its
     /// layers to produce an output (like a classification or prediction).
+    /// <para>
+    /// The default implementation routes through the compiled inference path
+    /// (<see cref="PredictCompiled"/>), which auto-compiles the forward pass on the first call and replays
+    /// the compiled plan on subsequent calls for near-zero overhead. On compilation failure it falls back
+    /// to eager execution via <see cref="PredictEager"/>. The call is wrapped in a <see cref="NoGradScope{T}"/>
+    /// so inference never records onto the gradient tape (matches PyTorch <c>torch.no_grad()</c> semantics).
+    /// </para>
+    /// <para>
+    /// Subclasses that need custom inference behavior (e.g., diffusion models that run a multi-step
+    /// denoising loop, GANs that sample from a generator, networks that produce structured outputs) should
+    /// override this method. Subclasses whose inference is just a flat forward pass through Layers should
+    /// leave the default in place to pick up compiled replay automatically.
+    /// </para>
     /// </remarks>
-    public abstract Tensor<T> Predict(Tensor<T> input);
+    public virtual Tensor<T> Predict(Tensor<T> input)
+    {
+        using var _ = new NoGradScope<T>();
+        return PredictCompiled(input);
+    }
 
     /// <summary>
     /// Runs the forward pass through all layers WITHOUT suppressing tape recording.
@@ -2117,6 +2132,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// model family.
     /// </remarks>
     private readonly CompiledModelHost<T> _compileHost = new();
+
+    /// <summary>
+    /// Tracks input shapes whose compilation has previously failed on this
+    /// model instance. Once a shape is in this set, <see cref="PredictCompiled"/>
+    /// short-circuits to <see cref="PredictEager"/> without re-attempting
+    /// compilation — re-trying every Predict would re-burn the same trace cost
+    /// for no benefit and re-emit the same Trace warning on every call.
+    /// Uses <see cref="System.Collections.Concurrent.ConcurrentDictionary{TKey, TValue}"/>
+    /// (value type <see cref="byte"/> is unused) so concurrent Predict calls
+    /// on the same model instance (request-pool sharing) can safely add and
+    /// read without external synchronization.
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<long, byte> _knownBadCompileShapes = new();
+
+    /// <summary>
+    /// Computes a deterministic 64-bit shape key (FNV-1a) for the bad-compile
+    /// cache. Using a numeric key keeps the set entries cheap to hash without
+    /// allocating a wrapper object per Predict call.
+    /// </summary>
+    private static long ComputeShapeKey(int[] shape)
+    {
+        long hash = unchecked((long)0xcbf29ce484222325L);
+        for (int i = 0; i < shape.Length; i++)
+        {
+            hash ^= shape[i];
+            hash *= unchecked((long)0x100000001b3L);
+        }
+        return hash;
+    }
 
     /// <summary>
     /// Executes the forward pass using a compiled plan for maximum performance.
@@ -3069,8 +3113,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // rebuild cost every iteration — critical for large models like VideoCLIP.
         if (anyStructureChanged)
         {
-            _parameterBuffer = null;
-            _layerStructureVersion++;
+            // Reuse the full structural invalidation path so every cache that
+            // depends on layer structure (parameter count, parameter buffer,
+            // tape collector, layer-info, compiled inference plans, known-bad
+            // compile shapes) is reset together. Maintaining a partial path
+            // here would let _knownBadCompileShapes / _cachedParameterCount
+            // stay stale after a lazy-init resize and lock the model into
+            // permanently-eager Predict for shapes that previously failed.
+            InvalidateParameterCountCache();
         }
     }
 
@@ -4672,8 +4722,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// Neural networks support JIT compilation for accelerated inference.
-    /// The computation graph represents the forward pass through all layers.
+    /// Default is <c>true</c> because the base class's <see cref="Predict"/> now
+    /// routes through <see cref="PredictCompiled"/>, which auto-compiles when
+    /// <c>TensorCodecOptions.EnableCompilation</c> is on AND the model's op
+    /// graph is traceable, falling back to eager otherwise. So every
+    /// <see cref="NeuralNetworkBase{T}"/> subclass is "JIT-capable" in the
+    /// effective sense: JIT is attempted, and failures degrade gracefully
+    /// to eager without the user noticing.
+    /// </para>
+    /// <para>
+    /// Subclasses whose forward path is known to be incompatible with graph
+    /// capture (non-Engine tensor access, scalar control flow that bakes at
+    /// trace time, layers whose outputs depend on mutable instance state)
+    /// should override this to return <c>false</c> — that signals "don't even
+    /// try" so tooling can short-circuit and users know to expect eager-only
+    /// performance.
     /// </para>
     /// <para><b>For Beginners:</b> JIT (Just-In-Time) compilation optimizes neural networks for faster predictions.
     ///
@@ -4687,12 +4750,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// - Production deployment (real-time predictions)
     /// - Batch inference (processing many examples)
     /// - Edge devices (mobile, embedded systems)
-    ///
-    /// Note: Not all layer types support JIT compilation yet. The SupportsJitCompilation
-    /// property indicates whether this specific network configuration can be JIT compiled.
     /// </para>
     /// </remarks>
-    public virtual bool SupportsJitCompilation => false;
+    public virtual bool SupportsJitCompilation => true;
 
     /// <inheritdoc/>
     /// <remarks>

@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 /// <summary>
 /// Contract tests for Phase 3 guidance methods and control models.
 /// </summary>
-public class ControlModelContractTests
+public class ControlModelContractTests : DiffusionUnitTestBase
 {
     #region Guidance Method Tests
 

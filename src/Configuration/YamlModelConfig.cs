@@ -102,6 +102,13 @@ public partial class YamlModelConfig
     public InferenceOptimizationConfig? InferenceOptimizations { get; set; }
 
     /// <summary>
+    /// JIT compilation configuration — toggles
+    /// <c>TensorCodecOptions.EnableCompilation</c> plus fusion/CSE phase flags
+    /// on the returned model. Keyed as <c>jitCompilation</c> in YAML.
+    /// </summary>
+    public JitCompilationConfig? JitCompilation { get; set; }
+
+    /// <summary>
     /// Interpretability configuration for model explainability (SHAP, LIME, etc.).
     /// </summary>
     public InterpretabilityOptions? Interpretability { get; set; }

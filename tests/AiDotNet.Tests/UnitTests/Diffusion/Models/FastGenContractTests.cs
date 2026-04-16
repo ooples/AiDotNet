@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 /// <summary>
 /// Contract tests for Phases 4, 6, and 7: T2I models, fast generation, schedulers, and VAEs.
 /// </summary>
-public class FastGenContractTests
+public class FastGenContractTests : DiffusionUnitTestBase
 {
     #region Phase 4 — New T2I Models
 

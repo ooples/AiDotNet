@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion;
 /// <summary>
 /// Tests for memory management components used in diffusion models.
 /// </summary>
-public class MemoryManagementTests
+public class MemoryManagementTests : DiffusionUnitTestBase
 {
     #region ActivationPool Tests
 
