@@ -491,7 +491,12 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             var plan = cache.GetOrCompileInference(
                 key,
                 () => ForwardUNet(sampleNoisy, timeEmbed, conditioning));
-            _ = plan.Execute();
+            // Execute once to validate the plan replays correctly and warm
+            // workspace buffers. Dispose the output to avoid leaking the
+            // pooled tensor allocation from the warm-up.
+            var warmupOutput = plan.Execute();
+            if (warmupOutput is IDisposable disposableOutput)
+                disposableOutput.Dispose();
             return true;
         }
         catch (Exception ex) when (

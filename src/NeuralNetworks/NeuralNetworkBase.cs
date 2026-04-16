@@ -2188,7 +2188,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             var plan = cache.GetOrCompileInference(
                 (int[])sampleInput._shape.Clone(),
                 () => PredictEager(sampleInput));
-            _ = plan.Execute();
+            var warmupOutput = plan.Execute();
+            if (warmupOutput is IDisposable disposableOutput)
+                disposableOutput.Dispose();
             return true;
         }
         catch (Exception ex) when (
