@@ -329,7 +329,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
                 {
                     SpatialResBlock = CreateSpatialResBlock(inChannels, outChannels),
                     TemporalResBlock = CreateTemporalMixingBlock(),
-                    SpatialAttention = useAttention ? CreateSpatialAttention(outChannels) : null,
+                    SpatialAttention = useAttention ? CreateSpatialAttention(outChannels, level) : null,
                     TemporalAttention = useAttention ? CreateTemporalAttention(outChannels) : null,
                     CrossAttention = useAttention && _contextDim > 0 ? CreateCrossAttention(outChannels) : null,
                     TimeCondProjection = CreateTimeCondProjection(outChannels)
@@ -342,17 +342,18 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             {
                 _encoderBlocks.Add(new VideoBlock
                 {
-                    Downsample = CreateDownsample(outChannels)
+                    Downsample = CreateDownsample(outChannels, level)
                 });
             }
         }
 
-        // Build middle
+        // Build middle — operates at the deepest (smallest) encoder resolution.
+        int middleLevel = _channelMultipliers.Length - 1;
         _middleBlocks.Add(new VideoBlock
         {
             SpatialResBlock = CreateSpatialResBlock(inChannels, inChannels),
             TemporalResBlock = CreateTemporalMixingBlock(),
-            SpatialAttention = CreateSpatialAttention(inChannels),
+            SpatialAttention = CreateSpatialAttention(inChannels, middleLevel),
             TemporalAttention = CreateTemporalAttention(inChannels),
             CrossAttention = _contextDim > 0 ? CreateCrossAttention(inChannels) : null,
             TimeCondProjection = CreateTimeCondProjection(inChannels)
@@ -380,7 +381,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
                 {
                     SpatialResBlock = CreateSpatialResBlock(inChannels + skipChannels, outChannels),
                     TemporalResBlock = CreateTemporalMixingBlock(),
-                    SpatialAttention = useAttention ? CreateSpatialAttention(outChannels) : null,
+                    SpatialAttention = useAttention ? CreateSpatialAttention(outChannels, level) : null,
                     TemporalAttention = useAttention ? CreateTemporalAttention(outChannels) : null,
                     CrossAttention = useAttention && _contextDim > 0 ? CreateCrossAttention(outChannels) : null,
                     TimeCondProjection = CreateTimeCondProjection(outChannels)
@@ -393,7 +394,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             {
                 _decoderBlocks.Add(new VideoBlock
                 {
-                    Upsample = CreateUpsample(outChannels)
+                    Upsample = CreateUpsample(outChannels, level)
                 });
             }
         }
@@ -1031,9 +1032,20 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         return LazyDense(_timeEmbeddingDim, channels * 2, activation: null);
     }
 
-    private ILayer<T> CreateSpatialAttention(int channels)
+    /// <summary>
+    /// Returns the spatial resolution (height = width) at encoder/decoder
+    /// level <paramref name="level"/>. Level 0 is the top of the UNet (input
+    /// resolution); each subsequent downsample halves spatial size, so level
+    /// N has resolution <c>_inputHeight &gt;&gt; N</c>. Clamped at 1 so
+    /// deeper-than-expected level counts don't underflow.
+    /// </summary>
+    private int ResolutionAtLevel(int level)
+        => Math.Max(1, _inputHeight >> level);
+
+    private ILayer<T> CreateSpatialAttention(int channels, int level)
     {
-        return LazyMHA(_inputHeight * _inputWidth, channels, _numHeads, new IdentityActivation<T>());
+        int res = ResolutionAtLevel(level);
+        return LazyMHA(res * res, channels, _numHeads, new IdentityActivation<T>());
     }
 
     private ILayer<T> CreateTemporalAttention(int channels)
@@ -1046,12 +1058,13 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         return LazyMHA(_clipTokenLength, channels, _numHeads, new IdentityActivation<T>());
     }
 
-    private ILayer<T> CreateDownsample(int channels)
+    private ILayer<T> CreateDownsample(int channels, int level)
     {
+        int res = ResolutionAtLevel(level);
         return LazyConv2D(
             inputDepth: channels,
-            inputHeight: _inputHeight,
-            inputWidth: _inputWidth,
+            inputHeight: res,
+            inputWidth: res,
             outputDepth: channels,
             kernelSize: 3,
             stride: 2,
@@ -1059,13 +1072,15 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             activation: new IdentityActivation<T>());
     }
 
-    private ILayer<T> CreateUpsample(int channels)
+    private ILayer<T> CreateUpsample(int channels, int level)
     {
-        // Transposed convolution (deconvolution) for upsampling
-        // With stride=2, kernel=4, padding=1: output = (input - 1) * 2 + 4 - 2*1 = 2*input
-        // This doubles the spatial dimensions
+        // Decoder level N has input resolution _inputHeight >> (level+1)
+        // (output of the corresponding encoder downsample) and upsamples to
+        // _inputHeight >> level (the paired encoder-level resolution).
+        int inputRes = ResolutionAtLevel(level + 1);
+        // Transposed convolution: stride=2, kernel=4, padding=1 ⇒ output = 2 * input
         return new DeconvolutionalLayer<T>(
-            inputShape: new[] { 1, channels, _inputHeight / 2, _inputWidth / 2 },
+            inputShape: new[] { 1, channels, inputRes, inputRes },
             outputDepth: channels,
             kernelSize: 4,
             stride: 2,
