@@ -1487,12 +1487,25 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             Engine.InvalidatePersistentTensor(_biases);
 
             // Return rented kernel tensor to the TensorAllocator pool so it can
-            // be reused by subsequent layer constructors. Skip when the layer was
-            // lazy-initialized — those zero-sized placeholders were not rented.
-            // Mirrors the same pattern in DenseLayer.Dispose.
-            if (_isInitialized && _kernels.Length > 0)
+            // be reused by subsequent layer constructors. Check Length > 0
+            // rather than _isInitialized — EnsureInitialized rents BEFORE
+            // flipping the flag, so a partial init failure (exception during
+            // weight population) leaves Length > 0 but _isInitialized == false.
+            // Length > 0 is sufficient: lazy placeholders sit at Length == 0
+            // and aren't pool-rented.
+            if (_kernels.Length > 0)
             {
                 TensorAllocator.Return(_kernels);
+            }
+
+            // Return the rented forward-pass output buffer. Without this,
+            // disposing many ConvolutionalLayer instances (one per conv in
+            // a deep UNet) leaks one rented activation per layer to the pool
+            // free list — dozens of MB per disposed model at SD scale.
+            if (_preAllocatedOutput is not null)
+            {
+                TensorAllocator.Return(_preAllocatedOutput);
+                _preAllocatedOutput = null;
             }
 
             // Clear other managed resources (CPU)
