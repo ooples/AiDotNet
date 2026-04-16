@@ -294,10 +294,15 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <summary>
     /// Ensures layers are initialized (lazy init on first use).
     /// </summary>
+    private readonly object _initLock = new();
+
     private void EnsureLayersInitialized()
     {
-        if (!_layersInitialized)
+        if (_layersInitialized) return;
+        lock (_initLock)
         {
+            if (_layersInitialized) return; // double-checked locking
+            _blocks.Clear(); // retry-safe: clear partial state
             InitializeLayers(_architecture, _numClasses, _customBlocks);
             _layersInitialized = true;
         }
