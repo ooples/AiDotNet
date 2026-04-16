@@ -1,7 +1,8 @@
 name: Build & SonarCloud
 
-# Primary build workflow - other workflows depend on this
-# Runs on Windows to support both net10.0 and net471 targets
+# Primary build workflow - other workflows depend on this.
+# Runs on ubuntu-latest; net471 targets cross-compile via the modern .NET SDK's
+# auto-included reference assembly pack (no Windows runner required).
 on:
   push:
     branches:
@@ -95,10 +96,10 @@ jobs:
           category: "/language:csharp"
           upload: always
 
-  # Build once on Windows (net10.0 + net471), then run tests in parallel shards.
-  build-windows:
-    name: Build (Windows)
-    runs-on: windows-latest
+  # Build once on ubuntu (net10.0 + net471), then run tests in parallel shards.
+  build:
+    name: Build
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     if: github.event.pull_request.draft != true
 
@@ -127,11 +128,12 @@ jobs:
       - name: Build source generator first
         run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
 
-      - name: Shutdown build servers to release file handles
-        run: dotnet build-server shutdown
-
       - name: Build (Release)
-        run: dotnet build -c Release --no-restore -p:UseSharedCompilation=false -p:nodeReuse=false
+        # Windows-only workarounds (UseSharedCompilation=false, nodeReuse=false) are
+        # dropped — they existed to work around MSBuild file-locking on Windows and
+        # aren't needed on Linux. net471 cross-compiles on Linux via the modern SDK's
+        # auto-included reference assembly pack.
+        run: dotnet build -c Release --no-restore
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
@@ -156,8 +158,8 @@ jobs:
   # Coverage artifacts are consumed by the SonarCloud analysis job below.
   test-net10-sharded:
     name: Tests (net10.0) - ${{ matrix.shard.name }}
-    runs-on: windows-latest
-    needs: build-windows
+    runs-on: ubuntu-latest
+    needs: build
     timeout-minutes: 45
     if: github.event.pull_request.draft != true
     strategy:
@@ -389,7 +391,9 @@ jobs:
         run: dotnet restore ${{ matrix.shard.project }}
 
       - name: Run tests (sharded) with coverage
-        shell: powershell
+        # pwsh (PowerShell Core) is pre-installed on ubuntu-latest runners and runs
+        # the existing scripts cross-platform without a rewrite.
+        shell: pwsh
         run: |
           # Sanitize shard name: remove/replace all characters invalid in file paths
           $shardName = "${{ matrix.shard.name }}"
@@ -400,12 +404,12 @@ jobs:
 
       - name: Report slow tests
         if: always()
-        shell: powershell
+        shell: pwsh
         run: .github/scripts/report-slow-tests.ps1
 
       - name: Set artifact name
         if: always()
-        shell: powershell
+        shell: pwsh
         run: |
           # Create sanitized artifact name from shard name
           $slug = "${{ matrix.shard.name }}" -replace '[\\/:*?"<>|\s-]+', '_'
@@ -424,11 +428,11 @@ jobs:
 
   sonarcloud:
     name: SonarCloud Analysis
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     if: github.event.pull_request.draft != true
     needs:
-      - build-windows
+      - build
       - test-net10-sharded
 
     steps:
@@ -459,7 +463,7 @@ jobs:
       - name: Cache SonarCloud packages
         uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v4
         with:
-          path: ~\sonar\cache
+          path: ~/.sonar/cache
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
@@ -467,16 +471,16 @@ jobs:
         id: cache-sonar-scanner
         uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v4
         with:
-          path: ${{ runner.temp }}\scanner
+          path: ${{ runner.temp }}/scanner
           key: ${{ runner.os }}-sonar-scanner
           restore-keys: ${{ runner.os }}-sonar-scanner
 
       - name: Install SonarCloud scanner
         if: steps.cache-sonar-scanner.outputs.cache-hit != 'true'
-        shell: powershell
+        shell: pwsh
         run: |
-          New-Item -Path ${{ runner.temp }}\scanner -ItemType Directory -Force
-          dotnet tool update dotnet-sonarscanner --tool-path ${{ runner.temp }}\scanner
+          New-Item -Path ${{ runner.temp }}/scanner -ItemType Directory -Force
+          dotnet tool update dotnet-sonarscanner --tool-path ${{ runner.temp }}/scanner
 
       - name: Download coverage artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
@@ -502,7 +506,7 @@ jobs:
           PR_BASE: ${{ github.base_ref || inputs.pr_base || 'master' }}
           PR_REPO: ${{ github.repository || inputs.pr_repo || 'ooples/AiDotNet' }}
           EVENT_NAME: ${{ github.event_name }}
-        shell: powershell
+        shell: pwsh
         run: |
           $params = @(
             "/k:ooples_AiDotNet",
@@ -525,34 +529,34 @@ jobs:
             $params += "/d:sonar.pullrequest.github.repository=$env:PR_REPO"
           }
 
-          & "${{ runner.temp }}\scanner\dotnet-sonarscanner" begin @params
+          & "${{ runner.temp }}/scanner/dotnet-sonarscanner" begin @params
 
       - name: Build source generator first
         run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
 
-      - name: Shutdown build servers to release file handles
-        run: dotnet build-server shutdown
-
       - name: Build (Release)
-        run: dotnet build -c Release --no-restore -p:UseSharedCompilation=false -p:nodeReuse=false
+        # Windows-only MSBuild flags dropped — file-locking workarounds not needed on Linux.
+        run: dotnet build -c Release --no-restore
 
       - name: End SonarCloud analysis
         if: github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        shell: powershell
+        shell: pwsh
         run: |
-          ${{ runner.temp }}\scanner\dotnet-sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"
+          & "${{ runner.temp }}/scanner/dotnet-sonarscanner" end /d:sonar.token="$env:SONAR_TOKEN"
 
-  # Note: net471 tests removed to save CI resources
-  # Build verification for net471 is done in the build-windows job
-  # Only net10.0 tests are run as they produce coverage for SonarCloud
+  # Note: net471 tests removed to save CI resources.
+  # Build verification for net471 is done in the build job (cross-compiled on Linux
+  # via the Microsoft.NETFramework.ReferenceAssemblies NuGet package, which provides
+  # the .NET Framework targeting pack on non-Windows runners).
+  # Only net10.0 tests are run as they produce coverage for SonarCloud.
 
   # Artifact size analysis
   size-check:
     name: Artifact Size Check
     runs-on: ubuntu-latest
-    needs: build-windows
+    needs: build
     timeout-minutes: 10
 
     steps:
