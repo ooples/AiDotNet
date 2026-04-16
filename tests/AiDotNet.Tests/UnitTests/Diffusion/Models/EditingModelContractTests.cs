@@ -18,7 +18,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 /// Contract tests for Phase 5 editing, inpainting, style transfer, virtual try-on,
 /// panorama, and motion generation models, plus Phase 8 SR, alignment, and safety.
 /// </summary>
-public class EditingModelContractTests
+public class EditingModelContractTests : DiffusionUnitTestBase
 {
     #region Inpainting Models (Phase 5b)
 

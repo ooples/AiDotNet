@@ -725,6 +725,19 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // Reinitialize _lastInput and _lastOutput
         _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+
+        // Re-register the freshly-created tensors as trainable parameters so
+        // optimizers and tape training target these objects (not the stale ones
+        // from a prior EnsureInitialized or constructor call). Without this,
+        // the registered list points at the old tensors while Forward uses the
+        // new ones — gradient updates silently go to dead references.
+        ClearRegisteredParameters();
+        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+        // Mark as initialized so EnsureInitialized() doesn't re-randomize the
+        // just-deserialized weights on the next Forward/GetParameters call.
+        _isInitialized = true;
     }
 
     /// <summary>
@@ -1315,11 +1328,14 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// This provides access to all the "knowledge" the layer has learned.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _kernels.Length + _biases.Shape[0];
+    public override int ParameterCount => _isInitialized
+        ? _kernels.Length + _biases.Shape[0]
+        : OutputDepth * InputDepth * KernelSize * KernelSize + OutputDepth;
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
+        EnsureInitialized();
         // Bulk copy from contiguous tensor storage — replaces 4-nested scalar loops
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_kernels.Data),
@@ -1339,11 +1355,16 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// <returns>A vector containing all parameter gradients (kernel gradients followed by bias gradients).</returns>
     public override Vector<T> GetParameterGradients()
     {
-        // If gradients haven't been computed yet, return zero gradients
+        // If gradients haven't been computed yet, return zero gradients without
+        // forcing initialization — ParameterCount already computes the correct
+        // size from constructor-time shapes when the layer is uninitialized,
+        // so there's no need to allocate/randomize the full weight tensors
+        // just to return a zero vector.
         if (_kernelsGradient == null || _biasesGradient == null)
         {
             return new Vector<T>(ParameterCount);
         }
+        EnsureInitialized();
 
         // Bulk copy from contiguous tensor storage — replaces 4-nested scalar loops
         return Vector<T>.Concatenate(
@@ -1377,6 +1398,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureInitialized();
         int kernelLen = _kernels.Length;
         int biasLen = _biases.Shape[0];
         if (parameters.Length != kernelLen + biasLen)

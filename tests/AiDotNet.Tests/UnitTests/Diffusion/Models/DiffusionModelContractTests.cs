@@ -16,7 +16,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 /// Contract tests verifying that all diffusion models follow the golden constructor pattern
 /// and implement the required interfaces correctly.
 /// </summary>
-public class DiffusionModelContractTests
+public class DiffusionModelContractTests : DiffusionUnitTestBase
 {
     #region Golden Constructor Pattern Tests - New Models
 
