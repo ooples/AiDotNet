@@ -485,17 +485,23 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
             var cache = _compiledInferenceCache ??= new AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>();
+            // Key includes conditioning presence so null-vs-present paths
+            // don't share plans (different traced graphs).
+            var key = BuildCompileKey(sampleNoisy, conditioning);
             var plan = cache.GetOrCompileInference(
-                (int[])sampleNoisy._shape.Clone(),
+                key,
                 () => ForwardUNet(sampleNoisy, timeEmbed, conditioning));
             _ = plan.Execute();
             return true;
         }
-        catch
+        catch (Exception ex) when (
+            ex is not OutOfMemoryException &&
+            ex is not StackOverflowException &&
+            ex is not AccessViolationException)
         {
-            // Trace/compile failed — lazy compile on first PredictNoise
-            // will retry. PredictNoise's eager fallback still delivers a
-            // correct output.
+            System.Diagnostics.Trace.TraceWarning(
+                $"UNetNoisePredictor.CompileForward failed for shape [{string.Join(",", sampleNoisy._shape)}]: " +
+                $"{ex.GetType().Name}: {ex.Message}");
             return false;
         }
     }
@@ -513,15 +519,50 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         try
         {
             var cache = _compiledInferenceCache ??= new AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>();
+            // Key includes conditioning presence so null-vs-present paths
+            // don't share plans (different traced graphs).
+            var key = BuildCompileKey(noisySample, conditioning);
             var plan = cache.GetOrCompileInference(
-                (int[])noisySample._shape.Clone(),
+                key,
                 () => ForwardUNet(noisySample, timeEmbed, conditioning));
             return plan.Execute();
         }
-        catch
+        catch (Exception ex) when (
+            ex is not OutOfMemoryException &&
+            ex is not StackOverflowException &&
+            ex is not AccessViolationException)
         {
+            System.Diagnostics.Trace.TraceWarning(
+                $"UNetNoisePredictor.PredictCompiledForward fallback: " +
+                $"{ex.GetType().Name}: {ex.Message}");
             return ForwardUNet(noisySample, timeEmbed, conditioning);
         }
+    }
+
+    /// <summary>
+    /// Builds a composite cache key that includes BOTH the noisy-sample
+    /// shape AND the conditioning shape (or a sentinel for null). This
+    /// prevents a plan traced with conditioning=null from being replayed
+    /// with a conditioning tensor (different graph) or vice versa.
+    /// </summary>
+    private static int[] BuildCompileKey(Tensor<T> noisySample, Tensor<T>? conditioning)
+    {
+        var inputShape = noisySample._shape;
+        if (conditioning is null)
+        {
+            // Append a single -1 sentinel so "no conditioning" has a
+            // distinct key from any real conditioning shape.
+            var key = new int[inputShape.Length + 1];
+            Array.Copy(inputShape, key, inputShape.Length);
+            key[^1] = -1;
+            return key;
+        }
+        var condShape = conditioning._shape;
+        var compositeKey = new int[inputShape.Length + 1 + condShape.Length];
+        Array.Copy(inputShape, 0, compositeKey, 0, inputShape.Length);
+        compositeKey[inputShape.Length] = -1; // separator
+        Array.Copy(condShape, 0, compositeKey, inputShape.Length + 1, condShape.Length);
+        return compositeKey;
     }
 
     /// <inheritdoc />

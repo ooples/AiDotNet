@@ -2191,101 +2191,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             _ = plan.Execute();
             return true;
         }
-        catch
+        catch (Exception ex) when (
+            ex is not OutOfMemoryException &&
+            ex is not StackOverflowException &&
+            ex is not AccessViolationException)
         {
             // Trace/compile failed — fall back to lazy-compile-on-first-Predict.
             // PredictCompiled still handles the eager fallback transparently.
+            // Fatal CLR exceptions (OOM, SO, AV) propagate rather than being
+            // silently swallowed.
+            System.Diagnostics.Trace.TraceWarning(
+                $"CompileForward failed for shape [{string.Join(",", sampleInput._shape)}]: " +
+                $"{ex.GetType().Name}: {ex.Message}");
             return false;
-        }
-    }
-
-    /// <summary>
-    /// Builds the full forward-pass computation graph for the network by
-    /// chaining each layer's <see cref="ILayer{T}.ExportComputationGraph"/>
-    /// output into the next layer's input.
-    /// </summary>
-    /// <param name="sampleInput">
-    /// A sample input tensor used to seed the graph's root node. Its shape
-    /// and values flow through the graph during tracing but don't persist —
-    /// the returned graph can be replayed with any equivalently-shaped
-    /// input.
-    /// </param>
-    /// <returns>
-    /// The output node of the full graph, or <c>null</c> when any layer
-    /// in <see cref="Layers"/> returns
-    /// <see cref="ILayer{T}.SupportsJitCompilation"/>=false or throws
-    /// during export (graceful fallback — the caller can fall back to
-    /// eager <see cref="PredictEager"/>).
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// Addresses the "LayerBase graph capture mode" checklist item on
-    /// github.com/ooples/AiDotNet#1015. Unlike a global-flag-based
-    /// capture mode (PyTorch's <c>torch.jit.trace</c>), this method
-    /// explicitly composes per-layer <see cref="ILayer{T}.ExportComputationGraph"/>
-    /// exports — avoiding the "forgot to toggle the flag" and thread-safety
-    /// headaches that plague flag-based capture.
-    /// </para>
-    /// <para>
-    /// Layers that haven't yet implemented <see cref="ILayer{T}.ExportComputationGraph"/>
-    /// are detected at export time: they throw <see cref="NotSupportedException"/>
-    /// which this method catches and translates to a <c>null</c> return —
-    /// signaling the caller to use the eager path. This is the intended
-    /// graceful-degradation behavior; the JIT is opt-in per layer and
-    /// the default <see cref="ILayer{T}.SupportsJitCompilation"/>=false
-    /// prevents mis-use.
-    /// </para>
-    /// </remarks>
-    /// <example>
-    /// <code>
-    /// var graph = network.BuildFullGraph(sampleInput);
-    /// if (graph is not null)
-    /// {
-    ///     // Full forward captured as a ComputationNode chain — can be
-    ///     // serialized, optimized by TensorCodec, or replayed.
-    ///     var output = graph.Value;
-    /// }
-    /// else
-    /// {
-    ///     // Eager fallback.
-    ///     var output = network.Predict(sampleInput);
-    /// }
-    /// </code>
-    /// </example>
-    public AiDotNet.Autodiff.ComputationNode<T>? BuildFullGraph(Tensor<T> sampleInput)
-    {
-        if (sampleInput is null)
-            throw new ArgumentNullException(nameof(sampleInput));
-        if (Layers is null || Layers.Count == 0)
-            return null;
-
-        try
-        {
-            var current = AiDotNet.Autodiff.TensorOperations<T>.Constant(
-                sampleInput, name: "network.input");
-
-            foreach (var layer in Layers)
-            {
-                // SupportsJitCompilation / ExportComputationGraph live on
-                // LayerBase<T>, not the ILayer<T> interface. Cast to access
-                // them; skip layers that don't derive from LayerBase or
-                // haven't opted in to JIT.
-                if (layer is not AiDotNet.NeuralNetworks.Layers.LayerBase<T> layerBase)
-                    return null;
-                if (!layerBase.SupportsJitCompilation)
-                    return null;
-
-                var inputNodes = new List<AiDotNet.Autodiff.ComputationNode<T>> { current };
-                current = layerBase.ExportComputationGraph(inputNodes);
-            }
-
-            return current;
-        }
-        catch (NotSupportedException)
-        {
-            // One of the layers declared SupportsJitCompilation=true but its
-            // ExportComputationGraph isn't wired — legitimate error surface.
-            return null;
         }
     }
 

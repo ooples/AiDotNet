@@ -1,6 +1,5 @@
 ﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
@@ -186,92 +185,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     }
 
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Exports the conv layer as a <see cref="ComputationNode{T}"/> graph:
-    /// <c>Conv2D(x, kernels, bias) → Activation</c>. When the JIT compiler's
-    /// fusion pass (Pattern 12, tracked at ooples/AiDotNet.Tensors#181)
-    /// recognizes this chain it rewrites it into a single
-    /// <c>FusedConv2DBiasActivationOp</c> — matching the eager path's
-    /// existing <c>Engine.FusedConv2D</c> call with workspace-allocated
-    /// intermediates instead of fresh tensors.
-    /// </summary>
-    /// <param name="inputNodes"><c>[0]</c>: 4D input of shape <c>[B, inChannels, H, W]</c>.</param>
-    /// <returns>Output node of shape <c>[B, outChannels, outH, outW]</c>.</returns>
-    /// <remarks>
-    /// Addresses the "ConvolutionalLayer.Forward uses JIT when compiled"
-    /// and "FusedConv2D selection" checklist items on
-    /// github.com/ooples/AiDotNet#1015. The eager
-    /// <see cref="Forward(Tensor{T})"/> path already calls
-    /// <c>Engine.FusedConv2D</c> via <see cref="LayerBase{T}.GetFusedActivationType"/>;
-    /// this method emits the un-fused IR chain and lets the JIT's
-    /// OperationFusionPass rewrite it back to the fused form — same kernel,
-    /// workspace-allocated intermediates. Vector activations fall back to
-    /// Conv2D-only with no trailing activation node (vector activations
-    /// require a separate execution path this export doesn't yet model).
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null || inputNodes.Count == 0)
-            throw new ArgumentException("ConvolutionalLayer.ExportComputationGraph requires one input node (the 4D input).", nameof(inputNodes));
-
-        EnsureInitialized();
-
-        var x = inputNodes[0];
-        var kernel = TensorOperations<T>.Constant(_kernels, name: $"{GetType().Name}.kernels");
-        var bias = TensorOperations<T>.Constant(_biases, name: $"{GetType().Name}.biases");
-
-        // Conv2D with bias — TensorOperations.Conv2D handles the bias addition
-        // as a broadcast inside the same op, which maps cleanly onto the
-        // FusedConv2DBiasActivationOp pattern that the fusion pass will
-        // recognize (see ooples/AiDotNet.Tensors#181 Pattern 12).
-        var convOut = TensorOperations<T>.Conv2D(
-            x,
-            kernel,
-            bias,
-            stride: new[] { Stride, Stride },
-            padding: new[] { Padding, Padding });
-
-        // Trailing activation — emit the op that matches the scalar
-        // activation function so the fusion pass can collapse it into
-        // FusedConv2DBiasActivationOp. Vector activations don't have a
-        // direct ComputationNode analog in this PR; skip the activation
-        // node and let the caller handle it eagerly.
-        if (ScalarActivation is not null)
-        {
-            return ApplyScalarActivationNode(convOut, ScalarActivation);
-        }
-        return convOut;
-    }
-
-    /// <summary>
-    /// Maps a <see cref="IActivationFunction{T}"/> onto the closest
-    /// <see cref="TensorOperations{T}"/> node — ReLU, Sigmoid, Tanh, SiLU/Swish,
-    /// GELU, Leaky/ELU, SoftPlus. Unknown activations return the input
-    /// unchanged (caller must apply eagerly).
-    /// </summary>
-    private static ComputationNode<T> ApplyScalarActivationNode(
-        ComputationNode<T> input,
-        IActivationFunction<T> activation)
-    {
-        return activation switch
-        {
-            ReLUActivation<T> => TensorOperations<T>.ReLU(input),
-            SigmoidActivation<T> => TensorOperations<T>.Sigmoid(input),
-            TanhActivation<T> => TensorOperations<T>.Tanh(input),
-            SiLUActivation<T> => TensorOperations<T>.Swish(input),
-            SwishActivation<T> => TensorOperations<T>.Swish(input),
-            GELUActivation<T> => TensorOperations<T>.GELU(input),
-            LeakyReLUActivation<T> => TensorOperations<T>.LeakyReLU(input),
-            ELUActivation<T> => TensorOperations<T>.ELU(input),
-            SoftPlusActivation<T> => TensorOperations<T>.SoftPlus(input),
-            IdentityActivation<T> => input,
-            _ => input, // Unknown — caller's eager Forward() owns the activation.
-        };
-    }
 
     /// <summary>
     /// The collection of filter kernels used for the convolution operation.
