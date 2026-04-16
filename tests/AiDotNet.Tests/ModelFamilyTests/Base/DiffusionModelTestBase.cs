@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Runtime;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -13,8 +14,71 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Tests mathematical invariants: denoising convergence, output sensitivity,
 /// training stability, scheduler consistency, and noise schedule properties.
 /// </summary>
-public abstract class DiffusionModelTestBase
+/// <remarks>
+/// Implements <see cref="IAsyncLifetime"/> to force a full GC cycle between
+/// tests. Without this hint, sequential Diffusion tests on 16 GB Windows CI
+/// runners accumulate undisposed weight-tensor backing arrays that sit in
+/// gen-2 heap — the ~255-test Diffusion shards hit OOM within 45 min
+/// wall-clock because GC never has time to run a compacting collection.
+/// See issue #1136. The forced <c>GC.Collect → WaitForPendingFinalizers → GC.Collect</c>
+/// sequence (standard two-pass pattern) runs AFTER each test disposes its
+/// model (via <c>using var model = CreateModel()</c>), reclaiming the rented
+/// weight buffers returned to the TensorAllocator pool on Dispose.
+/// </remarks>
+public abstract class DiffusionModelTestBase : IAsyncLifetime
 {
+    /// <summary>
+    /// Static lock serializing concurrent teardowns. xunit parallelizes across
+    /// test-classes by default, so two derived test classes can hit
+    /// <see cref="DisposeAsync"/> concurrently on different threads.
+    /// <see cref="GCSettings.LargeObjectHeapCompactionMode"/> is process-
+    /// global, so concurrent toggles race. Serializing the whole
+    /// mode-set → collect → wait → mode-set → collect sequence keeps LOH
+    /// compaction deterministic per teardown.
+    /// </summary>
+    private static readonly object _lohCompactionGate = new();
+
+    /// <summary>Before-test hook. No-op — the base has no ambient state to initialize.</summary>
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    /// <summary>
+    /// After-test hook. Forces a blocking compacting Gen-2 GC (with explicit
+    /// Large Object Heap compaction) to reclaim weight tensors that the
+    /// <c>using var model</c> Dispose released AND defragment the LOH
+    /// between tests.
+    /// </summary>
+    /// <remarks>
+    /// Diffusion model weight tensors are typically several hundred MB each,
+    /// well above the 85KB LOH threshold. Plain <see cref="GC.Collect"/> sweeps
+    /// the LOH but does NOT compact it — over hundreds of sequential tests,
+    /// LOH fragmentation accumulates until the next allocation can't find a
+    /// contiguous region even when total free bytes remain large, producing
+    /// <see cref="OutOfMemoryException"/>. Setting
+    /// <see cref="GCLargeObjectHeapCompactionMode.CompactOnce"/> on the next
+    /// Gen-2 pass forces LOH compaction; the mode auto-resets to Default
+    /// after each use, so this is scoped per-teardown. The entire sequence
+    /// runs under <see cref="_lohCompactionGate"/> so parallel teardowns
+    /// don't race on the process-global flag.
+    /// </remarks>
+    public Task DisposeAsync()
+    {
+        lock (_lohCompactionGate)
+        {
+            // First pass: compacting Gen-2 + LOH reclaims everything unreachable
+            // including the just-Disposed model's weight tensors.
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+
+            // Second pass: finalizer-released memory (e.g. GPU-pool return paths)
+            // and any LOH allocations from finalizers.
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+        }
+        return Task.CompletedTask;
+    }
+
+
     protected abstract IDiffusionModel<double> CreateModel();
 
     protected virtual int[] InputShape => [1, 4];
@@ -48,7 +112,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
@@ -83,7 +147,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input1 = CreateConstantTensor(InputShape, 0.1);
         var input2 = CreateConstantTensor(InputShape, 0.9);
 
@@ -115,7 +179,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
 
         var input = CreateRandomTensor(InputShape, rng);
         var scaledInput = new Tensor<double>(InputShape);
@@ -151,7 +215,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
 
         var output = model.Predict(input);
@@ -168,7 +232,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
         var output = model.Predict(input);
 
@@ -186,7 +250,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
@@ -213,7 +277,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var baseInput = CreateRandomTensor(InputShape, rng);
 
         // Predict at different "noise levels" by scaling input
@@ -259,7 +323,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
 
         var output = model.Predict(input);
@@ -282,7 +346,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
 
         var out1 = model.Predict(input);
@@ -298,7 +362,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
 
         var original = model.Predict(input);
@@ -316,7 +380,7 @@ public abstract class DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
         model.Train(input, target);
@@ -328,7 +392,7 @@ public abstract class DiffusionModelTestBase
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        var model = CreateModel();
+        using var model = CreateModel();
         Assert.True(model.GetParameters().Length > 0,
             "Diffusion model should have learnable parameters.");
     }
@@ -338,7 +402,7 @@ public abstract class DiffusionModelTestBase
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        var model = CreateModel();
+        using var model = CreateModel();
         Assert.NotNull(model.Scheduler);
     }
 

@@ -185,6 +185,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private MixedPrecisionConfig? _mixedPrecisionConfig;
     private AiDotNet.Configuration.InferenceOptimizationConfig? _inferenceOptimizationConfig;
 
+    /// <summary>
+    /// When <c>true</c>, <see cref="BuildAsync"/> does NOT force deterministic
+    /// math on the engine.
+    /// </summary>
+    private bool _allowNondeterminism;
     private RLTrainingOptions<T>? _rlOptions;
     private IAutoMLModel<T, TInput, TOutput>? _autoMLModel;
     private AutoMLOptions<T, TInput, TOutput>? _autoMLOptions;
@@ -889,6 +894,58 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         return this;
     }
 
+    /// <summary>
+    /// Opts out of the builder's deterministic-by-default policy. Call this when
+    /// you want the engine to pick the fastest available kernels even if they
+    /// produce slightly different floating-point results across runs or hardware.
+    /// </summary>
+    /// <returns>This builder for fluent chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// By default, <see cref="BuildAsync"/> calls
+    /// <c>AiDotNetEngine.SetDeterministicMode(true)</c> so every model built by
+    /// this library produces bitwise-identical results across runs on the same
+    /// hardware. This is the production-safe default — PyTorch's <c>deterministic</c>
+    /// mode is opt-in and slower than its default, so deterministic training
+    /// typically has a measurable throughput tax. AiDotNet's deterministic kernels
+    /// (landed in Tensors #136) close that gap — deterministic is free, so it's
+    /// the default.
+    /// </para>
+    /// <para>
+    /// Call this method when:
+    /// <list type="bullet">
+    /// <item>You're hyper-tuning and squeezing the last 1-3% of throughput where
+    /// kernel-order variance across runs is acceptable.</item>
+    /// <item>You're on a platform/backend where some operations haven't yet been
+    /// implemented with deterministic kernels and the fallback slows you down.</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>Do NOT call this in production serving</b> where reproducibility
+    /// matters for debugging, regression tests, or regulatory compliance.
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// // Deterministic by default — no action needed
+    /// var deterministic = await new AiModelBuilder&lt;float, ...&gt;()
+    ///     .ConfigureModel(myModel)
+    ///     .BuildAsync();
+    ///
+    /// // Opt out when chasing max throughput on a benchmark
+    /// var fast = await new AiModelBuilder&lt;float, ...&gt;()
+    ///     .ConfigureModel(myModel)
+    ///     .AllowNondeterminism()
+    ///     .BuildAsync();
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> AllowNondeterminism()
+    {
+        _allowNondeterminism = true;
+        return this;
+    }
+
     // Uncertainty quantification configuration lives in AiModelBuilder.UncertaintyQuantification.cs to keep this file focused.
 
     /// <summary>
@@ -1147,6 +1204,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // — without that re-application AutoML paths silently skip checkpointing.
         ApplyGradientCheckpointingFromMemoryConfig();
 
+        // Deterministic-by-default: force bitwise-reproducible kernels unless the
+        // caller opted out via AllowNondeterminism().
+        AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(!_allowNondeterminism);
+
         // Validate RAG pipeline composition if any RAG components were configured
         bool hasAnyRAG = _ragRetriever != null || _ragReranker != null || _ragGenerator != null
             || _queryProcessors != null || _graphStore != null || _knowledgeGraph != null;
@@ -1289,6 +1350,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            AllowNondeterminism = _allowNondeterminism,
             AugmentationConfig = _augmentationConfig,
             ReasoningConfig = _reasoningConfig,
             DeploymentConfiguration = deploymentConfig,
@@ -1641,6 +1703,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            AllowNondeterminism = _allowNondeterminism,
             AugmentationConfig = _augmentationConfig,
             ReasoningConfig = _reasoningConfig,
             DeploymentConfiguration = deploymentConfig,
@@ -2838,6 +2901,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             QuantizationInfo = quantizationInfo,
             JitCompiledFunction = null,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            AllowNondeterminism = _allowNondeterminism,
             AugmentationConfig = _augmentationConfig,
             ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
@@ -2994,6 +3058,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             MetaLearner = _metaLearner,
             MetaTrainingResult = metaResult,
+            // Propagate determinism policy so meta-learning results re-assert
+            // the same policy as supervised/RL paths — without this, callers
+            // who opt out via AllowNondeterminism() silently get deterministic
+            // behavior back on meta-learning Predict.
+            AllowNondeterminism = _allowNondeterminism,
             LoRAConfiguration = _loraConfiguration,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
@@ -3326,6 +3395,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             AgentConfig = _agentConfig,
             DeploymentConfiguration = deploymentConfig,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            AllowNondeterminism = _allowNondeterminism,
             ReasoningConfig = _reasoningConfig,
             KnowledgeGraph = _knowledgeGraph,
             GraphStore = _graphStore,
