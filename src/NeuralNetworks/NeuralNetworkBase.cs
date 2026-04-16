@@ -4609,19 +4609,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             //
             // Shared-layer graphs can cause the same ILayer instance to
             // appear in multiple networks (or multiple times in one graph).
-            // Relying on ObjectDisposedException is NOT safe — many layer
-            // Dispose implementations are not idempotent (e.g., DenseLayer
-            // returns rented tensors to TensorAllocator with no guard) and
-            // a second Dispose would silently double-return pooled buffers.
-            //
             // Route each layer through DisposeOnceGuard so the same instance
             // is disposed at most once process-wide, regardless of how many
-            // owners cascade into it.
-            foreach (var layer in _layers)
+            // owners cascade into it. Without the guard, non-idempotent
+            // Dispose implementations (e.g., DenseLayer returning rented
+            // tensors to TensorAllocator) would double-return pooled buffers.
+            //
+            // Single loop: _layers and Layers reference the same collection.
+            // Guard against null for partially-constructed networks (ctor
+            // threw before InitializeLayers).
+            if (Layers is not null)
             {
-                if (layer is IDisposable disposable)
+                foreach (var layer in Layers)
                 {
-                    AiDotNet.Helpers.DisposeOnceGuard.TryDispose(disposable);
+                    if (layer is IDisposable disposable)
+                    {
+                        AiDotNet.Helpers.DisposeOnceGuard.TryDispose(disposable);
+                    }
                 }
             }
 
@@ -4630,28 +4634,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // buffers that mixed-precision teardown wants to recycle.
             DisableMemoryManagement();
             DisableMixedPrecision();
-
-            // Cascade to child layers. Guard against null because Layers may not be
-            // populated on a partially-constructed network (e.g., if a ctor threw
-            // before InitializeLayers ran).
-            if (Layers is not null)
-            {
-                foreach (var layer in Layers)
-                {
-                    if (layer is IDisposable disposable)
-                    {
-                        try
-                        {
-                            disposable.Dispose();
-                        }
-                        catch (ObjectDisposedException)
-                        {
-                            // A layer shared between networks may have been disposed
-                            // already — not a bug, don't let it abort the cascade.
-                        }
-                    }
-                }
-            }
         }
     }
 

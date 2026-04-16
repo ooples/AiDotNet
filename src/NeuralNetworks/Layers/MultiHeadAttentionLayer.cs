@@ -341,6 +341,14 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _lastEntropyLoss = NumOps.Zero;
         _lastDiversityLoss = NumOps.Zero;
 
+        if (headCount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(headCount),
+                $"headCount must be positive, got {headCount}.");
+        if (embeddingDimension % headCount != 0)
+            throw new ArgumentException(
+                $"embeddingDimension ({embeddingDimension}) must be divisible by headCount ({headCount}).",
+                nameof(headCount));
+
         _headCount = headCount;
         _headDimension = embeddingDimension / headCount;
         _embeddingDimension = embeddingDimension;
@@ -1098,6 +1106,11 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        // Materialize lazy Q/K/V/O weights before GPU projection matmuls.
+        // Without this, a fresh lazy-init MHA entering the GPU path would
+        // use [0,0] placeholder tensors and produce wrong outputs.
+        EnsureInitialized();
 
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
