@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 /// <summary>
 /// Comprehensive unit tests for <see cref="DDPMModel{T}"/>.
 /// </summary>
-public class DDPMModelTests
+public class DDPMModelTests : DiffusionUnitTestBase
 {
     #region Construction Tests
 

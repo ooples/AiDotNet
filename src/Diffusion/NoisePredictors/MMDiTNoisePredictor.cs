@@ -253,26 +253,23 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         var patchDim = _inputChannels * _patchSize * _patchSize;
         var timeEmbedDim = _hiddenSize * 4;
 
-        // Patch embedding: linear projection from flattened patch to hidden dim
-        _patchEmbed = new DenseLayer<T>(patchDim, _hiddenSize, activationFunction: null);
+        // Patch embedding: linear projection from flattened patch to hidden dim.
+        // Use LazyDense so weight tensors stay unallocated until Forward() — full
+        // MMDiT (~2 GB of weights at default sizes) would otherwise OOM the CI
+        // runner just from `new MMDiTNoisePredictor()`.
+        _patchEmbed = LazyDense(patchDim, _hiddenSize);
 
         // Time embedding MLP
-        _timeEmbed1 = new DenseLayer<T>(
-            _hiddenSize,
-            timeEmbedDim,
-            (IActivationFunction<T>)new SiLUActivation<T>());
-        _timeEmbed2 = new DenseLayer<T>(
-            timeEmbedDim,
-            timeEmbedDim,
-            (IActivationFunction<T>)new SiLUActivation<T>());
+        _timeEmbed1 = LazyDense(_hiddenSize, timeEmbedDim, new SiLUActivation<T>());
+        _timeEmbed2 = LazyDense(timeEmbedDim, timeEmbedDim, new SiLUActivation<T>());
 
         // Context projection: project text embeddings to hidden dim
-        _contextProj = new DenseLayer<T>(_contextDim, _hiddenSize, activationFunction: null);
+        _contextProj = LazyDense(_contextDim, _hiddenSize);
 
         // Final layers
         _finalNorm = new LayerNormalizationLayer<T>(_hiddenSize);
-        _adalnModulation = new DenseLayer<T>(timeEmbedDim, _hiddenSize * 2, activationFunction: null);
-        _outputProj = new DenseLayer<T>(_hiddenSize, patchDim, activationFunction: null);
+        _adalnModulation = LazyDense(timeEmbedDim, _hiddenSize * 2);
+        _outputProj = LazyDense(_hiddenSize, patchDim);
 
         // Priority 1: Use custom blocks passed directly
         if (customJointBlocks != null && customJointBlocks.Count > 0)
@@ -317,27 +314,27 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
             // Image stream
             ImageNorm1 = new LayerNormalizationLayer<T>(_hiddenSize),
             ImageNorm2 = new LayerNormalizationLayer<T>(_hiddenSize),
-            ImageMLP1 = new DenseLayer<T>(_hiddenSize, mlpHidden, (IActivationFunction<T>)new GELUActivation<T>()),
-            ImageMLP2 = new DenseLayer<T>(mlpHidden, _hiddenSize, activationFunction: null),
-            ImageAdaLN = new DenseLayer<T>(timeEmbedDim, _hiddenSize * 6, activationFunction: null),
+            ImageMLP1 = LazyDense(_hiddenSize, mlpHidden, new GELUActivation<T>()),
+            ImageMLP2 = LazyDense(mlpHidden, _hiddenSize),
+            ImageAdaLN = LazyDense(timeEmbedDim, _hiddenSize * 6),
 
             // Text stream
             TextNorm1 = new LayerNormalizationLayer<T>(_hiddenSize),
             TextNorm2 = new LayerNormalizationLayer<T>(_hiddenSize),
-            TextMLP1 = new DenseLayer<T>(_hiddenSize, mlpHidden, (IActivationFunction<T>)new GELUActivation<T>()),
-            TextMLP2 = new DenseLayer<T>(mlpHidden, _hiddenSize, activationFunction: null),
-            TextAdaLN = new DenseLayer<T>(timeEmbedDim, _hiddenSize * 6, activationFunction: null),
+            TextMLP1 = LazyDense(_hiddenSize, mlpHidden, new GELUActivation<T>()),
+            TextMLP2 = LazyDense(mlpHidden, _hiddenSize),
+            TextAdaLN = LazyDense(timeEmbedDim, _hiddenSize * 6),
 
             // Joint attention Q/K/V projections
-            ImageQProj = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null),
-            ImageKProj = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null),
-            ImageVProj = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null),
-            ImageOutProj = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null),
+            ImageQProj = LazyDense(_hiddenSize, _hiddenSize),
+            ImageKProj = LazyDense(_hiddenSize, _hiddenSize),
+            ImageVProj = LazyDense(_hiddenSize, _hiddenSize),
+            ImageOutProj = LazyDense(_hiddenSize, _hiddenSize),
 
-            TextQProj = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null),
-            TextKProj = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null),
-            TextVProj = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null),
-            TextOutProj = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null)
+            TextQProj = LazyDense(_hiddenSize, _hiddenSize),
+            TextKProj = LazyDense(_hiddenSize, _hiddenSize),
+            TextVProj = LazyDense(_hiddenSize, _hiddenSize),
+            TextOutProj = LazyDense(_hiddenSize, _hiddenSize)
         };
     }
 
@@ -350,13 +347,13 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
             _singleBlocks.Add(new MMDiTSingleBlock
             {
                 Norm = new LayerNormalizationLayer<T>(_hiddenSize),
-                QProj = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null),
-                KProj = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null),
-                VProj = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null),
-                OutProj = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null),
-                MLP1 = new DenseLayer<T>(_hiddenSize, mlpHidden, (IActivationFunction<T>)new GELUActivation<T>()),
-                MLP2 = new DenseLayer<T>(mlpHidden, _hiddenSize, activationFunction: null),
-                AdaLN = new DenseLayer<T>(timeEmbedDim, _hiddenSize * 3, activationFunction: null)
+                QProj = LazyDense(_hiddenSize, _hiddenSize),
+                KProj = LazyDense(_hiddenSize, _hiddenSize),
+                VProj = LazyDense(_hiddenSize, _hiddenSize),
+                OutProj = LazyDense(_hiddenSize, _hiddenSize),
+                MLP1 = LazyDense(_hiddenSize, mlpHidden, new GELUActivation<T>()),
+                MLP2 = LazyDense(mlpHidden, _hiddenSize),
+                AdaLN = LazyDense(timeEmbedDim, _hiddenSize * 3)
             });
         }
     }

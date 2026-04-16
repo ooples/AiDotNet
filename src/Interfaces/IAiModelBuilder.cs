@@ -1202,6 +1202,48 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null);
 
     /// <summary>
+    /// Controls GPU backend diagnostic output visibility and routing.
+    /// Exposes all three controls from github.com/ooples/AiDotNet#1122:
+    /// verbosity level, environment variable, and ILogger/custom sink.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// AiDotNet's GPU backends (OpenCL, HIP, CUDA) emit status messages
+    /// during device discovery, kernel compilation, and availability checks.
+    /// This method is the fluent entry point for all three
+    /// configuration approaches:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><b>Level</b> —
+    /// <see cref="AiDotNet.Configuration.GpuDiagnosticsOptions.Level"/>
+    /// sets <see cref="AiDotNet.Configuration.GpuDiagnosticLevel.Silent"/>,
+    /// <see cref="AiDotNet.Configuration.GpuDiagnosticLevel.Minimal"/>, or
+    /// <see cref="AiDotNet.Configuration.GpuDiagnosticLevel.Verbose"/>.</item>
+    /// <item><b>Environment variable</b> — <c>AIDOTNET_GPU_VERBOSE=1</c>,
+    /// <c>=verbose</c>, or <c>=minimal</c> seeds the initial level at
+    /// process start.</item>
+    /// <item><b>Sink</b> —
+    /// <see cref="AiDotNet.Configuration.GpuDiagnosticsOptions.Sink"/>
+    /// routes diagnostic messages through a custom delegate. Use
+    /// <c>logger.ToSink()</c> (from
+    /// <see cref="AiDotNet.Configuration.GpuDiagnosticsLoggerExtensions"/>)
+    /// to wrap a <see cref="Microsoft.Extensions.Logging.ILogger"/>.</item>
+    /// </list>
+    /// <para><b>For Beginners:</b> If your AI application is printing lots of
+    /// <c>[OpenClBackend]</c> status messages, call
+    /// <c>.ConfigureGpuDiagnostics(new() { Level = GpuDiagnosticLevel.Silent })</c>
+    /// to silence them. To route through your own logging framework, set
+    /// <see cref="AiDotNet.Configuration.GpuDiagnosticsOptions.Sink"/>.</para>
+    /// </remarks>
+    /// <param name="options">
+    /// The GPU-diagnostics options, or <c>null</c> to leave all current
+    /// settings unchanged. Each options property is nullable and only
+    /// applied when non-null (preserve semantics).
+    /// </param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureGpuDiagnostics(AiDotNet.Configuration.GpuDiagnosticsOptions? options = null);
+
+    /// <summary>
     /// Configures the comprehensive safety pipeline for input validation and output filtering.
     /// </summary>
     /// <param name="configure">Action to configure safety settings. If null, safety is enabled with defaults.</param>
@@ -1345,6 +1387,21 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     IAiModelBuilder<T, TInput, TOutput> ConfigureInferenceOptimizations(AiDotNet.Configuration.InferenceOptimizationConfig? config = null);
+
+    /// <summary>
+    /// Enables JIT (Just-In-Time) compilation for the built model's forward-pass
+    /// replay.
+    /// </summary>
+    /// <param name="config">JIT config. <c>null</c> uses library defaults.</param>
+    /// <returns>This builder for fluent chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureJitCompilation(
+        AiDotNet.Configuration.JitCompilationConfig? config = null);
+
+    /// <summary>
+    /// Opts out of the builder's deterministic-by-default policy.
+    /// </summary>
+    /// <returns>This builder for fluent chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> AllowNondeterminism();
 
     /// <summary>
     /// Configures mixed-precision training for faster neural network training with reduced memory usage.

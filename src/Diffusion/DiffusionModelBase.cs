@@ -35,8 +35,122 @@ namespace AiDotNet.Diffusion;
 /// Specific diffusion models (like DDPM, Latent Diffusion) extend this base to implement
 /// their unique noise prediction architectures.</para>
 /// </remarks>
-public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>, IModelShape
+public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>, IModelShape, IDisposable
 {
+    /// <summary>
+    /// Concrete diffusion models can override this method to yield the components
+    /// they own that hold disposable resources — typically the noise predictor
+    /// (DiT, UNet, MMDiT) plus, for latent diffusion, the VAE and conditioner.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// We use a method-based opt-in rather than a <c>NoisePredictor</c> property
+    /// to avoid name collision with <see cref="ILatentDiffusionModel{T}.NoisePredictor"/>
+    /// (which returns the non-nullable interface type and is part of an existing
+    /// contract). Subclasses of <c>LatentDiffusionModelBase</c> can override
+    /// this method to surface the same predictor for Dispose cleanup without
+    /// changing their interface obligations.
+    /// </para>
+    /// <para>
+    /// <b>Default behavior</b>: when a subclass does NOT override this, the base
+    /// performs a reflection walk over its own and the subclass's instance
+    /// fields and yields anything that implements <see cref="IDisposable"/>.
+    /// This catches the common case (a private predictor field) without forcing
+    /// every existing concrete model to override — but for predictable cleanup
+    /// in performance-sensitive code, an explicit override remains preferred.
+    /// </para>
+    /// <example>
+    /// <code>
+    /// public class DDPMModel&lt;T&gt; : DiffusionModelBase&lt;T&gt; {
+    ///     private readonly UNetNoisePredictor&lt;T&gt; _unet;
+    ///     protected override IEnumerable&lt;IDisposable&gt; EnumerateDisposableComponents() {
+    ///         yield return _unet;
+    ///     }
+    /// }
+    /// </code>
+    /// </example>
+    /// </remarks>
+    protected virtual IEnumerable<IDisposable> EnumerateDisposableComponents() =>
+        ReflectInstanceDisposables(this);
+
+    /// <summary>
+    /// Walks an object's instance fields and yields anything that implements
+    /// <see cref="IDisposable"/>. Used as the default fallback for
+    /// <see cref="EnumerateDisposableComponents"/> so concrete subclasses don't
+    /// need to override just to get correct cleanup.
+    /// </summary>
+    /// <remarks>
+    /// Uses a <see cref="HashSet{Object}"/> of visited references to avoid
+    /// double-yielding when the same disposable is reachable from multiple
+    /// fields (e.g., a predictor stored as both an interface and a concrete
+    /// type alias). Skips primitives, value types, strings, and the model's
+    /// own scheduler (handled separately in Dispose).
+    /// </remarks>
+    private static IEnumerable<IDisposable> ReflectInstanceDisposables(object root)
+    {
+        var visited = new HashSet<object>(Helpers.TensorReferenceComparer<object>.Instance);
+        if (!visited.Add(root)) yield break;
+
+        var type = root.GetType();
+        const System.Reflection.BindingFlags fieldFlags =
+            System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.Public |
+            System.Reflection.BindingFlags.NonPublic;
+        for (var t = type; t != null && t != typeof(object); t = t.BaseType)
+        {
+            foreach (var field in t.GetFields(fieldFlags | System.Reflection.BindingFlags.DeclaredOnly))
+            {
+                if (field.FieldType.IsValueType || field.FieldType == typeof(string)) continue;
+                // Skip _scheduler — Dispose(bool) handles it explicitly. Yielding
+                // it here would cause a double-dispose attempt on the cascade.
+                if (field.Name == "_scheduler") continue;
+                object? value;
+                try { value = field.GetValue(root); }
+                catch (Exception ex)
+                {
+                    // Trace the read failure rather than silently skip — without
+                    // this a private field whose getter throws would leak its
+                    // disposable resource without any diagnostic trail.
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"DiffusionModelBase.Dispose: skipping field '{field.Name}' " +
+                        $"on {t.Name} due to reflection read failure: {ex.GetType().Name}: {ex.Message}");
+                    continue;
+                }
+                if (value is null) continue;
+                if (!visited.Add(value)) continue;
+                if (value is IDisposable disposable)
+                {
+                    yield return disposable;
+                }
+                else if (value is System.Collections.IDictionary dictionary)
+                {
+                    // Dictionary<K, V>.GetEnumerator yields KeyValuePair<K,V>,
+                    // not the values — so the generic IEnumerable branch below
+                    // would MISS disposables held in the values slot. Handle
+                    // IDictionary explicitly by walking values through
+                    // DictionaryEntry, which gives us the value directly.
+                    foreach (System.Collections.DictionaryEntry entry in dictionary)
+                    {
+                        if (entry.Value is IDisposable nested && visited.Add(entry.Value))
+                            yield return nested;
+                    }
+                }
+                else if (value is System.Collections.IEnumerable enumerable && value is not string)
+                {
+                    // Walk collections that hold disposables (e.g.,
+                    // List<IDisposable>). Dictionary is handled above.
+                    foreach (var item in enumerable)
+                    {
+                        if (item is IDisposable nested && visited.Add(item))
+                            yield return nested;
+                    }
+                }
+            }
+        }
+    }
+
+    private bool _disposed;
+
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
     /// </summary>
@@ -851,6 +965,58 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         }
 
         return noise;
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Cascades Dispose to every disposable component the concrete model exposes
+    /// via <see cref="EnumerateDisposableComponents"/> (default: reflection walk
+    /// over instance fields), plus the owned <c>_scheduler</c>. Concrete diffusion
+    /// models that want to constrain WHAT gets disposed (e.g., skip injected
+    /// dependencies they don't own) override <see cref="EnumerateDisposableComponents"/>
+    /// to return an explicit allow-list. Models that hold additional disposable
+    /// composites beyond reflection-walk reach can also override this method and
+    /// call <c>base.Dispose(disposing)</c>.
+    /// </summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed || !disposing) return;
+        _disposed = true;
+
+        // Always dispose the scheduler we own — schedulers may hold buffers
+        // (precomputed alpha/beta arrays, native handles for accelerated
+        // sampling) that survive model disposal otherwise. Route through the
+        // guard so the scheduler instance is disposed at most once even if
+        // another owner also cascades into it.
+        if (_scheduler is IDisposable disposableScheduler)
+        {
+            AiDotNet.Helpers.DisposeOnceGuard.TryDispose(disposableScheduler);
+        }
+
+        // Cascade to every disposable component the concrete model exposes via
+        // EnumerateDisposableComponents (default: reflection walk over instance
+        // fields). Shared components (a predictor reused across two diffusion
+        // wrappers for ensembling, a VAE loaded once and injected into several
+        // models) are common — the guard ensures each instance is disposed
+        // exactly once regardless of how many cascades reach it. Many
+        // components aren't idempotent on double-Dispose (they'd double-return
+        // pooled buffers or crash on null derefs), which is why a plain
+        // try/catch around ObjectDisposedException is insufficient.
+        foreach (var component in EnumerateDisposableComponents())
+        {
+            if (component is null) continue;
+            AiDotNet.Helpers.DisposeOnceGuard.TryDispose(component);
+        }
     }
 
     #endregion

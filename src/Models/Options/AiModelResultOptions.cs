@@ -593,6 +593,17 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     /// </remarks>
     public InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
+    /// <summary>
+    /// JIT compilation configuration applied on every Predict call.
+    /// </summary>
+    public AiDotNet.Configuration.JitCompilationConfig? JitCompilationConfig { get; set; }
+
+    /// <summary>
+    /// Determinism policy. When false (default), Predict re-asserts deterministic
+    /// mode on the calling thread. When true, allows nondeterministic kernels.
+    /// </summary>
+    public bool AllowNondeterminism { get; set; }
+
     // ============================================================================
     // Augmentation Properties
     // ============================================================================

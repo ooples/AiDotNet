@@ -108,17 +108,18 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
     private void InitializeLayers(int? seed)
     {
         int patchDim = _inputChannels * 4; // 2x2 patches
-        _patchEmbed = new DenseLayer<T>(patchDim, _hiddenSize, (IActivationFunction<T>)new GELUActivation<T>());
+        // LazyDense defers weight allocation to first Forward() call.
+        _patchEmbed = LazyDense(patchDim, _hiddenSize, new GELUActivation<T>());
 
         _doubleBlocks = new DenseLayer<T>[_numJointLayers];
         for (int i = 0; i < _numJointLayers; i++)
-            _doubleBlocks[i] = new DenseLayer<T>(_hiddenSize, _hiddenSize, (IActivationFunction<T>)new GELUActivation<T>());
+            _doubleBlocks[i] = LazyDense(_hiddenSize, _hiddenSize, new GELUActivation<T>());
 
         _singleBlocks = new DenseLayer<T>[_numSingleLayers];
         for (int i = 0; i < _numSingleLayers; i++)
-            _singleBlocks[i] = new DenseLayer<T>(_hiddenSize, _hiddenSize, (IActivationFunction<T>)new GELUActivation<T>());
+            _singleBlocks[i] = LazyDense(_hiddenSize, _hiddenSize, new GELUActivation<T>());
 
-        _finalLayer = new DenseLayer<T>(_hiddenSize, patchDim, (IActivationFunction<T>?)null);
+        _finalLayer = LazyDense(_hiddenSize, patchDim);
     }
 
     private int CalculateParameterCount()

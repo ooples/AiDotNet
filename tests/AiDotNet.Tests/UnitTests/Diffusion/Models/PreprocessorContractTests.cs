@@ -7,7 +7,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 /// <summary>
 /// Contract tests for Phase 2 condition preprocessors.
 /// </summary>
-public class PreprocessorContractTests
+public class PreprocessorContractTests : DiffusionUnitTestBase
 {
     #region Constructor Tests
 

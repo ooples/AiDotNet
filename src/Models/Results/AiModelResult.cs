@@ -641,6 +641,14 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     [JsonProperty]
     private AiDotNet.Configuration.InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
+    /// <summary>JIT compilation config carried from the builder.</summary>
+    [JsonProperty]
+    private AiDotNet.Configuration.JitCompilationConfig? JitCompilationConfig { get; set; }
+
+    /// <summary>Builder's determinism policy, re-asserted on every Predict.</summary>
+    [JsonProperty]
+    private bool AllowNondeterminism { get; set; }
+
     [JsonIgnore]
     private readonly object _inferenceOptimizationLock = new();
 
@@ -1269,6 +1277,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         DeploymentConfiguration = options.DeploymentConfiguration;
         JitCompiledFunction = options.JitCompiledFunction;
         InferenceOptimizationConfig = options.InferenceOptimizationConfig;
+        JitCompilationConfig = options.JitCompilationConfig;
+        AllowNondeterminism = options.AllowNondeterminism;
         QuantizationInfo = options.QuantizationInfo;
 
         // Layer metadata (populated if the model supports layer-level access)
@@ -1811,6 +1821,21 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         {
             throw new InvalidOperationException("Model is not initialized.");
         }
+
+        // Bridge builder-configured JIT compilation flags into this thread's
+        // TensorCodecOptions so CompiledModelCache engages correctly.
+        if (JitCompilationConfig is { } jit)
+        {
+            jit.ApplyToTensorCodec();
+        }
+        else
+        {
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(
+                AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Default);
+        }
+
+        // Re-assert the builder's determinism policy on this thread.
+        AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(!AllowNondeterminism);
 
         var dataForPrediction = newData;
         if (SafetyFilter != null && newData is Vector<T> vectorInput && typeof(TInput) == typeof(Vector<T>))
@@ -2886,6 +2911,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             DeploymentConfiguration = DeploymentConfiguration,
             // JIT compilation is parameter-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
+            JitCompilationConfig = JitCompilationConfig,
+            AllowNondeterminism = AllowNondeterminism,
             ReasoningConfig = ReasoningConfig,
             KnowledgeGraph = KnowledgeGraph,
             GraphStore = GraphStore,
@@ -4623,6 +4650,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             DeploymentConfiguration = DeploymentConfiguration,
             // JIT compilation is model-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
+            JitCompilationConfig = JitCompilationConfig,
+            AllowNondeterminism = AllowNondeterminism,
             ReasoningConfig = ReasoningConfig,
             KnowledgeGraph = KnowledgeGraph,
             GraphStore = GraphStore,
@@ -4812,6 +4841,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 BiasDetector = deserializedObject.BiasDetector;
                 FairnessEvaluator = deserializedObject.FairnessEvaluator;
                 InferenceOptimizationConfig = deserializedObject.InferenceOptimizationConfig;
+                JitCompilationConfig = deserializedObject.JitCompilationConfig;
+                AllowNondeterminism = deserializedObject.AllowNondeterminism;
                 SerializedModelData = deserializedObject.SerializedModelData;
 
                 // Model is intentionally facade-hidden and is not serialized directly.

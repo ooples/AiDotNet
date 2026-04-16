@@ -1751,6 +1751,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         _parameterBuffer = null;
         Training.TapeTrainingStep<T>.InvalidateCache();
         InvalidateLayerInfoCache();
+        // Layer structure changed — drop stale compiled inference plans.
+        _compileHost.Invalidate();
+        // Also drop compiled fused training plans and reset sticky-disable
+        // so the next training run gets a fresh chance at the fused path.
+        Training.CompiledTapeTrainingStep<T>.Invalidate();
+        _fusedTrainingDisabled = false;
+        _fusedTrainingCommitted = false;
     }
 
     /// <summary>
@@ -2070,11 +2077,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <param name="input">The input data to process.</param>
     /// <returns>The network's prediction.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> This is the main method you'll use to get results from your trained neural network. 
-    /// You provide some input data (like an image or text), and the network processes it through all its 
+    /// <b>For Beginners:</b> This is the main method you'll use to get results from your trained neural network.
+    /// You provide some input data (like an image or text), and the network processes it through all its
     /// layers to produce an output (like a classification or prediction).
+    /// <para>
+    /// The default implementation routes through the compiled inference path
+    /// (<see cref="PredictCompiled"/>), which auto-compiles the forward pass on the first call and replays
+    /// the compiled plan on subsequent calls for near-zero overhead. On compilation failure it falls back
+    /// to eager execution via <see cref="PredictEager"/>. The call is wrapped in a <see cref="NoGradScope{T}"/>
+    /// so inference never records onto the gradient tape (matches PyTorch <c>torch.no_grad()</c> semantics).
+    /// </para>
+    /// <para>
+    /// Subclasses that need custom inference behavior (e.g., diffusion models that run a multi-step
+    /// denoising loop, GANs that sample from a generator, networks that produce structured outputs) should
+    /// override this method. Subclasses whose inference is just a flat forward pass through Layers should
+    /// leave the default in place to pick up compiled replay automatically.
+    /// </para>
     /// </remarks>
-    public abstract Tensor<T> Predict(Tensor<T> input);
+    public virtual Tensor<T> Predict(Tensor<T> input)
+    {
+        using var _ = new NoGradScope<T>();
+        return PredictCompiled(input);
+    }
 
     /// <summary>
     /// Runs the forward pass through all layers WITHOUT suppressing tape recording.
@@ -2094,35 +2118,58 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
-    /// Compiled inference cache — auto-compiles forward pass on first call,
-    /// replays compiled plan on subsequent calls. Per-instance to prevent
-    /// cross-model cache hits (different models produce different graphs).
+    /// Composable inference-compilation helper — traces the forward pass on first
+    /// call at each input shape and replays the compiled plan on subsequent calls.
+    /// Falls back to eager execution on failure. Invalidated automatically when
+    /// <see cref="_layerStructureVersion"/> changes (lazy-init resize, layer
+    /// mutation, weight swap).
     /// </summary>
-    private AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>? _compiledInferenceCache;
+    /// <remarks>
+    /// Single attachment point for future compilation features: AOT plan
+    /// serialization, CUDA Graph capture, symbolic shape plans, persistent
+    /// autotune. All of those attach to <see cref="CompiledModelHost{T}"/>
+    /// rather than re-implementing the compile+cache+fallback dance per
+    /// model family.
+    /// </remarks>
+    private readonly CompiledModelHost<T> _compileHost = new();
+
+    /// <summary>
+    /// Tracks input shapes whose compilation has previously failed on this
+    /// model instance. Once a shape is in this set, <see cref="PredictCompiled"/>
+    /// short-circuits to <see cref="PredictEager"/> without re-attempting
+    /// compilation — re-trying every Predict would re-burn the same trace cost
+    /// for no benefit and re-emit the same Trace warning on every call.
+    /// Uses <see cref="System.Collections.Concurrent.ConcurrentDictionary{TKey, TValue}"/>
+    /// (value type <see cref="byte"/> is unused) so concurrent Predict calls
+    /// on the same model instance (request-pool sharing) can safely add and
+    /// read without external synchronization.
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<long, byte> _knownBadCompileShapes = new();
+
+    /// <summary>
+    /// Computes a deterministic 64-bit shape key (FNV-1a) for the bad-compile
+    /// cache. Using a numeric key keeps the set entries cheap to hash without
+    /// allocating a wrapper object per Predict call.
+    /// </summary>
+    private static long ComputeShapeKey(int[] shape)
+    {
+        long hash = unchecked((long)0xcbf29ce484222325L);
+        for (int i = 0; i < shape.Length; i++)
+        {
+            hash ^= shape[i];
+            hash *= unchecked((long)0x100000001b3L);
+        }
+        return hash;
+    }
 
     /// <summary>
     /// Executes the forward pass using a compiled plan for maximum performance.
     /// First call traces and compiles; subsequent calls replay the compiled plan.
-    /// Falls back to eager execution if compilation fails.
+    /// Falls back to eager execution if compilation fails. Plans auto-invalidate
+    /// when <see cref="_layerStructureVersion"/> changes.
     /// </summary>
-    protected Tensor<T> PredictCompiled(Tensor<T> input)
-    {
-        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
-            return PredictEager(input);
-
-        try
-        {
-            var cache = _compiledInferenceCache ??= new AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>();
-            var plan = cache.GetOrCompileInference(
-                (int[])input._shape.Clone(),
-                () => PredictEager(input)); // Use same path as eager for consistency
-            return plan.Execute();
-        }
-        catch
-        {
-            return PredictEager(input);
-        }
-    }
+    protected Tensor<T> PredictCompiled(Tensor<T> input) =>
+        _compileHost.Predict(input, _layerStructureVersion, () => PredictEager(input));
 
     /// <summary>
     /// Eagerly traces and compiles the forward pass for the given input shape,
@@ -2541,6 +2588,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected void TrainWithTape(Tensor<T> input, Tensor<T> expected,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
+        var resolvedOptimizer = optimizer ?? GetOrCreateBaseOptimizer();
+
+        // Fused-compiled fast path: forward + backward + parameter update all
+        // in one compiled kernel, SIMD-accelerated, zero materialized gradient
+        // tensors between backward and the optimizer step. Engages when the
+        // optimizer is a plain Adam/AdamW/SGD with constant hyperparameters
+        // AND the numeric type is float (Tensors-side fused optimizer kernels
+        // operate on float* directly). Returns false if any condition isn't
+        // met or tracing fails; we then fall through to the eager tape path
+        // below with behavior unchanged.
+        if (TryTrainWithFusedOptimizer(input, expected, resolvedOptimizer))
+            return;
+
         // Initialize parameter buffer — replaces layer tensors with buffer-backed views.
         // try/finally MUST cover this so views are restored even if setup throws.
         var initialParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _parameterBuffer is null ? -1 : _layerStructureVersion);
@@ -2634,6 +2694,248 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         // Use the default optimizer (which respects configured LR) rather than creating a throwaway one
         TrainWithTape(input, expected, optimizer: null);
+    }
+
+    /// <summary>
+    /// Sticky disable for the fused training path on this model instance. Set
+    /// when <see cref="TryTrainWithFusedOptimizer"/> falls back BEFORE the
+    /// fused path has ever successfully run. Subsequent steps stay on the
+    /// eager path. Mixing fused (plan-embedded m/v) and eager (optimizer-
+    /// instance state) updates within one training run would reset Adam
+    /// moments at the next successful fused step. Stickiness keeps optimizer
+    /// state consistent for the rest of the run. Cleared in
+    /// <see cref="ResetState"/> and <see cref="InvalidateParameterCountCache"/>.
+    /// </summary>
+    private bool _fusedTrainingDisabled;
+
+    /// <summary>
+    /// Tracks whether the fused compiled training path has EVER successfully
+    /// run on this model. Once true, Adam/AdamW/SGD moment buffers live
+    /// exclusively inside the compiled plan — falling back to eager would
+    /// silently lose that state (<c>resolvedOptimizer</c> has empty m/v).
+    /// So once committed, any condition that would force a fallback
+    /// (optimizer-config drift, input-shape change producing a new plan)
+    /// throws an explicit exception instead of silently diverging from the
+    /// reference Adam trajectory. Cleared in <see cref="ResetState"/> and
+    /// <see cref="InvalidateParameterCountCache"/> — both are explicit
+    /// reset points where the caller has acknowledged state changes and
+    /// both fused and eager optimizer states start fresh.
+    /// </summary>
+    private bool _fusedTrainingCommitted;
+
+    /// <summary>
+    /// Attempts the fused-compiled training path — forward + backward + fused
+    /// optimizer update all in one compiled kernel. Engages when conditions
+    /// permit, returns <c>false</c> to signal the caller to fall back to the
+    /// eager tape path otherwise.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Conditions for fused path:
+    /// <list type="bullet">
+    /// <item><c>TensorCodecOptions.Current.EnableCompilation</c> is true (user
+    /// opted into JIT via <see cref="AiModelBuilder{T,TInput,TOutput}.ConfigureJitCompilation"/>).</item>
+    /// <item><c>T</c> is <see cref="float"/> — the Tensors-side fused optimizer
+    /// operates on <c>float*</c> buffers directly.</item>
+    /// <item>The resolved optimizer is a plain <see cref="AdamOptimizer{T,TInput,TOutput}"/>,
+    /// <see cref="AdamWOptimizer{T,TInput,TOutput}"/>, or
+    /// <see cref="StochasticGradientDescentOptimizer{T,TInput,TOutput}"/> without
+    /// adaptive-rate machinery that would mutate hyperparameters between steps.
+    /// LR schedulers and adaptive rates fall back to the eager path — the fused
+    /// kernel bakes hyperparameters into the compiled plan and reconfiguring
+    /// them per step would reset Adam's moment buffers, destroying training.</item>
+    /// <item>At least one trainable layer participates in the graph (no-op models fall back).</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// When all hold, <see cref="Training.CompiledTapeTrainingStep{T}.TryStepWithFusedOptimizer"/>
+    /// runs the compiled fwd+bwd+update kernel and updates <see cref="LastLoss"/>.
+    /// Behavior matches eager Adam/AdamW/SGD closely enough that training converges
+    /// identically on standard benchmarks (the fused kernels use the same formulas).
+    /// </para>
+    /// </remarks>
+    private bool TryTrainWithFusedOptimizer(
+        Tensor<T> input,
+        Tensor<T> expected,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> resolvedOptimizer)
+    {
+        if (_fusedTrainingDisabled) return false;
+        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
+            return false;
+        if (typeof(T) != typeof(float))
+            return false;
+
+        if (!TryMapToFusedOptimizerConfig(
+                resolvedOptimizer, out var fusedType, out float lr, out float b1, out float b2, out float eps, out float wd))
+            return false;
+
+        // Use the existing recursive trainable-layer collector instead of the
+        // top-level-only scan — composite layers with trainable children (e.g.,
+        // residual blocks, transformer layers) expose those children via
+        // GetSubLayers() but aren't ITrainableLayer themselves. Without
+        // recursion the fused path silently stops updating part of the model.
+        var trainableLayers = Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers, _layerStructureVersion);
+        if (trainableLayers.Length == 0) return false;
+
+        var loss = LossFunction as LossFunctions.LossFunctionBase<T>;
+        if (loss is null) return false;
+
+        // Mirror the eager path's bidirectional shape alignment exactly:
+        // (a) forward has extra leading dim → reshape FORWARD to target shape
+        // (b) target has extra leading dim → reshape TARGET to forward shape
+        // The eager path at TrainWithTape reshapes target down to forward's
+        // shape in branch (b); doing it the other way (reshape forward up to
+        // target's shape) makes the loss compute in a different space and
+        // produces different gradients. Apply the same direction-aware fix
+        // inside computeLoss where both tensors are in scope.
+        var ran = Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
+            trainableLayers,
+            input,
+            expected,
+            forward: inp =>
+            {
+                var fwd = ForwardForTraining(inp);
+                // Branch (a): fwd has extra leading batch dim.
+                if (fwd.Rank > expected.Rank && fwd.Shape[0] == 1 && fwd.Length == expected.Length)
+                    return Engine.Reshape(fwd, expected._shape);
+                return fwd;
+            },
+            computeLoss: (pred, tgt) =>
+            {
+                // Branch (b): target has extra leading batch dim → reshape TARGET
+                // (matches the eager path's direction at TrainWithTape:2509-2512).
+                if (tgt.Rank > pred.Rank && tgt.Shape[0] == 1 && tgt.Length == pred.Length)
+                    tgt = Engine.Reshape(tgt, pred._shape);
+                return loss.ComputeTapeLoss(pred, tgt);
+            },
+            optimizerType: fusedType,
+            learningRate: lr,
+            beta1: b1,
+            beta2: b2,
+            epsilon: eps,
+            weightDecay: wd,
+            out T lossValue);
+
+        if (ran)
+        {
+            LastLoss = lossValue;
+            // First successful fused step commits this model to the fused
+            // path for the rest of the training session — Adam m/v are now
+            // inside the compiled plan and transferring them to the eager
+            // optimizer isn't possible without API we don't have.
+            _fusedTrainingCommitted = true;
+        }
+        else if (_fusedTrainingCommitted)
+        {
+            // We've previously run fused successfully, so Adam/SGD moments
+            // live inside the compiled plan. Falling back to eager now would
+            // silently reset optimizer state and produce a trajectory that
+            // diverges from the previous fused steps. Surface the problem
+            // explicitly rather than corrupt training. Common causes:
+            //   - variable {input, target} shape produced a new compiled
+            //     plan (strict single-plan policy refused to configure it)
+            //   - mutated optimizer hyperparameters between steps
+            //     (attached LR scheduler, changed betas, etc.)
+            // Resolution: call ResetState() or InvalidateParameterCountCache()
+            // to fully reset training state, then retrain with stable
+            // shapes + fixed hyperparameters. Or disable compilation via
+            // AllowNondeterminism / Configure(JitCompilationConfig.Disabled)
+            // so training runs entirely on the eager path from the start.
+            throw new InvalidOperationException(
+                "Fused compiled training has already run successfully, but the current step cannot " +
+                "engage the fused path. The plan-embedded Adam/AdamW/SGD state cannot be transferred " +
+                "to the eager optimizer, so falling back silently would produce a trajectory that " +
+                "diverges from the previous fused steps. Common causes: variable input/target shape " +
+                "(new compiled plan), LR scheduler or adaptive-rate changes, attached AMSGrad. " +
+                "Resolution: keep shapes and optimizer hyperparameters stable across steps, OR call " +
+                "ResetState() / InvalidateParameterCountCache() to explicitly reset training state, " +
+                "OR disable compilation (AiModelBuilder.ConfigureJitCompilation(JitCompilationConfig.Disabled)).");
+        }
+        else
+        {
+            // Sticky disable: subsequent training steps in this run stay on the
+            // eager path so we don't reset Adam moments by re-engaging fused
+            // mid-run. Cleared on next ResetState/InvalidateParameterCountCache.
+            _fusedTrainingDisabled = true;
+        }
+        return ran;
+    }
+
+    /// <summary>
+    /// Inspects a pluggable optimizer and maps it onto the fixed set supported
+    /// by the Tensors-side fused kernel (<c>SGD</c>, <c>Adam</c>, <c>AdamW</c>).
+    /// Returns <c>false</c> when the optimizer is outside that set OR when
+    /// per-step hyperparameter mutation would defeat the fused plan's
+    /// configure-once contract: adaptive learning rates, attached LR schedulers,
+    /// or AMSGrad mode (which the fused kernel doesn't model).
+    /// </summary>
+    private static bool TryMapToFusedOptimizerConfig(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        out AiDotNet.Tensors.Engines.Compilation.OptimizerType optimizerType,
+        out float learningRate,
+        out float beta1,
+        out float beta2,
+        out float epsilon,
+        out float weightDecay)
+    {
+        optimizerType = default;
+        learningRate = 0f;
+        beta1 = 0f;
+        beta2 = 0f;
+        epsilon = 0f;
+        weightDecay = 0f;
+
+        // Reject when an LR scheduler is attached — GetCurrentLearningRate()
+        // would change between steps but the fused plan bakes the LR at first
+        // ConfigureOptimizer, so subsequent rate changes silently disappear.
+        if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradBase
+            && gradBase.LearningRateScheduler is not null)
+            return false;
+
+        switch (optimizer)
+        {
+            case Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>> adam:
+            {
+                if (adam.GetOptions() is not Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> opts)
+                    return false;
+                if (opts.UseAdaptiveLearningRate) return false;
+                optimizerType = AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam;
+                learningRate = (float)adam.GetCurrentLearningRate();
+                beta1 = (float)opts.Beta1;
+                beta2 = (float)opts.Beta2;
+                epsilon = (float)opts.Epsilon;
+                weightDecay = 0f;
+                return true;
+            }
+            case Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>> adamW:
+            {
+                if (adamW.GetOptions() is not Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> opts)
+                    return false;
+                if (opts.UseAdaptiveLearningRate) return false;
+                // Fused AdamW kernel does not implement AMSGrad's max-of-second-moment
+                // update rule. If the user enabled it, fall back to eager so the
+                // configured update rule isn't silently swapped for standard AdamW.
+                if (adamW.UseAMSGrad) return false;
+                optimizerType = AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdamW;
+                learningRate = (float)adamW.GetCurrentLearningRate();
+                beta1 = (float)opts.Beta1;
+                beta2 = (float)opts.Beta2;
+                epsilon = (float)opts.Epsilon;
+                weightDecay = (float)opts.WeightDecay;
+                return true;
+            }
+            case Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>> sgd:
+            {
+                if (sgd.GetOptions() is not Models.Options.StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>> opts)
+                    return false;
+                if (opts.UseAdaptiveLearningRate) return false;
+                optimizerType = AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD;
+                learningRate = (float)sgd.GetCurrentLearningRate();
+                return true;
+            }
+            default:
+                return false;
+        }
     }
 
     /// <summary>
@@ -2884,8 +3186,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // rebuild cost every iteration — critical for large models like VideoCLIP.
         if (anyStructureChanged)
         {
-            _parameterBuffer = null;
-            _layerStructureVersion++;
+            // Reuse the full structural invalidation path so every cache that
+            // depends on layer structure (parameter count, parameter buffer,
+            // tape collector, layer-info, compiled inference plans, known-bad
+            // compile shapes) is reset together. Maintaining a partial path
+            // here would let _knownBadCompileShapes / _cachedParameterCount
+            // stay stale after a lazy-init resize and lock the model into
+            // permanently-eager Predict for shapes that previously failed.
+            InvalidateParameterCountCache();
         }
     }
 
@@ -2922,6 +3230,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             layer.ResetState();
         }
+        // Give the fused-training path a fresh chance after ResetState — the
+        // user typically calls this between training runs, which is exactly
+        // when the sticky-disable from a prior fallback should be cleared.
+        // Also clear the fused-commitment: ResetState is an explicit
+        // "start training over" signal, so any plan-embedded Adam/SGD state
+        // is no longer needed, and the next run can engage fused fresh.
+        _fusedTrainingDisabled = false;
+        _fusedTrainingCommitted = false;
     }
 
     /// <summary>
@@ -4001,6 +4317,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             layer.SetParameters(layerParameters);
             currentIndex += layerParameterCount;
         }
+
+        // Some ITrainableLayer implementations swap their parameter tensors
+        // wholesale during SetParameters rather than mutating in place. When
+        // they do, any compiled plan captured against the prior tensor
+        // references is stale — replay would write into freed buffers. Drop
+        // BOTH the inference compile cache AND the tape-training caches that
+        // also key off the captured tensor references (TapeTrainingStep's
+        // collected-parameter cache + CompiledTapeTrainingStep's compiled
+        // plans). Without invalidating the tape side, the next training step
+        // would replay against parameters that no longer exist.
+        _compileHost.Invalidate();
+        Training.TapeTrainingStep<T>.InvalidateCache();
     }
 
     /// <summary>
@@ -4398,7 +4726,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         if (disposing)
         {
-            // Dispose managed resources
+            // Release compiled plans first so pooled tensor buffers the plans
+            // captured are freed before layers Dispose and return their weights.
+            _compileHost.Dispose();
+
+            // Cascade Dispose into every layer that owns releasable state
+            // (pool-rented weight tensors, GPU handles, native buffers).
+            //
+            // Shared-layer graphs can cause the same ILayer instance to
+            // appear in multiple networks (or multiple times in one graph).
+            // Relying on ObjectDisposedException is NOT safe — many layer
+            // Dispose implementations are not idempotent (e.g., DenseLayer
+            // returns rented tensors to TensorAllocator with no guard) and
+            // a second Dispose would silently double-return pooled buffers.
+            //
+            // Route each layer through DisposeOnceGuard so the same instance
+            // is disposed at most once process-wide, regardless of how many
+            // owners cascade into it.
+            foreach (var layer in _layers)
+            {
+                if (layer is IDisposable disposable)
+                {
+                    AiDotNet.Helpers.DisposeOnceGuard.TryDispose(disposable);
+                }
+            }
+
+            // Release activation pool / gradient checkpoint state before
+            // mixed-precision teardown — the memory manager may hold pooled
+            // buffers that mixed-precision teardown wants to recycle.
+            DisableMemoryManagement();
             DisableMixedPrecision();
         }
     }
@@ -4408,8 +4764,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// Neural networks support JIT compilation for accelerated inference.
-    /// The computation graph represents the forward pass through all layers.
+    /// Default is <c>true</c> because the base class's <see cref="Predict"/> now
+    /// routes through <see cref="PredictCompiled"/>, which auto-compiles when
+    /// <c>TensorCodecOptions.EnableCompilation</c> is on AND the model's op
+    /// graph is traceable, falling back to eager otherwise. So every
+    /// <see cref="NeuralNetworkBase{T}"/> subclass is "JIT-capable" in the
+    /// effective sense: JIT is attempted, and failures degrade gracefully
+    /// to eager without the user noticing.
+    /// </para>
+    /// <para>
+    /// Subclasses whose forward path is known to be incompatible with graph
+    /// capture (non-Engine tensor access, scalar control flow that bakes at
+    /// trace time, layers whose outputs depend on mutable instance state)
+    /// should override this to return <c>false</c> — that signals "don't even
+    /// try" so tooling can short-circuit and users know to expect eager-only
+    /// performance.
     /// </para>
     /// <para><b>For Beginners:</b> JIT (Just-In-Time) compilation optimizes neural networks for faster predictions.
     ///
@@ -4423,12 +4792,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// - Production deployment (real-time predictions)
     /// - Batch inference (processing many examples)
     /// - Edge devices (mobile, embedded systems)
-    ///
-    /// Note: Not all layer types support JIT compilation yet. The SupportsJitCompilation
-    /// property indicates whether this specific network configuration can be JIT compiled.
     /// </para>
     /// </remarks>
-    public virtual bool SupportsJitCompilation => false;
+    public virtual bool SupportsJitCompilation => true;
 
     /// <inheritdoc/>
     /// <remarks>
