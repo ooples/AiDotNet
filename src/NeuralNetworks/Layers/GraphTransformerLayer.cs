@@ -946,7 +946,6 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         // Attention scale factor: 1/sqrt(d_k). Compute as a scalar Multiply factor
         // so we can use Engine.TensorMultiplyScalar instead of per-element Divide.
         T invSqrtDk = NumOps.FromDouble(1.0 / Math.Sqrt(_headDim));
-        T maskNeg = NumOps.FromDouble(-1e9);
         T maskScale = NumOps.FromDouble(1e9);
 
         // Build the additive adjacency mask once if we'll need it. Encoding is

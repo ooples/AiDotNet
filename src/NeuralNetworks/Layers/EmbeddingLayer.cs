@@ -263,8 +263,10 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     internal override Dictionary<string, string> GetMetadata()
     {
         var metadata = base.GetMetadata();
-        metadata["VocabularySize"] = _embeddingTensor.Shape[0].ToString(System.Globalization.CultureInfo.InvariantCulture);
-        metadata["EmbeddingDimension"] = _embeddingTensor.Shape[1].ToString(System.Globalization.CultureInfo.InvariantCulture);
+        // Use the stored fields (not _embeddingTensor.Shape) because the
+        // tensor may be a [0,0] lazy placeholder before first Forward.
+        metadata["VocabularySize"] = _vocabularySize.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["EmbeddingDimension"] = _embeddingDimension.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return metadata;
     }
 
@@ -634,6 +636,9 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        // Materialize lazy embedding tensor before GPU lookups.
+        EnsureEmbeddingInitialized();
 
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");

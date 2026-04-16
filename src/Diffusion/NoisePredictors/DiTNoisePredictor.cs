@@ -450,6 +450,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
+        EnsureLayersInitialized();
         _lastInput = noisySample;
         return Forward(noisySample, timeEmbedding, conditioning);
     }

@@ -725,6 +725,11 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // Reinitialize _lastInput and _lastOutput
         _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+
+        // Mark as initialized so Dispose returns the rented _kernels to
+        // TensorAllocator. Without this, deserialized layers leak their
+        // rented tensors because the Dispose guard checks _isInitialized.
+        _isInitialized = true;
     }
 
     /// <summary>

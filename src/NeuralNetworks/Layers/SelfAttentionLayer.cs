@@ -385,11 +385,17 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         _lastSparsityLoss = NumOps.Zero;
 
         _sequenceLength = sequenceLength;
+        if (headCount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(headCount),
+                $"headCount must be positive, got {headCount}.");
+        if (embeddingDimension % headCount != 0)
+            throw new ArgumentException(
+                $"embeddingDimension ({embeddingDimension}) must be divisible by headCount ({headCount}).",
+                nameof(headCount));
+
         _embeddingDimension = embeddingDimension;
         _headCount = headCount;
         _headDimension = embeddingDimension / headCount;
-        if (embeddingDimension % headCount != 0)
-            throw new ArgumentException("Embedding dimension must be divisible by the number of heads.");
 
         if (initializationStrategy is { IsLazy: true })
         {
@@ -470,11 +476,17 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         _lastSparsityLoss = NumOps.Zero;
 
         _sequenceLength = sequenceLength;
+        if (headCount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(headCount),
+                $"headCount must be positive, got {headCount}.");
+        if (embeddingDimension % headCount != 0)
+            throw new ArgumentException(
+                $"embeddingDimension ({embeddingDimension}) must be divisible by headCount ({headCount}).",
+                nameof(headCount));
+
         _embeddingDimension = embeddingDimension;
         _headCount = headCount;
         _headDimension = embeddingDimension / headCount;
-        if (embeddingDimension % headCount != 0)
-            throw new ArgumentException("Embedding dimension must be divisible by the number of heads.");
 
         if (initializationStrategy is { IsLazy: true })
         {
