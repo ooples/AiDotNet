@@ -141,6 +141,14 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     private Tensor<T> _outputBias;
 
     /// <summary>
+    /// True once <see cref="EnsureInitialized"/> has allocated and populated the
+    /// Q/K/V weight tensors and the output bias. The lazy-init path leaves these at
+    /// [0,0] until the first Forward / GetParameters / SetParameters call demands
+    /// the real allocation, matching the pattern used by DenseLayer and MHA.
+    /// </summary>
+    private bool _isInitialized = true;
+
+    /// <summary>
     /// Stores the input tensor from the most recent forward pass for use in backpropagation.
     /// </summary>
     /// <remarks>
@@ -376,19 +384,41 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         _lastEntropyLoss = NumOps.Zero;
         _lastSparsityLoss = NumOps.Zero;
 
-        // Initialize tensor fields - will be properly sized in InitializeLayer
-        _queryWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _keyWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _valueWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _outputBias = new Tensor<T>([embeddingDimension]);
+        _sequenceLength = sequenceLength;
+        _embeddingDimension = embeddingDimension;
+        _headCount = headCount;
+        _headDimension = embeddingDimension / headCount;
+        if (embeddingDimension % headCount != 0)
+            throw new ArgumentException("Embedding dimension must be divisible by the number of heads.");
 
-        InitializeLayer(sequenceLength, embeddingDimension, headCount);
+        if (initializationStrategy is { IsLazy: true })
+        {
+            // Lazy path: zero-sized placeholders. DiT's SelfAttentionLayer instances
+            // (one per transformer block, 28 per DiT-XL tower) hold Q/K/V weights
+            // + output bias = 3 × hidden² + hidden. At hidden=1152 that's ~32 MB
+            // per block × 28 = ~900 MB per DiT tower, eagerly allocated at model
+            // construction before any test input is ever fed in.
+            _queryWeights = new Tensor<T>([0, 0]);
+            _keyWeights = new Tensor<T>([0, 0]);
+            _valueWeights = new Tensor<T>([0, 0]);
+            _outputBias = new Tensor<T>([0]);
+            _isInitialized = false;
+        }
+        else
+        {
+            _queryWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _keyWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _valueWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _outputBias = new Tensor<T>([embeddingDimension]);
 
-        // Register trainable parameters for GPU memory optimization
-        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+            InitializeParameters();
+
+            RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+            _isInitialized = true;
+        }
     }
 
     /// <summary>
@@ -439,19 +469,37 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         _lastEntropyLoss = NumOps.Zero;
         _lastSparsityLoss = NumOps.Zero;
 
-        // Initialize tensor fields - will be properly sized in InitializeLayer
-        _queryWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _keyWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _valueWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _outputBias = new Tensor<T>([embeddingDimension]);
+        _sequenceLength = sequenceLength;
+        _embeddingDimension = embeddingDimension;
+        _headCount = headCount;
+        _headDimension = embeddingDimension / headCount;
+        if (embeddingDimension % headCount != 0)
+            throw new ArgumentException("Embedding dimension must be divisible by the number of heads.");
 
-        InitializeLayer(sequenceLength, embeddingDimension, headCount);
+        if (initializationStrategy is { IsLazy: true })
+        {
+            // See scalar-activation overload for rationale.
+            _queryWeights = new Tensor<T>([0, 0]);
+            _keyWeights = new Tensor<T>([0, 0]);
+            _valueWeights = new Tensor<T>([0, 0]);
+            _outputBias = new Tensor<T>([0]);
+            _isInitialized = false;
+        }
+        else
+        {
+            _queryWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _keyWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _valueWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _outputBias = new Tensor<T>([embeddingDimension]);
 
-        // Register trainable parameters for GPU memory optimization
-        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+            InitializeParameters();
+
+            RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+            _isInitialized = true;
+        }
     }
 
     /// <summary>
@@ -488,6 +536,10 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Materialize lazy-init weights before any Q/K/V projection runs — same
+        // contract DenseLayer gives for lazy layers.
+        EnsureInitialized();
+
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
@@ -623,6 +675,9 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        // Materialize lazy Q/K/V/bias tensors before GPU path.
+        EnsureInitialized();
 
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
@@ -885,6 +940,8 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        // Force lazy tensors to materialize before copying their data.
+        EnsureInitialized();
         // Calculate total number of parameters using tensor shape
         int qRows = _queryWeights.Shape[0], qCols = _queryWeights.Shape[1];
         int kRows = _keyWeights.Shape[0], kCols = _keyWeights.Shape[1];
@@ -963,6 +1020,9 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Force lazy tensors to materialize so the shape reads below report the
+        // real dimensions rather than 0.
+        EnsureInitialized();
         // Calculate total number of parameters using tensor shape
         int qRows = _queryWeights.Shape[0], qCols = _queryWeights.Shape[1];
         int kRows = _keyWeights.Shape[0], kCols = _keyWeights.Shape[1];
@@ -1318,6 +1378,49 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         for (int i = 0; i < biasLen; i++)
         {
             _outputBias[i] = NumOps.Zero;
+        }
+    }
+
+    /// <summary>
+    /// Ensures the Q/K/V/bias tensors are allocated and populated. Cheap no-op
+    /// after the first call. Takes <see cref="LayerBase{T}.InitializationLock"/>
+    /// so concurrent Forward / GetParameters calls from different threads see a
+    /// single initialization event. SelfAttentionLayer has no sub-layer fields
+    /// so it's safe to override EnsureInitialized directly (the
+    /// TrainableParameterGenerator only emits its own override when sub-layers
+    /// are present).
+    /// </summary>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+
+        lock (InitializationLock)
+        {
+            if (_isInitialized) return;
+
+            _queryWeights = new Tensor<T>([_embeddingDimension, _embeddingDimension]);
+            _keyWeights = new Tensor<T>([_embeddingDimension, _embeddingDimension]);
+            _valueWeights = new Tensor<T>([_embeddingDimension, _embeddingDimension]);
+            _outputBias = new Tensor<T>([_embeddingDimension]);
+
+            if (InitializationStrategy is not null && !InitializationStrategy.IsLazy)
+            {
+                InitializationStrategy.InitializeWeights(_queryWeights, _embeddingDimension, _embeddingDimension);
+                InitializationStrategy.InitializeWeights(_keyWeights, _embeddingDimension, _embeddingDimension);
+                InitializationStrategy.InitializeWeights(_valueWeights, _embeddingDimension, _embeddingDimension);
+                InitializationStrategy.InitializeBiases(_outputBias);
+            }
+            else
+            {
+                InitializeParameters();
+            }
+
+            RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+
+            _isInitialized = true;
         }
     }
 

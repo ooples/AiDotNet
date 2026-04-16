@@ -4718,6 +4718,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Protected Dispose pattern implementation.
     /// </summary>
     /// <param name="disposing">True if called from Dispose(), false if called from finalizer.</param>
+    /// <remarks>
+    /// Cascades Dispose to every child layer that implements <see cref="IDisposable"/>.
+    /// Without this, a networkwide <c>using</c> or explicit <c>Dispose()</c> call only
+    /// tore down mixed-precision state and left each layer's pool-rented weight
+    /// buffer (up to multi-GB for production-scale models like VGG16BN or DiT-XL)
+    /// live until GC ran. Cascading lets DenseLayer/ConvolutionalLayer return their
+    /// rented weight tensors to the <c>TensorAllocator</c> pool immediately — the
+    /// main memory win from the Dispose path.
+    /// </remarks>
     protected virtual void Dispose(bool disposing)
     {
         if (disposing)
@@ -4731,19 +4740,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             //
             // Shared-layer graphs can cause the same ILayer instance to
             // appear in multiple networks (or multiple times in one graph).
-            // Relying on ObjectDisposedException is NOT safe — many layer
-            // Dispose implementations are not idempotent (e.g., DenseLayer
-            // returns rented tensors to TensorAllocator with no guard) and
-            // a second Dispose would silently double-return pooled buffers.
-            //
             // Route each layer through DisposeOnceGuard so the same instance
             // is disposed at most once process-wide, regardless of how many
-            // owners cascade into it.
-            foreach (var layer in _layers)
+            // owners cascade into it. Without the guard, non-idempotent
+            // Dispose implementations (e.g., DenseLayer returning rented
+            // tensors to TensorAllocator) would double-return pooled buffers.
+            //
+            // Single loop: _layers and Layers reference the same collection.
+            // Guard against null for partially-constructed networks (ctor
+            // threw before InitializeLayers).
+            if (Layers is not null)
             {
-                if (layer is IDisposable disposable)
+                foreach (var layer in Layers)
                 {
-                    AiDotNet.Helpers.DisposeOnceGuard.TryDispose(disposable);
+                    if (layer is IDisposable disposable)
+                    {
+                        AiDotNet.Helpers.DisposeOnceGuard.TryDispose(disposable);
+                    }
                 }
             }
 

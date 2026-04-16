@@ -460,11 +460,13 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     {
         // Compute sequence length from latent spatial size and patch size
         var numPatches = (_latentSpatialSize / _patchSize) * (_latentSpatialSize / _patchSize);
-        return new SelfAttentionLayer<T>(
+        // LazySelfAttention keeps Q/K/V weight tensors at size 0 until the first
+        // Forward() call — 28 of these per DiT-XL tower × ~32 MB = ~900 MB that
+        // would otherwise allocate at model-construction time.
+        return LazySelfAttention(
             sequenceLength: numPatches,
             embeddingDimension: _hiddenSize,
-            headCount: _numHeads,
-            activationFunction: null);
+            headCount: _numHeads);
     }
 
     /// <inheritdoc />

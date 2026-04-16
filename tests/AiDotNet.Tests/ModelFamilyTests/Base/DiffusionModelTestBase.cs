@@ -393,7 +393,12 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         using var model = CreateModel();
-        Assert.True(model.GetParameters().Length > 0,
+        // Check ParameterCount rather than GetParameters().Length — both answer the
+        // same question ("does the model have learnable parameters?") but
+        // ParameterCount reads the declared count without forcing lazy layers to
+        // materialize their weight tensors (which at DiT-XL scale is ~4 GB and
+        // OOMs CI runners just for an existence check).
+        Assert.True(model.ParameterCount > 0,
             "Diffusion model should have learnable parameters.");
     }
 

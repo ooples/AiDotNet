@@ -297,6 +297,38 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
             inputDepth, inputHeight, inputWidth, outputDepth,
             kernelSize, stride, padding, activation, InitializationStrategies<T>.Lazy);
 
+    /// <summary>
+    /// Creates a <see cref="MultiHeadAttentionLayer{T}"/> with lazy Q/K/V/O weight
+    /// allocation. DiT transformer stacks contain ~112 of these per tower at
+    /// default sizes (16 heads × 4 projections × 28 blocks + 4 projections × 28
+    /// cross-attention blocks) — each holding a [hidden, hidden] weight tensor.
+    /// Lazy init defers the full ~1 GB of attention weights to first Forward().
+    /// </summary>
+    protected static MultiHeadAttentionLayer<T> LazyMHA(
+        int sequenceLength,
+        int embeddingDimension,
+        int headCount,
+        IActivationFunction<T>? activation = null)
+        => new MultiHeadAttentionLayer<T>(
+            sequenceLength, embeddingDimension, headCount,
+            activation, InitializationStrategies<T>.Lazy);
+
+    /// <summary>
+    /// Creates a <see cref="SelfAttentionLayer{T}"/> with lazy Q/K/V weight
+    /// allocation. DiT and UViT predictors construct one of these per transformer
+    /// block — 28 per DiT-XL tower, each carrying 3 × [hidden, hidden] weight
+    /// tensors (~32 MB per block at hidden=1152 = ~900 MB per tower). Lazy init
+    /// defers the full attention-weight budget to first Forward().
+    /// </summary>
+    protected static SelfAttentionLayer<T> LazySelfAttention(
+        int sequenceLength,
+        int embeddingDimension,
+        int headCount = 8,
+        IActivationFunction<T>? activation = null)
+        => new SelfAttentionLayer<T>(
+            sequenceLength, embeddingDimension, headCount,
+            activation, InitializationStrategies<T>.Lazy);
+
     #endregion
 
     #region INoisePredictor<T> Implementation
