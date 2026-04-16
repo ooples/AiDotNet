@@ -884,6 +884,40 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     }
 
     /// <summary>
+    /// Graph-capture convenience: wraps <paramref name="input"/> as a
+    /// <see cref="ComputationNode{T}"/> and delegates to
+    /// <see cref="ExportComputationGraph"/>. Addresses the "LayerBase graph
+    /// capture mode" checklist item on github.com/ooples/AiDotNet#1015 —
+    /// gives callers an explicit per-layer capture API without needing a
+    /// global/thread-local "capture mode" flag.
+    /// </summary>
+    /// <param name="input">The input tensor to capture against.</param>
+    /// <returns>
+    /// The output <see cref="ComputationNode{T}"/> with the layer's op chain.
+    /// Use <see cref="ComputationNode{T}.Value"/> to access the materialized
+    /// output tensor (identical to what <see cref="Forward"/> would return),
+    /// or feed the node into a parent graph for composition.
+    /// </returns>
+    /// <remarks>
+    /// This method is a thin helper — the real work happens in
+    /// <see cref="ExportComputationGraph"/> which each layer overrides.
+    /// The explicit-composition design avoids the thread-safety and
+    /// "forgot to toggle" failure modes of a flag-based capture mode.
+    /// For whole-network capture, use
+    /// <c>NeuralNetworkBase&lt;T&gt;.BuildFullGraph(sampleInput)</c>.
+    /// </remarks>
+    public ComputationNode<T> CaptureGraph(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (!SupportsJitCompilation)
+            throw new NotSupportedException(
+                $"{GetType().Name} does not declare SupportsJitCompilation=true. " +
+                "Override SupportsJitCompilation and ExportComputationGraph to opt into JIT capture.");
+        var inputNode = Autodiff.TensorOperations<T>.Constant(input, name: $"{GetType().Name}.input");
+        return ExportComputationGraph(new List<ComputationNode<T>> { inputNode });
+    }
+
+    /// <summary>
     /// Gets whether this layer supports JIT compilation.
     /// </summary>
     /// <value>True if the layer can be JIT compiled, false otherwise.</value>

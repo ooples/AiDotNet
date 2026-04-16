@@ -22,6 +22,11 @@ public class UNetBenchmarks
     private UNetNoisePredictor<double> _mediumUnet = null!;
     private Tensor<double> _mediumInput = null!;
 
+    // SD15 paper scale (float precision — production dimensions)
+    // input=[1, 4, 64, 64], base=320, channelMultipliers=[1, 2, 4, 4]
+    private UNetNoisePredictor<float>? _sd15Unet;
+    private Tensor<float>? _sd15Input;
+
     [GlobalSetup]
     public void Setup()
     {
@@ -40,6 +45,27 @@ public class UNetBenchmarks
             numResBlocks: 1, attentionResolutions: [1],
             contextDim: 0, numHeads: 4, inputHeight: 16, seed: 42);
         _mediumInput = CreateRandom(1, 4, 16, 16);
+
+        // SD15 production scale — per the issue (#1015): input=[1,4,64,64],
+        // base=320, channelMultipliers=[1,2,4,4]. Uses float precision to
+        // match production inference. Construction is expensive (~860M
+        // params) so done once in GlobalSetup.
+        try
+        {
+            _sd15Unet = new UNetNoisePredictor<float>(
+                inputChannels: 4, outputChannels: 4,
+                baseChannels: 320, channelMultipliers: [1, 2, 4, 4],
+                numResBlocks: 2, attentionResolutions: [1, 2, 3],
+                contextDim: 0, numHeads: 8, inputHeight: 64, seed: 42);
+            _sd15Input = CreateRandomFloat(1, 4, 64, 64);
+        }
+        catch (OutOfMemoryException)
+        {
+            // Runner lacks the memory for full SD15 — skip that benchmark.
+            // This lets the rest of the suite still run on smaller CI hosts.
+            _sd15Unet = null;
+            _sd15Input = null;
+        }
     }
 
     [Benchmark(Description = "UNet Small (64ch, 8x8) single forward")]
@@ -49,6 +75,13 @@ public class UNetBenchmarks
     [Benchmark(Description = "UNet Medium (128ch, 16x16) single forward")]
     public Tensor<double> UNet_Medium_Forward()
         => _mediumUnet.PredictNoise(_mediumInput, 500, null);
+
+    [Benchmark(Description = "UNet SD15 (320ch base, [1,2,4,4], 64x64) single forward — production scale")]
+    public Tensor<float>? UNet_SD15_Forward()
+    {
+        if (_sd15Unet is null || _sd15Input is null) return null;
+        return _sd15Unet.PredictNoise(_sd15Input, 500, null);
+    }
 
     [Benchmark(Description = "UNet Small construction")]
     public UNetNoisePredictor<double> UNet_Small_Construction()
@@ -63,6 +96,16 @@ public class UNetBenchmarks
         var tensor = new Tensor<double>([b, c, h, w]);
         for (int i = 0; i < tensor.Length; i++)
             tensor[i] = rng.NextDouble() - 0.5;
+        return tensor;
+    }
+
+    private static Tensor<float> CreateRandomFloat(int b, int c, int h, int w)
+    {
+        var rng = new Random(42);
+        var tensor = new Tensor<float>([b, c, h, w]);
+        var data = new float[tensor.Length];
+        for (int i = 0; i < data.Length; i++) data[i] = (float)(rng.NextDouble() - 0.5);
+        tensor.CopyFromArray(data);
         return tensor;
     }
 }

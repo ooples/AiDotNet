@@ -122,6 +122,53 @@ public class DiffusionResBlockGraphExportTests
         Assert.True(block.SupportsJitCompilation);
     }
 
+    /// <summary>
+    /// <c>LayerBase.CaptureGraph(input)</c> should wrap the input as a
+    /// Constant node, delegate to <c>ExportComputationGraph</c>, and return
+    /// the output node. This is the per-layer capture convenience API.
+    /// </summary>
+    [Fact]
+    public void CaptureGraph_DelegatesToExportComputationGraph()
+    {
+        var block = new DiffusionResBlock<float>(
+            inChannels: 4, outChannels: 4, spatialSize: 4);
+
+        var x = MakeInput(new[] { 1, 4, 4, 4 });
+        _ = block.Forward(x); // warmup
+
+        var graph = block.CaptureGraph(x);
+        Assert.NotNull(graph);
+        Assert.NotNull(graph.Value);
+        Assert.Equal(4, graph.Value.Shape.Length);
+        Assert.Equal(4, graph.Value.Shape[1]);
+    }
+
+    /// <summary>
+    /// CaptureGraph throws NotSupportedException on a layer that doesn't
+    /// declare SupportsJitCompilation=true. Fails fast so the caller
+    /// doesn't get a confusing "not implemented" from the base
+    /// ExportComputationGraph default.
+    /// </summary>
+    [Fact]
+    public void CaptureGraph_ThrowsOnNonJitCapableLayer()
+    {
+        // DenseLayer doesn't override SupportsJitCompilation — stays false.
+        var dense = new AiDotNet.NeuralNetworks.Layers.DenseLayer<float>(4, 2);
+        var x = MakeInput(new[] { 1, 4 });
+        Assert.Throws<System.NotSupportedException>(() => dense.CaptureGraph(x));
+    }
+
+    /// <summary>
+    /// CaptureGraph throws ArgumentNullException on null input.
+    /// </summary>
+    [Fact]
+    public void CaptureGraph_ThrowsOnNullInput()
+    {
+        var block = new DiffusionResBlock<float>(
+            inChannels: 4, outChannels: 4, spatialSize: 4);
+        Assert.Throws<System.ArgumentNullException>(() => block.CaptureGraph(null!));
+    }
+
     private static Tensor<float> MakeInput(int[] shape)
     {
         int length = 1;
