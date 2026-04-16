@@ -104,13 +104,15 @@ public class EMMDiTPredictor<T> : NoisePredictorBase<T>
     private void InitializeLayers(int? seed)
     {
         int patchDim = _inputChannels * 4;
-        _patchEmbed = new DenseLayer<T>(patchDim, EMMDIT_HIDDEN_SIZE, (IActivationFunction<T>)new GELUActivation<T>());
+        // LazyDense: weight tensors stay unallocated until first Forward() — avoids
+        // eagerly materializing ~GB of weights at construction time.
+        _patchEmbed = LazyDense(patchDim, EMMDIT_HIDDEN_SIZE, new GELUActivation<T>());
 
         _blocks = new DenseLayer<T>[EMMDIT_NUM_LAYERS];
         for (int i = 0; i < EMMDIT_NUM_LAYERS; i++)
-            _blocks[i] = new DenseLayer<T>(EMMDIT_HIDDEN_SIZE, EMMDIT_HIDDEN_SIZE, (IActivationFunction<T>)new GELUActivation<T>());
+            _blocks[i] = LazyDense(EMMDIT_HIDDEN_SIZE, EMMDIT_HIDDEN_SIZE, new GELUActivation<T>());
 
-        _finalLayer = new DenseLayer<T>(EMMDIT_HIDDEN_SIZE, patchDim, (IActivationFunction<T>?)null);
+        _finalLayer = LazyDense(EMMDIT_HIDDEN_SIZE, patchDim);
     }
 
     private int CalculateParameterCount()

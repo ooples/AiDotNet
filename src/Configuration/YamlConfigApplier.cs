@@ -134,6 +134,11 @@ internal static partial class YamlConfigApplier<T, TInput, TOutput>
             builder.ConfigureInferenceOptimizations(config.InferenceOptimizations);
         }
 
+        if (config.JitCompilation is not null)
+        {
+            builder.ConfigureJitCompilation(config.JitCompilation);
+        }
+
         if (config.Interpretability is not null)
         {
             builder.ConfigureInterpretability(config.Interpretability);

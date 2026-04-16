@@ -1,4 +1,5 @@
 ﻿using AiDotNet.Diffusion.VAE;
+using AiDotNet.Initialization;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.PhysicsInformed.NeuralOperators;
@@ -586,7 +587,10 @@ public static class LayerHelper<T>
             {
                 int outputChannels = block[convIdx];
 
-                // Convolutional layer with 3x3 kernel
+                // Convolutional layer with 3x3 kernel. Lazy weight init defers the
+                // kernel tensor allocation to first Forward() — VGG16BN at 224×224×3
+                // production defaults is ~1.1 GB of weights, and eager allocation at
+                // ctor time OOMs CI before tests even run.
                 yield return new ConvolutionalLayer<T>(
                     inputDepth: currentChannels,
                     inputHeight: currentHeight,
@@ -595,7 +599,8 @@ public static class LayerHelper<T>
                     kernelSize: 3,
                     stride: 1,
                     padding: 1,  // Same padding to preserve spatial dimensions
-                    activationFunction: new ReLUActivation<T>()
+                    activationFunction: new ReLUActivation<T>(),
+                    initializationStrategy: InitializationStrategies<T>.Lazy
                 );
 
                 // Optional batch normalization (per-channel normalization)
@@ -624,14 +629,18 @@ public static class LayerHelper<T>
         int flattenedSize = currentChannels * currentHeight * currentWidth;
         yield return new FlattenLayer<T>(inputShape: [currentChannels, currentHeight, currentWidth]);
 
-        // Classifier (fully connected layers) - only if included
+        // Classifier (fully connected layers) - only if included. The three FC
+        // layers are the dominant memory cost of VGG (FC1 alone is ~822 MB at
+        // 224×224 input → 7×7×512 = 25088 × 4096 float64 weights); lazy init
+        // defers those allocations to first Forward().
         if (configuration.IncludeClassifier)
         {
             // FC1: flattenedSize -> 4096
             yield return new DenseLayer<T>(
                 inputSize: flattenedSize,
                 outputSize: 4096,
-                activationFunction: new ReLUActivation<T>()
+                activationFunction: new ReLUActivation<T>(),
+                initializationStrategy: InitializationStrategies<T>.Lazy
             );
             yield return new DropoutLayer<T>((float)configuration.DropoutRate);
 
@@ -639,7 +648,8 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(
                 inputSize: 4096,
                 outputSize: 4096,
-                activationFunction: new ReLUActivation<T>()
+                activationFunction: new ReLUActivation<T>(),
+                initializationStrategy: InitializationStrategies<T>.Lazy
             );
             yield return new DropoutLayer<T>((float)configuration.DropoutRate);
 
@@ -647,7 +657,8 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(
                 inputSize: 4096,
                 outputSize: configuration.NumClasses,
-                activationFunction: new SoftmaxActivation<T>() as IActivationFunction<T>
+                activationFunction: new SoftmaxActivation<T>() as IActivationFunction<T>,
+                initializationStrategy: InitializationStrategies<T>.Lazy
             );
         }
     }
@@ -1272,7 +1283,9 @@ public static class LayerHelper<T>
         int inputHeight = architecture.InputHeight;
         int inputWidth = architecture.InputWidth;
 
-        // Add initial convolutional layer
+        // Add initial convolutional layer — lazy weight init defers the kernel
+        // tensor (9×9×inputDepth×256 = ~150 KB per input channel) to first Forward().
+        // CapsuleNetwork tests repeatedly instantiate this at production defaults.
         yield return new ConvolutionalLayer<T>(
             inputDepth: inputDepth,
             outputDepth: 256,
@@ -1281,7 +1294,8 @@ public static class LayerHelper<T>
             inputWidth: inputWidth,
             stride: 1,
             padding: 0,
-            activationFunction: new ReLUActivation<T>()
+            activationFunction: new ReLUActivation<T>(),
+            initializationStrategy: InitializationStrategies<T>.Lazy
         );
 
         // Add PrimaryCapsules layer

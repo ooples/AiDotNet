@@ -1,5 +1,6 @@
 ﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Helpers;
+using AiDotNet.Initialization;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.Diffusion.NoisePredictors;
@@ -93,7 +94,9 @@ public class DiffusionResBlock<T> : LayerBase<T>
         int groups1 = ComputeNumGroups(inChannels, numGroups);
         int groups2 = ComputeNumGroups(outChannels, numGroups);
 
-        // First block: GroupNorm(in) → SiLU → Conv3x3(in→out)
+        // First block: GroupNorm(in) → SiLU → Conv3x3(in→out). Pass the Lazy strategy
+        // so kernel tensors stay unallocated until the first Forward() call — diffusion
+        // U-Nets contain dozens of these blocks and eager allocation OOMs CI.
         _norm1 = new GroupNormalizationLayer<T>(groups1, inChannels);
         _conv1 = new ConvolutionalLayer<T>(
             inputDepth: inChannels,
@@ -103,13 +106,15 @@ public class DiffusionResBlock<T> : LayerBase<T>
             kernelSize: 3,
             stride: 1,
             padding: 1,
-            activationFunction: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>(),
+            initializationStrategy: InitializationStrategies<T>.Lazy);
 
         // Time embedding projection: projects time embed to outChannels for additive conditioning
         _timeMlp = new DenseLayer<T>(
             timeEmbedDim > 0 ? timeEmbedDim : 1,
             outChannels,
-            (IActivationFunction<T>)new SiLUActivation<T>());
+            (IActivationFunction<T>)new SiLUActivation<T>(),
+            InitializationStrategies<T>.Lazy);
 
         // Second block: GroupNorm(out) → SiLU → Conv3x3(out→out)
         _norm2 = new GroupNormalizationLayer<T>(groups2, outChannels);
@@ -121,7 +126,8 @@ public class DiffusionResBlock<T> : LayerBase<T>
             kernelSize: 3,
             stride: 1,
             padding: 1,
-            activationFunction: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>(),
+            initializationStrategy: InitializationStrategies<T>.Lazy);
 
         // Skip connection: 1x1 conv if channels differ
         if (inChannels != outChannels)
@@ -134,7 +140,8 @@ public class DiffusionResBlock<T> : LayerBase<T>
                 kernelSize: 1,
                 stride: 1,
                 padding: 0,
-                activationFunction: new IdentityActivation<T>());
+                activationFunction: new IdentityActivation<T>(),
+                initializationStrategy: InitializationStrategies<T>.Lazy);
         }
     }
 

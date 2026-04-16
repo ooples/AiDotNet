@@ -286,40 +286,24 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private void InitializeLayers()
     {
         // Input convolution: [inputChannels] -> [baseChannels]
-        // For video: processes each frame spatially
-        _inputConv = new ConvolutionalLayer<T>(
-            inputDepth: _inputChannels,
-            outputDepth: _baseChannels,
-            kernelSize: 3,
-            inputHeight: _inputHeight,
-            inputWidth: _inputWidth,
-            stride: 1,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
+        // For video: processes each frame spatially. Lazy so we don't allocate
+        // the kernel tensor at construction time.
+        _inputConv = LazyConv2D(
+            inputDepth: _inputChannels, inputHeight: _inputHeight, inputWidth: _inputWidth,
+            outputDepth: _baseChannels, kernelSize: 3, stride: 1, padding: 1,
+            activation: new IdentityActivation<T>());
 
-        // Time embedding MLP
-        _timeEmbedMlp1 = new DenseLayer<T>(
-            _timeEmbeddingDim / 4,
-            _timeEmbeddingDim,
-            (IActivationFunction<T>)new SiLUActivation<T>());
-
-        _timeEmbedMlp2 = new DenseLayer<T>(
-            _timeEmbeddingDim,
-            _timeEmbeddingDim,
-            (IActivationFunction<T>)new SiLUActivation<T>());
+        // Time embedding MLP — lazy so constructor-time memory stays flat.
+        _timeEmbedMlp1 = LazyDense(_timeEmbeddingDim / 4, _timeEmbeddingDim, new SiLUActivation<T>());
+        _timeEmbedMlp2 = LazyDense(_timeEmbeddingDim, _timeEmbeddingDim, new SiLUActivation<T>());
 
         // Image conditioning projection (for image-to-video)
         if (_supportsImageConditioning)
         {
-            _imageCondProjection = new ConvolutionalLayer<T>(
-                inputDepth: _inputChannels,
-                outputDepth: _baseChannels,
-                kernelSize: 1,
-                inputHeight: _inputHeight,
-                inputWidth: _inputWidth,
-                stride: 1,
-                padding: 0,
-                activationFunction: new IdentityActivation<T>());
+            _imageCondProjection = LazyConv2D(
+                inputDepth: _inputChannels, inputHeight: _inputHeight, inputWidth: _inputWidth,
+                outputDepth: _baseChannels, kernelSize: 1, stride: 1, padding: 0,
+                activation: new IdentityActivation<T>());
         }
 
         // Build encoder
@@ -334,10 +318,11 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
                 _encoderBlocks.Add(new VideoBlock
                 {
                     SpatialResBlock = CreateSpatialResBlock(inChannels, outChannels),
-                    TemporalResBlock = CreateTemporalResBlock(outChannels),
+                    TemporalResBlock = CreateTemporalMixingBlock(),
                     SpatialAttention = useAttention ? CreateSpatialAttention(outChannels) : null,
                     TemporalAttention = useAttention ? CreateTemporalAttention(outChannels) : null,
-                    CrossAttention = useAttention && _contextDim > 0 ? CreateCrossAttention(outChannels) : null
+                    CrossAttention = useAttention && _contextDim > 0 ? CreateCrossAttention(outChannels) : null,
+                    TimeCondProjection = CreateTimeCondProjection(outChannels)
                 });
                 inChannels = outChannels;
             }
@@ -356,15 +341,17 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         _middleBlocks.Add(new VideoBlock
         {
             SpatialResBlock = CreateSpatialResBlock(inChannels, inChannels),
-            TemporalResBlock = CreateTemporalResBlock(inChannels),
+            TemporalResBlock = CreateTemporalMixingBlock(),
             SpatialAttention = CreateSpatialAttention(inChannels),
             TemporalAttention = CreateTemporalAttention(inChannels),
-            CrossAttention = _contextDim > 0 ? CreateCrossAttention(inChannels) : null
+            CrossAttention = _contextDim > 0 ? CreateCrossAttention(inChannels) : null,
+            TimeCondProjection = CreateTimeCondProjection(inChannels)
         });
         _middleBlocks.Add(new VideoBlock
         {
             SpatialResBlock = CreateSpatialResBlock(inChannels, inChannels),
-            TemporalResBlock = CreateTemporalResBlock(inChannels)
+            TemporalResBlock = CreateTemporalMixingBlock(),
+            TimeCondProjection = CreateTimeCondProjection(inChannels)
         });
 
         // Build decoder (reverse of encoder)
@@ -382,10 +369,11 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
                 _decoderBlocks.Add(new VideoBlock
                 {
                     SpatialResBlock = CreateSpatialResBlock(inChannels + skipChannels, outChannels),
-                    TemporalResBlock = CreateTemporalResBlock(outChannels),
+                    TemporalResBlock = CreateTemporalMixingBlock(),
                     SpatialAttention = useAttention ? CreateSpatialAttention(outChannels) : null,
                     TemporalAttention = useAttention ? CreateTemporalAttention(outChannels) : null,
-                    CrossAttention = useAttention && _contextDim > 0 ? CreateCrossAttention(outChannels) : null
+                    CrossAttention = useAttention && _contextDim > 0 ? CreateCrossAttention(outChannels) : null,
+                    TimeCondProjection = CreateTimeCondProjection(outChannels)
                 });
                 inChannels = outChannels;
             }
@@ -400,16 +388,11 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             }
         }
 
-        // Output convolution
-        _outputConv = new ConvolutionalLayer<T>(
-            inputDepth: _baseChannels,
-            outputDepth: _outputChannels,
-            kernelSize: 3,
-            inputHeight: _inputHeight,
-            inputWidth: _inputWidth,
-            stride: 1,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
+        // Output convolution (lazy).
+        _outputConv = LazyConv2D(
+            inputDepth: _baseChannels, inputHeight: _inputHeight, inputWidth: _inputWidth,
+            outputDepth: _outputChannels, kernelSize: 3, stride: 1, padding: 1,
+            activation: new IdentityActivation<T>());
     }
 
     /// <inheritdoc />
@@ -559,7 +542,13 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
-    /// Applies a video block (spatial + temporal processing).
+    /// Applies a single video block: spatial ResBlock → FiLM timestep conditioning →
+    /// temporal ResBlock → spatial attention → temporal attention → cross-attention.
+    /// Per Ho et al. 2022 "Video Diffusion Models" §3.1, timestep conditioning is
+    /// injected via Adaptive Group Normalization (AdaGN): the time embedding is projected
+    /// to per-channel scale and shift parameters, then the feature map is modulated as
+    /// <c>x = x * (1 + scale) + shift</c>. Temporal processing applies a learned
+    /// temporal mixing layer across the frame axis with a residual connection.
     /// </summary>
     private Tensor<T> ApplyVideoBlock(
         VideoBlock block,
@@ -576,7 +565,17 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
                 : block.SpatialResBlock.Forward(x);
         }
 
-        // Temporal ResBlock (only for video)
+        // FiLM timestep conditioning (Dhariwal & Nichol 2021 / Ho et al. 2022):
+        // project timeEmbed → [scale, shift], then x = x * (1 + scale) + shift.
+        // This makes the model's feature maps timestep-dependent — without it the
+        // noise predictor output is invariant to the diffusion step, which breaks
+        // the denoising objective fundamentally.
+        if (block.TimeCondProjection != null)
+        {
+            x = ApplyFiLMConditioning(block.TimeCondProjection, x, timeEmbed, isVideo);
+        }
+
+        // Temporal ResBlock (only for video) — learned temporal mixing with residual
         if (block.TemporalResBlock != null && isVideo)
         {
             x = ApplyTemporalProcessing(block.TemporalResBlock, x);
@@ -608,6 +607,88 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
+    /// Applies Feature-wise Linear Modulation (FiLM) from the timestep embedding to
+    /// the feature map <paramref name="x"/>. The projection layer maps
+    /// <c>[timeEmbedDim] → [channels * 2]</c>; the first half is scale, the second
+    /// half is shift. The modulation is <c>x = x * (1 + scale) + shift</c>,
+    /// broadcast across spatial (and temporal, for video) dimensions.
+    /// </summary>
+    private Tensor<T> ApplyFiLMConditioning(
+        DenseLayer<T> projection, Tensor<T> x, Tensor<T> timeEmbed, bool isVideo)
+    {
+        // Ground truth for dimensions is the feature map `x`, not the projection
+        // output — we want to fail loudly if the projection was constructed with
+        // the wrong channel count rather than silently slicing the projection
+        // vector and producing an out-of-shape broadcast.
+        int batchSize = x.Shape[0];
+        int channels = x.Shape[1];
+
+        // timeEmbed shape depends on the caller:
+        //   (a) 1D [timeEmbedDim] when GetTimestepEmbedding returns an unbatched
+        //       sinusoidal embedding (the shared-across-batch case — standard
+        //       path when batch originates from PredictNoise on a single int).
+        //   (b) 2D [B, timeEmbedDim] when the caller pre-batched timeEmbed
+        //       (e.g., PredictNoiseWithEmbedding on a [B, D] tensor).
+        // After projection:
+        //   (a) → 1D [channels*2]     — broadcast scale/shift across all batches.
+        //   (b) → 2D [B, channels*2]  — per-batch scale/shift.
+        var condVec = projection.Forward(timeEmbed);
+        bool condIsBatched = condVec.Shape.Length >= 2;
+        int expectedCondWidth = channels * 2;
+        if (condVec.Shape[^1] != expectedCondWidth)
+        {
+            throw new InvalidOperationException(
+                $"FiLM conditioning projection width mismatch: expected {expectedCondWidth} " +
+                $"(2 * channels for [scale, shift]), got {condVec.Shape[^1]}. " +
+                "This indicates the VideoBlock's TimeCondProjection was sized for a different channel count.");
+        }
+        if (condIsBatched && condVec.Shape[0] != batchSize)
+        {
+            throw new InvalidOperationException(
+                $"FiLM conditioning batch-size mismatch: feature map has batch {batchSize} " +
+                $"but projection output has batch {condVec.Shape[0]}. " +
+                "Pass a 1D timeEmbed to broadcast across all batches, or a 2D [B, timeEmbedDim] " +
+                "timeEmbed where B matches the feature map's batch size.");
+        }
+
+        // Split projection into scale and shift. When condVec is 1D, we
+        // broadcast the single [channels*2] vector across all batches. When
+        // 2D, we split per-batch.
+        var scaleData = new T[batchSize * channels];
+        var shiftData = new T[batchSize * channels];
+        var condSpan = condVec.AsSpan();
+        for (int b = 0; b < batchSize; b++)
+        {
+            // When condVec is 1D, all batches read from the same [channels*2]
+            // block at offset 0. When 2D, batch b reads from offset b*(channels*2).
+            int srcBase = condIsBatched ? b * channels * 2 : 0;
+            int dstBase = b * channels;
+            for (int c = 0; c < channels; c++)
+            {
+                scaleData[dstBase + c] = condSpan[srcBase + c];
+                shiftData[dstBase + c] = condSpan[srcBase + channels + c];
+            }
+        }
+
+        // Reshape scale/shift to broadcast over spatial (+ temporal) dims.
+        // Image: x is [B, C, H, W] → scale/shift [B, C, 1, 1]
+        // Video: x is [B, C, F, H, W] → scale/shift [B, C, 1, 1, 1]
+        int[] broadcastShape = isVideo
+            ? new[] { batchSize, channels, 1, 1, 1 }
+            : new[] { batchSize, channels, 1, 1 };
+
+        var scaleTensor = new Tensor<T>(scaleData, broadcastShape);
+        var shiftTensor = new Tensor<T>(shiftData, broadcastShape);
+
+        // x = x * (1 + scale) + shift
+        var onePlusScale = Engine.TensorBroadcastAdd(
+            scaleTensor,
+            Tensor<T>.CreateDefault(broadcastShape, NumOps.One));
+        var modulated = Engine.TensorBroadcastMultiply(x, onePlusScale);
+        return Engine.TensorBroadcastAdd(modulated, shiftTensor);
+    }
+
+    /// <summary>
     /// Processes each frame of a video through a layer.
     /// </summary>
     private Tensor<T> ProcessVideoFrames(Tensor<T> video, Func<Tensor<T>, Tensor<T>> processFrame)
@@ -626,14 +707,67 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
-    /// Applies temporal processing across frames.
+    /// Applies temporal processing with a residual connection, per Ho et al. 2022 §3.1.
+    /// The temporal layer is a learned mixing operation along the frame axis: for each
+    /// (batch, channel, height, width) position, the layer receives a vector of length
+    /// <c>numFrames</c> and outputs a mixed vector of the same length. A residual
+    /// connection preserves the original signal so the layer only needs to learn the
+    /// temporal delta.
     /// </summary>
+    /// <remarks>
+    /// The paper uses 3D convolution with kernel (3,1,1) for temporal processing. Since
+    /// this codebase does not yet have a 1D/3D temporal conv primitive, we approximate
+    /// with a DenseLayer(<c>numFrames</c>, <c>numFrames</c>) applied per spatial-channel
+    /// position. This captures global temporal mixing (each output frame is a learned
+    /// linear combination of ALL input frames, vs. the paper's local kernel-3 receptive
+    /// field). Both are viable — the dense version is more expressive but has O(F²)
+    /// parameters vs. O(F) for the kernel-3 conv.
+    /// </remarks>
     private Tensor<T> ApplyTemporalProcessing(ILayer<T> temporalLayer, Tensor<T> video)
     {
-        // Apply temporal layer to the video tensor
-        var result = new Tensor<T>(video._shape);
-        video.AsSpan().CopyTo(result.AsWritableSpan());
-        return result;
+        // Video shape: [B, C, F, H, W]. Use the public Shape API and materialize
+        // an independent int[] so we don't couple to Tensor<T>'s internal backing
+        // field (which could be refactored) or share mutable shape storage with
+        // the source tensor.
+        var shape = video.Shape.ToArray();
+        int batch = shape[0];
+        int channels = shape[1];
+        int frames = shape[2];
+        int height = shape[3];
+        int width = shape[4];
+
+        // A plain reshape from [B,C,F,H,W] to [B*C*H*W, F] does NOT produce
+        // rows that hold one spatial-channel position's frame vector — F is
+        // not the innermost dimension in the source, so neighboring elements
+        // along the flattened last axis span multiple H/W/F indices. Rows of
+        // the naive reshape would therefore mix values across H and W, and
+        // the DenseLayer would learn a meaningless cross-spatial mixing
+        // instead of temporal mixing.
+        //
+        // Correct layout: permute [B,C,F,H,W] → [B,C,H,W,F] so F is the
+        // innermost axis. Then reshape to [B*C*H*W, F] yields rows that ARE
+        // the per-(b,c,h,w) frame vectors. Apply the temporal mixing and
+        // reverse the permute so the caller sees [B,C,F,H,W] again.
+        var permuted = Engine.TensorPermute(video, new[] { 0, 1, 3, 4, 2 });
+        int spatialChannelPositions = batch * channels * height * width;
+        var flat = Engine.Reshape(permuted, new[] { spatialChannelPositions, frames });
+
+        // Apply temporal mixing layer: [B*C*H*W, F] → [B*C*H*W, F]
+        var mixed = temporalLayer.Forward(flat);
+
+        // Reshape back to [B, C, H, W, F] then un-permute to [B, C, F, H, W].
+        // The final .Contiguous() materializes the permuted view — downstream
+        // ops (ExtractFrame, AsSpan callers) require contiguous backing buffers,
+        // and permutation views don't materialize automatically.
+        var mixedPermuted = Engine.Reshape(mixed, new[] { batch, channels, height, width, frames });
+        var mixedVideo = Engine.TensorPermute(mixedPermuted, new[] { 0, 1, 4, 2, 3 }).Contiguous();
+
+        // Residual connection: output = input + temporalDelta
+        // Per the paper, the residual ensures the temporal block only needs to
+        // learn the temporal refinement, not reconstruct the full signal from
+        // scratch. .Contiguous() on the result — TensorAdd can return a view
+        // in some engine paths.
+        return Engine.TensorAdd(video, mixedVideo).Contiguous();
     }
 
     /// <summary>
@@ -681,7 +815,9 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
         // Step 5: Permute back from NHWFC to NCFHW
         // [batch, height, width, frames, channels] -> [batch, channels, frames, height, width]
-        var result = Engine.TensorPermute(reshapedBack, new[] { 0, 4, 3, 1, 2 });
+        // .Contiguous() materializes the permuted view — downstream ops
+        // (ExtractFrame, AsSpan callers) require a contiguous backing buffer.
+        var result = Engine.TensorPermute(reshapedBack, new[] { 0, 4, 3, 1, 2 }).Contiguous();
 
         return result;
     }
@@ -847,12 +983,37 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateSpatialResBlock(int inChannels, int outChannels)
     {
-        return new DenseLayer<T>(inChannels, outChannels, (IActivationFunction<T>)new SiLUActivation<T>());
+        return LazyDense(inChannels, outChannels, new SiLUActivation<T>());
     }
 
-    private ILayer<T> CreateTemporalResBlock(int channels)
+    /// <summary>
+    /// Creates a temporal mixing block that learns a frame-axis transform.
+    /// Per Ho et al. 2022 §3.1 the paper uses a 1D convolution along T; since
+    /// this codebase has no 1D temporal conv primitive we approximate with a
+    /// DenseLayer mapping <c>[numFrames] → [numFrames]</c>, applied per
+    /// (batch, channel, height, width) position (analogous to a depthwise
+    /// temporal 1×1 conv). The reshape+layer+reshape pipeline lives in
+    /// <see cref="ApplyTemporalProcessing"/>; a residual add connects input
+    /// and output so this layer only needs to learn the temporal refinement.
+    /// </summary>
+    /// <remarks>
+    /// Takes no parameters: the block's shape depends solely on
+    /// <see cref="_numFrames"/>, not on the channel count. The earlier
+    /// signature <c>CreateTemporalResBlock(int channels)</c> mislead callers
+    /// into sizing the block by channel count — now removed per review.
+    /// </remarks>
+    private ILayer<T> CreateTemporalMixingBlock()
     {
-        return new DenseLayer<T>(channels, channels, (IActivationFunction<T>)new SiLUActivation<T>());
+        return LazyDense(_numFrames, _numFrames, new SiLUActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates a FiLM conditioning projection for a VideoBlock: timeEmbedDim → channels * 2.
+    /// The first half of the output is the scale, the second half is the shift.
+    /// </summary>
+    private DenseLayer<T> CreateTimeCondProjection(int channels)
+    {
+        return LazyDense(_timeEmbeddingDim, channels * 2, activation: null);
     }
 
     private ILayer<T> CreateSpatialAttention(int channels)
@@ -884,15 +1045,10 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateDownsample(int channels)
     {
-        return new ConvolutionalLayer<T>(
-            inputDepth: channels,
-            outputDepth: channels,
-            kernelSize: 3,
-            inputHeight: _inputHeight,
-            inputWidth: _inputWidth,
-            stride: 2,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
+        return LazyConv2D(
+            inputDepth: channels, inputHeight: _inputHeight, inputWidth: _inputWidth,
+            outputDepth: channels, kernelSize: 3, stride: 2, padding: 1,
+            activation: new IdentityActivation<T>());
     }
 
     private ILayer<T> CreateUpsample(int channels)
@@ -1134,5 +1290,15 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         public ILayer<T>? CrossAttention { get; set; }
         public ILayer<T>? Downsample { get; set; }
         public ILayer<T>? Upsample { get; set; }
+
+        /// <summary>
+        /// FiLM conditioning projection: timeEmbedDim → channels * 2 (scale + shift).
+        /// Per Ho et al. 2022 "Video Diffusion Models" §3.1, each residual block receives
+        /// the timestep embedding and modulates its feature maps via
+        /// <c>x = x * (1 + scale) + shift</c>, where <c>[scale, shift]</c> are linearly
+        /// projected from the time embedding. This is the standard Adaptive Group
+        /// Normalization (AdaGN) pattern from Dhariwal &amp; Nichol 2021 (ADM).
+        /// </summary>
+        public DenseLayer<T>? TimeCondProjection { get; set; }
     }
 }

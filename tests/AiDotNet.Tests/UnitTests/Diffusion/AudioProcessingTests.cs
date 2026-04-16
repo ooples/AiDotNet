@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion;
 /// <summary>
 /// Tests for audio processing components used in diffusion models.
 /// </summary>
-public class AudioProcessingTests
+public class AudioProcessingTests : DiffusionUnitTestBase
 {
     #region Window Function Tests
 

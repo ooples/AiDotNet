@@ -641,10 +641,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     [JsonProperty]
     private AiDotNet.Configuration.InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
-    /// <summary>
-    /// Builder's determinism policy, re-asserted on every Predict to bridge the
-    /// engine's thread-local state across request-pool workers.
-    /// </summary>
+    /// <summary>JIT compilation config carried from the builder.</summary>
+    [JsonProperty]
+    private AiDotNet.Configuration.JitCompilationConfig? JitCompilationConfig { get; set; }
+
+    /// <summary>Builder's determinism policy, re-asserted on every Predict.</summary>
     [JsonProperty]
     private bool AllowNondeterminism { get; set; }
 
@@ -1276,6 +1277,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         DeploymentConfiguration = options.DeploymentConfiguration;
         JitCompiledFunction = options.JitCompiledFunction;
         InferenceOptimizationConfig = options.InferenceOptimizationConfig;
+        JitCompilationConfig = options.JitCompilationConfig;
         AllowNondeterminism = options.AllowNondeterminism;
         QuantizationInfo = options.QuantizationInfo;
 
@@ -1820,14 +1822,19 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new InvalidOperationException("Model is not initialized.");
         }
 
-        // Re-assert the builder's determinism policy on this thread. Engine
-        // determinism state is thread-local; without this bridge a Predict on
-        // a fresh request-pool worker would use whatever the thread happened
-        // to have. Always assert BOTH directions explicitly — when the user
-        // opted into AllowNondeterminism=true we need to ACTIVELY clear any
-        // previous deterministic=true left by an earlier deterministic call
-        // on the same thread; just skipping the set-true call would leak the
-        // prior policy and silently make the opt-out ineffective.
+        // Bridge builder-configured JIT compilation flags into this thread's
+        // TensorCodecOptions so CompiledModelCache engages correctly.
+        if (JitCompilationConfig is { } jit)
+        {
+            jit.ApplyToTensorCodec();
+        }
+        else
+        {
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(
+                AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Default);
+        }
+
+        // Re-assert the builder's determinism policy on this thread.
         AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(!AllowNondeterminism);
 
         var dataForPrediction = newData;
@@ -2904,10 +2911,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             DeploymentConfiguration = DeploymentConfiguration,
             // JIT compilation is parameter-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
-            // Propagate the determinism policy through clone paths so the
-            // copy honors the same opt-out as the original — without this,
-            // a model the user opted out via AllowNondeterminism() silently
-            // flips back to deterministic at WithParameters/DeepCopy.
+            JitCompilationConfig = JitCompilationConfig,
             AllowNondeterminism = AllowNondeterminism,
             ReasoningConfig = ReasoningConfig,
             KnowledgeGraph = KnowledgeGraph,
@@ -4646,10 +4650,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             DeploymentConfiguration = DeploymentConfiguration,
             // JIT compilation is model-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
-            // Propagate the determinism policy through clone paths so the
-            // copy honors the same opt-out as the original — without this,
-            // a model the user opted out via AllowNondeterminism() silently
-            // flips back to deterministic at WithParameters/DeepCopy.
+            JitCompilationConfig = JitCompilationConfig,
             AllowNondeterminism = AllowNondeterminism,
             ReasoningConfig = ReasoningConfig,
             KnowledgeGraph = KnowledgeGraph,
@@ -4840,9 +4841,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 BiasDetector = deserializedObject.BiasDetector;
                 FairnessEvaluator = deserializedObject.FairnessEvaluator;
                 InferenceOptimizationConfig = deserializedObject.InferenceOptimizationConfig;
-                // Restore determinism policy so a saved-and-reloaded result
-                // keeps re-asserting on every Predict — without this assignment
-                // a model saved with AllowNondeterminism() loads as deterministic.
+                JitCompilationConfig = deserializedObject.JitCompilationConfig;
                 AllowNondeterminism = deserializedObject.AllowNondeterminism;
                 SerializedModelData = deserializedObject.SerializedModelData;
 

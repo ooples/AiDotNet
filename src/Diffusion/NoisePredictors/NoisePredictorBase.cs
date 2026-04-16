@@ -2,8 +2,10 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
+using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -246,6 +248,56 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
             ? RandomHelper.CreateSeededRandom(seed.Value)
             : RandomHelper.CreateSecureRandom();
     }
+
+    #region Lazy Layer Factories
+
+    // Large diffusion noise predictors (DiT-XL: 28 layers × 1152 hidden × 4× MLP ratio)
+    // allocate ~4 GB of weight tensors at construction time when layers eagerly call
+    // TensorAllocator.Rent from their ctors. That crushes CI and masks real test
+    // failures behind OOM. These helpers wire every layer with
+    // InitializationStrategies<T>.Lazy so weight tensors stay at size 0 until the
+    // first Forward() pass actually needs them — construction becomes O(1) and
+    // allocation scales with the actual tests that exercise the model.
+
+    /// <summary>
+    /// Creates a <see cref="DenseLayer{T}"/> with lazy weight allocation —
+    /// weight/bias tensors stay zero-sized until the first Forward() call.
+    /// </summary>
+    protected static DenseLayer<T> LazyDense(
+        int inputSize,
+        int outputSize,
+        IActivationFunction<T>? activation = null)
+        => new DenseLayer<T>(inputSize, outputSize, activation, InitializationStrategies<T>.Lazy);
+
+    /// <summary>
+    /// Creates a <see cref="DenseLayer{T}"/> with a vector activation and lazy weight
+    /// allocation. Distinct name from <see cref="LazyDense(int, int, IActivationFunction{T}?)"/>
+    /// because the two ctor overloads otherwise collide on overload resolution for
+    /// activations that implement both scalar and vector interfaces.
+    /// </summary>
+    protected static DenseLayer<T> LazyDenseVec(
+        int inputSize,
+        int outputSize,
+        IVectorActivationFunction<T> vectorActivation)
+        => new DenseLayer<T>(inputSize, outputSize, vectorActivation, InitializationStrategies<T>.Lazy);
+
+    /// <summary>
+    /// Creates a <see cref="ConvolutionalLayer{T}"/> with lazy weight allocation.
+    /// </summary>
+    protected static ConvolutionalLayer<T> LazyConv2D(
+        int inputDepth,
+        int inputHeight,
+        int inputWidth,
+        int outputDepth,
+        int kernelSize,
+        int stride = 1,
+        int padding = 0,
+        IActivationFunction<T>? activation = null)
+        => new ConvolutionalLayer<T>(
+            inputDepth, inputHeight, inputWidth, outputDepth,
+            kernelSize, stride, padding, activation, InitializationStrategies<T>.Lazy);
+
+    #endregion
 
     #region INoisePredictor<T> Implementation
 

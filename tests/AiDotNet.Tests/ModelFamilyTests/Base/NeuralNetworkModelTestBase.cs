@@ -55,7 +55,7 @@ public abstract class NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
@@ -91,7 +91,7 @@ public abstract class NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
@@ -131,7 +131,7 @@ public abstract class NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
 
         var input1 = CreateConstantTensor(InputShape, 0.1);
         var input2 = CreateConstantTensor(InputShape, 0.9);
@@ -165,7 +165,7 @@ public abstract class NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
 
         var output = network.Predict(input);
@@ -189,7 +189,7 @@ public abstract class NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
@@ -217,7 +217,7 @@ public abstract class NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
 
         var input = CreateRandomTensor(InputShape, rng);
         var scaledInput = new Tensor<double>(InputShape);
@@ -251,7 +251,7 @@ public abstract class NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
 
         var out1 = network.Predict(input);
@@ -268,9 +268,13 @@ public abstract class NeuralNetworkModelTestBase
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        var network = CreateNetwork();
-        var parameters = network.GetParameters();
-        Assert.True(parameters.Length > 0, "Neural network should have learnable parameters.");
+        using var network = CreateNetwork();
+        // Use ParameterCount instead of GetParameters().Length — GetParameters
+        // materializes the full flat parameter vector just to measure existence,
+        // forcing all lazy-init layers to allocate. ParameterCount answers the
+        // same question ("does the network have learnable parameters?") without
+        // the allocation, preserving the lazy-init memory savings.
+        Assert.True(network.ParameterCount > 0, "Neural network should have learnable parameters.");
     }
 
     [Fact(Timeout = 120000)]
@@ -279,7 +283,7 @@ public abstract class NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
 
         var original = network.Predict(input);
@@ -298,7 +302,7 @@ public abstract class NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
         network.Train(input, target);
@@ -310,7 +314,7 @@ public abstract class NeuralNetworkModelTestBase
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         Assert.NotNull(network.GetArchitecture());
     }
 
@@ -320,7 +324,7 @@ public abstract class NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
 
         var activations = network.GetNamedLayerActivations(input);
@@ -379,7 +383,7 @@ public abstract class NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
@@ -412,7 +416,7 @@ public abstract class NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
@@ -450,7 +454,7 @@ public abstract class NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
 
         // Single prediction
@@ -478,7 +482,7 @@ public abstract class NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
 
         var output = network.Predict(input);
