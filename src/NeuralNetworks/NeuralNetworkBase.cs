@@ -2228,14 +2228,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         try
         {
-            var cache = _compiledInferenceCache ??= new AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>();
-            // GetOrCompileInference either traces-and-compiles or returns the
-            // existing plan. Executing once confirms the plan replays correctly
-            // and warms the downstream workspace buffers.
-            var plan = cache.GetOrCompileInference(
-                (int[])sampleInput._shape.Clone(),
+            // _compileHost.Predict handles trace-and-compile-on-miss / replay-on-hit
+            // internally and invalidates stale plans when _layerStructureVersion changes.
+            // Executing once up-front warms the plan so the first production inference
+            // pays no trace + compile cost.
+            var warmupOutput = _compileHost.Predict(
+                sampleInput,
+                _layerStructureVersion,
                 () => PredictEager(sampleInput));
-            var warmupOutput = plan.Execute();
             if (warmupOutput is IDisposable disposableOutput)
                 disposableOutput.Dispose();
             return true;
