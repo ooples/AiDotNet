@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Engines;
 using AiDotNet.Initialization;
@@ -700,7 +700,18 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// 
     /// It's like restoring a snapshot of a trained model exactly as it was.
     /// </para>
+    /// <summary>
+    /// Restores the layer's configuration and trainable tensors from a binary stream.
+    /// </summary>
+    /// <remarks>
+    /// This override invokes the base deserialization and then reads the layer shape
+    /// (input/output depths, kernel size, stride, padding) and the serialized kernel
+    /// and bias values. It recreates the internal placeholder tensors used for
+    /// forward/backward state, re-registers the newly-allocated kernels and biases
+    /// as trainable parameters so optimizers and the autodiff tape target the
+    /// correct objects, and marks the layer as initialized to prevent re-initialization.
     /// </remarks>
+    /// <param name="reader">The binary reader positioned at the layer's serialized data.</param>
     public override void Deserialize(BinaryReader reader)
     {
         base.Deserialize(reader);
@@ -1332,7 +1343,12 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         ? _kernels.Length + _biases.Shape[0]
         : OutputDepth * InputDepth * KernelSize * KernelSize + OutputDepth;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Get a flat vector of all trainable parameters with kernel values followed by bias values.
+    /// </summary>
+    /// <returns>
+    /// A vector containing the layer's parameters: the kernels laid out in the layer's internal tensor memory order first, then the biases.
+    /// </returns>
     public override Vector<T> GetParameters()
     {
         EnsureInitialized();
@@ -1352,7 +1368,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     }
 
     /// </summary>
-    /// <returns>A vector containing all parameter gradients (kernel gradients followed by bias gradients).</returns>
+    /// <summary>
+    /// Gets the concatenated gradient vector for all trainable parameters.
+    /// </summary>
+    /// <remarks>
+    /// If kernel or bias gradients are not available, returns a zero vector sized to <see cref="ParameterCount"/> without forcing layer initialization.
+    /// </remarks>
+    /// <returns>A <see cref="Vector{T}"/> containing kernel gradients followed by bias gradients, or a zero vector if gradients are not available.</returns>
     public override Vector<T> GetParameterGradients()
     {
         // If gradients haven't been computed yet, return zero gradients without
@@ -1395,6 +1417,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// 
     /// It's like replacing all the "knowledge" in the layer with new information.
     /// </para>
+    /// <summary>
+    /// Overwrites the layer's trainable parameters from a flat parameter vector, copying values into the layer's kernel and bias storage in-place.
+    /// </summary>
+    /// <param name="parameters">A flat vector whose first values populate the kernels (in the layer's internal layout) and whose remaining values populate the biases.</param>
+    /// <exception cref="ArgumentException">Thrown if the length of <paramref name="parameters"/> does not equal the expected total number of parameters (kernels + biases).</exception>
+    /// <remarks>
+    /// The copy is performed in-place into the existing kernel and bias tensors to preserve tensor identity; after copying, persistent tensor caches in the engine are invalidated so downstream GPU/engine state is refreshed.
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
