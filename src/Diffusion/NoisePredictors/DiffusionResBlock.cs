@@ -1,4 +1,5 @@
 ﻿#pragma warning disable CS0649, CS0414, CS0169
+using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -335,5 +336,126 @@ public class DiffusionResBlock<T> : LayerBase<T>
         _norm2.ResetState();
         _conv2.ResetState();
         _skipConv?.ResetState();
+    }
+
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Exports the full DDPM residual-block forward pass as a <see cref="ComputationNode{T}"/>
+    /// graph: <c>GroupNorm → SiLU → Conv3x3 → (+time_mlp(timeEmbed)) → GroupNorm → SiLU → Conv3x3 → (+skip_conv(x))</c>.
+    /// </summary>
+    /// <param name="inputNodes">
+    /// <c>[0]</c>: the spatial input <c>x</c> of shape <c>[B, inChannels, H, W]</c>.
+    /// <c>[1]</c> (optional): the time embedding of shape <c>[B, timeEmbedDim]</c>. When
+    /// omitted or when this block was constructed with <c>timeEmbedDim = 0</c>, the time
+    /// conditioning branch is skipped.
+    /// </param>
+    /// <returns>
+    /// The output node of shape <c>[B, outChannels, H, W]</c>, ready to be wired into a
+    /// parent graph (e.g. the UNet backbone's block chain).
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// Addresses the "DiffusionResBlock graph export" checklist item on
+    /// github.com/ooples/AiDotNet#1015. Previously the default <see cref="LayerBase{T}.ExportComputationGraph"/>
+    /// threw <see cref="NotSupportedException"/>, preventing the JIT compiler from
+    /// tracing any diffusion model. This export is the hot path — stacking ~40
+    /// ResBlocks into a SD15-class UNet and letting the JIT fuse
+    /// <c>GroupNorm+SiLU</c>, <c>Conv+Bias+SiLU</c>, and <c>ResidualAdd+GroupNorm</c>
+    /// is the reason the JIT infrastructure exists.
+    /// </para>
+    /// <para>
+    /// Weight tensors (<c>_norm1/_norm2.gamma</c>, <c>_conv1/_conv2.kernels</c>,
+    /// <c>_timeMlp.weights</c>, etc.) are emitted as <c>Constant</c> nodes —
+    /// inference-time compile treats them as frozen. Training-time compile is
+    /// out of scope for this PR; a follow-up can switch to <c>Variable</c> nodes
+    /// when the training loop wants JIT-compiled gradients.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null || inputNodes.Count == 0)
+            throw new ArgumentException("DiffusionResBlock.ExportComputationGraph requires at least one input node (the spatial input x).", nameof(inputNodes));
+
+        var x = inputNodes[0];
+        var timeEmbed = inputNodes.Count > 1 ? inputNodes[1] : null;
+
+        // Emit weight tensors as Constants. Names aid JIT debugging / dumps.
+        var norm1Gamma = TensorOperations<T>.Constant(_norm1.GetGammaTensor(), name: $"{GetType().Name}.norm1.gamma");
+        var norm1Beta = TensorOperations<T>.Constant(_norm1.GetBetaTensor(), name: $"{GetType().Name}.norm1.beta");
+        var norm2Gamma = TensorOperations<T>.Constant(_norm2.GetGammaTensor(), name: $"{GetType().Name}.norm2.gamma");
+        var norm2Beta = TensorOperations<T>.Constant(_norm2.GetBetaTensor(), name: $"{GetType().Name}.norm2.beta");
+
+        var conv1Kernel = TensorOperations<T>.Constant(_conv1.GetFilters(), name: $"{GetType().Name}.conv1.kernels");
+        var conv1Bias = TensorOperations<T>.Constant(_conv1.GetBiases(), name: $"{GetType().Name}.conv1.biases");
+        var conv2Kernel = TensorOperations<T>.Constant(_conv2.GetFilters(), name: $"{GetType().Name}.conv2.kernels");
+        var conv2Bias = TensorOperations<T>.Constant(_conv2.GetBiases(), name: $"{GetType().Name}.conv2.biases");
+
+        int groups1 = _norm1.NumGroups;
+        int groups2 = _norm2.NumGroups;
+        double eps1 = Convert.ToDouble(_norm1.GetEpsilon());
+        double eps2 = Convert.ToDouble(_norm2.GetEpsilon());
+
+        int stride1 = _conv1.Stride;
+        int pad1 = _conv1.Padding;
+        int stride2 = _conv2.Stride;
+        int pad2 = _conv2.Padding;
+
+        // First half-block: GroupNorm → SiLU → Conv3x3
+        var h = TensorOperations<T>.GroupNorm(x, groups1, norm1Gamma, norm1Beta, eps1);
+        h = TensorOperations<T>.Swish(h);
+        h = TensorOperations<T>.Conv2D(h, conv1Kernel, conv1Bias,
+            stride: new[] { stride1, stride1 },
+            padding: new[] { pad1, pad1 });
+
+        // Time conditioning: project timeEmbed through the SiLU-activated
+        // time MLP and broadcast-add over spatial dims. Matches the eager
+        // Forward(input, timeEmbed) path — only emitted when a time embedding
+        // node is supplied AND this block was constructed with timeEmbedDim > 0.
+        if (timeEmbed != null && _timeEmbedDim > 0)
+        {
+            var timeW = TensorOperations<T>.Constant(_timeMlp.GetWeights(), name: $"{GetType().Name}.time_mlp.weights");
+            var timeB = TensorOperations<T>.Constant(_timeMlp.GetBiases(), name: $"{GetType().Name}.time_mlp.biases");
+
+            // Dense forward: timeProj = SiLU(timeEmbed @ W + b)
+            var timeProj = TensorOperations<T>.MatrixMultiply(timeEmbed, timeW);
+            timeProj = TensorOperations<T>.Add(timeProj, timeB);
+            timeProj = TensorOperations<T>.Swish(timeProj);
+
+            // Reshape to [B, outChannels, 1, 1] so broadcast Add lifts to [B, outChannels, H, W].
+            int batch = timeProj.Value.Shape[0];
+            timeProj = TensorOperations<T>.Reshape(timeProj, new[] { batch, _outChannels, 1, 1 });
+            h = TensorOperations<T>.Add(h, timeProj);
+        }
+
+        // Skip connection: 1x1 conv when channels differ, identity otherwise.
+        ComputationNode<T> residual;
+        if (_skipConv is not null)
+        {
+            var skipKernel = TensorOperations<T>.Constant(_skipConv.GetFilters(), name: $"{GetType().Name}.skip_conv.kernels");
+            var skipBias = TensorOperations<T>.Constant(_skipConv.GetBiases(), name: $"{GetType().Name}.skip_conv.biases");
+            residual = TensorOperations<T>.Conv2D(x, skipKernel, skipBias,
+                stride: new[] { _skipConv.Stride, _skipConv.Stride },
+                padding: new[] { _skipConv.Padding, _skipConv.Padding });
+        }
+        else
+        {
+            residual = x;
+        }
+
+        // Second half-block: GroupNorm → SiLU → Conv3x3
+        h = TensorOperations<T>.GroupNorm(h, groups2, norm2Gamma, norm2Beta, eps2);
+        h = TensorOperations<T>.Swish(h);
+        h = TensorOperations<T>.Conv2D(h, conv2Kernel, conv2Bias,
+            stride: new[] { stride2, stride2 },
+            padding: new[] { pad2, pad2 });
+
+        // Residual add. The OperationFusionPass (pending on the Tensors side —
+        // see AiDotNet.Tensors#181 Pattern 14) will later fuse this Add with the
+        // next block's norm1, eliminating the intermediate materialization.
+        h = TensorOperations<T>.Add(h, residual);
+
+        return h;
     }
 }

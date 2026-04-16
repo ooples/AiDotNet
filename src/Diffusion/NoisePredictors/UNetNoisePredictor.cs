@@ -430,20 +430,98 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     }
 
 
+    /// <summary>
+    /// Per-instance compile cache for the UNet forward pass. Lazy-allocated
+    /// on first <see cref="PredictNoise"/> call when
+    /// <see cref="AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.EnableCompilation"/>
+    /// is on. Keyed by noisy-sample input shape — different shapes compile
+    /// different plans. Dropped when <see cref="ResetState"/> runs.
+    /// </summary>
+    private AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>? _compiledInferenceCache;
+
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
         _lastInput = noisySample;
 
-        // Compute timestep embedding
+        // Compute timestep embedding (already cached per-timestep in the base class).
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
-        // Forward pass
-        var output = ForwardUNet(noisySample, timeEmbed, conditioning);
+        // Compiled fast path — only when TensorCodecOptions.EnableCompilation is on.
+        // First call traces the eager ForwardUNet and compiles the plan; subsequent
+        // calls at the same shape replay the compiled plan.
+        var output = PredictCompiledForward(noisySample, timeEmbed, conditioning);
 
         _lastOutput = output;
         return output;
+    }
+
+    /// <summary>
+    /// Eagerly compiles the UNet forward pass for the given sample input shape,
+    /// storing the plan in the per-instance cache. Addresses the
+    /// "UNetNoisePredictor compiled forward" checklist item on
+    /// github.com/ooples/AiDotNet#1015.
+    /// </summary>
+    /// <param name="sampleNoisy">Representative noisy-sample tensor whose shape keys the plan.</param>
+    /// <param name="sampleTimestep">Timestep used for tracing. Any valid integer works — the plan's replay uses whichever timestep <see cref="PredictNoise"/> is called with.</param>
+    /// <param name="conditioning">Optional conditioning tensor of the shape production will use.</param>
+    /// <returns><c>true</c> when a compiled plan is cached; <c>false</c> when compilation is disabled or tracing throws.</returns>
+    /// <remarks>
+    /// Call this at startup with a representative input shape to avoid the
+    /// one-time trace+compile cost hitting the first real inference. Multiple
+    /// calls with different shapes pre-warm multiple plans in the same cache.
+    /// </remarks>
+    public bool CompileForward(Tensor<T> sampleNoisy, int sampleTimestep = 0, Tensor<T>? conditioning = null)
+    {
+        if (sampleNoisy is null)
+            throw new ArgumentNullException(nameof(sampleNoisy));
+        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
+            return false;
+
+        try
+        {
+            var timeEmbed = GetTimestepEmbedding(sampleTimestep);
+            timeEmbed = ProjectTimeEmbedding(timeEmbed);
+
+            var cache = _compiledInferenceCache ??= new AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>();
+            var plan = cache.GetOrCompileInference(
+                (int[])sampleNoisy._shape.Clone(),
+                () => ForwardUNet(sampleNoisy, timeEmbed, conditioning));
+            _ = plan.Execute();
+            return true;
+        }
+        catch
+        {
+            // Trace/compile failed — lazy compile on first PredictNoise
+            // will retry. PredictNoise's eager fallback still delivers a
+            // correct output.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Internal: dispatches to the compiled plan when available + enabled,
+    /// falling back to eager <see cref="ForwardUNet"/> otherwise. Mirrors
+    /// <see cref="AiDotNet.NeuralNetworks.NeuralNetworkBase{T}.PredictCompiled"/>.
+    /// </summary>
+    private Tensor<T> PredictCompiledForward(Tensor<T> noisySample, Tensor<T> timeEmbed, Tensor<T>? conditioning)
+    {
+        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
+            return ForwardUNet(noisySample, timeEmbed, conditioning);
+
+        try
+        {
+            var cache = _compiledInferenceCache ??= new AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>();
+            var plan = cache.GetOrCompileInference(
+                (int[])noisySample._shape.Clone(),
+                () => ForwardUNet(noisySample, timeEmbed, conditioning));
+            return plan.Execute();
+        }
+        catch
+        {
+            return ForwardUNet(noisySample, timeEmbed, conditioning);
+        }
     }
 
     /// <inheritdoc />
