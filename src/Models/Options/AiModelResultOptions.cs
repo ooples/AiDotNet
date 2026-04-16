@@ -593,6 +593,30 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     /// </remarks>
     public InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
+    /// <summary>
+    /// Gets or sets the builder's determinism policy. When <c>false</c> (the
+    /// builder default), <c>AiModelResult.Predict</c> re-asserts deterministic
+    /// mode on the current thread's engine. Bridges the builder's deterministic-
+    /// by-default policy across thread boundaries (e.g., request pools).
+    /// </summary>
+    /// <value>
+    /// <c>true</c> to allow the engine to pick the fastest available kernels
+    /// even when they introduce cross-run floating-point variance; <c>false</c>
+    /// (default) to enforce bitwise-reproducible kernels on every Predict.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Determinism means "running the same input through
+    /// the same model produces the same output, every time, on every machine."
+    /// Production systems typically want this for reproducibility — debugging,
+    /// regression tests, and regulatory audits all rely on it. Keep this
+    /// <c>false</c> (the default) unless you specifically need maximum throughput
+    /// and accept that a kernel might pick a different summation order across
+    /// runs (which can flip the last few floating-point bits of the result).
+    /// </para>
+    /// </remarks>
+    public bool AllowNondeterminism { get; set; }
+
     // ============================================================================
     // Augmentation Properties
     // ============================================================================

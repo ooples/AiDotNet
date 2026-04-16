@@ -1347,6 +1347,19 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureInferenceOptimizations(AiDotNet.Configuration.InferenceOptimizationConfig? config = null);
 
     /// <summary>
+    /// Opts out of the builder's deterministic-by-default policy. By default
+    /// <see cref="BuildAsync"/> forces bitwise-reproducible kernels on the engine.
+    /// Call this to let the engine pick the fastest available kernels even if
+    /// that introduces cross-run floating-point variance.
+    /// </summary>
+    /// <returns>This builder for fluent chaining.</returns>
+    /// <remarks>
+    /// Do not call this in production serving where reproducibility matters for
+    /// debugging, regression tests, or regulatory compliance.
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> AllowNondeterminism();
+
+    /// <summary>
     /// Configures mixed-precision training for faster neural network training with reduced memory usage.
     /// </summary>
     /// <param name="config">Mixed precision configuration (optional, uses defaults if null).</param>

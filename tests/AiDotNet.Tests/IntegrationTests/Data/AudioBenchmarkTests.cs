@@ -445,6 +445,294 @@ public class AudioBenchmarkTests
         Assert.Equal("v3.0.0", options.Version);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task SpeechCommandsLoader_CoreSubset_LoadsSyntheticDataWith12Classes()
+    {
+        // Locks down the Warden-2018 12-class core scheme: 10 keywords + _silence_ + _unknown_,
+        // per-class limiting, official-split honouring, and one-hot label shape.
+        string tempDir = CreateTempDirectory();
+        try
+        {
+            // Two keyword dirs (yes/no) + one non-core dir (cat → _unknown_) + the
+            // background-noise dir (→ _silence_), each with a couple of WAV files.
+            CreateSpeechCommandsDir(tempDir, "yes",  count: 3);
+            CreateSpeechCommandsDir(tempDir, "no",   count: 3);
+            CreateSpeechCommandsDir(tempDir, "cat",  count: 2); // collapsed to _unknown_
+            CreateSpeechCommandsBackgroundNoise(tempDir, count: 2);
+
+            // No testing/validation lists: every WAV is "train".
+            var options = new SpeechCommandsDataLoaderOptions
+            {
+                DataPath = tempDir,
+                AutoDownload = false,
+                UseCoreSubset = true,
+                MaxSamplesPerClass = 5,
+                SilenceSampleCount = 2,
+                TargetLength = 1600 // 100ms at 16kHz, keeps the test fast
+            };
+
+            var loader = new SpeechCommandsDataLoader<float>(options);
+            await loader.LoadAsync();
+
+            Assert.Equal(12, loader.NumClasses);
+            Assert.Equal(12, loader.OutputDimension);
+            Assert.Equal(1600, loader.FeatureCount);
+
+            // Sample count = 3 yes + 3 no + 2 unknown + 2 silence = 10
+            Assert.Equal(10, loader.TotalCount);
+
+            // Word list ends in the two synthetic labels.
+            Assert.Equal("_silence_", loader.WordList[10]);
+            Assert.Equal("_unknown_", loader.WordList[11]);
+
+            // Pulling a batch goes through the streaming ExtractBatch path:
+            // confirms the on-demand WAV decode works and the label shape is correct.
+            // (Split() is NotSupported on this streaming loader, so we iterate
+            // GetBatches directly to exercise the same codepath.)
+            var first = loader.GetBatches(batchSize: loader.TotalCount, shuffle: false).First();
+            Assert.Equal(new[] { loader.TotalCount, 1600 }, first.Features.Shape.ToArray());
+            Assert.Equal(new[] { loader.TotalCount, 12 }, first.Labels.Shape.ToArray());
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpeechCommandsLoader_FullMode_AllowsAll35Classes()
+    {
+        // Verifies the full 35-class path doesn't accidentally inject silence/unknown.
+        string tempDir = CreateTempDirectory();
+        try
+        {
+            CreateSpeechCommandsDir(tempDir, "yes", count: 1);
+            CreateSpeechCommandsDir(tempDir, "no",  count: 1);
+            CreateSpeechCommandsDir(tempDir, "cat", count: 1);
+
+            var options = new SpeechCommandsDataLoaderOptions
+            {
+                DataPath = tempDir,
+                AutoDownload = false,
+                UseCoreSubset = false,
+                TargetLength = 1600
+            };
+
+            var loader = new SpeechCommandsDataLoader<float>(options);
+            await loader.LoadAsync();
+
+            Assert.Equal(35, loader.NumClasses);
+            Assert.Equal(35, loader.OutputDimension);
+            // Only the three populated keyword dirs contribute samples in full mode.
+            Assert.Equal(3, loader.TotalCount);
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpeechCommandsLoader_Resampling_ProducesTargetLengthOutput()
+    {
+        // Confirms the linear-interp resampling path runs end-to-end and the
+        // resulting batch tensor has shape [N, TargetLength] at the requested rate.
+        string tempDir = CreateTempDirectory();
+        try
+        {
+            CreateSpeechCommandsDir(tempDir, "yes", count: 2);
+
+            var options = new SpeechCommandsDataLoaderOptions
+            {
+                DataPath = tempDir,
+                AutoDownload = false,
+                UseCoreSubset = false,        // skip silence/unknown for a focused resample test
+                SampleRate = 8000,            // half of native 16kHz
+                TargetLength = 800,           // 100ms at 8kHz
+            };
+
+            var loader = new SpeechCommandsDataLoader<float>(options);
+            await loader.LoadAsync();
+
+            Assert.Equal(2, loader.TotalCount);
+            Assert.Equal(800, loader.FeatureCount);
+
+            // Iterate a batch directly — Split() is NotSupported on this streaming
+            // loader, so GetBatches is the way to verify the post-resample shape.
+            var first = loader.GetBatches(batchSize: 2, shuffle: false).First();
+            Assert.Equal(new[] { 2, 800 }, first.Features.Shape.ToArray());
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpeechCommandsLoader_AutoDownloadDisabled_ThrowsOnMissingData()
+    {
+        // Verifies that AutoDownload=false now actually throws (the previous loader
+        // ignored the flag and emitted a misleading "no data found" error).
+        string tempDir = CreateTempDirectory();
+        try
+        {
+            // Note: empty directory — no Speech Commands files at all.
+            var options = new SpeechCommandsDataLoaderOptions
+            {
+                DataPath = tempDir,
+                AutoDownload = false,
+                UseCoreSubset = true,
+            };
+
+            var loader = new SpeechCommandsDataLoader<float>(options);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => loader.LoadAsync());
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpeechCommandsLoader_OfficialSplitLists_RouteSamplesToCorrectSplit()
+    {
+        // Regression test for the testing_list.txt / validation_list.txt parsing
+        // and the IsInRequestedSplit filter. Two test/val entries per word mean
+        // Train should see fewer samples than the full dir count while Validation
+        // and Test each expose their own dedicated entries.
+        string tempDir = CreateTempDirectory();
+        try
+        {
+            CreateSpeechCommandsDir(tempDir, "yes", count: 5);
+            CreateSpeechCommandsDir(tempDir, "no",  count: 5);
+
+            // Split-list format (relative path with forward slashes, matching the
+            // dataset's Unix-style listing files that the loader then normalises).
+            File.WriteAllLines(Path.Combine(tempDir, "validation_list.txt"), new[]
+            {
+                "yes/speaker0_nohash_0.wav",
+                "no/speaker0_nohash_0.wav",
+            });
+            File.WriteAllLines(Path.Combine(tempDir, "testing_list.txt"), new[]
+            {
+                "yes/speaker1_nohash_0.wav",
+                "no/speaker1_nohash_0.wav",
+            });
+
+            // Train split — expect 3 yes + 3 no = 6 (the 2+2 val/test entries dropped).
+            var trainOptions = new SpeechCommandsDataLoaderOptions
+            {
+                DataPath = tempDir, AutoDownload = false, UseCoreSubset = false,
+                SilenceSampleCount = 0, TargetLength = 1600,
+                Split = AiDotNet.Data.Geometry.DatasetSplit.Train,
+            };
+            var trainLoader = new SpeechCommandsDataLoader<float>(trainOptions);
+            await trainLoader.LoadAsync();
+            Assert.Equal(6, trainLoader.TotalCount);
+
+            // Validation split — expect 1 yes + 1 no = 2.
+            var valOptions = new SpeechCommandsDataLoaderOptions
+            {
+                DataPath = tempDir, AutoDownload = false, UseCoreSubset = false,
+                SilenceSampleCount = 0, TargetLength = 1600,
+                Split = AiDotNet.Data.Geometry.DatasetSplit.Validation,
+            };
+            var valLoader = new SpeechCommandsDataLoader<float>(valOptions);
+            await valLoader.LoadAsync();
+            Assert.Equal(2, valLoader.TotalCount);
+
+            // Test split — expect 1 yes + 1 no = 2.
+            var testOptions = new SpeechCommandsDataLoaderOptions
+            {
+                DataPath = tempDir, AutoDownload = false, UseCoreSubset = false,
+                SilenceSampleCount = 0, TargetLength = 1600,
+                Split = AiDotNet.Data.Geometry.DatasetSplit.Test,
+            };
+            var testLoader = new SpeechCommandsDataLoader<float>(testOptions);
+            await testLoader.LoadAsync();
+            Assert.Equal(2, testLoader.TotalCount);
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpeechCommandsLoader_MaxSamplesPerClass_EnforcesCap()
+    {
+        // Regression test for the per-class cap. Each keyword dir has 10 WAVs;
+        // with MaxSamplesPerClass=3 we expect exactly 6 samples (3 yes + 3 no).
+        string tempDir = CreateTempDirectory();
+        try
+        {
+            CreateSpeechCommandsDir(tempDir, "yes", count: 10);
+            CreateSpeechCommandsDir(tempDir, "no",  count: 10);
+
+            var options = new SpeechCommandsDataLoaderOptions
+            {
+                DataPath = tempDir, AutoDownload = false, UseCoreSubset = false,
+                SilenceSampleCount = 0, TargetLength = 1600,
+                MaxSamplesPerClass = 3,
+            };
+            var loader = new SpeechCommandsDataLoader<float>(options);
+            await loader.LoadAsync();
+            Assert.Equal(6, loader.TotalCount);
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpeechCommandsLoader_Split_ThrowsNotSupported()
+    {
+        // The loader is streaming-only; Split() must throw rather than silently
+        // materialising the whole dataset into memory.
+        string tempDir = CreateTempDirectory();
+        try
+        {
+            CreateSpeechCommandsDir(tempDir, "yes", count: 2);
+
+            var options = new SpeechCommandsDataLoaderOptions
+            {
+                DataPath = tempDir, AutoDownload = false, UseCoreSubset = false,
+                SilenceSampleCount = 0, TargetLength = 1600,
+            };
+            var loader = new SpeechCommandsDataLoader<float>(options);
+            await loader.LoadAsync();
+
+            Assert.Throws<NotSupportedException>(() =>
+                loader.Split(trainRatio: 0.5, validationRatio: 0.25, seed: 0));
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    private static void CreateSpeechCommandsDir(string root, string word, int count)
+    {
+        string dir = Path.Combine(root, word);
+        Directory.CreateDirectory(dir);
+        for (int i = 0; i < count; i++)
+        {
+            string fileName = $"speaker{i}_nohash_0.wav";
+            File.WriteAllBytes(Path.Combine(dir, fileName), CreateSyntheticWav(16000, 1.0));
+        }
+    }
+
+    private static void CreateSpeechCommandsBackgroundNoise(string root, int count)
+    {
+        string dir = Path.Combine(root, "_background_noise_");
+        Directory.CreateDirectory(dir);
+        for (int i = 0; i < count; i++)
+        {
+            File.WriteAllBytes(Path.Combine(dir, $"noise{i}.wav"), CreateSyntheticWav(16000, 1.0));
+        }
+    }
+
     /// <summary>
     /// Creates a minimal synthetic WAV file with a 44-byte header and 16-bit PCM samples.
     /// </summary>

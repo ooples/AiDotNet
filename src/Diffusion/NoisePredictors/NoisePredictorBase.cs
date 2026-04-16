@@ -1,4 +1,5 @@
-﻿using AiDotNet.Autodiff;
+﻿using System.Linq;
+using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -25,12 +26,157 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// extend this base class.
 /// </para>
 /// </remarks>
-public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
+public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, IDisposable
 {
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
     /// </summary>
     protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
+    /// Composable inference-compilation helper. Concrete predictors route their
+    /// <see cref="PredictNoiseWithEmbedding"/> through <see cref="PredictCompiled"/>
+    /// to get compiled-plan replay across the 50+ denoising steps in the diffusion
+    /// loop. First call traces, subsequent calls replay. Falls back to eager when
+    /// compilation is disabled or fails.
+    /// </summary>
+    private readonly AiDotNet.NeuralNetworks.CompiledModelHost<T> _compileHost = new();
+
+    /// <summary>
+    /// Monotonic layer-graph version. Concrete predictors bump this via
+    /// <see cref="InvalidateCompiledPlans"/> after lazy-init expands tensor shapes
+    /// or after <see cref="SetParameters"/> swaps weights. The host drops stale
+    /// plans automatically when the version changes.
+    /// </summary>
+    private int _layerStructureVersion;
+
+    private bool _disposed;
+
+    /// <summary>
+    /// Concrete predictors can override to expose their <see cref="ILayer{T}"/>
+    /// instances for (a) Dispose cascade — pool-rented weight tensors return to
+    /// the allocator, and (b) future compilation features (plan serialization,
+    /// CUDA Graph capture) that need visibility into the layer graph.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Default behavior</b>: returns an empty enumeration. Reflection-
+    /// based discovery is NOT the default because it would dispose layers
+    /// the predictor doesn't own (e.g., injected/shared cross-attention
+    /// layers from a shared encoder, a VAE reference passed in by the
+    /// caller). Ownership is expressed by what a predictor explicitly
+    /// enumerates, not by what reflection happens to find.
+    /// </para>
+    /// <para>
+    /// Concrete predictors that own their layers and want Dispose-time
+    /// cleanup can either:
+    /// </para>
+    /// <list type="number">
+    /// <item>Override and yield specific field references explicitly
+    /// (recommended — zero reflection cost, explicit ownership).</item>
+    /// <item>Opt in to <see cref="ReflectInstanceLayers"/> explicitly via
+    /// <c>protected override IEnumerable&lt;ILayer&lt;T&gt;&gt; EnumerateLayers() =&gt; ReflectInstanceLayers(this);</c>.
+    /// The reflector walks fields plus <see cref="System.Collections.IEnumerable"/>
+    /// and <see cref="System.Collections.IDictionary"/> elements that
+    /// implement <see cref="ILayer{T}"/>, but does NOT recurse into
+    /// arbitrary nested reference-type objects — a
+    /// <c>List&lt;DiTBlock&gt;</c> where <c>DiTBlock</c> only holds layer
+    /// <i>properties</i> is not discovered.</item>
+    /// </list>
+    /// </remarks>
+    protected virtual IEnumerable<ILayer<T>> EnumerateLayers() =>
+        Enumerable.Empty<ILayer<T>>();
+
+    /// <summary>
+    /// Walks an object's instance fields and yields anything that implements
+    /// <see cref="ILayer{T}"/>, including layers stored in collection fields.
+    /// Used as the default fallback for <see cref="EnumerateLayers"/> so concrete
+    /// predictors don't need to override just to get correct cleanup.
+    /// </summary>
+    protected static IEnumerable<ILayer<T>> ReflectInstanceLayers(object root)
+    {
+        var visited = new HashSet<object>(AiDotNet.Helpers.TensorReferenceComparer<object>.Instance);
+        if (!visited.Add(root)) yield break;
+
+        var type = root.GetType();
+        const System.Reflection.BindingFlags fieldFlags =
+            System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.Public |
+            System.Reflection.BindingFlags.NonPublic;
+        for (var t = type; t != null && t != typeof(object); t = t.BaseType)
+        {
+            foreach (var field in t.GetFields(fieldFlags | System.Reflection.BindingFlags.DeclaredOnly))
+            {
+                if (field.FieldType.IsValueType || field.FieldType == typeof(string)) continue;
+                object? value;
+                try { value = field.GetValue(root); }
+                catch (Exception ex)
+                {
+                    // Trace rather than silently skip — without this a private
+                    // field whose getter throws would leak its layer's resources
+                    // without any diagnostic trail at Dispose time.
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"NoisePredictorBase.Dispose: skipping field '{field.Name}' " +
+                        $"on {t.Name} due to reflection read failure: {ex.GetType().Name}: {ex.Message}");
+                    continue;
+                }
+                if (value is null || !visited.Add(value)) continue;
+
+                if (value is ILayer<T> layer)
+                {
+                    yield return layer;
+                }
+                else if (value is System.Collections.IDictionary dictionary)
+                {
+                    // Dictionary<K, V>.GetEnumerator yields KeyValuePair<K,V>,
+                    // not the values — so the generic IEnumerable branch below
+                    // would MISS layers held in the values slot. Handle
+                    // IDictionary explicitly so Dictionary<K, ILayer<T>> is
+                    // disposed correctly.
+                    foreach (System.Collections.DictionaryEntry entry in dictionary)
+                    {
+                        if (entry.Value is ILayer<T> nestedLayer && visited.Add(entry.Value))
+                            yield return nestedLayer;
+                    }
+                }
+                else if (value is System.Collections.IEnumerable enumerable && value is not string)
+                {
+                    foreach (var item in enumerable)
+                    {
+                        if (item is ILayer<T> nestedLayer && visited.Add(item))
+                            yield return nestedLayer;
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Runs <paramref name="eagerFallback"/> under the compile host — traces on
+    /// first call at each input shape, replays the compiled plan on subsequent
+    /// calls. Concrete predictors call this from hot forward paths (e.g., the
+    /// per-step <see cref="Forward"/> during the diffusion denoising loop) to
+    /// get near-zero-overhead replay after the first trace.
+    /// </summary>
+    /// <param name="input">Shape key for the compile cache.</param>
+    /// <param name="eagerFallback">The eager forward pass (traced, replayed, or fallback).</param>
+    protected Tensor<T> PredictCompiled(Tensor<T> input, Func<Tensor<T>> eagerFallback) =>
+        _compileHost.Predict(input, _layerStructureVersion, eagerFallback);
+
+    /// <summary>
+    /// Bump to signal the layer graph has changed — lazy init expanded a tensor,
+    /// weights were reassigned, a sub-layer was replaced. The compile host drops
+    /// any plan captured against the prior graph on the next <see cref="PredictCompiled"/>.
+    /// </summary>
+    protected void InvalidateCompiledPlans()
+    {
+        _layerStructureVersion++;
+        // Drop the cache eagerly rather than wait for the next PredictCompiled
+        // to detect the version mismatch. This releases captured tensor buffers
+        // immediately — important when the caller is invalidating because the
+        // old graph holds memory we want to reclaim now.
+        _compileHost.Invalidate();
+    }
 
     /// <summary>
     /// Provides numeric operations for the specific type T.
@@ -528,6 +674,64 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
         }
 
         return noise;
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases managed resources — compiled plans first (so pooled tensor
+    /// buffers the plans captured are freed before layers Dispose and return
+    /// their weights), then every <see cref="ILayer{T}"/> exposed by
+    /// <see cref="EnumerateLayers"/> that implements <see cref="IDisposable"/>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="EnumerateLayers"/> defaults to a reflection walk over
+    /// instance fields, so subclasses get the cascade automatically. Concrete
+    /// predictors that want to constrain WHAT gets disposed (e.g., skip a
+    /// shared layer injected via constructor that the predictor doesn't own)
+    /// override <see cref="EnumerateLayers"/> to return an explicit allow-list.
+    /// The <see cref="ObjectDisposedException"/> catch prevents a shared-layer
+    /// graph — the same <see cref="ILayer{T}"/> instance used by multiple
+    /// predictors or networks — from aborting the cascade when a previous
+    /// owner already disposed it.
+    /// </remarks>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed || !disposing) return;
+        _disposed = true;
+
+        _compileHost.Dispose();
+
+        // Release tensor handles cached per integer timestep — these are
+        // owned exclusively by this predictor and have no other Dispose path.
+        foreach (var embedding in _timestepEmbeddingCache.Values)
+        {
+            if (embedding is IDisposable d) d.Dispose();
+        }
+        _timestepEmbeddingCache.Clear();
+
+        // Route layer Dispose through DisposeOnceGuard — shared layers
+        // between predictors (ensemble predictors, cross-attention layers
+        // reused from a shared encoder, VAE layers injected into multiple
+        // wrappers) are common. Relying on ObjectDisposedException is
+        // unsafe because many layer Dispose implementations double-return
+        // pooled tensor buffers on a second Dispose call without throwing.
+        foreach (var layer in EnumerateLayers())
+        {
+            if (layer is IDisposable disposable)
+            {
+                AiDotNet.Helpers.DisposeOnceGuard.TryDispose(disposable);
+            }
+        }
     }
 
     #endregion

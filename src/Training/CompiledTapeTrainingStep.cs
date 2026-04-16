@@ -35,23 +35,48 @@ public static class CompiledTapeTrainingStep<T>
     private static Tensor<T>[]? _cachedParameters;
 
     /// <summary>
-    /// Per-plan optimizer configuration tracker. Keyed by plan reference so
-    /// each compiled plan is configured <i>exactly once</i>, even when the
-    /// training loop alternates between multiple plans (e.g., last partial
-    /// batch, variable sequence lengths, or variable {input, target} shape
-    /// pairs). Without this, a single-slot tracker would call
-    /// <c>ConfigureOptimizer</c> again every time control returned to a
-    /// previously-configured plan, resetting Adam's m/v buffers and silently
-    /// corrupting training.
-    /// <para>
-    /// <see cref="ThreadStaticAttribute"/> so the dict is per-thread (no lock
-    /// overhead); <see cref="TensorReferenceComparer{T}"/> gives us reference
-    /// equality in net471-compatible form (no <c>ReferenceEqualityComparer</c>
-    /// dependency).
-    /// </para>
+    /// The single plan that has been configured with an optimizer on this
+    /// thread. <b>Strict single-plan semantics</b>: Adam/AdamW/SGD moment
+    /// buffers live INSIDE the compiled plan (via
+    /// <c>ICompiledTrainingPlan.ConfigureOptimizer</c>), so allowing multiple
+    /// plans to each accumulate their own state would silently fork
+    /// optimizer state across variable-shape batches and diverge from the
+    /// reference eager semantics (one optimizer, one state vector). Any
+    /// attempt to engage a DIFFERENT plan on the same thread returns
+    /// <c>false</c> from <see cref="TryStepWithFusedOptimizer"/> — the
+    /// caller must decide whether to halt or continue via eager (the
+    /// NeuralNetworkBase caller enforces a strict commitment so the
+    /// state-loss cannot happen silently).
     /// </summary>
     [ThreadStatic]
-    private static Dictionary<object, (int OptType, float Lr, float B1, float B2, float Eps, float Wd)>? _planOptimizerConfigs;
+    private static object? _configuredPlan;
+
+    /// <summary>
+    /// Snapshot of the hyperparameters passed to
+    /// <c>ICompiledTrainingPlan.ConfigureOptimizer</c> on
+    /// <see cref="_configuredPlan"/>. Used to detect drift on the same
+    /// plan (LR change between steps, beta change) — reconfiguring would
+    /// reset m/v buffers and silently corrupt training, so on drift we
+    /// also return <c>false</c>.
+    /// </summary>
+    [ThreadStatic]
+    private static (int OptType, float Lr, float B1, float B2, float Eps, float Wd)? _configuredOptimizerConfig;
+
+    /// <summary>
+    /// Counter of successful fused-step executions on this thread. Exposed
+    /// via <see cref="GetFusedStepCount"/>/<see cref="ResetFusedStepCount"/>
+    /// so integration tests can assert that the fused compiled path
+    /// <i>actually engaged</i> rather than silently falling back to eager
+    /// (a test that only checks "finite loss" cannot distinguish the two).
+    /// </summary>
+    [ThreadStatic]
+    private static long _fusedStepCount;
+
+    /// <summary>Gets the count of successful fused-step executions on the calling thread.</summary>
+    public static long GetFusedStepCount() => _fusedStepCount;
+
+    /// <summary>Resets the fused-step counter on the calling thread to zero.</summary>
+    public static void ResetFusedStepCount() { _fusedStepCount = 0; }
 
     /// <summary>
     /// Executes a single compiled training step.
@@ -140,7 +165,12 @@ public static class CompiledTapeTrainingStep<T>
     {
         _cache?.Invalidate();
         _cachedParameters = null;
-        _planOptimizerConfigs?.Clear();
+        _configuredPlan = null;
+        _configuredOptimizerConfig = null;
+        // Reset the fused-engagement counter — from this point on, any
+        // assertion about "fused ran at least N times" should reflect the
+        // new lifecycle.
+        _fusedStepCount = 0;
     }
 
     /// <summary>
@@ -243,28 +273,27 @@ public static class CompiledTapeTrainingStep<T>
                 },
                 parameters);
 
-            // Configure once per fresh plan. Re-calling ConfigureOptimizer
-            // on the SAME plan re-allocates Adam's m/v buffers — so if the
-            // caller changes LR/betas mid-training we MUST NOT silently
-            // reconfigure (the resulting reset would corrupt training).
+            // STRICT SINGLE-PLAN POLICY: optimizer state lives inside the
+            // compiled plan (ConfigureOptimizer attaches m/v buffers directly
+            // to the plan object). Letting multiple plans each accumulate
+            // their own m/v would fork Adam state across variable-shape
+            // batches and silently diverge from eager semantics (where one
+            // optimizer holds one state vector across all shapes).
             //
-            // Track configuration per-plan (not single-slot). A training
-            // loop that alternates between multiple compiled plans (e.g.,
-            // full batches and a trailing partial batch, or variable
-            // sequence lengths) would otherwise re-configure every time
-            // control returned to a previously-seen plan. With the
-            // per-plan dictionary, each plan is configured exactly once,
-            // and drift on any one plan triggers the eager fallback for
-            // that plan without disturbing the others.
+            // So: the FIRST plan we see on this thread is the only plan we'll
+            // configure. Any subsequent call with a different plan (e.g., a
+            // new {input, target} shape combo producing a new compiled plan)
+            // returns false — the caller (NeuralNetworkBase) then enforces
+            // its commitment rule so state loss cannot happen silently.
+            //
+            // Drift on the SAME plan (LR or beta change between steps) also
+            // returns false — reconfiguring would reset m/v.
             var currentConfig = ((int)optimizerType, learningRate, beta1, beta2, epsilon, weightDecay);
-            var planConfigs = _planOptimizerConfigs
-                ??= new Dictionary<object, (int, float, float, float, float, float)>(
-                    AiDotNet.Helpers.TensorReferenceComparer<object>.Instance);
 
-            if (!planConfigs.TryGetValue(plan, out var priorConfig))
+            if (_configuredPlan is null)
             {
-                // First time seeing this plan on this thread. Configure
-                // fresh m/v buffers and record the config.
+                // First fused call on this thread. Configure the plan and
+                // commit to single-plan semantics from here on.
                 plan.ConfigureOptimizer(
                     optimizerType,
                     learningRate,
@@ -272,34 +301,48 @@ public static class CompiledTapeTrainingStep<T>
                     beta2,
                     epsilon,
                     weightDecay);
-                planConfigs[plan] = currentConfig;
+                _configuredPlan = plan;
+                _configuredOptimizerConfig = currentConfig;
             }
-            else if (!priorConfig.Equals(currentConfig))
+            else if (!ReferenceEquals(_configuredPlan, plan))
             {
-                // Same plan but optimizer config drifted between steps.
-                // Reconfiguring would reset m/v buffers and silently corrupt
-                // Adam training. Fall back to eager so the caller's pluggable
-                // optimizer (which owns its state) handles the LR change
-                // correctly. The caller's sticky-disable will keep subsequent
-                // steps on eager so we don't oscillate between the two.
+                // Plan switch → different shape or structure produced a new
+                // compiled plan. Using a fresh plan would fork optimizer
+                // state, so refuse and let the caller handle it (the
+                // NeuralNetworkBase caller throws once fused has committed).
+                return false;
+            }
+            else if (_configuredOptimizerConfig is null
+                || !_configuredOptimizerConfig.Value.Equals(currentConfig))
+            {
+                // Same plan, drifted hyperparameters between steps. Refuse
+                // to re-configure (would reset m/v) and let the caller
+                // handle the drift.
                 return false;
             }
 
             // Execute forward + backward + fused parameter update in one replay.
             var lossOutput = plan.Step();
             lossValue = lossOutput.Length > 0 ? lossOutput[0] : MathHelper.GetNumericOperations<T>().Zero;
+            // Signal successful fused engagement so tests/diagnostics can
+            // assert the compiled path actually ran — distinguishing it from
+            // a silent fallback to the eager path.
+            _fusedStepCount++;
             return true;
         }
         catch (Exception ex)
         {
             // Trace the failure so fused-path regressions are observable in
-            // production telemetry. Clear the per-plan config cache so any
-            // next attempt reconfigures fresh — we can't know which plan
-            // (if any) ended up in a partial state, so drop them all.
+            // production telemetry. Include ex.ToString() so stack trace +
+            // inner exceptions reach telemetry — without these, diagnosing
+            // a fused-path regression from logs requires reproducing the
+            // failure locally. Clear the single-slot config state so any
+            // next attempt reconfigures fresh.
             System.Diagnostics.Trace.TraceWarning(
                 $"CompiledTapeTrainingStep.TryStepWithFusedOptimizer failed, falling back to eager: " +
-                $"{ex.GetType().Name}: {ex.Message}");
-            _planOptimizerConfigs?.Clear();
+                $"{ex}");
+            _configuredPlan = null;
+            _configuredOptimizerConfig = null;
             return false;
         }
     }
