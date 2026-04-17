@@ -1,4 +1,3 @@
-using System.Reflection;
 using AiDotNet.Data;
 using Xunit;
 
@@ -16,41 +15,15 @@ namespace AiDotNetTests.UnitTests.Data;
 /// backoff before propagating. Used by DatasetDownloader, WeightDownloader,
 /// HuggingFaceModelLoader, OnnxModelDownloader, M4DatasetLoader, and the
 /// BTreeIndex atomic flush path.
+///
+/// Calls are direct (not reflection-based) — ``AiDotNet`` marks this
+/// assembly as <see cref="System.Runtime.CompilerServices.InternalsVisibleToAttribute"/>
+/// so ``RobustFileOps``'s internal methods are compile-time visible.
+/// That catches rename / signature regressions at build time instead of
+/// runtime.
 /// </summary>
 public class RobustFileOpsMoveRetryTests
 {
-    private static readonly MethodInfo MoveWithRetryAsyncMethod =
-        typeof(RobustFileOps).GetMethod(
-            "MoveWithRetryAsync",
-            BindingFlags.Static | BindingFlags.NonPublic)
-        ?? throw new InvalidOperationException("MoveWithRetryAsync not found; helper may have been reverted.");
-
-    private static readonly MethodInfo MoveWithRetrySyncMethod =
-        typeof(RobustFileOps).GetMethod(
-            "MoveWithRetry",
-            BindingFlags.Static | BindingFlags.NonPublic)
-        ?? throw new InvalidOperationException("MoveWithRetry (sync) not found; helper may have been reverted.");
-
-    private static readonly MethodInfo ReplaceWithRetryMethod =
-        typeof(RobustFileOps).GetMethod(
-            "ReplaceWithRetry",
-            BindingFlags.Static | BindingFlags.NonPublic)
-        ?? throw new InvalidOperationException("ReplaceWithRetry not found; helper may have been reverted.");
-
-    private static Task InvokeMoveAsync(string src, string dst, int maxAttempts = 5, int delayMs = 1)
-        => (Task)MoveWithRetryAsyncMethod.Invoke(
-            null,
-            new object[] { src, dst, CancellationToken.None, maxAttempts, delayMs })!;
-
-    private static void InvokeMoveSync(string src, string dst, int maxAttempts = 5, int delayMs = 1)
-        => MoveWithRetrySyncMethod.Invoke(
-            null,
-            new object[] { src, dst, maxAttempts, delayMs });
-
-    private static void InvokeReplaceSync(string src, string dst, string? backup, int maxAttempts = 5, int delayMs = 1)
-        => ReplaceWithRetryMethod.Invoke(
-            null,
-            new object?[] { src, dst, backup, maxAttempts, delayMs });
 
     [Fact]
     public async Task Move_Succeeds_WhenNoContention()
@@ -60,7 +33,7 @@ public class RobustFileOpsMoveRetryTests
         File.WriteAllBytes(src, [1, 2, 3, 4]);
         try
         {
-            await InvokeMoveAsync(src, dst);
+            await RobustFileOps.MoveWithRetryAsync(src, dst, CancellationToken.None, maxAttempts: 5, initialDelayMs: 1);
             Assert.True(File.Exists(dst));
             Assert.False(File.Exists(src));
             Assert.Equal(new byte[] { 1, 2, 3, 4 }, File.ReadAllBytes(dst));
@@ -125,8 +98,9 @@ public class RobustFileOpsMoveRetryTests
 
         try
         {
-            await InvokeMoveAsync(src, dst, maxAttempts: 8, delayMs: 100);
+            await RobustFileOps.MoveWithRetryAsync(src, dst, CancellationToken.None, maxAttempts: 8, initialDelayMs: 100);
             Assert.True(File.Exists(dst), "Destination should exist after retry-backed move");
+            Assert.False(File.Exists(src), "Source temp should have been consumed by the move");
             Assert.Equal(new byte[] { 9, 9, 9 }, File.ReadAllBytes(dst));
         }
         finally
@@ -155,7 +129,7 @@ public class RobustFileOpsMoveRetryTests
         File.WriteAllBytes(src, [7, 7, 7]);
         try
         {
-            InvokeMoveSync(src, dst);
+            RobustFileOps.MoveWithRetry(src, dst, maxAttempts: 5, initialDelayMs: 1);
             Assert.True(File.Exists(dst));
             Assert.False(File.Exists(src));
             Assert.Equal(new byte[] { 7, 7, 7 }, File.ReadAllBytes(dst));
@@ -183,7 +157,7 @@ public class RobustFileOpsMoveRetryTests
         File.WriteAllBytes(dst, [1, 2, 3]);  // destination must exist for File.Replace
         try
         {
-            InvokeReplaceSync(src, dst, bak);
+            RobustFileOps.ReplaceWithRetry(src, dst, bak, maxAttempts: 5, initialDelayMs: 1);
             Assert.True(File.Exists(dst), "Destination should exist after replace");
             Assert.False(File.Exists(src), "Source temp should have been consumed");
             Assert.Equal(new byte[] { 5, 5, 5 }, File.ReadAllBytes(dst));
@@ -216,7 +190,7 @@ public class RobustFileOpsMoveRetryTests
         try
         {
             await Assert.ThrowsAsync<IOException>(
-                () => InvokeMoveAsync(src, dst, maxAttempts: 3, delayMs: 1));
+                () => RobustFileOps.MoveWithRetryAsync(src, dst, CancellationToken.None, maxAttempts: 3, initialDelayMs: 1));
             Assert.False(File.Exists(dst), "Destination must not exist when the move fails");
         }
         finally
