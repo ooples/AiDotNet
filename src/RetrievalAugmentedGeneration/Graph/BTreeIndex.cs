@@ -227,20 +227,19 @@ public class BTreeIndex : IDisposable
                 }
             }
 
-            // Replace old index file with new one atomically
+            // Replace old index file with new one atomically. Both Move
+            // and Replace can fail with sharing violations on Windows when
+            // Defender or the indexer is mid-scan; RobustFileOps retries
+            // with linear backoff on transient IOException.
             if (File.Exists(_indexFilePath))
             {
-                // Use File.Replace for atomic replacement on Windows
                 var backupPath = _indexFilePath + ".bak";
-                File.Replace(tempPath, _indexFilePath, backupPath);
-                // Clean up backup file
+                RobustFileOps.ReplaceWithRetry(tempPath, _indexFilePath, backupPath);
                 if (File.Exists(backupPath))
                     File.Delete(backupPath);
             }
             else
             {
-                // Retry on transient sharing violations — a freshly written
-                // index file can briefly be held by AV / indexer on Windows.
                 RobustFileOps.MoveWithRetry(tempPath, _indexFilePath);
             }
 

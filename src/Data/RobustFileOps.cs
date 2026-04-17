@@ -107,4 +107,47 @@ internal static class RobustFileOps
         // Final attempt: propagate.
         File.Move(sourcePath, destinationPath);
     }
+
+    /// <summary>
+    /// Atomically replaces <paramref name="destinationPath"/> with
+    /// <paramref name="sourcePath"/>, optionally keeping a backup at
+    /// <paramref name="destinationBackupPath"/>. Retries on transient
+    /// <see cref="IOException"/> / <see cref="UnauthorizedAccessException"/>
+    /// with linear backoff, mirroring <see cref="MoveWithRetry"/>.
+    /// Synchronous; used by atomic index / checkpoint flush paths that are
+    /// not async.
+    /// </summary>
+    /// <remarks>
+    /// On Windows <see cref="File.Replace(string, string, string)"/> is the
+    /// in-place atomic rename, but it can still fail with a sharing
+    /// violation if Windows Defender or the search indexer is mid-scan of
+    /// either file.
+    /// </remarks>
+    internal static void ReplaceWithRetry(
+        string sourcePath,
+        string destinationPath,
+        string? destinationBackupPath,
+        int maxAttempts = 5,
+        int initialDelayMs = 200)
+    {
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                File.Replace(sourcePath, destinationPath, destinationBackupPath);
+                return;
+            }
+            catch (IOException) when (attempt < maxAttempts)
+            {
+                Thread.Sleep(initialDelayMs * attempt);
+            }
+            catch (UnauthorizedAccessException) when (attempt < maxAttempts)
+            {
+                Thread.Sleep(initialDelayMs * attempt);
+            }
+        }
+
+        // Final attempt: propagate.
+        File.Replace(sourcePath, destinationPath, destinationBackupPath);
+    }
 }

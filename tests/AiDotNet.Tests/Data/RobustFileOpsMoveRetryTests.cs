@@ -31,6 +31,12 @@ public class RobustFileOpsMoveRetryTests
             BindingFlags.Static | BindingFlags.NonPublic)
         ?? throw new InvalidOperationException("MoveWithRetry (sync) not found; helper may have been reverted.");
 
+    private static readonly MethodInfo ReplaceWithRetryMethod =
+        typeof(RobustFileOps).GetMethod(
+            "ReplaceWithRetry",
+            BindingFlags.Static | BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException("ReplaceWithRetry not found; helper may have been reverted.");
+
     private static Task InvokeMoveAsync(string src, string dst, int maxAttempts = 5, int delayMs = 1)
         => (Task)MoveWithRetryAsyncMethod.Invoke(
             null,
@@ -40,6 +46,11 @@ public class RobustFileOpsMoveRetryTests
         => MoveWithRetrySyncMethod.Invoke(
             null,
             new object[] { src, dst, maxAttempts, delayMs });
+
+    private static void InvokeReplaceSync(string src, string dst, string? backup, int maxAttempts = 5, int delayMs = 1)
+        => ReplaceWithRetryMethod.Invoke(
+            null,
+            new object?[] { src, dst, backup, maxAttempts, delayMs });
 
     [Fact]
     public async Task Move_Succeeds_WhenNoContention()
@@ -74,23 +85,43 @@ public class RobustFileOpsMoveRetryTests
         string dst = Path.Combine(Path.GetTempPath(), $"aidotnet_move_dst_{Guid.NewGuid()}.bin");
         File.WriteAllBytes(src, [9, 9, 9]);
 
-        // Hold an exclusive handle for ~250 ms then release, letting the
-        // retry loop (linear 1ms * attempt backoff, max 5 attempts) get
-        // through. The retry delay is scaled up to 100 ms per attempt here
-        // so the test is not racy; the production default is 200 ms.
-        var lockRelease = new TaskCompletionSource<bool>();
+        // Acquire an exclusive handle on the source, synchronize with the
+        // main test so the retry path is actually exercised (otherwise
+        // Task.Run scheduling could let the main thread call File.Move
+        // before the lock exists and the test passes trivially without
+        // ever triggering retry), hold the handle for ~250 ms, then
+        // release so the retry loop eventually succeeds. Retry delay is
+        // scaled up to 100 ms per attempt here to keep the race window
+        // deterministic; production default is 200 ms.
+        var lockAcquired = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var lockRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _ = Task.Run(async () =>
         {
             try
             {
                 using var holder = new FileStream(src, FileMode.Open, FileAccess.Read, FileShare.None);
+                lockAcquired.TrySetResult(true);
                 await Task.Delay(TimeSpan.FromMilliseconds(250));
+            }
+            catch (Exception ex)
+            {
+                // If the FileStream open itself fails, release both
+                // synchronization primitives so the main test fails fast
+                // with a clear error rather than hanging on the wait.
+                lockAcquired.TrySetException(ex);
             }
             finally
             {
                 lockRelease.TrySetResult(true);
             }
         });
+
+        // Wait for the background task to actually acquire the exclusive
+        // handle before we start the move. Without this await the test
+        // is a race between Task.Run scheduling and the main thread, and
+        // the retry path would not be exercised on the "fast" side of
+        // the race — a silently-passing test.
+        await lockAcquired.Task;
 
         try
         {
@@ -128,6 +159,37 @@ public class RobustFileOpsMoveRetryTests
         {
             if (File.Exists(src)) File.Delete(src);
             if (File.Exists(dst)) File.Delete(dst);
+        }
+    }
+
+    /// <summary>
+    /// Atomic replace sibling. Used by BTreeIndex.Flush to replace an
+    /// existing index file; must tolerate the same AV / indexer lock that
+    /// <see cref="RobustFileOps.MoveWithRetry"/> does and preserve the
+    /// optional backup file.
+    /// </summary>
+    [Fact]
+    public void ReplaceSync_Succeeds_WhenNoContention()
+    {
+        string src = Path.Combine(Path.GetTempPath(), $"aidotnet_replacesync_{Guid.NewGuid()}.bin");
+        string dst = Path.Combine(Path.GetTempPath(), $"aidotnet_replacesync_dst_{Guid.NewGuid()}.bin");
+        string bak = dst + ".bak";
+        File.WriteAllBytes(src, [5, 5, 5]);
+        File.WriteAllBytes(dst, [1, 2, 3]);  // destination must exist for File.Replace
+        try
+        {
+            InvokeReplaceSync(src, dst, bak);
+            Assert.True(File.Exists(dst), "Destination should exist after replace");
+            Assert.False(File.Exists(src), "Source temp should have been consumed");
+            Assert.Equal(new byte[] { 5, 5, 5 }, File.ReadAllBytes(dst));
+            Assert.True(File.Exists(bak), "Backup should contain the previous destination contents");
+            Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(bak));
+        }
+        finally
+        {
+            if (File.Exists(src)) File.Delete(src);
+            if (File.Exists(dst)) File.Delete(dst);
+            if (File.Exists(bak)) File.Delete(bak);
         }
     }
 
