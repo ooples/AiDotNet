@@ -213,10 +213,8 @@ public class ImageTensorLayoutTests
         Assert.True(loader.TotalCount > 0, "Loader returned no samples");
         using var enumerator = loader.GetBatches(batchSize: 2).GetEnumerator();
         Assert.True(enumerator.MoveNext(), "No batches returned");
-        var shape = enumerator.Current.Features.Shape;
-        Assert.Equal(4, shape.Length);
-        Assert.Equal(2, shape[0]);
-        Assert.Equal(3, shape[1]);
+        // EuroSat images are 64x64 RGB per EuroSatDataLoader.ImageSize.
+        AssertShape(enumerator.Current.Features, 2, 3, 64, 64);
     }
 
     /// <summary>

@@ -60,6 +60,9 @@ internal static class RobustFileOps
                 File.Move(sourcePath, destinationPath);
                 return;
             }
+            // On the final attempt the `when` clause is false, so the
+            // catch is skipped and the original exception propagates to
+            // the caller — exactly the intended "clear failure" behavior.
             catch (IOException) when (attempt < maxAttempts)
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(initialDelayMs * attempt), cancellationToken);
@@ -69,10 +72,6 @@ internal static class RobustFileOps
                 await Task.Delay(TimeSpan.FromMilliseconds(initialDelayMs * attempt), cancellationToken);
             }
         }
-
-        // Final attempt: propagate whatever exception the move raises so
-        // callers still see a clear failure rather than a silent no-op.
-        File.Move(sourcePath, destinationPath);
     }
 
     /// <summary>
@@ -94,6 +93,8 @@ internal static class RobustFileOps
                 File.Move(sourcePath, destinationPath);
                 return;
             }
+            // Final attempt falls through `when (attempt < maxAttempts)`,
+            // so the underlying exception naturally propagates.
             catch (IOException) when (attempt < maxAttempts)
             {
                 Thread.Sleep(initialDelayMs * attempt);
@@ -103,9 +104,6 @@ internal static class RobustFileOps
                 Thread.Sleep(initialDelayMs * attempt);
             }
         }
-
-        // Final attempt: propagate.
-        File.Move(sourcePath, destinationPath);
     }
 
     /// <summary>
@@ -137,6 +135,8 @@ internal static class RobustFileOps
                 File.Replace(sourcePath, destinationPath, destinationBackupPath);
                 return;
             }
+            // Final attempt: the `when` gate is false so the exception
+            // propagates directly to the caller.
             catch (IOException) when (attempt < maxAttempts)
             {
                 Thread.Sleep(initialDelayMs * attempt);
@@ -146,8 +146,5 @@ internal static class RobustFileOps
                 Thread.Sleep(initialDelayMs * attempt);
             }
         }
-
-        // Final attempt: propagate.
-        File.Replace(sourcePath, destinationPath, destinationBackupPath);
     }
 }
