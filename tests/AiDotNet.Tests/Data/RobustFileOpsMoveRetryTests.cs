@@ -128,10 +128,15 @@ public class RobustFileOpsMoveRetryTests
             await InvokeMoveAsync(src, dst, maxAttempts: 8, delayMs: 100);
             Assert.True(File.Exists(dst), "Destination should exist after retry-backed move");
             Assert.Equal(new byte[] { 9, 9, 9 }, File.ReadAllBytes(dst));
-            await lockRelease.Task;  // drain background task for clean teardown
         }
         finally
         {
+            // Drain the background task before teardown regardless of the
+            // assertion outcome. If we didn't await here and an assertion
+            // above threw, the background task could still own the
+            // FileStream when File.Delete(src) runs, masking the real
+            // failure with a confusing "file in use" IOException.
+            await lockRelease.Task;
             if (File.Exists(src)) File.Delete(src);
             if (File.Exists(dst)) File.Delete(dst);
         }

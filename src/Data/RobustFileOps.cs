@@ -53,6 +53,8 @@ internal static class RobustFileOps
         int maxAttempts = 5,
         int initialDelayMs = 200)
     {
+        ValidateRetryArguments(maxAttempts, initialDelayMs);
+
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
             try
@@ -86,6 +88,8 @@ internal static class RobustFileOps
         int maxAttempts = 5,
         int initialDelayMs = 200)
     {
+        ValidateRetryArguments(maxAttempts, initialDelayMs);
+
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
             try
@@ -128,6 +132,8 @@ internal static class RobustFileOps
         int maxAttempts = 5,
         int initialDelayMs = 200)
     {
+        ValidateRetryArguments(maxAttempts, initialDelayMs);
+
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
             try
@@ -145,6 +151,33 @@ internal static class RobustFileOps
             {
                 Thread.Sleep(initialDelayMs * attempt);
             }
+        }
+    }
+
+    /// <summary>
+    /// Validates retry parameters. Rejects silent-success configurations —
+    /// <c>maxAttempts &lt; 1</c> would exit the retry loop without ever
+    /// touching the filesystem and without throwing, which is a confusing
+    /// failure mode for any caller that forwards user-supplied config.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxAttempts"/>
+    /// is less than 1, or <paramref name="initialDelayMs"/> is negative.</exception>
+    private static void ValidateRetryArguments(int maxAttempts, int initialDelayMs)
+    {
+        if (maxAttempts < 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maxAttempts),
+                maxAttempts,
+                "maxAttempts must be at least 1.");
+        }
+
+        if (initialDelayMs < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(initialDelayMs),
+                initialDelayMs,
+                "initialDelayMs must be non-negative.");
         }
     }
 }

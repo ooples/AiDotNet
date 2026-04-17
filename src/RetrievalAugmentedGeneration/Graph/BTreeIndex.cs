@@ -235,8 +235,20 @@ public class BTreeIndex : IDisposable
             {
                 var backupPath = _indexFilePath + ".bak";
                 RobustFileOps.ReplaceWithRetry(tempPath, _indexFilePath, backupPath);
-                if (File.Exists(backupPath))
-                    File.Delete(backupPath);
+
+                // The replace has already succeeded — the new index is
+                // durable at _indexFilePath. Backup cleanup is best-effort:
+                // if the .bak file hits the same antivirus / indexer lock
+                // this PR addresses elsewhere, swallow the failure rather
+                // than throw from Flush() and leave _isDirty set when the
+                // actual flush was successful.
+                try
+                {
+                    if (File.Exists(backupPath))
+                        File.Delete(backupPath);
+                }
+                catch (IOException) { /* leave stale .bak; next flush reuses it */ }
+                catch (UnauthorizedAccessException) { /* same */ }
             }
             else
             {
