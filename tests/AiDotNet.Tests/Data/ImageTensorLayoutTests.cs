@@ -33,6 +33,17 @@ public class ImageTensorLayoutTests
             && File.Exists(Path.Combine(cachePath, "train-labels-idx1-ubyte"));
     }
 
+    private static bool EuroSatCacheExists()
+    {
+        string cachePath = DatasetDownloader.GetDefaultDataPath("eurosat");
+        // EuroSat is a class-folder structured dataset; require at least one
+        // known class directory with at least one image file.
+        return Directory.Exists(cachePath)
+            && Directory.EnumerateDirectories(cachePath, "*", SearchOption.AllDirectories)
+                .Any(d => Directory.EnumerateFiles(d, "*.jpg").Any()
+                       || Directory.EnumerateFiles(d, "*.png").Any());
+    }
+
     private static void AssertShape(Tensor<float> tensor, params int[] expected)
     {
         var shape = tensor.Shape;
@@ -170,6 +181,84 @@ public class ImageTensorLayoutTests
         // channels and a few spatial positions. If the permute dropped a
         // channel or flipped an axis, this will catch it.
         (int c, int y, int x)[] probes = [(0, 0, 0), (1, 7, 11), (2, 15, 15), (0, 31, 31), (2, 0, 31)];
+        foreach (var (c, y, x) in probes)
+        {
+            float ncValue = nchw[0, c, y, x];
+            float nhValue = nhwc[0, y, x, c];
+            Assert.Equal(ncValue, nhValue);
+        }
+    }
+
+    // --- CIFAR-100 ---
+
+    // --- EuroSat ---
+
+    /// <summary>
+    /// Regression: EuroSat is the mirror of the CIFAR bug. The NHWC default
+    /// path writes directly into the HWC buffer (fine), but the NCHW path
+    /// previously threw "Cannot get a contiguous span from a non-contiguous
+    /// tensor view" because it called AsSpan() on a TensorPermute result.
+    /// Fix materializes via .Contiguous() before the copy.
+    /// </summary>
+    [SkippableFact]
+    public async Task EuroSatNCHW_Shape_LoadsWithoutThrowing()
+    {
+        Skip.IfNot(EuroSatCacheExists(), "EuroSat not cached locally");
+        var loader = new EuroSatDataLoader<float>(new EuroSatDataLoaderOptions
+        {
+            Split = DatasetSplit.Train, AutoDownload = false, MaxSamples = 2,
+            Normalize = false, Layout = ImageTensorLayout.NCHW,
+        });
+        await loader.LoadAsync();
+        Assert.True(loader.TotalCount > 0, "Loader returned no samples");
+        using var enumerator = loader.GetBatches(batchSize: 2).GetEnumerator();
+        Assert.True(enumerator.MoveNext(), "No batches returned");
+        var shape = enumerator.Current.Features.Shape;
+        Assert.Equal(4, shape.Length);
+        Assert.Equal(2, shape[0]);
+        Assert.Equal(3, shape[1]);
+    }
+
+    /// <summary>
+    /// Value-correctness probe: EuroSat NHWC and NCHW layouts must agree on
+    /// <c>NHWC[y,x,c] == NCHW[c,y,x]</c> across a handful of probe positions.
+    /// Locks the permute direction so a future bad refactor silently
+    /// scrambling axes still fails the test.
+    /// </summary>
+    [SkippableFact]
+    public async Task EuroSatNHWC_PixelValues_MatchNCHW()
+    {
+        Skip.IfNot(EuroSatCacheExists(), "EuroSat not cached locally");
+
+        var nhwcLoader = new EuroSatDataLoader<float>(new EuroSatDataLoaderOptions
+        {
+            Split = DatasetSplit.Train, AutoDownload = false, MaxSamples = 1,
+            Normalize = false, Layout = ImageTensorLayout.NHWC,
+        });
+        var nchwLoader = new EuroSatDataLoader<float>(new EuroSatDataLoaderOptions
+        {
+            Split = DatasetSplit.Train, AutoDownload = false, MaxSamples = 1,
+            Normalize = false, Layout = ImageTensorLayout.NCHW,
+        });
+        await nhwcLoader.LoadAsync();
+        await nchwLoader.LoadAsync();
+
+        using var nhEnum = nhwcLoader.GetBatches(batchSize: 1).GetEnumerator();
+        using var ncEnum = nchwLoader.GetBatches(batchSize: 1).GetEnumerator();
+        Assert.True(nhEnum.MoveNext() && ncEnum.MoveNext(), "Both loaders must yield one batch");
+
+        var nhwc = nhEnum.Current.Features;
+        var nchw = ncEnum.Current.Features;
+        var hwcShape = nhwc.Shape;   // [1, H, W, 3]
+        int height = hwcShape[1];
+        int width = hwcShape[2];
+        Assert.Equal(3, hwcShape[3]);
+
+        (int c, int y, int x)[] probes =
+        [
+            (0, 0, 0), (1, height / 2, width / 2), (2, height - 1, width - 1),
+            (0, 1, width - 1), (2, height - 1, 0),
+        ];
         foreach (var (c, y, x) in probes)
         {
             float ncValue = nchw[0, c, y, x];

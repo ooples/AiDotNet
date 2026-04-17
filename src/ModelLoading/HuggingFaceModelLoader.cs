@@ -2,6 +2,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
+using AiDotNet.Data;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json.Linq;
 
@@ -259,12 +260,15 @@ public class HuggingFaceModelLoader<T>
                 }
             }
 
-            // Move temp to final location (overwrite parameter not available in .NET Framework 4.7.1)
+            // Move temp to final location (overwrite parameter not available in .NET Framework 4.7.1).
+            // RobustFileOps tolerates a transient antivirus / indexer lock on
+            // the freshly written temp file that would otherwise fail with a
+            // sharing violation.
             if (File.Exists(localPath))
             {
                 File.Delete(localPath);
             }
-            File.Move(tempPath, localPath);
+            await RobustFileOps.MoveWithRetryAsync(tempPath, localPath, cancellationToken);
         }
         catch (HttpRequestException ex)
         {

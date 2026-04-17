@@ -101,7 +101,7 @@ internal static class DatasetDownloader
             // briefly locked by antivirus (Defender) or the search indexer,
             // which makes File.Move fail with a sharing violation even after
             // the writer's handle is closed. Short backoff tolerates that.
-            await MoveWithRetryAsync(tempPath, destinationPath, cancellationToken);
+            await RobustFileOps.MoveWithRetryAsync(tempPath, destinationPath, cancellationToken);
             return true;
         }
         finally
@@ -112,42 +112,6 @@ internal static class DatasetDownloader
                 catch { /* Ignore cleanup errors */ }
             }
         }
-    }
-
-    /// <summary>
-    /// Moves <paramref name="sourcePath"/> to <paramref name="destinationPath"/>,
-    /// retrying on transient <see cref="IOException"/>s to tolerate Windows
-    /// antivirus / indexer handle locks that can linger briefly after a large
-    /// file is written. Exposed internally so the retry path is covered by
-    /// unit tests.
-    /// </summary>
-    internal static async Task MoveWithRetryAsync(
-        string sourcePath,
-        string destinationPath,
-        CancellationToken cancellationToken,
-        int maxAttempts = 5,
-        int initialDelayMs = 200)
-    {
-        for (int attempt = 1; attempt <= maxAttempts; attempt++)
-        {
-            try
-            {
-                File.Move(sourcePath, destinationPath);
-                return;
-            }
-            catch (IOException) when (attempt < maxAttempts)
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(initialDelayMs * attempt), cancellationToken);
-            }
-            catch (UnauthorizedAccessException) when (attempt < maxAttempts)
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(initialDelayMs * attempt), cancellationToken);
-            }
-        }
-
-        // Final attempt: propagate whatever exception the move raises so
-        // callers still see a clear failure rather than a silent no-op.
-        File.Move(sourcePath, destinationPath);
     }
 
     /// <summary>

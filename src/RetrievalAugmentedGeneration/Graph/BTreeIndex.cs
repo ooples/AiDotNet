@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using AiDotNet.Attributes;
+using AiDotNet.Data;
 using AiDotNet.Enums;
 using AiDotNet.Validation;
 
@@ -238,7 +239,9 @@ public class BTreeIndex : IDisposable
             }
             else
             {
-                File.Move(tempPath, _indexFilePath);
+                // Retry on transient sharing violations — a freshly written
+                // index file can briefly be held by AV / indexer on Windows.
+                RobustFileOps.MoveWithRetry(tempPath, _indexFilePath);
             }
 
             _isDirty = false;

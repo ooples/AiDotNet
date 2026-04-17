@@ -1,4 +1,5 @@
 using System.Net.Http;
+using AiDotNet.Data;
 
 namespace AiDotNet.ComputerVision.Weights;
 
@@ -108,8 +109,10 @@ public class WeightDownloader
                 }
             }
 
-            // Move completed download to final location
-            File.Move(tempPath, localPath);
+            // Move completed download to final location. Uses RobustFileOps
+            // so a transient Windows Defender / indexer lock doesn't abort
+            // the download (the finally block would wipe the temp file).
+            await RobustFileOps.MoveWithRetryAsync(tempPath, localPath, cancellationToken);
         }
         finally
         {

@@ -125,10 +125,13 @@ public class EuroSatDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
             bool nchw = _options.Layout == ImageTensorLayout.NCHW;
             if (nchw)
             {
-                // VisionLoaderHelper returns HWC [H,W,3]; permute to CHW [3,H,W]
+                // VisionLoaderHelper returns HWC [H,W,3]; permute to CHW [3,H,W].
+                // TensorPermute returns a strided view; materialize via
+                // .Contiguous() before AsSpan(), which requires a contiguous
+                // backing buffer.
                 var hwcTensor = new Tensor<T>([ImageSize, ImageSize, 3]);
                 pixels.AsSpan(0, available).CopyTo(hwcTensor.AsWritableSpan());
-                var chwTensor = AiDotNetEngine.Current.TensorPermute(hwcTensor, [2, 0, 1]);
+                var chwTensor = AiDotNetEngine.Current.TensorPermute(hwcTensor, [2, 0, 1]).Contiguous();
                 chwTensor.AsSpan().CopyTo(featuresData.AsSpan(featureOffset, pixelsPerImage));
             }
             else

@@ -366,12 +366,16 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
             // Write to temp file first
             await FilePolyfill.WriteAllTextAsync(tempPath, content, cancellationToken);
 
-            // Atomically move to final location
+            // Atomically move to final location. Uses RobustFileOps to
+            // tolerate a transient Windows Defender / indexer lock on the
+            // freshly written temp file (File.Move would otherwise fail
+            // with a sharing violation and the finally block would wipe
+            // the content).
             if (File.Exists(targetPath))
             {
                 File.Delete(targetPath);
             }
-            File.Move(tempPath, targetPath);
+            await RobustFileOps.MoveWithRetryAsync(tempPath, targetPath, cancellationToken);
         }
         finally
         {
