@@ -97,7 +97,11 @@ public class Cifar100DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
                 sampleTensor[p] = NumOps.FromDouble(data[pixelStart + p] * scale);
 
             if (!nchw)
-                sampleTensor = AiDotNetEngine.Current.TensorPermute(sampleTensor, [1, 2, 0]);
+            {
+                // TensorPermute returns a strided view; AsSpan() requires a
+                // contiguous backing buffer, so materialize before the copy.
+                sampleTensor = AiDotNetEngine.Current.TensorPermute(sampleTensor, [1, 2, 0]).Contiguous();
+            }
 
             sampleTensor.AsSpan().CopyTo(featuresData.AsSpan(featureOffset, ppi));
 
