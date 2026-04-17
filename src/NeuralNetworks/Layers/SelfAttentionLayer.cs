@@ -385,6 +385,11 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         _lastSparsityLoss = NumOps.Zero;
 
         _sequenceLength = sequenceLength;
+
+        // Validate headCount and divisibility BEFORE dividing. Without
+        // these guards, headCount=0 throws DivideByZeroException and
+        // non-divisible embeddings produce a silently-wrong _headDimension
+        // that only fails much later during reshape/matmul.
         if (headCount <= 0)
             throw new ArgumentOutOfRangeException(nameof(headCount),
                 $"headCount must be positive, got {headCount}.");
@@ -416,6 +421,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
             _keyWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
             _valueWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
             _outputBias = new Tensor<T>([embeddingDimension]);
+
 
             InitializeParameters();
 
@@ -476,6 +482,10 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         _lastSparsityLoss = NumOps.Zero;
 
         _sequenceLength = sequenceLength;
+
+        // Validate BEFORE dividing to avoid DivideByZeroException on
+        // headCount=0 and silently-wrong _headDimension on non-divisible
+        // embeddings. Same guards as the scalar-activation overload.
         if (headCount <= 0)
             throw new ArgumentOutOfRangeException(nameof(headCount),
                 $"headCount must be positive, got {headCount}.");
@@ -503,6 +513,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
             _keyWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
             _valueWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
             _outputBias = new Tensor<T>([embeddingDimension]);
+
 
             InitializeParameters();
 
@@ -687,6 +698,9 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        // Materialize lazy Q/K/V/bias tensors before GPU path.
+        EnsureInitialized();
 
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");

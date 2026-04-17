@@ -84,25 +84,6 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
     protected virtual int[] InputShape => [1, 4];
     protected virtual int[] OutputShape => [1, 4];
 
-    /// <inheritdoc />
-    public virtual Task InitializeAsync() => Task.CompletedTask;
-
-    /// <summary>
-    /// Force a full GC between diffusion model tests. Production-default
-    /// diffusion models (SDXL, DiT-XL, ControlNet variants, etc.) allocate
-    /// multi-GB parameter vectors once their lazy layers materialize.
-    /// Without GC pressure between xunit test methods, back-to-back tests
-    /// in a shared-process runner stack up live weight tensors and OOM
-    /// before the shard finishes.
-    /// </summary>
-    public virtual Task DisposeAsync()
-    {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-        return Task.CompletedTask;
-    }
-
     protected Tensor<double> CreateRandomTensor(int[] shape, Random rng)
     {
         var tensor = new Tensor<double>(shape);

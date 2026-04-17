@@ -1094,10 +1094,12 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateUpsample(int channels, int level)
     {
-        // Decoder level N has input resolution _inputHeight >> (level+1)
-        // (output of the corresponding encoder downsample) and upsamples
-        // to _inputHeight >> level (the paired encoder-level resolution).
-        // Transposed convolution: stride=2, kernel=4, padding=1 ⇒ output = 2 * input
+        // (output of the corresponding encoder downsample) and upsamples to
+        // _inputHeight >> level (the paired encoder-level resolution).
+        // Transposed convolution: stride=2, kernel=4, padding=1 ⇒ output = 2 * input.
+        // Note: ResolutionAtLevel uses _inputHeight; non-square inputs
+        // (_inputHeight != _inputWidth) would produce incorrect attention
+        // sequence lengths — documented on the constructor's inputHeight param.
         int inputRes = ResolutionAtLevel(level + 1);
         return new DeconvolutionalLayer<T>(
             inputShape: new[] { 1, channels, inputRes, inputRes },

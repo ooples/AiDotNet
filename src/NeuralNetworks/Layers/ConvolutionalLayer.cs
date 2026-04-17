@@ -1489,9 +1489,11 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             // Return rented kernel tensor to the TensorAllocator pool so it can
             // be reused by subsequent layer constructors. Check Length > 0
             // rather than _isInitialized — EnsureInitialized rents BEFORE
-            // flipping the flag, so a partial init failure (exception during
-            // weight population) leaves Length > 0 but _isInitialized == false.
-            // Length > 0 is sufficient: lazy placeholders sit at Length == 0
+            // flipping the flag, so a partial init failure (e.g., exception
+            // during weight population) leaves Length > 0 but _isInitialized
+            // == false. The old `_isInitialized &&` guard would leak the
+            // rented tensor in that window. Length > 0 is sufficient:
+            // lazy-init placeholders sit at [0, 0, 0, 0] with Length == 0
             // and aren't pool-rented.
             if (_kernels.Length > 0)
             {
