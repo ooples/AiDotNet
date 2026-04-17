@@ -44,11 +44,16 @@ public class ImageTensorLayoutTests
     {
         string cachePath = DatasetDownloader.GetDefaultDataPath("eurosat");
         if (!Directory.Exists(cachePath)) return false;
-        // EuroSat is a class-folder dataset; require at least one image
-        // file in any subdirectory.
-        return Directory.EnumerateDirectories(cachePath, "*", SearchOption.AllDirectories)
-            .Any(d => Directory.EnumerateFiles(d, "*.jpg").Any()
-                   || Directory.EnumerateFiles(d, "*.png").Any());
+        // EuroSat is a class-folder dataset; require at least one
+        // loader-supported image file. Match the loader's own extension
+        // set (see EuroSatDataLoader.cs): .jpg / .jpeg / .png / .tif,
+        // case-insensitive. A narrower probe causes false SKIPs on
+        // valid caches and hides regressions.
+        return Directory.EnumerateFiles(cachePath, "*.*", SearchOption.AllDirectories)
+            .Any(f => f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+                   || f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)
+                   || f.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+                   || f.EndsWith(".tif", StringComparison.OrdinalIgnoreCase));
     }
 
     private static void AssertShape(Tensor<float> tensor, params int[] expected)
