@@ -608,7 +608,8 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     #region Discriminator Layer List
 
     /// <summary>
-    /// Builds a combined list of discriminator layers for TapeLayerBridge.
+    /// Builds a combined list of discriminator layers (dense + dropout + output)
+    /// for gradient-penalty and related analyses.
     /// </summary>
     private IReadOnlyList<ILayer<T>> BuildDiscLayerList()
     {

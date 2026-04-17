@@ -722,7 +722,7 @@ public enum OperationType
     /// </summary>
     Attention,
 
-    // InferenceOptimization Operations
+    // Layer and graph node operations
 
     /// <summary>
     /// Output node in computation graph.
@@ -944,7 +944,7 @@ public enum OperationType
     /// </summary>
     Scatter,
 
-    // Fused Operations for InferenceOptimization
+    // Fused operations
 
     /// <summary>
     /// Fused Conv + BatchNorm + ReLU.

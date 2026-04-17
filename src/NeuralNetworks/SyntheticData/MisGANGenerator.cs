@@ -604,7 +604,8 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     }
 
     /// <summary>
-    /// Builds a combined list of data discriminator layers for TapeLayerBridge.
+    /// Builds a combined list of data discriminator layers for gradient-penalty
+    /// and related analyses.
     /// </summary>
     private IReadOnlyList<ILayer<T>> BuildDataDiscLayerList()
     {
@@ -619,7 +620,8 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     }
 
     /// <summary>
-    /// Builds a combined list of mask discriminator layers for TapeLayerBridge.
+    /// Builds a combined list of mask discriminator layers for gradient-penalty
+    /// and related analyses.
     /// </summary>
     private IReadOnlyList<ILayer<T>> BuildMaskDiscLayerList()
     {
