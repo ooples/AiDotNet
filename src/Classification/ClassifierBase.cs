@@ -680,11 +680,5 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     /// <inheritdoc/>
     public virtual bool SupportsJitCompilation => false;
 
-    /// <inheritdoc/>
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation is not supported for this classifier. Override this method in derived classes to enable JIT support.");
-    }
-
     #endregion
 }

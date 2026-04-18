@@ -588,14 +588,6 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     }
 
     /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation is not supported for this causal model.");
-    }
-
-    /// <summary>
     /// Gets additional model data to include in serialization.
     /// Override in derived classes to persist class-specific state.
     /// </summary>

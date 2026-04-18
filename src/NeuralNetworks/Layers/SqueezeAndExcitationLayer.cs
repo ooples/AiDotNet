@@ -1206,25 +1206,6 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         return result;
     }
 
-    private Autodiff.ComputationNode<T> ApplyActivationToGraphNode(Autodiff.ComputationNode<T> input, bool isFirst)
-    {
-        if (isFirst)
-        {
-            if (_firstVectorActivation != null && _firstVectorActivation.SupportsJitCompilation)
-                return _firstVectorActivation.ApplyToGraph(input);
-            if (_firstActivation != null && _firstActivation.SupportsJitCompilation)
-                return _firstActivation.ApplyToGraph(input);
-        }
-        else
-        {
-            if (_secondVectorActivation != null && _secondVectorActivation.SupportsJitCompilation)
-                return _secondVectorActivation.ApplyToGraph(input);
-            if (_secondActivation != null && _secondActivation.SupportsJitCompilation)
-                return _secondActivation.ApplyToGraph(input);
-        }
-        return input;
-    }
-
     /// <summary>
     /// Updates the layer's parameters using the calculated gradients and the specified learning rate.
     /// </summary>

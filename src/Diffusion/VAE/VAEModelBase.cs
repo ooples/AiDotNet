@@ -593,16 +593,6 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
 
     #endregion
 
-    #region IJitCompilable<T> Implementation
-
-    /// <inheritdoc />
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("This VAE does not support JIT compilation. Override ExportComputationGraph in derived class if needed.");
-    }
-
-    #endregion
-
     #region Helper Methods
 
     /// <summary>

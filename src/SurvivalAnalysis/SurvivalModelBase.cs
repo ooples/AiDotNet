@@ -743,13 +743,5 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape
         Deserialize(serializedData);
     }
 
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation is not supported for survival models.");
-    }
-
     #endregion
 }

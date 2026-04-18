@@ -1180,11 +1180,6 @@ namespace AiDotNet.AutoML
         /// </remarks>
         public virtual bool SupportsJitCompilation => false;
 
-        public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-        {
-            throw new NotSupportedException("JIT compilation has been removed.");
-        }
-
         #endregion
 
         /// <summary>

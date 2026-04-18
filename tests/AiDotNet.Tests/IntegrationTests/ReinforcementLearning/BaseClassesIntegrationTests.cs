@@ -78,16 +78,6 @@ public class BaseClassesIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task DeepReinforcementLearningAgentBase_JitRemoved_SupportsJitIsFalse()
-    {
-        var agent = new TestDeepAgent(CreateOptions());
-
-        // After JIT removal, SupportsJitCompilation always returns false
-        Assert.False(agent.SupportsJitCompilation);
-        Assert.Throws<NotSupportedException>(() => agent.ExportComputationGraph(new List<ComputationNode<double>>()));
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task ReinforcementLearningAgentBase_DefaultsAndStateRoundTrip_Work()
     {
         var agent = new TestBaseAgent(CreateOptions());
@@ -96,8 +86,6 @@ public class BaseClassesIntegrationTests
         var action = agent.Predict(state);
         Assert.Equal(agent.FeatureCount, action.Length);
 
-        Assert.False(agent.SupportsJitCompilation);
-        Assert.Throws<NotSupportedException>(() => agent.ExportComputationGraph(new List<ComputationNode<double>>()));
         Assert.Throws<NotSupportedException>(() => agent.Train(state, action));
 
         var names = agent.FeatureNames;

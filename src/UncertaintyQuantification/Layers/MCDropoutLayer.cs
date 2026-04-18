@@ -167,6 +167,4 @@ public class MCDropoutLayer<T> : LayerBase<T>
         copy.SetTrainingMode(IsTrainingMode);
         return copy;
     }
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-        => throw new NotSupportedException($"{GetType().Name} does not currently support JIT compilation.");
 }

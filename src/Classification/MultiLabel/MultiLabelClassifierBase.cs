@@ -450,12 +450,6 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     /// <inheritdoc />
     public virtual bool SupportsJitCompilation => false;
 
-    /// <inheritdoc />
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation is not supported for this multi-label classifier.");
-    }
-
     #endregion
 
     /// <summary>

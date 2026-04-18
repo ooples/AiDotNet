@@ -724,16 +724,6 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
 
     #endregion
 
-    #region IJitCompilable<T> Implementation
-
-    /// <inheritdoc />
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("This noise predictor does not support JIT compilation. Override ExportComputationGraph in derived class if needed.");
-    }
-
-    #endregion
-
     #region Helper Methods
 
     /// <summary>

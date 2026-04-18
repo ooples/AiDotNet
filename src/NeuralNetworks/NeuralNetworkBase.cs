@@ -4924,51 +4924,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual bool SupportsJitCompilation => true;
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// Exports the neural network as a computation graph for JIT compilation.
-    /// The graph represents the forward pass through all layers in sequence.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method converts the neural network into a computation graph.
-    ///
-    /// A computation graph is like a flowchart that describes:
-    /// 1. How data flows through each layer
-    /// 2. What operations each layer performs
-    /// 3. How layer outputs connect to the next layer's inputs
-    ///
-    /// The JIT compiler uses this graph to:
-    /// - Optimize the operations (remove redundancy)
-    /// - Fuse operations together (combine multiple steps)
-    /// - Generate fast native code
-    ///
-    /// For example, a simple network:
-    /// Input → Dense Layer → ReLU → Dense Layer → Output
-    ///
-    /// Becomes a graph:
-    /// input_node → matmul_node → add_bias_node → relu_node → matmul_node → add_bias_node
-    ///
-    /// The JIT compiler can then optimize this graph (e.g., fuse bias addition with matmul)
-    /// to create highly efficient code.
-    /// </para>
-    /// </remarks>
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation has been removed.");
-    }
-
-    protected virtual ComputationNode<T> ConvertLayerToGraph(ILayer<T> layer, ComputationNode<T> input)
-    {
-        if (layer is Layers.LayerBase<T> layerBase)
-        {
-            var layerInputs = new List<ComputationNode<T>> { input };
-            return layerBase.ExportComputationGraph(layerInputs);
-        }
-        throw new NotSupportedException(
-            $"Layer {layer.GetType().Name} does not support computation graph export.");
-    }
-
-
     #endregion
 
     #region ILayeredModel<T> Implementation

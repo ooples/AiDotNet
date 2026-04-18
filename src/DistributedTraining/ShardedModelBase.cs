@@ -504,11 +504,6 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     /// </remarks>
     public virtual bool SupportsJitCompilation => false;
 
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation has been removed.");
-    }
-
     #endregion
     /// <summary>
     /// Saves the model's current state to a stream.

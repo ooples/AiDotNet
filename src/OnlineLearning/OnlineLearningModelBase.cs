@@ -459,14 +459,6 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
         Deserialize(serializedData);
     }
 
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation is not supported for this online learning model.");
-    }
-
     #endregion
 
     #region Helper Methods
