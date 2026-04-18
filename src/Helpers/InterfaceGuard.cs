@@ -2,9 +2,9 @@ namespace AiDotNet.Helpers;
 
 /// <summary>
 /// Provides safe runtime capability checks for interface segregation.
-/// After removing IParameterizable, IFeatureAware, IGradientComputable, and IJitCompilable
-/// from IFullModel, callers must validate capabilities before use. These methods provide
-/// clear error messages when a model doesn't support the requested capability.
+/// After removing IParameterizable, IFeatureAware, and IGradientComputable from IFullModel,
+/// callers must validate capabilities before use. These methods provide clear error
+/// messages when a model doesn't support the requested capability.
 /// </summary>
 public static class InterfaceGuard
 {

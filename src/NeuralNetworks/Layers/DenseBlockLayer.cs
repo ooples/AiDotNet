@@ -227,56 +227,5 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>
         _conv3x3.ResetState();
     }
 
-    /// <inheritdoc />
-    public ComputationNode<T> BuildComputationGraph(
-        ComputationNode<T> inputNode,
-        string namePrefix)
-    {
-        // BN1
-        var bn1Node = TensorOperations<T>.BatchNorm(
-            inputNode,
-            gamma: TensorOperations<T>.Constant(_bn1.GetGamma(), $"{namePrefix}bn1_gamma"),
-            beta: TensorOperations<T>.Constant(_bn1.GetBeta(), $"{namePrefix}bn1_beta"),
-            runningMean: _bn1.GetRunningMean(),
-            runningVar: _bn1.GetRunningVariance(),
-            training: false,
-            epsilon: NumOps.ToDouble(_bn1.GetEpsilon()));
-
-        // ReLU1
-        var relu1Node = TensorOperations<T>.ReLU(bn1Node);
-
-        // Conv1x1
-        var conv1x1Biases = _conv1x1.GetBiases();
-        var conv1x1Node = TensorOperations<T>.Conv2D(
-            relu1Node,
-            TensorOperations<T>.Constant(_conv1x1.GetFilters(), $"{namePrefix}conv1x1_kernel"),
-            conv1x1Biases is not null ? TensorOperations<T>.Constant(conv1x1Biases, $"{namePrefix}conv1x1_bias") : null,
-            stride: new int[] { _conv1x1.Stride, _conv1x1.Stride },
-            padding: new int[] { _conv1x1.Padding, _conv1x1.Padding });
-
-        // BN2
-        var bn2Node = TensorOperations<T>.BatchNorm(
-            conv1x1Node,
-            gamma: TensorOperations<T>.Constant(_bn2.GetGamma(), $"{namePrefix}bn2_gamma"),
-            beta: TensorOperations<T>.Constant(_bn2.GetBeta(), $"{namePrefix}bn2_beta"),
-            runningMean: _bn2.GetRunningMean(),
-            runningVar: _bn2.GetRunningVariance(),
-            training: false,
-            epsilon: NumOps.ToDouble(_bn2.GetEpsilon()));
-
-        // ReLU2
-        var relu2Node = TensorOperations<T>.ReLU(bn2Node);
-
-        // Conv3x3
-        var conv3x3Biases = _conv3x3.GetBiases();
-        var outputNode = TensorOperations<T>.Conv2D(
-            relu2Node,
-            TensorOperations<T>.Constant(_conv3x3.GetFilters(), $"{namePrefix}conv3x3_kernel"),
-            conv3x3Biases is not null ? TensorOperations<T>.Constant(conv3x3Biases, $"{namePrefix}conv3x3_bias") : null,
-            stride: new int[] { _conv3x3.Stride, _conv3x3.Stride },
-            padding: new int[] { _conv3x3.Padding, _conv3x3.Padding });
-
-        return outputNode;
-    }
 
 }

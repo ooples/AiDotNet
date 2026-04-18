@@ -357,18 +357,6 @@ public class RRDBLayer<T> : LayerBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
-    {
-        // Pass through 3 Residual Dense Blocks sequentially
-        var x = _rdbBlocks[0].BuildComputationGraph(inputNode, $"{namePrefix}rdb0_");
-        x = _rdbBlocks[1].BuildComputationGraph(x, $"{namePrefix}rdb1_");
-        x = _rdbBlocks[2].BuildComputationGraph(x, $"{namePrefix}rdb2_");
-
-        // Global residual: output = RDB3_output * residualScale + input
-        var scaledOutput = ScaleNode(x, _residualScale, $"{namePrefix}global_scale");
-        return TensorOperations<T>.Add(scaledOutput, inputNode);
-    }
 
     /// <summary>
     /// Scales a computation node by a scalar value using element-wise multiplication.

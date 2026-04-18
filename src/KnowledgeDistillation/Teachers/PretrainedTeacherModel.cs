@@ -12,11 +12,11 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 /// Pretrained teacher model from external source (e.g., ImageNet, BERT).
 /// </summary>
 /// <remarks>
-/// <para><b>Architecture Note:</b> This class supports two construction modes:</para>
-/// <list type="bullet">
-/// <item><description>Function delegate mode: Uses a Func&lt;&gt; for forward pass (not JIT-compilable)</description></item>
-/// <item><description>IJitCompilable mode: Uses a JIT-compilable model for forward pass (JIT-compilable)</description></item>
-/// </list>
+/// <para>
+/// Construction uses a <c>Func&lt;&gt;</c> forward-pass delegate. Inference goes
+/// through the standard model path, which auto-compiles via Tensors' AutoTracer
+/// once the input-shape pattern repeats.
+/// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -440,35 +440,5 @@ public class TransitionLayer<T> : LayerBase<T>
         _pool.ResetState();
     }
 
-    /// <inheritdoc />
-    public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
-    {
-        // BN
-        var bnNode = TensorOperations<T>.BatchNorm(
-            inputNode,
-            gamma: TensorOperations<T>.Constant(_bn.GetGamma(), $"{namePrefix}bn_gamma"),
-            beta: TensorOperations<T>.Constant(_bn.GetBeta(), $"{namePrefix}bn_beta"),
-            runningMean: _bn.GetRunningMean(),
-            runningVar: _bn.GetRunningVariance(),
-            training: false,
-            epsilon: NumOps.ToDouble(_bn.GetEpsilon()));
-
-        // ReLU
-        var reluNode = TensorOperations<T>.ReLU(bnNode);
-
-        // Conv 1x1
-        var convBiases = _conv.GetBiases();
-        var convNode = TensorOperations<T>.Conv2D(
-            reluNode,
-            TensorOperations<T>.Constant(_conv.GetFilters(), $"{namePrefix}conv_kernel"),
-            convBiases is not null ? TensorOperations<T>.Constant(convBiases, $"{namePrefix}conv_bias") : null,
-            stride: new int[] { _conv.Stride, _conv.Stride },
-            padding: new int[] { _conv.Padding, _conv.Padding });
-
-        // Average Pooling 2x2, stride 2
-        var poolNode = TensorOperations<T>.AvgPool2D(convNode, poolSize: new int[] { 2, 2 }, strides: new int[] { 2, 2 });
-
-        return poolNode;
-    }
 
 }

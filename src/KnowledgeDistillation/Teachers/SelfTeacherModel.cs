@@ -13,11 +13,8 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 /// </summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> Self-distillation is a technique where a model learns from its own
-/// earlier predictions. This teacher can operate in two modes:</para>
-/// <list type="bullet">
-/// <item><description><b>Cached Mode:</b> Uses pre-computed predictions from earlier epochs (no JIT support)</description></item>
-/// <item><description><b>Model Mode:</b> Wraps an IJitCompilable model for dynamic predictions (JIT support available)</description></item>
-/// </list>
+/// earlier predictions. This teacher stores pre-computed predictions from earlier epochs and
+/// returns them by index via <see cref="GetCachedPrediction"/>.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -47,8 +44,7 @@ public class SelfTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// <param name="outputDimension">The output dimension of predictions.</param>
     /// <remarks>
     /// <para>Use this constructor when you want to manually cache predictions via
-    /// <see cref="CachePredictions"/> and retrieve them via <see cref="GetCachedPrediction"/>.
-    /// JIT compilation is not supported in this mode.</para>
+    /// <see cref="CachePredictions"/> and retrieve them via <see cref="GetCachedPrediction"/>.</para>
     /// </remarks>
     public SelfTeacherModel(int outputDimension)
     {
@@ -85,8 +81,8 @@ public class SelfTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// <returns>The logits from the underlying model.</returns>
     /// <exception cref="InvalidOperationException">Thrown when no underlying model is configured.</exception>
     /// <remarks>
-    /// <para>This method is only available when the SelfTeacherModel was constructed with an
-    /// IJitCompilable model. For cached prediction mode, use <see cref="GetCachedPrediction"/>.</para>
+    /// <para>Not supported for <see cref="SelfTeacherModel{T}"/> — callers must use
+    /// <see cref="GetCachedPrediction"/>, which returns a pre-computed prediction by index.</para>
     /// </remarks>
     public override Vector<T> GetLogits(Vector<T> input)
     {
