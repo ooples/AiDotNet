@@ -1668,6 +1668,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ {dim} }};");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
+        else if (family == TestFamily.TransformerNER || family == TestFamily.SpanBasedNER)
+        {
+            // TransformerNERBase and SpanBasedNERBase both default to
+            // HiddenDimension=768 (BERT-base). Inputs are validated as
+            // [seqLen, 768], so the base-class default [1, 4] causes a
+            // hard "embedding dim mismatch" failure inside MultiHeadAttention
+            // before any downstream logic runs. Use a short sequence to
+            // keep the test fast while matching the model's expected
+            // embedding size. Models with non-default hidden dimensions
+            // (TinyBERT=312, etc.) need a manual test override.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 8, 768 };");
+        }
+        else if (family == TestFamily.SequenceLabelingNER)
+        {
+            // LSTM-CRF family defaults to EmbeddingDimension=100.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 8, 100 };");
+        }
 
         sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
         sb.AppendLine(factoryBody);
