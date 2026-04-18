@@ -158,6 +158,24 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         {
             throw new ArgumentException("Polynomial degree must be non-negative for interpretable basis.", nameof(polynomialDegree));
         }
+        // Interpretable-basis builders cap usable theta at polynomialDegree + 1
+        // (ComputeBasisTensor populates only that many rows; ApplyBasisExpansion
+        // slices to the same count). Silently accepting oversized theta sizes
+        // would allocate trainable weights that are mathematically disconnected
+        // from the output — dead parameters that waste memory and mask bugs
+        // during gradient checks.
+        if (useInterpretableBasis && thetaSizeBackcast > polynomialDegree + 1)
+        {
+            throw new ArgumentException(
+                $"Backcast theta size ({thetaSizeBackcast}) cannot exceed polynomialDegree + 1 ({polynomialDegree + 1}) for interpretable basis.",
+                nameof(thetaSizeBackcast));
+        }
+        if (useInterpretableBasis && thetaSizeForecast > polynomialDegree + 1)
+        {
+            throw new ArgumentException(
+                $"Forecast theta size ({thetaSizeForecast}) cannot exceed polynomialDegree + 1 ({polynomialDegree + 1}) for interpretable basis.",
+                nameof(thetaSizeForecast));
+        }
 
         _lookbackWindow = lookbackWindow;
         _forecastHorizon = forecastHorizon;
@@ -458,9 +476,12 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
             thetaForecast[i] = NumOps.Add(fcBiasVec[i], fcWx[i, 0]);
         }
 
-        // Apply basis expansion
-        Vector<T> backcast = ApplyBasisExpansion(thetaBackcast, _lookbackWindow);
-        Vector<T> forecast = ApplyBasisExpansion(thetaForecast, _forecastHorizon);
+        // Apply basis expansion. Pass the matching basis tensor so generic
+        // blocks multiply by their learned V_b / V_f matrices (keeping this
+        // path consistent with Forward() / ForwardTape() and with the
+        // parameter export/import of _basisBackcast / _basisForecast).
+        Vector<T> backcast = ApplyBasisExpansion(thetaBackcast, _basisBackcast, _lookbackWindow);
+        Vector<T> forecast = ApplyBasisExpansion(thetaForecast, _basisForecast, _forecastHorizon);
 
         return (backcast, forecast);
     }
@@ -537,7 +558,17 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         return basis;
     }
 
-    private Vector<T> ApplyBasisExpansion(Vector<T> theta, int outputLength)
+    /// <summary>
+    /// Expands the theta coefficients into an output time series of the requested length.
+    /// </summary>
+    /// <param name="theta">The theta coefficient vector produced by the fc head.</param>
+    /// <param name="basis">
+    /// The basis matrix for the generic branch — shape [outputLength, theta.Length].
+    /// Ignored when <see cref="_useInterpretableBasis"/> is <c>true</c> (the closed-form
+    /// polynomial basis is computed on the fly from <see cref="_polynomialDegree"/>).
+    /// </param>
+    /// <param name="outputLength">Length of the expanded output vector.</param>
+    private Vector<T> ApplyBasisExpansion(Vector<T> theta, Tensor<T> basis, int outputLength)
     {
         Vector<T> output = new Vector<T>(outputLength);
 
@@ -563,10 +594,20 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         }
         else
         {
-            // Generic basis: identity — theta[t] maps directly to output[t]
+            // Generic basis: output = basis · theta. Must use the learned V_b/V_f
+            // matrices per Oreshkin et al. 2020 Section 3.2 — they round-trip through
+            // GetParameters/SetParameters as trainable weights, and the tape-based
+            // Forward path multiplies by the same tensors. Returning theta directly
+            // here (as the pre-fix code did) made PredictSingle diverge from both
+            // training and model-load state.
             for (int t = 0; t < outputLength; t++)
             {
-                output[t] = (t < theta.Length) ? theta[t] : NumOps.Zero;
+                T value = NumOps.Zero;
+                for (int k = 0; k < theta.Length; k++)
+                {
+                    value = NumOps.Add(value, NumOps.Multiply(basis[t, k], theta[k]));
+                }
+                output[t] = value;
             }
         }
 
