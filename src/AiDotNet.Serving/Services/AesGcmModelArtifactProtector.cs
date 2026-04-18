@@ -72,10 +72,27 @@ public sealed class AesGcmModelArtifactProtector : IModelArtifactProtector
         }
     }
 
+    /// <summary>
+    /// Cross-platform-invalid filename characters. Combines the Windows
+    /// invalid set (most restrictive: ":" + "\\" + reserved punctuation +
+    /// control chars) with POSIX "/" and "\0". Used instead of
+    /// <see cref="Path.GetInvalidFileNameChars"/> because that method
+    /// returns a platform-specific set — on Linux it only contains '\0'
+    /// and '/', so a model name like "my:model" sanitizes to "my:model"
+    /// on Linux but "my_model" on Windows. Encrypted artifacts are
+    /// designed to be portable, so we apply the strict Windows superset
+    /// on every OS to guarantee the output is mountable everywhere.
+    /// </summary>
+    private static readonly HashSet<char> CrossPlatformInvalidFileNameChars =
+        new(new[]
+        {
+            '\0', '/', '\\', ':', '*', '?', '"', '<', '>', '|',
+        }
+        .Concat(Enumerable.Range(1, 31).Select(i => (char)i)));
+
     private static string SanitizeFileName(string name)
     {
-        var invalid = Path.GetInvalidFileNameChars();
-        var chars = name.Select(c => invalid.Contains(c) ? '_' : c).ToArray();
+        var chars = name.Select(c => CrossPlatformInvalidFileNameChars.Contains(c) ? '_' : c).ToArray();
         return new string(chars);
     }
 }
