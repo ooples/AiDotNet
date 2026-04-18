@@ -87,6 +87,14 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
             {
                 count += bias.Length;
             }
+            // Generic blocks: V_b and V_f bases are learnable per Oreshkin et al.
+            // 2020 Section 3.2. Interpretable blocks use fixed polynomial bases
+            // that aren't trainable, so don't include them in the parameter count.
+            if (!_useInterpretableBasis)
+            {
+                count += _basisBackcast.Length;
+                count += _basisForecast.Length;
+            }
             return count;
         }
     }
@@ -137,6 +145,18 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         if (numHiddenLayers <= 0)
         {
             throw new ArgumentException("Number of hidden layers must be positive.", nameof(numHiddenLayers));
+        }
+        if (thetaSizeBackcast <= 0)
+        {
+            throw new ArgumentException("Backcast theta size must be positive.", nameof(thetaSizeBackcast));
+        }
+        if (thetaSizeForecast <= 0)
+        {
+            throw new ArgumentException("Forecast theta size must be positive.", nameof(thetaSizeForecast));
+        }
+        if (useInterpretableBasis && polynomialDegree < 0)
+        {
+            throw new ArgumentException("Polynomial degree must be non-negative for interpretable basis.", nameof(polynomialDegree));
         }
 
         _lookbackWindow = lookbackWindow;
@@ -362,9 +382,24 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
     public override void ResetState() { /* stateless layer -- no recurrent state to reset */ }
 
     /// <summary>
-    /// No-op: tape-based training handles parameter updates through the optimizer.
+    /// Throws <see cref="InvalidOperationException"/>: this block is trained
+    /// through the tape-based optimizer path and has no eager scalar-step update.
     /// </summary>
-    public override void UpdateParameters(T learningRate) { }
+    /// <remarks>
+    /// N-BEATS blocks register their parameters via <c>RegisterTrainableParameter</c>
+    /// and are updated by the compiled training plan that <see cref="CompiledTapeTrainingStep{T}"/>
+    /// drives. Calling <c>UpdateParameters(learningRate)</c> directly bypasses
+    /// that path and would silently lose updates, so fail fast to catch the
+    /// misuse at the training boundary rather than later as a silent accuracy
+    /// regression.
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        throw new InvalidOperationException(
+            $"{nameof(NBEATSBlock<T>)} uses tape-based optimization. " +
+            "Update parameters through the optimizer / training step, " +
+            "not directly via UpdateParameters(learningRate).");
+    }
 
     /// <summary>
     /// Non-tape forward pass for inference (used by PredictSingle).
@@ -557,6 +592,15 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
             parameters.AddRange(vec);
         }
 
+        // Generic blocks: include trainable V_b / V_f bases so export round-trips
+        // don't drop learned basis state. Ordering (fc weights, fc biases, then
+        // bases) must match SetParameters.
+        if (!_useInterpretableBasis)
+        {
+            parameters.AddRange(_basisBackcast.ToVector());
+            parameters.AddRange(_basisForecast.ToVector());
+        }
+
         return new Vector<T>(parameters.ToArray());
     }
 
@@ -600,6 +644,27 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
             _fcBiases[b] = new Tensor<T>(new[] { len }, new Vector<T>(data));
         }
 
+        // Generic blocks: restore trainable V_b / V_f bases. Must match the
+        // order GetParameters produced them in.
+        if (!_useInterpretableBasis)
+        {
+            int backcastLen = _basisBackcast.Length;
+            var backcastData = new T[backcastLen];
+            for (int i = 0; i < backcastLen; i++)
+            {
+                backcastData[i] = parameters[idx++];
+            }
+            _basisBackcast = new Tensor<T>(_basisBackcast.Shape.ToArray(), new Vector<T>(backcastData));
+
+            int forecastLen = _basisForecast.Length;
+            var forecastData = new T[forecastLen];
+            for (int i = 0; i < forecastLen; i++)
+            {
+                forecastData[i] = parameters[idx++];
+            }
+            _basisForecast = new Tensor<T>(_basisForecast.Shape.ToArray(), new Vector<T>(forecastData));
+        }
+
         // Re-register trainable parameters after replacing tensors
         ReRegisterParameters();
     }
@@ -615,6 +680,15 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
             RegisterTrainableParameter(w, PersistentTensorRole.Weights);
         foreach (var b in _fcBiases)
             RegisterTrainableParameter(b, PersistentTensorRole.Biases);
+
+        // Generic blocks also learn the basis matrices — re-register them after
+        // SetParameters replaces the tensor instances. Interpretable blocks use
+        // fixed polynomial bases that are not trainable, so skip.
+        if (!_useInterpretableBasis)
+        {
+            RegisterTrainableParameter(_basisBackcast, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_basisForecast, PersistentTensorRole.Weights);
+        }
     }
 
 }
