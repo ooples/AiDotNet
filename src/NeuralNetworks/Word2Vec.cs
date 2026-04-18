@@ -317,10 +317,11 @@ namespace AiDotNet.NeuralNetworks
         /// <b>For Beginners:</b> This is identical to the Forward pass—it takes word IDs and 
         /// returns their embeddings.
         /// </remarks>
-        public override Tensor<T> Predict(Tensor<T> input)
-        {
-            return Forward(input);
-        }
+        /// <summary>
+        /// Routes inference through <see cref="NeuralNetworkBase{T}.PredictCompiled"/> for
+        /// compiled-plan replay; <see cref="Forward"/> remains the eager fallback.
+        /// </summary>
+        protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
 
         /// <summary>
         /// Trains the Word2Vec model on a single batch of target and context pairs.

@@ -236,10 +236,11 @@ public class UNet3D<T> : NeuralNetworkBase<T>
     /// <param name="input">The input voxel grid tensor.</param>
     /// <returns>The predicted segmentation map.</returns>
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input)
-    {
-        return Forward(input);
-    }
+    /// <summary>
+    /// Routes inference through <see cref="NeuralNetworkBase{T}.PredictCompiled"/> for
+    /// compiled-plan replay; <see cref="Forward"/> remains the eager fallback.
+    /// </summary>
+    protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
 
     /// <summary>
     /// Trains the network on a single batch of input-output pairs.

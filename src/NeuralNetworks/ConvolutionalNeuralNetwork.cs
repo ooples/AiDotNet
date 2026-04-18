@@ -234,10 +234,11 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// about what's in the image.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
-    {
-        return Forward(input);
-    }
+    /// <summary>
+    /// Routes inference through <see cref="NeuralNetworkBase{T}.PredictCompiled"/> for
+    /// compiled-plan replay; <see cref="Forward"/> remains the eager fallback.
+    /// </summary>
+    protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
 
     /// <summary>
     /// Trains the convolutional neural network using the provided input and expected output.

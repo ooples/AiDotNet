@@ -1,5 +1,6 @@
 using System.Text;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Helpers.Autotune;
 
 namespace AiDotNet.Diagnostics;
 
@@ -48,6 +49,11 @@ public static class AccelerationDiagnostics
         sb.AppendLine("  Native GPU libs:  " +
             $"CUDA={nativeStatus.HasCuda} HIP={nativeStatus.HasHip} OpenCL={nativeStatus.HasOpenCl}");
 
+        sb.AppendLine("  Autotune cache:   " +
+            $"path={AutotuneCache.DefaultCachePath}");
+        sb.AppendLine("  Autotune HW fp:   " +
+            $"{AutotuneCache.CurrentHardwareFingerprint}");
+
         sb.Append(NativeLibraryDetector.GetStatusSummary());
         return sb.ToString();
     }
@@ -80,6 +86,8 @@ public static class AccelerationDiagnostics
             L1CacheKB = caps.L1CacheSize / 1024,
             L2CacheKB = caps.L2CacheSize / 1024,
             L3CacheKB = caps.L3CacheSize / 1024,
+            AutotuneCachePath = AutotuneCache.DefaultCachePath,
+            AutotuneHardwareFingerprint = AutotuneCache.CurrentHardwareFingerprint,
         };
     }
 }
@@ -107,4 +115,6 @@ public sealed class AccelerationSnapshot
     public int L1CacheKB { get; init; }
     public int L2CacheKB { get; init; }
     public int L3CacheKB { get; init; }
+    public string AutotuneCachePath { get; init; } = "";
+    public string AutotuneHardwareFingerprint { get; init; } = "";
 }
