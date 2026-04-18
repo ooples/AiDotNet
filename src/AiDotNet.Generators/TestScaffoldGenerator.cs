@@ -1492,7 +1492,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     }
                 }
             }
-            else if (model.Domains.Contains(3) && !model.Tasks.Contains(35))
+            else if (model.Domains.Contains(4) && !model.Tasks.Contains(35))
             {
                 // Temporal video models (ActionRecognition=22, VideoGeneration=41, etc.)
                 // need a 4D [frames, channels, height, width] input shape, but
@@ -1500,6 +1500,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Rather than silently emit a mismatched 3D architecture alongside a
                 // 4D InputShape, route these to a runtime placeholder until the
                 // architecture type can represent a temporal dimension.
+                //
+                // The enum ordinal for ModelDomain.Video is 4
+                // (General=0, Vision=1, Language=2, Audio=3, Video=4, ...).
+                // This check previously used 3, which incorrectly flagged every
+                // *audio* model (PlayHT, Bark, etc.) as "temporal video" and
+                // emitted a NotImplementedException factory — ten PlayHTTests
+                // failures on PR #1156 traced to this off-by-one.
                 constructorExpr = "throw new System.NotImplementedException(" +
                     $"\"'{GeneratorHelpers.StripGenericSuffix(model.ClassName)}' is a temporal video model; NeuralNetworkArchitecture<T> cannot express its 4D [frames, channels, height, width] input. Implement this factory manually.\")";
             }
@@ -1510,7 +1517,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // others default to OneDimensional. Temporal video is handled above.
                 needsArchitectureUsing = true;
                 bool isVision = model.Domains.Contains(1) || model.Domains.Contains(11); // Vision=1, ThreeD=11
-                bool isAudio = model.Domains.Contains(4); // Audio=4
+                bool isAudio = model.Domains.Contains(3); // Audio=3 (enum ordinal, not Video=4)
                 bool isFrameInterp = model.Tasks.Contains(35); // FrameInterpolation → 3D input
 
                 string inputTypeExpr;
@@ -1623,11 +1630,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         // Override InputShape/OutputShape for domain-appropriate test data.
         // Vision/Video/3D models need [C, H, W]; default is [1, 4].
-        bool isVideoModel = model.Domains.Contains(3);
+        // Enum ordinals: General=0, Vision=1, Language=2, Audio=3, Video=4.
+        bool isVideoModel = model.Domains.Contains(4); // Video=4 (was incorrectly 3)
         bool isFrameInterpModel = model.Tasks.Contains(35); // FrameInterpolation
         bool isTemporalVideoModel = isVideoModel && !isFrameInterpModel;
         bool isVisionModel = model.Domains.Contains(1) || model.Domains.Contains(11);
-        bool isAudioModel = model.Domains.Contains(4);
+        bool isAudioModel = model.Domains.Contains(3); // Audio=3 (was incorrectly 4)
         if (isTemporalVideoModel)
         {
             // Temporal video: [frames, channels, height, width]
