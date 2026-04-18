@@ -1404,6 +1404,16 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> AllowNondeterminism();
 
     /// <summary>
+    /// Captures SIMD/GPU/native-BLAS acceleration status at build time, logs it, and
+    /// surfaces a structured snapshot on <c>PredictionModelResult.AccelerationSnapshot</c>.
+    /// </summary>
+    /// <param name="logger">
+    /// Optional callback receiving the formatted report. Defaults to <see cref="Console.WriteLine(string)"/>.
+    /// </param>
+    /// <returns>This builder for fluent chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ReportAccelerationStatus(Action<string>? logger = null);
+
+    /// <summary>
     /// Configures mixed-precision training for faster neural network training with reduced memory usage.
     /// </summary>
     /// <param name="config">Mixed precision configuration (optional, uses defaults if null).</param>

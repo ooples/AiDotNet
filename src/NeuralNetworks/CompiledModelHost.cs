@@ -60,6 +60,19 @@ internal sealed class CompiledModelHost<T> : IDisposable
     private bool _disposed;
 
     /// <summary>
+    /// Symbolic-shape strategy that governs which input dims the compile cache
+    /// treats as variable. BatchDynamic (default) lets a single compiled plan
+    /// serve batch-size 1, 4, 32, 128 etc. without recompiling each time —
+    /// matching PyTorch's default <c>torch.compile(dynamic=True)</c> posture.
+    /// </summary>
+    private readonly SymbolicShapeMode _shapeMode;
+
+    public CompiledModelHost(SymbolicShapeMode shapeMode = SymbolicShapeMode.BatchDynamic)
+    {
+        _shapeMode = shapeMode;
+    }
+
+    /// <summary>
     /// Synchronizes lifecycle mutations on <c>_cache</c>, <c>_lastCompiledVersion</c>,
     /// and <c>_disposed</c>. Without it a concurrent <c>Dispose</c>/<c>Invalidate</c>
     /// racing with <c>Predict</c> on the same model instance can tear down the
@@ -185,9 +198,11 @@ internal sealed class CompiledModelHost<T> : IDisposable
                 // tensor ambiguous to the tracer, producing wrong outputs on
                 // replay. Keep the expression-bodied lambda so the value threads
                 // through unchanged.
-                var plan = cache.GetOrCompileInference(
-                    (int[])input._shape.Clone(),
-                    () => eagerForward());
+                var concreteShape = (int[])input._shape.Clone();
+                var symbolicShape = BuildSymbolicShape(concreteShape, _shapeMode);
+                var plan = symbolicShape is null
+                    ? cache.GetOrCompileInference(concreteShape, () => eagerForward())
+                    : cache.GetOrCompileInference(concreteShape, () => eagerForward(), symbolicShape);
 
                 // Safe to write _lastCompiledVersion outside the lock — int writes
                 // are atomic in .NET, and the value is only used as a hint by the
@@ -386,4 +401,43 @@ internal sealed class CompiledModelHost<T> : IDisposable
             }
         }
     }
+
+    /// <summary>
+    /// Translates <see cref="SymbolicShapeMode"/> + concrete shape into a Tensors
+    /// <see cref="SymbolicShape"/> (or null to fall back to the purely concrete
+    /// overload when the rank is too small for the requested mode).
+    /// </summary>
+    private static SymbolicShape? BuildSymbolicShape(int[] shape, SymbolicShapeMode mode)
+    {
+        switch (mode)
+        {
+            case SymbolicShapeMode.Static:
+                return null;
+            case SymbolicShapeMode.BatchDynamic:
+                return shape.Length >= 2 ? SymbolicShape.BatchDynamic(shape) : null;
+            case SymbolicShapeMode.BatchAndSeqDynamic:
+                return shape.Length >= 3 ? SymbolicShape.BatchAndSeqDynamic(shape) : null;
+            case SymbolicShapeMode.AllDynamic:
+                return SymbolicShape.AllDynamic(shape);
+            default:
+                return null;
+        }
+    }
+}
+
+/// <summary>
+/// Strategy for how <see cref="CompiledModelHost{T}"/> keys the compile cache. Dynamic
+/// dims let one compiled plan serve multiple concrete shapes — essential for bursty
+/// inference traffic where every request has a different batch size.
+/// </summary>
+public enum SymbolicShapeMode
+{
+    /// <summary>Every dim treated as static. Recompile on any shape change.</summary>
+    Static,
+    /// <summary>Dim 0 (batch) dynamic; all others static. PyTorch-default behavior.</summary>
+    BatchDynamic,
+    /// <summary>Dims 0 (batch) and 1 (seq-len) dynamic. For transformer-style inputs.</summary>
+    BatchAndSeqDynamic,
+    /// <summary>Every dim dynamic. Maximum reuse; slight dispatch overhead on replay.</summary>
+    AllDynamic,
 }
