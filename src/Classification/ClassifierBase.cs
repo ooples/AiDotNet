@@ -675,10 +675,4 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
         Deserialize(serializedData);
     }
 
-    #region IJitCompilable Implementation
-
-    /// <inheritdoc/>
-    public virtual bool SupportsJitCompilation => false;
-
-    #endregion
 }

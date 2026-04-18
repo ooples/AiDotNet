@@ -445,13 +445,6 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
         return gradients;
     }
 
-    #region IJitCompilable Implementation
-
-    /// <inheritdoc />
-    public virtual bool SupportsJitCompilation => false;
-
-    #endregion
-
     /// <summary>
     /// Binary cross-entropy loss for multi-label classification.
     /// </summary>

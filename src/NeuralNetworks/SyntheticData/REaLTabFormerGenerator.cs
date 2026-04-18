@@ -828,7 +828,4 @@ public class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabular
 
     #endregion
 
-    #region IJitCompilable Override
-
-    #endregion
 }

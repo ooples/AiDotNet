@@ -988,7 +988,4 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     #endregion
 
-    #region IJitCompilable Override
-
-    #endregion
 }

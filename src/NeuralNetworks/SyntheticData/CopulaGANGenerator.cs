@@ -1335,7 +1335,4 @@ public class CopulaGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
 
     #endregion
 
-    #region IJitCompilable Override
-
-    #endregion
 }

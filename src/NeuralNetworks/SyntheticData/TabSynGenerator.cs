@@ -1203,9 +1203,6 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     #endregion
 
-    #region IJitCompilable Override
-
-    #endregion
 
     #region Tensor Shape Helpers
 

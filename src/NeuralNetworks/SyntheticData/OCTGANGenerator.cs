@@ -984,7 +984,4 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     #endregion
 
-    #region IJitCompilable Override
-
-    #endregion
 }

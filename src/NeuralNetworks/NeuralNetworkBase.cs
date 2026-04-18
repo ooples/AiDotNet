@@ -4887,45 +4887,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
     }
 
-    #region IJitCompilable Implementation
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// Default is <c>true</c> because the base class's <see cref="Predict"/> now
-    /// routes through <see cref="PredictCompiled"/>, which auto-compiles when
-    /// <c>TensorCodecOptions.EnableCompilation</c> is on AND the model's op
-    /// graph is traceable, falling back to eager otherwise. So every
-    /// <see cref="NeuralNetworkBase{T}"/> subclass is "JIT-capable" in the
-    /// effective sense: JIT is attempted, and failures degrade gracefully
-    /// to eager without the user noticing.
-    /// </para>
-    /// <para>
-    /// Subclasses whose forward path is known to be incompatible with graph
-    /// capture (non-Engine tensor access, scalar control flow that bakes at
-    /// trace time, layers whose outputs depend on mutable instance state)
-    /// should override this to return <c>false</c> — that signals "don't even
-    /// try" so tooling can short-circuit and users know to expect eager-only
-    /// performance.
-    /// </para>
-    /// <para><b>For Beginners:</b> JIT (Just-In-Time) compilation optimizes neural networks for faster predictions.
-    ///
-    /// Instead of executing each layer one by one at runtime, JIT compilation:
-    /// - Analyzes the entire network structure
-    /// - Combines and optimizes operations
-    /// - Generates specialized native code
-    /// - Results in 5-10x faster predictions
-    ///
-    /// This is especially beneficial for:
-    /// - Production deployment (real-time predictions)
-    /// - Batch inference (processing many examples)
-    /// - Edge devices (mobile, embedded systems)
-    /// </para>
-    /// </remarks>
-    public virtual bool SupportsJitCompilation => true;
-
-    #endregion
-
     #region ILayeredModel<T> Implementation
 
     /// <summary>

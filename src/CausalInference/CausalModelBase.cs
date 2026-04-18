@@ -84,11 +84,6 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
 
     /// <summary>
-    /// Gets whether JIT compilation is supported.
-    /// </summary>
-    public virtual bool SupportsJitCompilation => false;
-
-    /// <summary>
     /// Initializes a new instance of the CausalModelBase class.
     /// </summary>
     protected CausalModelBase()

@@ -90,9 +90,6 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc />
     public ILossFunction<T> DefaultLossFunction => LossFunction;
 
-    /// <inheritdoc />
-    public virtual bool SupportsJitCompilation => false;
-
     /// <summary>
     /// Initializes a new instance of the VAEModelBase class.
     /// </summary>

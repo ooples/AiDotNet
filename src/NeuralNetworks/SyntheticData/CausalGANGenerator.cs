@@ -1179,7 +1179,4 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
 
     #endregion
 
-    #region IJitCompilable Override
-
-    #endregion
 }

@@ -836,7 +836,4 @@ public class TabLLMGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
 
     #endregion
 
-    #region IJitCompilable Override
-
-    #endregion
 }

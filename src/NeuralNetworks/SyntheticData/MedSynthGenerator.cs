@@ -868,7 +868,4 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
     #endregion
 
-    #region IJitCompilable Override
-
-    #endregion
 }

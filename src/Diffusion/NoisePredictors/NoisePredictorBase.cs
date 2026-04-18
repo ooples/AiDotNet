@@ -233,9 +233,6 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public ILossFunction<T> DefaultLossFunction => LossFunction;
 
-    /// <inheritdoc />
-    public virtual bool SupportsJitCompilation => false;
-
     /// <summary>
     /// Initializes a new instance of the NoisePredictorBase class.
     /// </summary>

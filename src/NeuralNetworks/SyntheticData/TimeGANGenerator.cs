@@ -888,7 +888,4 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
     #endregion
 
-    #region IJitCompilable Override
-
-    #endregion
 }

@@ -583,7 +583,4 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return clone;
     }
 
-    #region IJitCompilable Implementation Override
-
-    #endregion
 }

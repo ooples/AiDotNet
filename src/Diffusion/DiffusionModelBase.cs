@@ -238,9 +238,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </remarks>
     public NeuralNetworkArchitecture<T>? Architecture => _architecture;
 
-    /// <inheritdoc />
-    public virtual bool SupportsJitCompilation => false;
-
     /// <summary>
     /// Initializes a new instance of the DiffusionModelBase class.
     /// </summary>

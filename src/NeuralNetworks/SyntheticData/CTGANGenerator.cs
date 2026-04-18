@@ -1065,7 +1065,4 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
 
     #endregion
 
-    #region IJitCompilable Override
-
-    #endregion
 }

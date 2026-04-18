@@ -93,11 +93,6 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
 
     /// <summary>
-    /// Gets whether JIT compilation is supported.
-    /// </summary>
-    public virtual bool SupportsJitCompilation => false;
-
-    /// <summary>
     /// Initializes a new instance of the OnlineLearningModelBase class.
     /// </summary>
     /// <param name="initialLearningRate">Initial learning rate. Default is 0.01.</param>
