@@ -960,6 +960,38 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     }
 
     /// <summary>
+    /// Enables disk-backed caching of compiled inference plans. Plans are saved after
+    /// the first compilation and loaded transparently on subsequent process starts,
+    /// skipping the trace+compile cost of cold start.
+    /// </summary>
+    /// <param name="directory">
+    /// Filesystem directory where plan files are stored. Created if missing. Plans are
+    /// keyed by (concrete model type, element type, structure version, input shape)
+    /// so one directory can host plans for multiple models.
+    /// </param>
+    /// <returns>This builder for fluent chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// PyTorch-parity equivalent: <c>torch.jit.save</c> + <c>torch.jit.load</c>.
+    /// Plans are tied to the host's hardware fingerprint (via Tensors'
+    /// <c>PlanCompatibilityInfo</c>); plans compiled on one host are rejected on
+    /// incompatible hardware, triggering a fresh compile.
+    /// </para>
+    /// <para>
+    /// Caching is opt-in — without this call, plans live only for the process
+    /// lifetime via the in-memory <c>CompiledModelCache</c>.
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigurePlanCaching(string directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory))
+            throw new ArgumentException("Plan cache directory must be a non-empty path.", nameof(directory));
+
+        AiDotNet.NeuralNetworks.PlanCache.SetCurrent(new AiDotNet.NeuralNetworks.PlanCache(directory));
+        return this;
+    }
+
+    /// <summary>
     /// Opts out of the builder's deterministic-by-default policy. Call this when
     /// you want the engine to pick the fastest available kernels even if they
     /// produce slightly different floating-point results across runs or hardware.

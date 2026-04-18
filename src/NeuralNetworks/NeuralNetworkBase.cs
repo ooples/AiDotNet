@@ -328,6 +328,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         LossFunction = lossFunction;
         _cachedParameterCount = null;
         _sensitiveFeatures = new Vector<int>(0);
+        // Concrete subclass's type name threads through so disk-cached plans in
+        // PlanCache.Current don't collide between different model classes.
+        _compileHost = new CompiledModelHost<T>(
+            shapeMode: SymbolicShapeMode.BatchDynamic,
+            modelIdentity: GetType().FullName ?? GetType().Name);
     }
 
     /// <summary>
@@ -2212,7 +2217,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// rather than re-implementing the compile+cache+fallback dance per
     /// model family.
     /// </remarks>
-    private readonly CompiledModelHost<T> _compileHost = new();
+    private readonly CompiledModelHost<T> _compileHost;
 
     /// <summary>
     /// Tracks input shapes whose compilation has previously failed on this

@@ -42,7 +42,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// loop. First call traces, subsequent calls replay. Falls back to eager when
     /// compilation is disabled or fails.
     /// </summary>
-    private readonly AiDotNet.NeuralNetworks.CompiledModelHost<T> _compileHost = new();
+    private readonly AiDotNet.NeuralNetworks.CompiledModelHost<T> _compileHost;
 
     /// <summary>
     /// Monotonic layer-graph version. Concrete predictors bump this via
@@ -244,6 +244,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         RandomGenerator = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
             : RandomHelper.CreateSecureRandom();
+        _compileHost = new AiDotNet.NeuralNetworks.CompiledModelHost<T>(
+            shapeMode: AiDotNet.NeuralNetworks.SymbolicShapeMode.BatchDynamic,
+            modelIdentity: GetType().FullName ?? GetType().Name);
     }
 
     #region Lazy Layer Factories
