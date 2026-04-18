@@ -160,16 +160,6 @@ public class FineTuningIntegrationTests
             }
         }
 
-        // IJitCompilable
-        public bool IsJitCompiled => false;
-        public bool SupportsJitCompilation => false;
-        public void CompileForJit() { }
-        public void ResetJitCompilation() { }
-        public AiDotNet.Autodiff.ComputationNode<double> ExportComputationGraph(List<AiDotNet.Autodiff.ComputationNode<double>> nodes)
-        {
-            return new AiDotNet.Autodiff.ComputationNode<double>(new Tensor<double>(new[] { 1 }), false, null, null, "mock");
-        }
-
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 

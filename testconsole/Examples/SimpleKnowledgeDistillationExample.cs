@@ -171,22 +171,6 @@ public static class SimpleKnowledgeDistillationExample
         public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null) => new Vector<double>(0);
         public void ApplyGradients(Vector<double> gradients, double learningRate) { }
 
-        // IJitCompilable implementation
-        public bool SupportsJitCompilation => true;
-
-        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-        {
-            // Create a simple computation graph for the mock model
-            var inputShape = new int[] { 1, _inputDim };
-            var inputTensor = new Tensor<double>(inputShape);
-            var inputNode = TensorOperations<double>.Variable(inputTensor, "input");
-            inputNodes.Add(inputNode);
-
-            // Simple transformation: mean of inputs
-            var outputNode = TensorOperations<double>.Mean(inputNode);
-            return outputNode;
-        }
-
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 }

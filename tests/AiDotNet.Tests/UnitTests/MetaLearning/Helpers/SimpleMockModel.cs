@@ -141,28 +141,6 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
         }
     }
 
-    // IJitCompilable implementation
-    public bool SupportsJitCompilation => true;
-
-    public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-    {
-        // Create a simple linear computation graph: output = sum(input * parameters)
-        var inputShape = new int[] { 1, _parameters.Length };
-        var inputTensor = new Tensor<double>(inputShape);
-        var inputNode = TensorOperations<double>.Variable(inputTensor, "input");
-        inputNodes.Add(inputNode);
-
-        // Create parameter node
-        var paramTensor = new Tensor<double>(new int[] { _parameters.Length }, _parameters);
-        var paramNode = TensorOperations<double>.Variable(paramTensor, "parameters");
-        inputNodes.Add(paramNode);
-
-        // Compute element-wise multiply and sum
-        var mulNode = TensorOperations<double>.ElementwiseMultiply(inputNode, paramNode);
-        var outputNode = TensorOperations<double>.Sum(mulNode);
-        return outputNode;
-    }
-
     // ISecondOrderGradientComputable implementation
     public Vector<double> ComputeSecondOrderGradients(
         List<(Tensor<double> input, Tensor<double> target)> adaptationSteps,

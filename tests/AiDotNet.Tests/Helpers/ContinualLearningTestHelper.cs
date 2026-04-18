@@ -413,14 +413,6 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
         }
     }
 
-    // IJitCompilable<T>
-    public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("Mock network does not support JIT compilation");
-    }
-
-    public bool SupportsJitCompilation => false;
-
     public T GetLastLoss() => _ops.Zero;
 
     public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
@@ -563,14 +555,6 @@ public class MockLayer<T> : ILayer<T>
     {
         // No state to reset for mock
     }
-
-    // IJitCompilable<T>
-    public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("Mock layer does not support JIT compilation");
-    }
-
-    public bool SupportsJitCompilation => false;
 
     // GPU execution
     public bool CanExecuteOnGpu => false;

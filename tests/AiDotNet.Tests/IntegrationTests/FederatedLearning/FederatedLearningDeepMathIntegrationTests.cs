@@ -874,11 +874,6 @@ public class FederatedLearningDeepMathIntegrationTests
             => new(_parameters.Length);
         public void ApplyGradients(Vector<double> gradients, double learningRate) { }
 
-        // IJitCompilable
-        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-            => throw new NotSupportedException();
-        public bool SupportsJitCompilation => false;
-
         // IModelSerializer
         public byte[] Serialize() => Array.Empty<byte>();
         public void Deserialize(byte[] data) { }

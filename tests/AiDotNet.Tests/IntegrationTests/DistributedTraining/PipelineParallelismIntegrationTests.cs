@@ -1278,7 +1278,6 @@ public class PipelineParallelismIntegrationTests
         public int ParameterCount => _parameterCount;
         public bool SupportsParameterInitialization => ParameterCount > 0;
         public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
-        public bool SupportsJitCompilation => false;
 
         public Vector<double> Predict(Vector<double> input)
         {
@@ -1398,15 +1397,6 @@ public class PipelineParallelismIntegrationTests
         public Dictionary<string, double> GetFeatureImportance() =>
             Enumerable.Range(0, _parameterCount).ToDictionary(i => $"f_{i}", i => 1.0 / _parameterCount);
 
-        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-        {
-            var node = new ComputationNode<double>(
-                new Tensor<double>(new[] { _parameterCount }),
-                false, null, null, "test_graph");
-            inputNodes.Add(node);
-            return node;
-        }
-
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
@@ -1433,7 +1423,6 @@ public class PipelineParallelismIntegrationTests
         public int ParameterCount => _parameterCount;
         public bool SupportsParameterInitialization => ParameterCount > 0;
         public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
-        public bool SupportsJitCompilation => false;
 
         public Vector<double> Predict(Vector<double> input)
         {
@@ -1567,15 +1556,6 @@ public class PipelineParallelismIntegrationTests
         public bool IsFeatureUsed(int featureIndex) => featureIndex >= 0 && featureIndex < _parameterCount;
         public Dictionary<string, double> GetFeatureImportance() =>
             Enumerable.Range(0, _parameterCount).ToDictionary(i => $"f_{i}", i => 1.0 / _parameterCount);
-
-        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-        {
-            var node = new ComputationNode<double>(
-                new Tensor<double>(new[] { _parameterCount }),
-                false, null, null, "decomposable_test_graph");
-            inputNodes.Add(node);
-            return node;
-        }
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }

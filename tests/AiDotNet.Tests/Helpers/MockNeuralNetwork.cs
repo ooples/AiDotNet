@@ -273,14 +273,6 @@ public class MockNeuralNetwork : INeuralNetwork<double>
         }
     }
 
-    // IJitCompilable implementation
-    public bool SupportsJitCompilation => false;
-
-    public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation not supported in mock model");
-    }
-
     // ILayeredModel<double> implementation
     IReadOnlyList<ILayer<double>> ILayeredModel<double>.Layers => Array.Empty<ILayer<double>>();
 

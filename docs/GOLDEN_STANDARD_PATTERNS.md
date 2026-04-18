@@ -102,11 +102,6 @@ public ExampleLayer(
 /// </summary>
 public override bool SupportsTraining => true;
 
-/// <summary>
-/// Gets whether this layer supports JIT compilation.
-/// </summary>
-public override bool SupportsJitCompilation => CanActivationBeJitted();
-
 public override Tensor<T> Forward(Tensor<T> input)
 {
     _lastInput = input;
@@ -171,11 +166,6 @@ public override void ResetState()
 {
     _lastInput = new Tensor<T>(InputShape);
     _lastOutput = new Tensor<T>(OutputShape);
-}
-
-public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-{
-    // Create computation graph for JIT compilation
 }
 ```
 
@@ -650,10 +640,6 @@ public abstract IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy();
 public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null);
 public virtual void ApplyGradients(Vector<T> gradients, T learningRate);
 
-// IJitCompilable<T>
-public virtual bool SupportsJitCompilation => false;
-public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes);
-
 // IFullModel<T, TInput, TOutput>
 public ILossFunction<T> DefaultLossFunction => LossFunction;
 ```
@@ -786,14 +772,12 @@ SomeWeight = NumOps.FromDouble(0.01);
 - [ ] Uses `NumOps` for all numeric operations
 - [ ] Uses `RandomHelper` for random number generation
 - [ ] Implements `SupportsTraining` property
-- [ ] Implements `SupportsJitCompilation` property
 - [ ] Implements `Forward(Tensor<T>)`
 - [ ] Implements `Backward(Tensor<T>)`
 - [ ] Implements `UpdateParameters(T)`
 - [ ] Implements `GetParameters()`
 - [ ] Implements `SetParameters(Vector<T>)`
 - [ ] Implements `ResetState()`
-- [ ] Implements `ExportComputationGraph(List<ComputationNode<T>>)`
 - [ ] Overrides `Serialize(BinaryWriter)` if additional state
 - [ ] Overrides `Deserialize(BinaryReader)` if additional state
 - [ ] Has comprehensive XML documentation with "For Beginners" sections
@@ -852,7 +836,6 @@ Key patterns demonstrated:
 - Forward/Backward pass caching (`_lastInput`, `_lastOutput`)
 - Gradient storage (`_kernelsGradient`, `_biasesGradient`)
 - Serialization/Deserialization with `NumOps.ToDouble`/`FromDouble`
-- JIT compilation support via `ExportComputationGraph`
 
 ### Reference Layer: TimeEmbeddingLayer
 
