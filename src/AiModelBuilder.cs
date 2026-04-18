@@ -188,6 +188,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private bool _reportAccelerationAtBuild;
     private Action<string>? _accelerationLogger;
     private AiDotNet.Diagnostics.AccelerationSnapshot? _accelerationSnapshot;
+    private bool _tensorsOpProfilingEnabled;
+    private AiDotNet.Diagnostics.TensorsOperationProfile? _tensorsOperationProfile;
 
     /// <summary>
     /// When <c>true</c>, <see cref="BuildAsync"/> does NOT force deterministic
@@ -988,6 +990,29 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             throw new ArgumentException("Plan cache directory must be a non-empty path.", nameof(directory));
 
         AiDotNet.NeuralNetworks.PlanCache.SetCurrent(new AiDotNet.NeuralNetworks.PlanCache(directory));
+        return this;
+    }
+
+    /// <summary>
+    /// Enables low-level per-tensor-op profiling via Tensors'
+    /// <c>PerformanceProfiler.Instance</c>. After <c>BuildAsync()</c> returns, kernel
+    /// timings are captured on <c>AiModelResult.TensorsOperationProfile</c>.
+    /// Orthogonal to the higher-level <c>ConfigureProfiling</c> (AiDotNet workflow
+    /// timings) — both can be enabled together to get a full picture.
+    /// </summary>
+    /// <returns>This builder for fluent chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// The profiler wraps every engine op in a dispatchable scope — expect a small
+    /// overhead (~1-3%) during the measured window. Disable in production latency-
+    /// sensitive paths. PyTorch-parity equivalent: low-level
+    /// <c>torch.profiler.profile</c> CUDA/CPU op breakdown.
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> EnableTensorsOpProfiling()
+    {
+        _tensorsOpProfilingEnabled = true;
+        AiDotNet.Tensors.Engines.Optimization.PerformanceProfiler.Instance.Enabled = true;
         return this;
     }
 
@@ -6602,6 +6627,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         if (_accelerationSnapshot is not null)
         {
             result.AccelerationSnapshot = _accelerationSnapshot;
+        }
+        if (_tensorsOpProfilingEnabled)
+        {
+            _tensorsOperationProfile = AiDotNet.Diagnostics.TensorsOperationProfile.Capture();
+            result.TensorsOperationProfile = _tensorsOperationProfile;
         }
         return result;
     }

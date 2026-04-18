@@ -23,4 +23,19 @@ public partial class AiModelResult<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public AccelerationSnapshot? AccelerationSnapshot { get; internal set; }
+
+    /// <summary>
+    /// Per-tensor-op performance profile captured when the builder opted in via
+    /// <c>EnableTensorsOpProfiling()</c>. Null otherwise. Complements the
+    /// higher-level <c>ProfilingReport</c> (from <c>ConfigureProfiling</c>) by
+    /// surfacing Tensors-package kernel timings, not just AiDotNet workflow timings.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// PyTorch-parity equivalent: low-level <c>torch.profiler.profile</c> CUDA/CPU op
+    /// breakdown. Operations are sorted by total time descending; use
+    /// <see cref="TensorsOperationProfile.FormatSummary"/> for a one-line-per-op table.
+    /// </para>
+    /// </remarks>
+    public TensorsOperationProfile? TensorsOperationProfile { get; internal set; }
 }

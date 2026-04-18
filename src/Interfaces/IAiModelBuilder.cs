@@ -1423,6 +1423,14 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigurePlanCaching(string directory);
 
     /// <summary>
+    /// Enables low-level per-tensor-op profiling via Tensors'
+    /// <c>PerformanceProfiler.Instance</c>. After BuildAsync, timings are captured
+    /// on <c>AiModelResult.TensorsOperationProfile</c>.
+    /// </summary>
+    /// <returns>This builder for fluent chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> EnableTensorsOpProfiling();
+
+    /// <summary>
     /// Configures mixed-precision training for faster neural network training with reduced memory usage.
     /// </summary>
     /// <param name="config">Mixed precision configuration (optional, uses defaults if null).</param>
