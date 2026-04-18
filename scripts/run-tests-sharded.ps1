@@ -214,7 +214,6 @@ try {
     "Helpers",
     "Inference",
     "Interpretability",
-    "JitCompiler",
     "KnowledgeDistillation",
     "LearningRateSchedulers",
     "LinearAlgebra",
@@ -242,14 +241,13 @@ try {
   $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 04 Diagnostics/Diffusion/Encoding" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter (New-UnitShardFilter -CategoryFilter $categoryFilter -Roots $unitNamespaceRoots -Segments @("Diagnostics", "Diffusion", "Encoding"))))
   $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 05 Feature/Fit/Fitness" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter (New-UnitShardFilter -CategoryFilter $categoryFilter -Roots $unitNamespaceRoots -Segments @("FeatureSelectors", "FitDetectors", "FitnessCalculators"))))
   $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 06 Genetics/Helpers/Inference" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter (New-UnitShardFilter -CategoryFilter $categoryFilter -Roots $unitNamespaceRoots -Segments @("Genetics", "Helpers", "Inference"))))
-  $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 07 Interpretability/JIT/KD" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter (New-UnitShardFilter -CategoryFilter $categoryFilter -Roots $unitNamespaceRoots -Segments @("Interpretability", "JitCompiler", "KnowledgeDistillation"))))
+  $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 07 Interpretability/KD" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter (New-UnitShardFilter -CategoryFilter $categoryFilter -Roots $unitNamespaceRoots -Segments @("Interpretability", "KnowledgeDistillation"))))
   $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 08 Schedulers/LA/Logging/Loss" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter (New-UnitShardFilter -CategoryFilter $categoryFilter -Roots $unitNamespaceRoots -Segments @("LearningRateSchedulers", "LinearAlgebra", "Logging", "LossFunctions"))))
   $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 09 Meta/Mixed/Compression" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter (New-UnitShardFilter -CategoryFilter $categoryFilter -Roots $unitNamespaceRoots -Segments @("MetaLearning", "MixedPrecision", "ModelCompression"))))
   $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 10 NN/Optimizers/RAG" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter (New-UnitShardFilter -CategoryFilter $categoryFilter -Roots $unitNamespaceRoots -Segments @("NeuralNetworks", "Optimizers", "RAG"))))
   $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 11 Regularization/RL/RAG2" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter (New-UnitShardFilter -CategoryFilter $categoryFilter -Roots $unitNamespaceRoots -Segments @("Regularization", "ReinforcementLearning", "RetrievalAugmentedGeneration"))))
   $shards.Add((New-TestShard -Name "AiDotNet.Tests - Unit - 12 Serving/TimeSeries/Token/Transfer" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter (New-UnitShardFilter -CategoryFilter $categoryFilter -Roots $unitNamespaceRoots -Segments @("Serving", "TimeSeries", "Tokenization", "TransferLearning"))))
-  $shards.Add((New-TestShard -Name "AiDotNet.Tests - Other - 13 InferenceOptimization" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "$categoryFilter&FullyQualifiedName~AiDotNet.Tests.InferenceOptimization"))
-  $shards.Add((New-TestShard -Name "AiDotNet.Tests - Other - 14 PromptEngineering" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "$categoryFilter&FullyQualifiedName~AiDotNet.Tests.PromptEngineering"))
+  $shards.Add((New-TestShard -Name "AiDotNet.Tests - Other - 13 PromptEngineering" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "$categoryFilter&FullyQualifiedName~AiDotNet.Tests.PromptEngineering"))
   $shards.Add((New-TestShard -Name "AiDotNet.Tests - Other - 15 Recovery/Concurrency" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter "$categoryFilter&FullyQualifiedName~AiDotNet.Tests.Concurrency|$categoryFilter&FullyQualifiedName~AiDotNet.Tests.Recovery"))
   $shards.Add((New-TestShard -Name "AiDotNet.Tests - Other - 16 ActivationFunctions" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter (New-NamespaceFilter -CategoryFilter $categoryFilter -Namespaces @("AiDotNet.Tests.ActivationFunctions"))))
   $shards.Add((New-TestShard -Name "AiDotNet.Tests - Other - 17 Factories" -Project "tests\AiDotNet.Tests\AiDotNetTests.csproj" -Filter (New-NamespaceFilter -CategoryFilter $categoryFilter -Namespaces @("AiDotNet.Tests.Factories"))))
