@@ -4207,11 +4207,23 @@ public static class LayerHelper<T>
 
         // ============== DECODER PATH ==============
         // Each decoder block: Upsample3D -> Conv3D -> Conv3D
-        // Note: Skip connections need to be handled by the network model
+        //
+        // Note: a full U-Net would concatenate encoder skip-connections at
+        // each decoder level, doubling the channel count into the first
+        // Conv3D. This implementation does NOT actually perform the
+        // concatenation, so the "*2" previously applied to
+        // encoderFilters[block + 1] told the Upsample and first-Conv3D to
+        // expect twice the channels they would actually receive from the
+        // preceding decoder block's Second-Conv3D output. That produced
+        //   "Input channels (128) must match kernel in_channels (256)"
+        // at the first decoder block after the bottleneck-adjacent one.
+        // Matching the actual tensor-channel count (= encoderFilters[block + 1])
+        // keeps the stack consistent; adding real skip concatenation is a
+        // separate architectural improvement tracked independently.
         for (int block = numEncoderBlocks - 2; block >= 0; block--)
         {
             int outputFilters = encoderFilters[block];
-            int inChannels = block == numEncoderBlocks - 2 ? bottleneckFilters : encoderFilters[block + 1] * 2;
+            int inChannels = block == numEncoderBlocks - 2 ? bottleneckFilters : encoderFilters[block + 1];
 
             // Upsample3D to increase resolution
             yield return new Upsample3DLayer<T>(
