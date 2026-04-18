@@ -388,7 +388,18 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
+            // Match Forward's behavior: accept 3D [C,H,W] single example and
+            // expand to 4D [1,C,H,W] so the layer stack (conv / pool / flatten /
+            // dense) receives the batched shape it expects. Without the
+            // expansion the FlattenLayer in the classifier head treats the
+            // channel dimension as a batch and produces an output with the
+            // wrong leading dim — fails the loss-shape check on every training
+            // call with a single 3D input.
+            Tensor<T> processedInput = input.Rank == 3 ? AddBatchDimension(input) : input;
+            Tensor<T> processedTarget = input.Rank == 3 && expectedOutput.Rank < processedInput.Rank - 2
+                ? AddBatchDimension(expectedOutput)
+                : expectedOutput;
+            TrainWithTape(processedInput, processedTarget, _optimizer);
         }
         finally
         {
