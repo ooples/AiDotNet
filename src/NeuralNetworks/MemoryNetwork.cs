@@ -187,6 +187,21 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         _embeddingSize = embeddingSize;
         _memory = new Matrix<T>(_memorySize, _embeddingSize);
 
+        // Seed memory with small random values so MemoryReadLayer has something
+        // non-trivial to attend over on the first forward pass. Leaving memory
+        // as zeros makes keys · memory^T identically zero, so softmax produces
+        // a uniform attention distribution and readValues = attention · memory
+        // is also zero — every subsequent layer then sees the same constant
+        // input and the network cannot discriminate between its own inputs,
+        // which was the source of the scaledinput_shouldchangeoutput and
+        // differentinputs_shouldproducedifferentoutputs failures. Use a small
+        // Xavier-scale so downstream layers see a reasonable magnitude.
+        var memRand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        double memScale = Math.Sqrt(2.0 / (_memorySize + _embeddingSize));
+        for (int r = 0; r < _memorySize; r++)
+            for (int c = 0; c < _embeddingSize; c++)
+                _memory[r, c] = NumOps.FromDouble((memRand.NextDouble() * 2 - 1) * memScale);
+
         InitializeLayers();
     }
 
@@ -308,6 +323,24 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         // Set to inference mode
         SetTrainingMode(false);
 
+        return RunLayers(input);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // The base class version walks Layers with the plain single-arg
+        // Forward, which misses the Memory{Read,Write}Layer memory-tensor
+        // plumbing and skips the rank-1 → rank-2 reshape — both of which
+        // Predict does. Without this override the tape-based training path
+        // either crashes ("TensorMatMul requires tensors of rank >= 2")
+        // or silently reads from an identity-memory fallback that has
+        // nothing to do with _memory.
+        return RunLayers(input);
+    }
+
+    private Tensor<T> RunLayers(Tensor<T> input)
+    {
         // Ensure 2D input for memory operations (TensorMatMul requires rank >= 2)
         if (input.Rank == 1)
             input = input.Reshape([1, input.Shape[0]]);
