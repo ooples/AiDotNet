@@ -266,12 +266,16 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     }
 
     async function loadLicenses() {
-      // Load profiles for name lookup
-      const profiles = await fetchAllPaginated<{ id: string; full_name: string }>('profiles', 'id, full_name', 'id');
+      // Load profiles for name lookup. Fall back through full_name -> email
+      // -> 'Unknown' so licenses issued to bot accounts (e.g. CI) that never
+      // set a display name still show a meaningful owner label instead of
+      // collapsing to 'Unknown'.
+      const profiles = await fetchAllPaginated<{ id: string; full_name: string | null; email: string | null }>('profiles', 'id, full_name, email', 'id');
 
       const nameMap = new Map<string, string>();
       for (const p of profiles) {
-        nameMap.set(p.id, p.full_name || 'Unknown');
+        const label = (p.full_name && p.full_name.trim()) || p.email || 'Unknown';
+        nameMap.set(p.id, label);
       }
 
       // Load all license keys
