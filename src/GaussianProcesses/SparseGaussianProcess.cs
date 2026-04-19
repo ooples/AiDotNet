@@ -204,22 +204,24 @@ public class SparseGaussianProcess<T> : GaussianProcessBase<T>
                 Ky[j, i] = avg;
             }
 
-        // Add diagonal jitter before Cholesky for the same reason Kuu gets
-        // it above: Ky = Kuu + D·Kuf·Kuf^T is only positive-semi-definite
-        // in exact arithmetic (when rank(D·Kuf·Kuf^T) < m, which is typical
-        // when the number of inducing points matches the data dimensionality).
-        // Floating-point roundoff then pushes the smallest eigenvalue just
-        // below zero and CholeskyDecomposition throws "Matrix is not
-        // positive definite" — this was the root cause of all six
-        // SparseGaussianProcessTests failures in the PR #1156 CI shard.
-        // Escalate jitter on failure (PyTorch / GPyTorch pattern): start at
-        // 1e-6·trace, retry at 1e-4·trace, then 1e-2·trace before giving up.
+        // Solve Ky·α = DKuf·y. Ky = Kuu + D·Kuf·Kuf^T is only
+        // positive-semidefinite in exact arithmetic (rank(D·Kuf·Kuf^T) < m
+        // when inducing points equal data dimensionality), so floating-point
+        // roundoff can push the smallest eigenvalue just below zero and make
+        // Cholesky throw "not positive definite".
+        //
+        // Two-tier solve: try Cholesky with an escalating jitter schedule
+        // first (cheap and accurate on the happy path), fall back to an SVD
+        // pseudoinverse only when jitter can't rescue the matrix. Cholesky
+        // alone with jitter <= 10% of trace was not enough on the CI shard,
+        // but the SVD path as a fallback (instead of a replacement) avoids
+        // the O(n³) SVD cost in the common case.
         T traceScale = _numOps.Zero;
         for (int i = 0; i < Ky.Rows; i++)
             traceScale = _numOps.Add(traceScale, Ky[i, i]);
         traceScale = _numOps.Divide(traceScale, _numOps.FromDouble(Ky.Rows));
 
-        CholeskyDecomposition<T>? choleskyKy = null;
+        Vector<T>? alpha = null;
         double[] jitterSchedule = { 1e-6, 1e-4, 1e-2, 1e-1 };
         foreach (var scale in jitterSchedule)
         {
@@ -228,21 +230,16 @@ public class SparseGaussianProcess<T> : GaussianProcessBase<T>
                 Ky[i, i] = _numOps.Add(Ky[i, i], jitterAmt);
             try
             {
-                choleskyKy = new CholeskyDecomposition<T>(Ky);
+                var choleskyKy = new CholeskyDecomposition<T>(Ky);
+                alpha = choleskyKy.Solve(DKuf.Multiply(y));
                 break;
             }
             catch (ArgumentException)
             {
-                // Escalate by adding more jitter on top of what we already
-                // added; the next iteration's jitterAmt is added to the
-                // already-augmented diagonal, growing geometrically.
                 continue;
             }
         }
-        if (choleskyKy is null)
-            throw new ArgumentException(
-                "Matrix is not positive definite — Ky remained non-PD even after jittering at scales up to 0.1 × trace.");
-        var alpha = choleskyKy.Solve(DKuf.Multiply(y));
+        alpha ??= SolveViaPseudoInverse(Ky, DKuf.Multiply(y));
 
         // Store necessary components for prediction
         _Kuu = Kuu;
@@ -260,6 +257,47 @@ public class SparseGaussianProcess<T> : GaussianProcessBase<T>
     private T Reciprocal(T value)
     {
         return _numOps.Divide(_numOps.One, value);
+    }
+
+    /// <summary>
+    /// Solves A·x = b via the Moore–Penrose pseudoinverse computed from a
+    /// truncated SVD, dropping singular values below <c>ε · σ_max</c>. Robust
+    /// to rank deficiency and small negative eigenvalues from floating-point
+    /// drift — both of which are endemic to the sparse GP's Ky matrix.
+    /// </summary>
+    private Vector<T> SolveViaPseudoInverse(Matrix<T> A, Vector<T> b)
+    {
+        var svd = new SvdDecomposition<T>(A);
+
+        T sigmaMax = _numOps.Zero;
+        for (int i = 0; i < svd.S.Length; i++)
+        {
+            if (_numOps.GreaterThan(svd.S[i], sigmaMax))
+                sigmaMax = svd.S[i];
+        }
+
+        // Relative tolerance: max(rows, cols) * ε_machine * σ_max. Same choice
+        // as numpy.linalg.pinv / MATLAB pinv default. Scales with matrix size
+        // so bigger matrices tolerate more roundoff.
+        T tolerance = _numOps.Multiply(
+            _numOps.FromDouble(Math.Max(A.Rows, A.Columns) * 1e-12),
+            sigmaMax);
+
+        // x = V · Σ^+ · U^T · b. Σ^+ has 1/σ_i on the diagonal where σ_i >
+        // tolerance, and 0 elsewhere — this is the standard truncated
+        // pseudoinverse.
+        var x = new Vector<T>(svd.Vt.Columns);
+        for (int i = 0; i < svd.S.Length; i++)
+        {
+            if (!_numOps.GreaterThan(svd.S[i], tolerance))
+                continue;
+
+            Vector<T> uCol = svd.U.GetColumn(i);
+            T coeff = _numOps.Divide(uCol.DotProduct(b), svd.S[i]);
+            Vector<T> vtRow = svd.Vt.GetRow(i);
+            x = x.Add(vtRow.Multiply(coeff));
+        }
+        return x;
     }
 
     /// <summary>
