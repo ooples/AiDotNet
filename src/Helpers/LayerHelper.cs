@@ -2724,11 +2724,16 @@ public static class LayerHelper<T>
         yield return new QuantumLayer<T>(hiddenSize, quantumDim, numQubits);
         yield return new MeasurementLayer<T>(quantumDim);
 
-        // Final dense layer to map to output size
+        // Final dense layer to map to output size. Use identity so the
+        // task-appropriate activation below owns the output non-linearity
+        // — passing null falls through to DenseLayer's ReLU default and
+        // clips the pre-activation logits, which collapsed
+        // scaledinput_shouldchangeoutput / differentinputs for quantum
+        // regression models.
         yield return new DenseLayer<T>(
             inputSize: quantumDim,
             outputSize: outputSize,
-            activationFunction: null
+            activationFunction: new IdentityActivation<T>()
         );
 
         // Final activation based on task type
