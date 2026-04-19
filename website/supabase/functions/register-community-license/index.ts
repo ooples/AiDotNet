@@ -1,7 +1,9 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
-const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "https://aidotnet.com";
+// Default matches the production origin the marketing site actually serves from.
+// Override via the ALLOWED_ORIGIN function secret for staging / preview envs.
+const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "https://www.aidotnet.dev";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
@@ -61,11 +63,14 @@ serve(async (req: Request) => {
     // Use service role to check existing licenses and create new ones
     const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Check if the user already has an active community license
+    // Check if the user already has an active AiDotNet community license.
+    // Scoped to product='aidotnet' so a Harmonic Engine community license
+    // doesn't shadow a pending AiDotNet signup and vice versa.
     const { data: existingLicenses, error: queryError } = await serviceClient
       .from("license_keys")
       .select("id, license_key, status, tier")
       .eq("user_id", user.id)
+      .eq("product", "aidotnet")
       .eq("tier", "community")
       .eq("status", "active");
 
@@ -96,12 +101,15 @@ serve(async (req: Request) => {
     const keyPart2 = crypto.randomUUID().replace(/-/g, "").substring(0, 16);
     const licenseKey = `aidn.${keyPart1}.${keyPart2}`;
 
-    // Insert the new community license
+    // Insert the new community license, scoped to product='aidotnet'. The
+    // marketing site's Get Free License button is AiDotNet-specific; other
+    // products (Harmonic Engine, etc.) have their own issuance path.
     const { error: insertError } = await serviceClient
       .from("license_keys")
       .insert({
         user_id: user.id,
         license_key: licenseKey,
+        product: "aidotnet",
         tier: "community",
         status: "active",
         max_activations: 3,
