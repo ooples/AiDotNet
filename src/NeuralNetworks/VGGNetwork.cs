@@ -271,7 +271,7 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
                 nameof(VGGNetwork<T>),
                 "forward pass");
             addedBatch = true;
-            processedInput = AddBatchDimension(input);
+            processedInput = PromoteToBatchedTensor(input);
         }
         else if (input.Rank == 4)
         {
@@ -303,29 +303,6 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Adds a batch dimension to a single input tensor.
-    /// </summary>
-    /// <param name="input">The input tensor with shape [channels, height, width].</param>
-    /// <returns>A tensor with shape [1, channels, height, width].</returns>
-    private static Tensor<T> AddBatchDimension(Tensor<T> input)
-    {
-        int[] inputShape = input._shape;
-        int[] resultShape = new int[inputShape.Length + 1];
-
-        // Add batch dimension of size 1
-        resultShape[0] = 1;
-
-        // Copy remaining dimensions
-        for (int i = 0; i < inputShape.Length; i++)
-        {
-            resultShape[i + 1] = inputShape[i];
-        }
-
-        // Use Reshape which should handle the memory layout correctly
-        return input.Reshape(resultShape);
     }
 
     /// <summary>
@@ -395,10 +372,7 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
             // channel dimension as a batch and produces an output with the
             // wrong leading dim — fails the loss-shape check on every training
             // call with a single 3D input.
-            Tensor<T> processedInput = input.Rank == 3 ? AddBatchDimension(input) : input;
-            Tensor<T> processedTarget = input.Rank == 3 && expectedOutput.Rank < processedInput.Rank - 2
-                ? AddBatchDimension(expectedOutput)
-                : expectedOutput;
+            var (processedInput, processedTarget) = EnsureBatchForCnnTraining(input, expectedOutput);
             TrainWithTape(processedInput, processedTarget, _optimizer);
         }
         finally

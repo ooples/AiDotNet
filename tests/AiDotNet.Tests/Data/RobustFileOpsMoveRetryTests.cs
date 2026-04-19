@@ -58,7 +58,7 @@ public class RobustFileOpsMoveRetryTests
     /// ever exercising retry on the Linux CI runner.
     /// </summary>
     [Fact]
-    public async Task Move_SucceedsAfter_TransientSharingViolation()
+    public async Task Move_SucceedsAfter_TransientMissingParentDirectory()
     {
         string src = Path.Combine(Path.GetTempPath(), $"aidotnet_move_{Guid.NewGuid()}.bin");
         string parentDir = Path.Combine(Path.GetTempPath(), $"aidotnet_move_parent_{Guid.NewGuid()}");
@@ -163,11 +163,11 @@ public class RobustFileOpsMoveRetryTests
     ///
     /// Cross-platform retry-trigger: destination's parent directory never
     /// exists, so every File.Move attempt throws DirectoryNotFoundException
-    /// (an IOException subclass). Assert.ThrowsAsync&lt;IOException&gt;
-    /// matches that subtype.
+    /// (an IOException subclass). Assert.ThrowsAsync&lt;DirectoryNotFoundException&gt;
+    /// verifies the specific cross-platform trigger used by this test.
     /// </summary>
     [Fact]
-    public async Task Move_Propagates_WhenLockNeverReleases()
+    public async Task Move_Propagates_WhenParentDirectoryNeverCreated()
     {
         string src = Path.Combine(Path.GetTempPath(), $"aidotnet_move_{Guid.NewGuid()}.bin");
         string parentDir = Path.Combine(Path.GetTempPath(), $"aidotnet_move_parent_{Guid.NewGuid()}");

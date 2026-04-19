@@ -441,7 +441,7 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
                 nameof(ResNetNetwork<T>),
                 "forward pass");
             addedBatch = true;
-            processedInput = AddBatchDimension(input);
+            processedInput = PromoteToBatchedTensor(input);
         }
         else if (input.Rank == 4)
         {
@@ -475,20 +475,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Adds a batch dimension to a single input tensor.
-    /// </summary>
-    private static Tensor<T> AddBatchDimension(Tensor<T> input)
-    {
-        int[] inputShape = input._shape;
-        int[] resultShape = new int[inputShape.Length + 1];
-        resultShape[0] = 1;
-        for (int i = 0; i < inputShape.Length; i++)
-        {
-            resultShape[i + 1] = inputShape[i];
-        }
-        return input.Reshape(resultShape);
-    }
 
     /// <summary>
     /// Updates the parameters of all layers in the network.
@@ -539,10 +525,7 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
         SetTrainingMode(true);
         try
         {
-            Tensor<T> processedInput = input.Rank == 3 ? AddBatchDimension(input) : input;
-            Tensor<T> processedTarget = input.Rank == 3 && expectedOutput.Rank < processedInput.Rank - 2
-                ? AddBatchDimension(expectedOutput)
-                : expectedOutput;
+            var (processedInput, processedTarget) = EnsureBatchForCnnTraining(input, expectedOutput);
             TrainWithTape(processedInput, processedTarget, _optimizer);
         }
         finally

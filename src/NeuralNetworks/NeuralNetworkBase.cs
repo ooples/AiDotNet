@@ -2660,6 +2660,45 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Promotes a rank-3 <c>[C,H,W]</c> tensor to rank-4 <c>[1,C,H,W]</c>. Named
+    /// <c>PromoteToBatchedTensor</c> to avoid collision with per-subclass
+    /// <c>AddBatchDimension</c> helpers that predate this shared utility.
+    /// </summary>
+    protected static Tensor<T> PromoteToBatchedTensor(Tensor<T> tensor)
+    {
+        int[] inputShape = tensor._shape;
+        int[] resultShape = new int[inputShape.Length + 1];
+        resultShape[0] = 1;
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            resultShape[i + 1] = inputShape[i];
+        }
+        return tensor.Reshape(resultShape);
+    }
+
+    /// <summary>
+    /// Normalizes a (input, target) pair for CNN training loops: when input is
+    /// a single rank-3 <c>[C,H,W]</c> sample, adds a batch dim so downstream
+    /// layers see <c>[1,C,H,W]</c>. When the caller supplied a rank-1
+    /// classification label, promotes it to match the promoted input so
+    /// tape-based training sees consistent shapes.
+    /// </summary>
+    /// <returns>(processedInput, processedTarget) ready for <c>TrainWithTape</c>.</returns>
+    protected static (Tensor<T> Input, Tensor<T> Target) EnsureBatchForCnnTraining(
+        Tensor<T> input, Tensor<T> target)
+    {
+        if (input.Rank != 3)
+        {
+            return (input, target);
+        }
+        var processedInput = PromoteToBatchedTensor(input);
+        var processedTarget = target.Rank < processedInput.Rank - 2
+            ? PromoteToBatchedTensor(target)
+            : target;
+        return (processedInput, processedTarget);
+    }
+
+    /// <summary>
     /// Performs tape-based forward/backward pass and delegates the parameter update to the
     /// provided optimizer via <see cref="IGradientBasedOptimizer{T,TInput,TOutput}.Step"/>.
     /// </summary>

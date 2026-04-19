@@ -708,7 +708,17 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         // TensorSliceAxis(axis=1, index=i) yields a [B, 1, hidden] view directly,
         // broadcastable over [B, seq, hidden] without further reshape.
         var modulation = block.AdaLNModulation.Forward(timeEmbed);
-        int batchM = modulation.Length / (6 * _hiddenSize);
+        int stride = 6 * _hiddenSize;
+        if (modulation.Length % stride != 0)
+        {
+            throw new InvalidOperationException(
+                $"AdaLNModulation output length {modulation.Length} is not divisible by 6 * hiddenSize " +
+                $"({stride}). This indicates the modulation MLP's output size is misconfigured — " +
+                $"each DiT block needs exactly 6 * {_hiddenSize} = {stride} modulation parameters per " +
+                $"sample (shift/scale/gate × 2 for attention and MLP branches). " +
+                $"Check the layer that produced `timeEmbed` and `block.AdaLNModulation`.");
+        }
+        int batchM = modulation.Length / stride;
         var modReshaped = Engine.Reshape(modulation, new[] { batchM, 6, 1, _hiddenSize });
 
         var shift1 = Engine.TensorSliceAxis(modReshaped, axis: 1, index: 0);
@@ -886,7 +896,16 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             throw new InvalidOperationException("Final layers not initialized.");
 
         var modulation = _adaln_modulation.Forward(timeEmbed);
-        int batchM = modulation.Length / (2 * _hiddenSize);
+        int stride = 2 * _hiddenSize;
+        if (modulation.Length % stride != 0)
+        {
+            throw new InvalidOperationException(
+                $"Final-layer AdaLN modulation output length {modulation.Length} is not divisible " +
+                $"by 2 * hiddenSize ({stride}). The final-layer modulation MLP must emit exactly " +
+                $"2 * {_hiddenSize} = {stride} parameters per sample (shift + scale). Check the " +
+                $"layer that produced `timeEmbed` and `_adaln_modulation`.");
+        }
+        int batchM = modulation.Length / stride;
         var modReshaped = Engine.Reshape(modulation, new[] { batchM, 2, 1, _hiddenSize });
         var shiftView = Engine.TensorSliceAxis(modReshaped, axis: 1, index: 0);
         var scaleView = Engine.TensorSliceAxis(modReshaped, axis: 1, index: 1);

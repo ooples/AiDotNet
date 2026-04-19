@@ -270,25 +270,13 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
             //    shape dimension 0 (32)."
             // Mirror ResNet/VGG/MobileNetV2's fix: expand input and target to
             // 4D (and 2D respectively) before dispatching to TrainWithTape.
-            Tensor<T> processedInput = input.Rank == 3 ? AddBatchDimension(input) : input;
-            Tensor<T> processedTarget = input.Rank == 3 && expectedOutput.Rank < processedInput.Rank - 2
-                ? AddBatchDimension(expectedOutput)
-                : expectedOutput;
+            var (processedInput, processedTarget) = EnsureBatchForCnnTraining(input, expectedOutput);
             TrainWithTape(processedInput, processedTarget, _optimizer);
         }
         finally
         {
             SetTrainingMode(false);
         }
-    }
-
-    private static Tensor<T> AddBatchDimension(Tensor<T> t)
-    {
-        int[] shape = t._shape;
-        int[] expanded = new int[shape.Length + 1];
-        expanded[0] = 1;
-        for (int i = 0; i < shape.Length; i++) expanded[i + 1] = shape[i];
-        return t.Reshape(expanded);
     }
 
     /// <summary>

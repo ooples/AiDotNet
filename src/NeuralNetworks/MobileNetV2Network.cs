@@ -254,7 +254,7 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
         Tensor<T> output = input;
         if (input.Rank == 3)
         {
-            output = AddBatchDimension(input);
+            output = PromoteToBatchedTensor(input);
             addedBatch = true;
         }
 
@@ -275,15 +275,6 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
         return output;
     }
 
-    private static Tensor<T> AddBatchDimension(Tensor<T> input)
-    {
-        int[] shape = input._shape;
-        int[] expanded = new int[shape.Length + 1];
-        expanded[0] = 1;
-        for (int i = 0; i < shape.Length; i++) expanded[i + 1] = shape[i];
-        return input.Reshape(expanded);
-    }
-
     /// <inheritdoc />
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
     {
@@ -293,7 +284,7 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
         // activations layer-by-layer with a 3D test input hit the same
         // "[16,32,32] vs [1,16,1] cannot be broadcast" failure that the
         // Forward override already handles.
-        Tensor<T> probeInput = input.Rank == 3 ? AddBatchDimension(input) : input;
+        Tensor<T> probeInput = input.Rank == 3 ? PromoteToBatchedTensor(input) : input;
         return base.GetNamedLayerActivations(probeInput);
     }
 
@@ -310,10 +301,7 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
         // targets) to 4D so ForwardForTraining's raw layer iteration
         // receives the 4D tensor BatchNormalizationLayer needs. See
         // ResNet/VGG Train() for the same pattern.
-        Tensor<T> processedInput = input.Rank == 3 ? AddBatchDimension(input) : input;
-        Tensor<T> processedTarget = input.Rank == 3 && expectedOutput.Rank < processedInput.Rank - 2
-            ? AddBatchDimension(expectedOutput)
-            : expectedOutput;
+        var (processedInput, processedTarget) = EnsureBatchForCnnTraining(input, expectedOutput);
         TrainWithTape(processedInput, processedTarget, _optimizer);
     }
 

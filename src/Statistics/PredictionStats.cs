@@ -674,8 +674,13 @@ public class PredictionStats<T>
         T meanPredErr = StatisticsHelper<T>.CalculateMeanPredictionError(actual, predicted);
         T medianPredErr = StatisticsHelper<T>.CalculateMedianPredictionError(actual, predicted);
 
-        T r2 = StatisticsHelper<T>.CalculateR2(actual, predicted);
-        T adjR2 = StatisticsHelper<T>.CalculateAdjustedR2(r2, actual.Length, numberOfParameters);
+        // R2 and AdjustedR2 were already computed eagerly in the ctor
+        // (see lines 570-571) with the same Actual/Predicted/NumberOfParameters
+        // inputs. Reuse the stored values instead of calling StatisticsHelper
+        // a second time — cuts a redundant O(n) scan per metric over the
+        // prediction vector on the lazy-compute path.
+        T r2 = R2;
+        T adjR2 = AdjustedR2;
         T evs = StatisticsHelper<T>.CalculateExplainedVarianceScore(actual, predicted);
         var lc = StatisticsHelper<T>.CalculateLearningCurve(actual, predicted, learningCurveSteps);
         T pearson = StatisticsHelper<T>.CalculatePearsonCorrelationCoefficient(actual, predicted);
