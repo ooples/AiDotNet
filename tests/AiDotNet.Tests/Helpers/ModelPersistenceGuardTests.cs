@@ -597,6 +597,40 @@ public class ModelPersistenceGuardTests : IDisposable
     }
 
     [Fact(Timeout = 60000)]
+    public async Task Transformer_DeepCopy_WithValidLicenseKey_RoundTripsMultiHeadAttention()
+    {
+        // Regression for a second bug surfaced by PR #1163's tests: the
+        // DeserializationHelper.CreateMultiHeadAttentionLayer probe
+        // looked for a 4-arg constructor, but the public ctor has 5 args
+        // (the trailing IInitializationStrategy<T>). Before the
+        // DeserializationHelper fix, this test would throw
+        // "Cannot find MultiHeadAttentionLayer constructor ..." during
+        // Deserialize(). This verifies that a Transformer round-trips
+        // through Serialize/Deserialize successfully.
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
+
+        var architecture = new TransformerArchitecture<float>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.SequenceClassification,
+            numEncoderLayers: 1,
+            numDecoderLayers: 0,
+            numHeads: 2,
+            modelDimension: 8,
+            feedForwardDimension: 16,
+            inputSize: 4,
+            outputSize: 4,
+            maxSequenceLength: 4,
+            vocabularySize: 4);
+        var transformer = new Transformer<float>(architecture);
+
+        // The DeepCopy path calls Serialize + Deserialize internally.
+        // Before the DeserializationHelper fix, Deserialize would throw
+        // "Cannot find MultiHeadAttentionLayer constructor ...".
+        var copy = transformer.DeepCopy();
+        Assert.NotNull(copy);
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task NeuralNetwork_DeepCopy_WithExhaustedTrial_DoesNotThrow()
     {
         // End-to-end proof of the fix: on a fully exhausted trial, the

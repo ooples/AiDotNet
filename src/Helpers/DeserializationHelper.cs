@@ -989,7 +989,9 @@ public static class DeserializationHelper
 
     private static object CreateMultiHeadAttentionLayer<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)
     {
-        // MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IActivationFunction<T>? activationFunction = null)
+        // MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount,
+        //                          IActivationFunction<T>? activationFunction = null,
+        //                          IInitializationStrategy<T>? initializationStrategy = null)
         if (inputShape.Length < 2)
         {
             throw new InvalidOperationException("MultiHeadAttentionLayer requires input shape [sequenceLength, embeddingDimension].");
@@ -1000,14 +1002,28 @@ public static class DeserializationHelper
         int headCount = TryGetInt(additionalParams, "HeadCount") ?? ResolveDefaultHeadCount(embDim);
 
         var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType });
-        if (ctor is null)
+        var initStrategyType = typeof(IInitializationStrategy<>).MakeGenericType(typeof(T));
+
+        // Try 5-param ctor (with IInitializationStrategy) first — this is the
+        // signature the public constructor actually exposes today. Fall back
+        // to the 4-param shape for older builds.
+        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
+        if (ctor is not null)
         {
-            throw new InvalidOperationException("Cannot find MultiHeadAttentionLayer constructor with (int, int, int, IActivationFunction<T>).");
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            return ctor.Invoke(new object?[] { seqLen, embDim, headCount, activation, null });
         }
 
-        object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke(new object?[] { seqLen, embDim, headCount, activation });
+        ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType });
+        if (ctor is null)
+        {
+            throw new InvalidOperationException("Cannot find MultiHeadAttentionLayer constructor with (int, int, int, IActivationFunction<T>[, IInitializationStrategy<T>]).");
+        }
+
+        {
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            return ctor.Invoke(new object?[] { seqLen, embDim, headCount, activation });
+        }
     }
 
     private static object CreateFlashAttentionLayer<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)
