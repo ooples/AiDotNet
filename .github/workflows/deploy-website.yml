@@ -59,6 +59,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify required build secrets
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          # Fail the job here rather than deploying a site that silently
+          # disables auth. Astro bakes these at build time — a missing or
+          # rotated secret would otherwise produce a broken production bundle.
+          : "${PUBLIC_SUPABASE_URL:?Missing PUBLIC_SUPABASE_URL GitHub secret}"
+          : "${PUBLIC_SUPABASE_ANON_KEY:?Missing PUBLIC_SUPABASE_ANON_KEY GitHub secret}"
+
       - name: Build website
         run: npx astro build
         env:

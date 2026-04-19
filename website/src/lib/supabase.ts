@@ -31,19 +31,28 @@ function createDisabledClient(): SupabaseClient {
     console.error('[AiDotNet] Supabase env vars missing — auth disabled.', err.message);
   }
 
-  const rejectingPromise = () => Promise.reject(err);
+  // Match Supabase's result-shape contract: every terminal call resolves to
+  // { data: null, error } instead of rejecting. That lets unguarded call sites
+  // like `const { error } = await supabase.auth.signInWithPassword(...)`
+  // destructure normally and fall through to their error-display paths without
+  // needing try/catch or an explicit supabaseConfigured check. Logout/sign-in
+  // flows that DO gate on supabaseConfigured still work the same way.
+  const disabledResult = { data: null, error: err };
+  const resolvingPromise = () => Promise.resolve(disabledResult);
+
   const handler: ProxyHandler<object> = {
     get(_target, prop) {
       if (prop === 'then') return undefined; // don't accidentally become awaitable
       // Nested access (e.g. supabase.auth.getSession) returns another proxy so the
-      // chain keeps working syntactically; terminal calls return rejecting promises.
-      return new Proxy(rejectingPromise, handler);
+      // chain keeps working syntactically; terminal calls resolve to the
+      // disabled-result shape.
+      return new Proxy(resolvingPromise, handler);
     },
     apply() {
-      return rejectingPromise();
+      return resolvingPromise();
     },
   };
-  return new Proxy(rejectingPromise, handler) as unknown as SupabaseClient;
+  return new Proxy(resolvingPromise, handler) as unknown as SupabaseClient;
 }
 
 export const supabase: SupabaseClient = supabaseConfigured

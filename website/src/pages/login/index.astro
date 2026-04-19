@@ -133,10 +133,14 @@ const base = import.meta.env.BASE_URL;
         errorDiv.textContent = supabaseMissingConfigMessage;
         errorDiv.classList.remove('hidden');
       }
-      document.querySelectorAll<HTMLButtonElement>('button').forEach(btn => {
-        btn.disabled = true;
-        btn.classList.add('opacity-50', 'cursor-not-allowed');
-      });
+      document
+        .querySelectorAll<HTMLButtonElement>(
+          '#github-login, #google-login, #login-form button[type="submit"]',
+        )
+        .forEach(btn => {
+          btn.disabled = true;
+          btn.classList.add('opacity-50', 'cursor-not-allowed');
+        });
     }
 
     // Check if already logged in
@@ -153,6 +157,10 @@ const base = import.meta.env.BASE_URL;
     const githubBtn = document.getElementById('github-login');
     if (githubBtn) {
       githubBtn.addEventListener('click', async () => {
+        if (!supabaseConfigured) {
+          showError(supabaseMissingConfigMessage);
+          return;
+        }
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'github',
           options: {
@@ -167,6 +175,10 @@ const base = import.meta.env.BASE_URL;
     const googleBtn = document.getElementById('google-login');
     if (googleBtn) {
       googleBtn.addEventListener('click', async () => {
+        if (!supabaseConfigured) {
+          showError(supabaseMissingConfigMessage);
+          return;
+        }
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
@@ -182,6 +194,10 @@ const base = import.meta.env.BASE_URL;
     if (form) {
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (!supabaseConfigured) {
+          showError(supabaseMissingConfigMessage);
+          return;
+        }
         const email = (document.getElementById('email') as HTMLInputElement).value;
         const password = (document.getElementById('password') as HTMLInputElement).value;
 
