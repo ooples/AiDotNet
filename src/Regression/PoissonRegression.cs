@@ -181,6 +181,27 @@ public class PoissonRegression<T> : RegressionBase<T>
                 newCoefficients = Regularization.Regularize(newCoefficients);
             }
 
+            // Guard against NaN/Inf leaking out of the IRLS step. Even with
+            // ridge diagonal loading the qr/svd solve can produce non-finite
+            // entries when the reweighted x^t·w·x is numerically singular
+            // (e.g. when exp-clamping collapses most mu's to the floor),
+            // and propagating those poisons every subsequent predict() with
+            // nan. when we hit that, stop iterating with the last known-good
+            // coefficients rather than overwriting them — this mirrors how
+            // statsmodels' glm halts on a "linear algebra error".
+            bool hasBadEntry = false;
+            for (int i = 0; i < newCoefficients.Length; i++)
+            {
+                double v = NumOps.ToDouble(newCoefficients[i]);
+                if (double.IsNaN(v) || double.IsInfinity(v))
+                {
+                    hasBadEntry = true;
+                    break;
+                }
+            }
+            if (hasBadEntry)
+                break;
+
             if (HasConverged(currentCoefficients, newCoefficients))
             {
                 break;
