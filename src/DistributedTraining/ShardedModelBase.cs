@@ -35,7 +35,11 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="T">The numeric type for operations</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
-public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TInput, TOutput>, IModelShape
+public abstract class ShardedModelBase<T, TInput, TOutput> :
+    IShardedModel<T, TInput, TOutput>,
+    IParameterizable<T, TInput, TOutput>,
+    IGradientComputable<T, TInput, TOutput>,
+    IModelShape
 {
     /// <summary>
     /// Provides numeric operations for type T.

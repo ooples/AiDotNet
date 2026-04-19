@@ -1261,7 +1261,10 @@ public class PipelineParallelismIntegrationTests
     /// A simple mock model for pipeline parallelism testing.
     /// Implements IFullModel with basic predict/train/gradient operations.
     /// </summary>
-    private class PipelineTestModel : IFullModel<double, Vector<double>, Vector<double>>
+    private class PipelineTestModel :
+        IFullModel<double, Vector<double>, Vector<double>>,
+        IParameterizable<double, Vector<double>, Vector<double>>,
+        IGradientComputable<double, Vector<double>, Vector<double>>
     {
         private Vector<double> _parameters;
         private Vector<double> _gradients;
@@ -1416,6 +1419,8 @@ public class PipelineParallelismIntegrationTests
     /// </summary>
     private class DecomposablePipelineTestModel :
         IFullModel<double, Vector<double>, Vector<double>>,
+        IParameterizable<double, Vector<double>, Vector<double>>,
+        IGradientComputable<double, Vector<double>, Vector<double>>,
         IPipelineDecomposableModel<double, Vector<double>, Vector<double>>
     {
         private Vector<double> _parameters;

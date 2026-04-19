@@ -635,8 +635,8 @@ public class ModelPersistenceGuardTests : IDisposable
     {
         // End-to-end proof of the fix: on a fully exhausted trial, the
         // old behavior was to throw LicenseRequiredException from the
-        // first DeepCopy call. With the fix, DeepCopy stays inside an
-        // InternalOperation scope so the guard never fires.
+        // first DeepCopy call. With the fix, DeepCopy bypasses the guard
+        // via the private SerializeInternalUnchecked path.
         ClearAllLicenseSources();
 
         WithFreshRealTrial(() =>
@@ -659,5 +659,114 @@ public class ModelPersistenceGuardTests : IDisposable
             var cloned = network.Clone();
             Assert.NotNull(cloned);
         });
+    }
+
+    // --- Defence-in-depth regression tests --------------------------------
+    //
+    // The license system's job is to gate user-facing Save/Load/Serialize/
+    // Deserialize. DeepCopy is training-internal and so bypasses the guard —
+    // but that bypass must NOT leak to any path that a user can reach to
+    // exfiltrate weights. The tests below lock in the boundary:
+    //
+    //  - The COPY returned by DeepCopy is a normal model: Serialize() /
+    //    SaveModel() on it fire the guard exactly like they do on the
+    //    original. DeepCopy does not create a "licensing-free twin".
+    //  - A user subclass that overrides virtual Serialize() cannot intercept
+    //    DeepCopy's serialization. The internal round-trip uses a private,
+    //    non-virtual serializer that the subclass can't see.
+
+    [Fact(Timeout = 60000)]
+    public async Task DeepCopy_Output_Serialize_StillFiresGuard()
+    {
+        // Lock-in test: the copy is not a "free pass" around the guard.
+        // Calling Serialize() on the copy must fire EnforceBeforeSerialize
+        // exactly like it does on the original. Without this guarantee,
+        // `model.DeepCopy().Serialize()` would be a trivial license-bypass.
+        ClearAllLicenseSources();
+
+        WithFreshRealTrial(() =>
+        {
+            // Exhaust the trial so any unguarded call would NOT throw but a
+            // guarded one would.
+            var manager = new TrialStateManager();
+            for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+            {
+                manager.RecordOperationOrThrow();
+            }
+
+            var network = CreateSimpleFeedForward();
+            var copy = (FeedForwardNeuralNetwork<double>)network.DeepCopy();
+
+            // copy.Serialize() MUST throw on an exhausted trial.
+            Assert.Throws<LicenseRequiredException>(() => copy.Serialize());
+
+            // And so must copy.SaveModel — guard path is symmetrical.
+            string tempPath = Path.Combine(Path.GetTempPath(), $"aidotnet-test-{Guid.NewGuid():N}.bin");
+            try
+            {
+                Assert.Throws<LicenseRequiredException>(() => copy.SaveModel(tempPath));
+            }
+            finally
+            {
+                if (File.Exists(tempPath)) File.Delete(tempPath);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Subclass whose override of <see cref="Serialize"/> performs a tracked
+    /// side-effect (writing to a test-local flag). Used to verify that
+    /// DeepCopy's serialization path does NOT invoke this override — i.e.
+    /// the user override is only reachable from the public virtual call.
+    /// </summary>
+    private sealed class ExfilTrackingFeedForward : FeedForwardNeuralNetwork<double>
+    {
+        public int SerializeOverrideCalls { get; private set; }
+
+        public ExfilTrackingFeedForward(NeuralNetworkArchitecture<double> arch) : base(arch) { }
+
+        public override byte[] Serialize()
+        {
+            SerializeOverrideCalls++;
+            return base.Serialize();
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task DeepCopy_DoesNotRouteThroughUserOverrideOfSerialize()
+    {
+        // Defence in depth: a user subclass that overrides Serialize (e.g.
+        // to add logging, telemetry, or in the malicious case to write the
+        // bytes to disk) must NOT see DeepCopy's internal round-trip.
+        // DeepCopy uses the private, non-virtual SerializeInternalUnchecked
+        // so the override's call counter stays at zero.
+        //
+        // Use a valid license key to avoid tripping the guard on the public
+        // Serialize path while we observe DeepCopy's behaviour.
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
+
+        var arch = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 2);
+        var network = new ExfilTrackingFeedForward(arch);
+
+        // Sanity: override fires on direct public call.
+        _ = network.Serialize();
+        Assert.Equal(1, network.SerializeOverrideCalls);
+
+        // The interesting case: DeepCopy must NOT route through the override.
+        int before = network.SerializeOverrideCalls;
+        var copy = network.DeepCopy();
+        Assert.NotNull(copy);
+        Assert.Equal(before, network.SerializeOverrideCalls);
+
+        // And the returned copy, whose override also exists, must not have
+        // been called either during DeepCopy's Deserialize.
+        if (copy is ExfilTrackingFeedForward typedCopy)
+        {
+            Assert.Equal(0, typedCopy.SerializeOverrideCalls);
+        }
     }
 }
