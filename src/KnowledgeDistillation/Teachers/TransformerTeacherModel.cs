@@ -14,9 +14,11 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 /// <typeparam name="T">The numeric type for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// Construction uses a <c>Func&lt;&gt;</c> forward-pass delegate. Inference goes
-/// through the standard model path, which auto-compiles via Tensors' AutoTracer
-/// once the input-shape pattern repeats.
+/// This wrapper takes a <c>Func&lt;Vector&lt;T&gt;, Vector&lt;T&gt;&gt;</c> forward-pass
+/// delegate and invokes it directly on every <see cref="GetLogits"/> call.
+/// The wrapper performs no caching or graph compilation itself — any
+/// optimizations (including Tensors' AutoTracer auto-compile) depend on what
+/// the supplied delegate does internally.
 /// </para>
 /// <para>For attention-based distillation strategies that need attention weights, implement
 /// a custom IDistillationStrategy that can extract attention from the underlying model.</para>

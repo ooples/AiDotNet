@@ -119,16 +119,26 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
     /// - useInterpretableBasis: Whether to use human-understandable basis functions
     /// </para>
     /// </remarks>
-    public NBEATSBlock(
-        int lookbackWindow,
-        int forecastHorizon,
-        int hiddenLayerSize,
-        int numHiddenLayers,
-        int thetaSizeBackcast,
-        int thetaSizeForecast,
-        bool useInterpretableBasis,
-        int polynomialDegree = 3)
-        : base(new[] { lookbackWindow }, new[] { lookbackWindow + forecastHorizon })
+    /// <summary>
+    /// Validates <paramref name="lookbackWindow"/> and returns the corresponding
+    /// LayerBase input shape. Runs BEFORE the base ctor so invalid values surface
+    /// as <see cref="ArgumentException"/> with the argument name instead of a
+    /// downstream shape error.
+    /// </summary>
+    private static int[] CreateInputShape(int lookbackWindow)
+    {
+        if (lookbackWindow <= 0)
+        {
+            throw new ArgumentException("Lookback window must be positive.", nameof(lookbackWindow));
+        }
+        return new[] { lookbackWindow };
+    }
+
+    /// <summary>
+    /// Validates <paramref name="forecastHorizon"/> (and re-checks lookback for
+    /// consistency) and returns the corresponding LayerBase output shape.
+    /// </summary>
+    private static int[] CreateOutputShape(int lookbackWindow, int forecastHorizon)
     {
         if (lookbackWindow <= 0)
         {
@@ -138,6 +148,28 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         {
             throw new ArgumentException("Forecast horizon must be positive.", nameof(forecastHorizon));
         }
+        return new[] { lookbackWindow + forecastHorizon };
+    }
+
+    public NBEATSBlock(
+        int lookbackWindow,
+        int forecastHorizon,
+        int hiddenLayerSize,
+        int numHiddenLayers,
+        int thetaSizeBackcast,
+        int thetaSizeForecast,
+        bool useInterpretableBasis,
+        int polynomialDegree = 3)
+        : base(
+            CreateInputShape(lookbackWindow),
+            CreateOutputShape(lookbackWindow, forecastHorizon))
+    {
+        // Primary-argument validation happens inside the static shape factories
+        // above so `lookbackWindow` / `forecastHorizon` are rejected BEFORE
+        // LayerBase<T> consumes them — users see the nameof(...)-tagged
+        // ArgumentException instead of a downstream shape error from the base.
+        // (The two blocks that previously validated those here are now in
+        // CreateInputShape / CreateOutputShape below.)
         if (hiddenLayerSize <= 0)
         {
             throw new ArgumentException("Hidden layer size must be positive.", nameof(hiddenLayerSize));

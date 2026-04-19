@@ -75,14 +75,19 @@ public class SelfTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     }
 
     /// <summary>
-    /// Gets logits from the underlying model.
+    /// Not supported for <see cref="SelfTeacherModel{T}"/> — always throws.
     /// </summary>
-    /// <param name="input">Input to the model.</param>
-    /// <returns>The logits from the underlying model.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when no underlying model is configured.</exception>
+    /// <param name="input">Ignored.</param>
+    /// <returns>This method does not return; it always throws.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Always thrown. <see cref="SelfTeacherModel{T}"/> serves pre-computed
+    /// predictions by index via <see cref="GetCachedPrediction"/> and cannot
+    /// evaluate a fresh input vector — it has no underlying model to run.
+    /// </exception>
     /// <remarks>
-    /// <para>Not supported for <see cref="SelfTeacherModel{T}"/> — callers must use
-    /// <see cref="GetCachedPrediction"/>, which returns a pre-computed prediction by index.</para>
+    /// <para>Callers must use <see cref="GetCachedPrediction"/> instead, which
+    /// returns a prediction from the cache populated via
+    /// <see cref="CachePredictions"/>.</para>
     /// </remarks>
     public override Vector<T> GetLogits(Vector<T> input)
     {

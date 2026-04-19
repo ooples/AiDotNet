@@ -13,9 +13,14 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Construction uses a <c>Func&lt;&gt;</c> forward-pass delegate. Inference goes
-/// through the standard model path, which auto-compiles via Tensors' AutoTracer
-/// once the input-shape pattern repeats.
+/// This wrapper takes a <c>Func&lt;Vector&lt;T&gt;, Vector&lt;T&gt;&gt;</c> forward-pass
+/// delegate and invokes it directly on every <see cref="GetLogits"/> call.
+/// The wrapper itself performs no caching or graph compilation — any
+/// optimizations (including Tensors' AutoTracer auto-compile) depend entirely
+/// on what happens inside the supplied delegate. A delegate that wraps a
+/// standard neural-network model's <c>Predict</c> path will pick up those
+/// engine-level optimizations; a delegate that invokes external code
+/// (pre-converted ONNX, a REST call, etc.) will not.
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
