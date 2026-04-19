@@ -56,6 +56,31 @@ function createDisabledClient(): SupabaseClient {
     }
   };
 
+  // Methods that END a call chain — everything else is treated as an
+  // intermediate fluent builder (e.g. supabase.from('t').select('*').eq(...))
+  // so `.select(...)` called on the result of `.from(...)` still returns a
+  // proxy instead of crashing with "Cannot read property 'select' of Promise".
+  const terminalMethods = new Set<string>([
+    'getSession',
+    'getUser',
+    'onAuthStateChange',
+    'signInWithOAuth',
+    'signInWithPassword',
+    'signUp',
+    'signOut',
+    'resetPasswordForEmail',
+    'updateUser',
+    'exchangeCodeForSession',
+    'refreshSession',
+    // Query terminals — awaiting a Supabase PostgrestFilterBuilder runs the
+    // query, so anything the caller awaits must also resolve to a shape.
+    'then',
+    'single',
+    'maybeSingle',
+    'csv',
+    'explain',
+  ]);
+
   const createProxy = (path: PropertyKey[] = []): any =>
     new Proxy(() => undefined, {
       get(_target, prop) {
@@ -65,7 +90,12 @@ function createDisabledClient(): SupabaseClient {
         return createProxy([...path, prop]);
       },
       apply() {
-        return resolveDisabledCall(path[path.length - 1]);
+        const method = String(path[path.length - 1] ?? '');
+        // Terminal methods resolve to their shape; everything else returns
+        // another proxy so fluent chains keep working without TypeError.
+        return terminalMethods.has(method)
+          ? resolveDisabledCall(method)
+          : createProxy(path);
       },
     });
 
