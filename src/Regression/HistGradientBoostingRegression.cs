@@ -700,9 +700,14 @@ public class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>, Vector<
     /// </remarks>
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
-        var copy = new HistGradientBoostingRegression<T>(_options);
-        copy.Deserialize(Serialize());
-        return copy;
+        // In-memory clone, not a user save/load — wrap in InternalOperation
+        // so the persistence guard does not treat this as a billable op.
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            var copy = new HistGradientBoostingRegression<T>(_options);
+            copy.Deserialize(Serialize());
+            return copy;
+        }
     }
 
     /// <summary>

@@ -632,10 +632,15 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// <inheritdoc/>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
-        byte[] data = Serialize();
-        var copy = CreateNewInstance();
-        copy.Deserialize(data);
-        return copy;
+        // In-memory clone, not a user save/load — wrap in InternalOperation
+        // so the persistence guard does not treat this as a billable op.
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] data = Serialize();
+            var copy = CreateNewInstance();
+            copy.Deserialize(data);
+            return copy;
+        }
     }
 
     /// <inheritdoc/>

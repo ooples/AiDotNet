@@ -3862,16 +3862,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
-        // The most reliable way to create a deep copy is through serialization/deserialization
-        byte[] serialized = Serialize();
+        // DeepCopy is a training-internal in-memory clone, not a user-facing
+        // save/load. The Serialize()/Deserialize() round-trip is an
+        // implementation detail of how the clone is produced. Wrap both calls
+        // in InternalOperation so the persistence guard does not treat this
+        // as a billable save/load operation — matches the pattern in
+        // SaveModel/LoadModel above (lines ~3367, ~3403). Without this wrap,
+        // the default NormalOptimizer.InitializeRandomSolution path (which
+        // Clone()s the model for its best-so-far snapshot) trips the guard
+        // on expired trials even though training is supposed to remain
+        // unrestricted per ModelPersistenceGuard's own XML docs.
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] serialized = Serialize();
 
-        // Create a new instance of the same type as this network
-        var copy = CreateNewInstance();
+            // Create a new instance of the same type as this network
+            var copy = CreateNewInstance();
 
-        // Load the serialized data into the new instance
-        copy.Deserialize(serialized);
+            // Load the serialized data into the new instance
+            copy.Deserialize(serialized);
 
-        return copy;
+            return copy;
+        }
     }
 
     /// <summary>

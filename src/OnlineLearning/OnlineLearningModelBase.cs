@@ -366,10 +366,15 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     /// </summary>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
-        byte[] serialized = Serialize();
-        var copy = CreateNewInstance();
-        copy.Deserialize(serialized);
-        return copy;
+        // In-memory clone, not a user save/load — wrap in InternalOperation
+        // so the persistence guard does not treat this as a billable op.
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] serialized = Serialize();
+            var copy = CreateNewInstance();
+            copy.Deserialize(serialized);
+            return copy;
+        }
     }
 
     /// <summary>

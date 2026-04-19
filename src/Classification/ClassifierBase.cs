@@ -1,6 +1,7 @@
 global using AiDotNet.Factories;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Classification;
@@ -563,10 +564,15 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     /// <returns>A new instance of the model with the same parameters and options.</returns>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
-        byte[] serialized = Serialize();
-        var copy = CreateNewInstance();
-        copy.Deserialize(serialized);
-        return copy;
+        // In-memory clone, not a user save/load — wrap in InternalOperation
+        // so the persistence guard does not treat this as a billable op.
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] serialized = Serialize();
+            var copy = CreateNewInstance();
+            copy.Deserialize(serialized);
+            return copy;
+        }
     }
 
     /// <summary>

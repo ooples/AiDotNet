@@ -1,5 +1,6 @@
 global using AiDotNet.Factories;
 using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Regression;
@@ -830,16 +831,15 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
-        // The most reliable way to create a deep copy is through serialization/deserialization
-        byte[] serialized = Serialize();
-
-        // Create a new instance of the same type as this network
-        var copy = CreateNewInstance();
-
-        // Load the serialized data into the new instance
-        copy.Deserialize(serialized);
-
-        return copy;
+        // In-memory clone, not a user save/load — wrap in InternalOperation
+        // so the persistence guard does not treat this as a billable op.
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] serialized = Serialize();
+            var copy = CreateNewInstance();
+            copy.Deserialize(serialized);
+            return copy;
+        }
     }
 
     /// <summary>

@@ -1348,12 +1348,15 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
-        // Create a new instance through serialization/deserialization for a true deep copy
-        byte[] serialized = this.Serialize();
-        var newModel = (TimeSeriesModelBase<T>)CreateInstance();
-        newModel.Deserialize(serialized);
-
-        return newModel;
+        // In-memory clone, not a user save/load — wrap in InternalOperation
+        // so the persistence guard does not treat this as a billable op.
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] serialized = this.Serialize();
+            var newModel = (TimeSeriesModelBase<T>)CreateInstance();
+            newModel.Deserialize(serialized);
+            return newModel;
+        }
     }
 
     /// <summary>

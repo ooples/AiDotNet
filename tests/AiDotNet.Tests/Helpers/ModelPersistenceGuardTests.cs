@@ -1,5 +1,8 @@
+using AiDotNet.Enums;
 using AiDotNet.Exceptions;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -484,5 +487,143 @@ public class ModelPersistenceGuardTests : IDisposable
         Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "");
 
         Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSave());
+    }
+
+    // ---------------------------------------------------------------------
+    // Regression tests for issue #1161:
+    //   NeuralNetworkBase.DeepCopy() internally calls Serialize(), which
+    //   used to trip the ModelPersistenceGuard on an expired trial. The
+    //   optimizer's InitializeRandomSolution calls Clone() → DeepCopy() as
+    //   part of every training run, so this one-line issue blocked every
+    //   AiModelBuilder.BuildAsync() call on an expired trial — even though
+    //   the guard's own XML docs state "training and inference are never
+    //   restricted."
+    //
+    //   Fix: wrap DeepCopy's Serialize/Deserialize pair in
+    //   ModelPersistenceGuard.InternalOperation(). These tests verify the
+    //   fix against the actual model types (not just the guard API).
+    // ---------------------------------------------------------------------
+
+    private static FeedForwardNeuralNetwork<double> CreateSimpleFeedForward()
+    {
+        // Simple feed-forward is used for these tests because its
+        // Serialize/Deserialize round-trip is well-exercised by existing
+        // integration tests. This lets us isolate the guard-vs-DeepCopy
+        // fix from any unrelated serialization bugs elsewhere in the layer
+        // catalogue.
+        var arch = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 2);
+        return new FeedForwardNeuralNetwork<double>(arch);
+    }
+
+    /// <summary>
+    /// Runs an action with a transient fresh real trial. Backs up and
+    /// restores the user's real ~/.aidotnet/trial.json around the action
+    /// so tests can exercise the guard against a known-state trial file
+    /// without permanently disturbing the developer's local state.
+    /// </summary>
+    private static void WithFreshRealTrial(Action action)
+    {
+        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string trialPath = Path.Combine(homeDir, ".aidotnet", "trial.json");
+        string? backupContent = File.Exists(trialPath) ? File.ReadAllText(trialPath) : null;
+        try
+        {
+            if (File.Exists(trialPath)) File.Delete(trialPath);
+            action();
+        }
+        finally
+        {
+            try
+            {
+                if (backupContent != null)
+                    File.WriteAllText(trialPath, backupContent);
+                else if (File.Exists(trialPath))
+                    File.Delete(trialPath);
+            }
+            catch
+            {
+                // Best-effort restore.
+            }
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task NeuralNetwork_DeepCopy_DoesNotCountTrialOperation()
+    {
+        // The heart of issue #1161: DeepCopy is a training-internal
+        // in-memory clone. The NormalOptimizer.InitializeRandomSolution
+        // call path uses it on every training step. It must NOT count as
+        // a billable save/load operation against the free trial — if it
+        // did, ten training steps would exhaust the trial and every
+        // subsequent AiModelBuilder.BuildAsync() would throw.
+        //
+        // Before the fix: DeepCopy() called Serialize() directly, which
+        // called ModelPersistenceGuard.EnforceBeforeSerialize() and either
+        // counted an operation or threw LicenseRequiredException on an
+        // exhausted trial. This test proves neither happens now.
+        ClearAllLicenseSources();
+
+        WithFreshRealTrial(() =>
+        {
+            // Record one save to materialize the trial file and set a baseline.
+            ModelPersistenceGuard.EnforceBeforeSave();
+
+            int before;
+            {
+                var m = new TrialStateManager();
+                before = m.GetStatus().OperationsUsed;
+            }
+
+            var network = CreateSimpleFeedForward();
+
+            // Multiple DeepCopy / Clone calls must not consume trial operations.
+            for (int i = 0; i < 5; i++)
+            {
+                _ = network.DeepCopy();
+                _ = network.Clone();
+            }
+
+            int after;
+            {
+                var m = new TrialStateManager();
+                after = m.GetStatus().OperationsUsed;
+            }
+            Assert.Equal(before, after);
+        });
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task NeuralNetwork_DeepCopy_WithExhaustedTrial_DoesNotThrow()
+    {
+        // End-to-end proof of the fix: on a fully exhausted trial, the
+        // old behavior was to throw LicenseRequiredException from the
+        // first DeepCopy call. With the fix, DeepCopy stays inside an
+        // InternalOperation scope so the guard never fires.
+        ClearAllLicenseSources();
+
+        WithFreshRealTrial(() =>
+        {
+            // Exhaust the trial (same pattern as the existing
+            // InternalOperation_SuppressesSerializeEnforcement test above).
+            var manager = new TrialStateManager();
+            for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+            {
+                manager.RecordOperationOrThrow();
+            }
+
+            var network = CreateSimpleFeedForward();
+
+            // DeepCopy / Clone must succeed — training-internal, not user
+            // save/load. Before the fix this would throw.
+            var copy = network.DeepCopy();
+            Assert.NotNull(copy);
+
+            var cloned = network.Clone();
+            Assert.NotNull(cloned);
+        });
     }
 }
