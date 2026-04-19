@@ -2579,11 +2579,18 @@ public static class LayerHelper<T>
         // RNN layers output [seqLen, hiddenSize], but Dense layer expects [hiddenSize]
         yield return new SequenceLastLayer<T>(hiddenSize);
 
-        // Add the final Dense Layer to map to output size
+        // Add the final Dense Layer to map to output size.
+        // Use an explicit IdentityActivation so the Dense output keeps its sign —
+        // passing activationFunction:null falls through to DenseLayer's ReLU
+        // default, which clipped all regression outputs at zero. With ReLU
+        // the 2-layer tanh stack produced small mixed-sign values that the
+        // final Dense then zeroed, so ScaledInput_ShouldChangeOutput saw
+        // output=0 for both the raw and the 10x input and reported "forward
+        // pass may ignore input values".
         yield return new DenseLayer<T>(
             inputSize: hiddenSize,
             outputSize: outputSize,
-            activationFunction: null
+            activationFunction: new IdentityActivation<T>()
         );
 
         // Task-appropriate final activation
