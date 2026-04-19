@@ -112,7 +112,11 @@ public class Cifar10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
             if (!nchw)
                 sampleTensor = AiDotNetEngine.Current.TensorPermute(sampleTensor, [1, 2, 0]);
 
-            sampleTensor.AsSpan().CopyTo(featuresData.AsSpan(featureOffset, pixelsPerImage));
+            // Tensor<T>.CopyTo handles both contiguous and strided (post-permute)
+            // layouts in a single pass. Using AsSpan() here would throw
+            // "Cannot get a contiguous span from a non-contiguous tensor view"
+            // on the NHWC default path.
+            sampleTensor.CopyTo(featuresData.AsSpan(featureOffset, pixelsPerImage));
 
             if (label >= 0 && label < 10)
                 labelsData[i * 10 + label] = NumOps.One;

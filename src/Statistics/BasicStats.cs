@@ -436,18 +436,40 @@ public class BasicStats<T>
     /// </remarks>
     private void CalculateStats(Vector<T> values)
     {
-        N = values.Length;
-        if (N == 0) return;
-        Mean = values.Average();
-        Variance = values.Variance();
-        StandardDeviation = _numOps.Sqrt(Variance);
-        (Skewness, Kurtosis) = StatisticsHelper<T>.CalculateSkewnessAndKurtosis(values, Mean, StandardDeviation, N);
-        Min = values.Min();
-        Max = values.Max();
-        Median = StatisticsHelper<T>.CalculateMedian(values);
-        (FirstQuartile, ThirdQuartile) = StatisticsHelper<T>.CalculateQuantiles(values);
-        InterquartileRange = _numOps.Subtract(ThirdQuartile, FirstQuartile);
-        MAD = StatisticsHelper<T>.CalculateMeanAbsoluteDeviation(values, Median);
+        // CRITICAL: every property on this class (N, Mean, Variance,
+        // StandardDeviation, Median, etc.) goes through a getter that calls
+        // EnsureFullStatsComputed(), which calls back into this method
+        // when _fullStatsComputed is false. We are exactly in that window
+        // here, so reading any property would recurse forever and crash
+        // the test host with a StackOverflowException. Compute everything
+        // into locals and assign to the properties at the end.
+        int n = values.Length;
+        N = n;
+        if (n == 0) return;
+
+        T mean = values.Average();
+        T variance = values.Variance();
+        T stdDev = _numOps.Sqrt(variance);
+        var (skewness, kurtosis) = StatisticsHelper<T>.CalculateSkewnessAndKurtosis(values, mean, stdDev, n);
+        T min = values.Min();
+        T max = values.Max();
+        T median = StatisticsHelper<T>.CalculateMedian(values);
+        var (firstQuartile, thirdQuartile) = StatisticsHelper<T>.CalculateQuantiles(values);
+        T iqr = _numOps.Subtract(thirdQuartile, firstQuartile);
+        T mad = StatisticsHelper<T>.CalculateMeanAbsoluteDeviation(values, median);
+
+        Mean = mean;
+        Variance = variance;
+        StandardDeviation = stdDev;
+        Skewness = skewness;
+        Kurtosis = kurtosis;
+        Min = min;
+        Max = max;
+        Median = median;
+        FirstQuartile = firstQuartile;
+        ThirdQuartile = thirdQuartile;
+        InterquartileRange = iqr;
+        MAD = mad;
     }
 
     /// <summary>

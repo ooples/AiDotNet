@@ -99,7 +99,9 @@ public class Cifar100DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
             if (!nchw)
                 sampleTensor = AiDotNetEngine.Current.TensorPermute(sampleTensor, [1, 2, 0]);
 
-            sampleTensor.AsSpan().CopyTo(featuresData.AsSpan(featureOffset, ppi));
+            // Tensor<T>.CopyTo handles the strided post-permute case in a
+            // single pass; see Cifar10DataLoader for the rationale.
+            sampleTensor.CopyTo(featuresData.AsSpan(featureOffset, ppi));
 
             if (label >= 0 && label < _numClasses)
                 labelsData[i * _numClasses + label] = NumOps.One;

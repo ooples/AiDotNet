@@ -2,6 +2,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text.Json;
+using AiDotNet.Data;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
 
@@ -306,7 +307,10 @@ public class OnnxModelDownloader : IOnnxModelDownloader, IDisposable
             }
         }
 
-        // Move completed download to final location
+        // Move completed download to final location. RobustFileOps
+        // tolerates a transient antivirus / indexer lock on the freshly
+        // written temp file that would otherwise fail with a sharing
+        // violation and lose the download.
         fileStream.Close();
 
         if (File.Exists(localPath))
@@ -314,7 +318,7 @@ public class OnnxModelDownloader : IOnnxModelDownloader, IDisposable
             File.Delete(localPath);
         }
 
-        File.Move(tempPath, localPath);
+        await RobustFileOps.MoveWithRetryAsync(tempPath, localPath, cancellationToken);
         progress?.Report(1.0);
     }
 

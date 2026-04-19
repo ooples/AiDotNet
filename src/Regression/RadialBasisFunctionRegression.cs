@@ -488,30 +488,61 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private Vector<T> SolveLinearRegression(Matrix<T> x, Vector<T> y)
     {
-        // Use pseudo-inverse with ridge regularization to solve for weights
-        // Ridge regularization (Tikhonov regularization) adds a small penalty term (λI)
-        // to prevent numerical instability and improve generalization
-        Matrix<T> xTranspose = x.Transpose();
-        Matrix<T> xTx = xTranspose.Multiply(x);
+        // RBF design matrices are often severely ill-conditioned: when a few
+        // centers end up far from every input, the corresponding columns
+        // become near-zero and X^T·X has a huge condition number. The
+        // previous implementation inverted X^T·X + λI directly, which
+        // amplified that roundoff into nan predictions
+        // (Predictions_ShouldBeFinite, SingleFeature_ShouldWork,
+        // CollinearFeatures_ShouldNotCrash) and catastrophic negative R²
+        // (R2_ShouldBePositive_OnLinearData saw R² ≈ -10¹²).
+        //
+        // Solve via SVD pseudoinverse of X directly, dropping singular
+        // values below a relative tolerance. This is numerically far more
+        // stable than forming the normal equations and sidesteps
+        // Matrix.Inverse entirely.
+        var svd = new AiDotNet.DecompositionMethods.MatrixDecomposition.SvdDecomposition<T>(x);
 
-        // Add ridge regularization: (X^T X + λI)^-1 X^T y
-        // Scale lambda relative to the diagonal magnitude to ensure numerical stability
-        double diagMean = 0;
-        for (int i = 0; i < xTx.Rows; i++)
-            diagMean += Math.Abs(NumOps.ToDouble(xTx[i, i]));
-        diagMean /= xTx.Rows;
-        T stabilityLambda = NumOps.FromDouble(
-            Math.Max(MinimumStabilityLambda, diagMean * StabilityLambdaScale));
-        Matrix<T> identity = Matrix<T>.CreateIdentity(xTx.Rows);
-        Matrix<T> xTxRegularized = xTx.Add(identity.Multiply(stabilityLambda));
-        if (Regularization != null)
+        T sigmaMax = NumOps.Zero;
+        for (int i = 0; i < svd.S.Length; i++)
         {
-            xTxRegularized = xTxRegularized.Add(Regularization.Regularize(xTx));
+            if (NumOps.GreaterThan(svd.S[i], sigmaMax))
+                sigmaMax = svd.S[i];
         }
 
-        Matrix<T> xTxInverse = xTxRegularized.Inverse();
-        Matrix<T> xTxInverseXT = xTxInverse.Multiply(xTranspose);
-        return xTxInverseXT.Multiply(y);
+        // Tikhonov-regularized SVD solve: weights = V · diag(σ / (σ² + λ²)) · Uᵀ · y.
+        // Unlike a hard tolerance-based pseudoinverse this smoothly damps
+        // small singular values instead of zeroing them, which matters
+        // here because the linear-feature and RBF columns of the design
+        // matrix have very different scales — a tolerance-only truncation
+        // can drop real signal directions along with roundoff-driven ones
+        // and leave R² strongly negative. Small λ ≈ 1e-6 · σ_max gives a
+        // stable solve while barely biasing the well-conditioned directions.
+        T lambda = NumOps.Multiply(sigmaMax, NumOps.FromDouble(1e-6));
+        T lambdaSq = NumOps.Multiply(lambda, lambda);
+
+        var weights = new Vector<T>(svd.Vt.Columns);
+        for (int i = 0; i < svd.S.Length; i++)
+        {
+            T sigma = svd.S[i];
+            T sigmaSq = NumOps.Multiply(sigma, sigma);
+            T damped = NumOps.Divide(sigma, NumOps.Add(sigmaSq, lambdaSq));
+
+            Vector<T> uCol = svd.U.GetColumn(i);
+            T coeff = NumOps.Multiply(uCol.DotProduct(y), damped);
+            Vector<T> vtRow = svd.Vt.GetRow(i);
+            weights = weights.Add(vtRow.Multiply(coeff));
+        }
+
+        // Apply external regularization (if any) on the learned weight
+        // vector — the pseudoinverse path doesn't build the normal-equations
+        // matrix that the previous code was regularizing.
+        if (Regularization != null)
+        {
+            weights = Regularization.Regularize(weights);
+        }
+
+        return weights;
     }
 
     /// <summary>

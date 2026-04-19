@@ -482,13 +482,21 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            // Lazily initialize per-parameter moment tensors
-            if (!_tapeM.TryGetValue(param, out var m))
+            // Lazily initialize per-parameter moment tensors. If the parameter
+            // was first seen while a lazy-init layer (e.g.
+            // MultiHeadAttentionLayer with IsLazy: true initialization
+            // strategy) still had its weights allocated as a placeholder
+            // [0, 0] tensor, our cached m / v captured the placeholder shape.
+            // Once the layer materializes real weights, the gradient arrives
+            // at the real shape — m / v need to be re-allocated to match,
+            // otherwise TensorAdd's result has a length larger than m and
+            // TensorCopy throws "Destination array was not long enough".
+            if (!_tapeM.TryGetValue(param, out var m) || !m._shape.SequenceEqual(param._shape))
             {
                 m = new Tensor<T>(param._shape);
                 _tapeM[param] = m;
             }
-            if (!_tapeV.TryGetValue(param, out var v))
+            if (!_tapeV.TryGetValue(param, out var v) || !v._shape.SequenceEqual(param._shape))
             {
                 v = new Tensor<T>(param._shape);
                 _tapeV[param] = v;

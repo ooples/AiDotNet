@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using AiDotNet.Attributes;
+using AiDotNet.Data;
 using AiDotNet.Enums;
 using AiDotNet.Validation;
 
@@ -226,19 +227,32 @@ public class BTreeIndex : IDisposable
                 }
             }
 
-            // Replace old index file with new one atomically
+            // Replace old index file with new one atomically. Both Move
+            // and Replace can fail with sharing violations on Windows when
+            // Defender or the indexer is mid-scan; RobustFileOps retries
+            // with linear backoff on transient IOException.
             if (File.Exists(_indexFilePath))
             {
-                // Use File.Replace for atomic replacement on Windows
                 var backupPath = _indexFilePath + ".bak";
-                File.Replace(tempPath, _indexFilePath, backupPath);
-                // Clean up backup file
-                if (File.Exists(backupPath))
-                    File.Delete(backupPath);
+                RobustFileOps.ReplaceWithRetry(tempPath, _indexFilePath, backupPath);
+
+                // The replace has already succeeded — the new index is
+                // durable at _indexFilePath. Backup cleanup is best-effort:
+                // if the .bak file hits the same antivirus / indexer lock
+                // this PR addresses elsewhere, swallow the failure rather
+                // than throw from Flush() and leave _isDirty set when the
+                // actual flush was successful.
+                try
+                {
+                    if (File.Exists(backupPath))
+                        File.Delete(backupPath);
+                }
+                catch (IOException) { /* leave stale .bak; next flush reuses it */ }
+                catch (UnauthorizedAccessException) { /* same */ }
             }
             else
             {
-                File.Move(tempPath, _indexFilePath);
+                RobustFileOps.MoveWithRetry(tempPath, _indexFilePath);
             }
 
             _isDirty = false;

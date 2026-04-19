@@ -73,23 +73,35 @@ internal static class DatasetDownloader
         string tempPath = destinationPath + ".tmp";
         try
         {
-            using var response = await SharedHttpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            response.EnsureSuccessStatusCode();
+            using (var response = await SharedHttpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
+            {
+                response.EnsureSuccessStatusCode();
 
-            using var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                // Close the file stream explicitly (via nested using) before
+                // File.Move runs. The nested scope guarantees the handle is
+                // released; otherwise the outer `using` would dispose *after*
+                // the move attempt.
+                using var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None);
 #if NET6_0_OR_GREATER
-            await response.Content.CopyToAsync(fileStream, cancellationToken);
+                await response.Content.CopyToAsync(fileStream, cancellationToken);
+                await fileStream.FlushAsync(cancellationToken);
 #else
-            await response.Content.CopyToAsync(fileStream);
+                await response.Content.CopyToAsync(fileStream);
+                fileStream.Flush();
 #endif
+            }
 
-            // Move temp file to final location
+            // Move temp file to final location.
             if (File.Exists(destinationPath))
             {
                 File.Delete(destinationPath);
             }
 
-            File.Move(tempPath, destinationPath);
+            // Retry the rename. On Windows the freshly-written file can be
+            // briefly locked by antivirus (Defender) or the search indexer,
+            // which makes File.Move fail with a sharing violation even after
+            // the writer's handle is closed. Short backoff tolerates that.
+            await RobustFileOps.MoveWithRetryAsync(tempPath, destinationPath, cancellationToken);
             return true;
         }
         finally

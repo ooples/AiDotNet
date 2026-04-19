@@ -116,14 +116,36 @@ const base = import.meta.env.BASE_URL;
   </div>
 
   <script>
-    import { supabase } from '../../lib/supabase';
+    import { supabase, supabaseConfigured, supabaseMissingConfigMessage } from '../../lib/supabase';
 
     const base = import.meta.env.BASE_URL || '/';
     const params = new URLSearchParams(window.location.search);
     const redirectTo = params.get('redirect') || `${base}account/`;
 
+    // Fail loud when the build was missing Supabase env vars: show a user-visible
+    // banner AND disable the form buttons. Previous behavior threw inside
+    // supabase.ts at module load, crashing the entire script — every button
+    // became a silent no-op which is a much worse user experience than a clear
+    // "temporarily unavailable" message.
+    if (!supabaseConfigured) {
+      const errorDiv = document.getElementById('login-error');
+      if (errorDiv) {
+        errorDiv.textContent = supabaseMissingConfigMessage;
+        errorDiv.classList.remove('hidden');
+      }
+      document
+        .querySelectorAll<HTMLButtonElement>(
+          '#github-login, #google-login, #login-form button[type="submit"]',
+        )
+        .forEach(btn => {
+          btn.disabled = true;
+          btn.classList.add('opacity-50', 'cursor-not-allowed');
+        });
+    }
+
     // Check if already logged in
     async function checkExistingSession() {
+      if (!supabaseConfigured) return;
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         window.location.href = redirectTo;
@@ -135,6 +157,10 @@ const base = import.meta.env.BASE_URL;
     const githubBtn = document.getElementById('github-login');
     if (githubBtn) {
       githubBtn.addEventListener('click', async () => {
+        if (!supabaseConfigured) {
+          showError(supabaseMissingConfigMessage);
+          return;
+        }
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'github',
           options: {
@@ -149,6 +175,10 @@ const base = import.meta.env.BASE_URL;
     const googleBtn = document.getElementById('google-login');
     if (googleBtn) {
       googleBtn.addEventListener('click', async () => {
+        if (!supabaseConfigured) {
+          showError(supabaseMissingConfigMessage);
+          return;
+        }
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
@@ -164,6 +194,10 @@ const base = import.meta.env.BASE_URL;
     if (form) {
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (!supabaseConfigured) {
+          showError(supabaseMissingConfigMessage);
+          return;
+        }
         const email = (document.getElementById('email') as HTMLInputElement).value;
         const password = (document.getElementById('password') as HTMLInputElement).value;
 

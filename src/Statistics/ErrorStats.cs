@@ -513,50 +513,83 @@ public class ErrorStats<T>
     /// </remarks>
     private void CalculateErrorStats(Vector<T> actual, Vector<T> predicted, int numberOfParameters, PredictionType predictionType = PredictionType.Regression)
     {
+        // All intermediate values are held in locals and only assigned to the
+        // observable properties at the very end. Earlier code called
+        //   RMSE = _numOps.Sqrt(MSE);
+        //   AIC = StatisticsHelper.CalculateAIC(n, numberOfParameters, RSS);
+        // which read MSE/RSS through their property getters. Those getters call
+        // EnsureFullStatsComputed, which is still running CalculateErrorStats —
+        // so the property read re-enters CalculateErrorStats and recurses
+        // without bound. The test host crashes with StackOverflowException
+        // (Classification / Clustering / Regression / TimeSeries / Serving
+        // host-crashes on PR #1154 and master).
         int n = actual.Length;
 
-        // Calculate basic error metrics
-        MAE = StatisticsHelper<T>.CalculateMeanAbsoluteError(actual, predicted);
-        RSS = StatisticsHelper<T>.CalculateResidualSumOfSquares(actual, predicted);
-        MSE = StatisticsHelper<T>.CalculateMeanSquaredError(actual, predicted);
-        RMSE = _numOps.Sqrt(MSE);
-        MAPE = StatisticsHelper<T>.CalculateMeanAbsolutePercentageError(actual, predicted);
-        MedianAbsoluteError = StatisticsHelper<T>.CalculateMedianAbsoluteError(actual, predicted);
-        MaxError = StatisticsHelper<T>.CalculateMaxError(actual, predicted);
+        T mae = StatisticsHelper<T>.CalculateMeanAbsoluteError(actual, predicted);
+        T rss = StatisticsHelper<T>.CalculateResidualSumOfSquares(actual, predicted);
+        T mse = StatisticsHelper<T>.CalculateMeanSquaredError(actual, predicted);
+        T rmse = _numOps.Sqrt(mse);
+        T mape = StatisticsHelper<T>.CalculateMeanAbsolutePercentageError(actual, predicted);
+        T medAbs = StatisticsHelper<T>.CalculateMedianAbsoluteError(actual, predicted);
+        T maxErr = StatisticsHelper<T>.CalculateMaxError(actual, predicted);
+        T aucPR, aucROC;
         if (predictionType == PredictionType.BinaryClassification)
         {
-            AUCPR = StatisticsHelper<T>.CalculatePrecisionRecallAUC(actual, predicted);
-            AUCROC = StatisticsHelper<T>.CalculateROCAUC(actual, predicted);
+            aucPR = StatisticsHelper<T>.CalculatePrecisionRecallAUC(actual, predicted);
+            aucROC = StatisticsHelper<T>.CalculateROCAUC(actual, predicted);
         }
         else
         {
-            AUCPR = _numOps.Zero;
-            AUCROC = _numOps.Zero;
+            aucPR = _numOps.Zero;
+            aucROC = _numOps.Zero;
         }
-        SMAPE = StatisticsHelper<T>.CalculateSymmetricMeanAbsolutePercentageError(actual, predicted);
-        MeanSquaredLogError = StatisticsHelper<T>.CalculateMeanSquaredLogError(actual, predicted);
-        CRPS = StatisticsHelper<T>.CalculateCRPS(actual, predicted);
+        T smape = StatisticsHelper<T>.CalculateSymmetricMeanAbsolutePercentageError(actual, predicted);
+        T msle = StatisticsHelper<T>.CalculateMeanSquaredLogError(actual, predicted);
+        T crps = StatisticsHelper<T>.CalculateCRPS(actual, predicted);
 
-        // Calculate standard errors
-        SampleStandardError = StatisticsHelper<T>.CalculateSampleStandardError(actual, predicted, numberOfParameters);
-        PopulationStandardError = StatisticsHelper<T>.CalculatePopulationStandardError(actual, predicted);
+        T sampleStd = StatisticsHelper<T>.CalculateSampleStandardError(actual, predicted, numberOfParameters);
+        T popStd = StatisticsHelper<T>.CalculatePopulationStandardError(actual, predicted);
 
-        // Calculate bias and autocorrelation metrics
-        MeanBiasError = StatisticsHelper<T>.CalculateMeanBiasError(actual, predicted);
-        TheilUStatistic = StatisticsHelper<T>.CalculateTheilUStatistic(actual, predicted);
-        DurbinWatsonStatistic = StatisticsHelper<T>.CalculateDurbinWatsonStatistic(actual, predicted);
+        T bias = StatisticsHelper<T>.CalculateMeanBiasError(actual, predicted);
+        T theil = StatisticsHelper<T>.CalculateTheilUStatistic(actual, predicted);
+        T dw = StatisticsHelper<T>.CalculateDurbinWatsonStatistic(actual, predicted);
 
-        // Calculate information criteria
-        AIC = StatisticsHelper<T>.CalculateAIC(n, numberOfParameters, RSS);
-        BIC = StatisticsHelper<T>.CalculateBIC(n, numberOfParameters, RSS);
-        AICAlt = StatisticsHelper<T>.CalculateAICAlternative(n, numberOfParameters, RSS);
+        T aic = StatisticsHelper<T>.CalculateAIC(n, numberOfParameters, rss);
+        T bic = StatisticsHelper<T>.CalculateBIC(n, numberOfParameters, rss);
+        T aicAlt = StatisticsHelper<T>.CalculateAICAlternative(n, numberOfParameters, rss);
 
-        // Calculate classification metrics
-        Accuracy = StatisticsHelper<T>.CalculateAccuracy(actual, predicted, predictionType);
-        (Precision, Recall, F1Score) = StatisticsHelper<T>.CalculatePrecisionRecallF1(actual, predicted, predictionType);
+        T accuracy = StatisticsHelper<T>.CalculateAccuracy(actual, predicted, predictionType);
+        var (precision, recall, f1) = StatisticsHelper<T>.CalculatePrecisionRecallF1(actual, predicted, predictionType);
 
-        // Populate error list
-        ErrorList = new List<T>(StatisticsHelper<T>.CalculateResiduals(actual, predicted));
+        var residuals = new List<T>(StatisticsHelper<T>.CalculateResiduals(actual, predicted));
+
+        // Assign to the observable properties only after every dependency is a
+        // local — no re-entry possible now.
+        MAE = mae;
+        RSS = rss;
+        MSE = mse;
+        RMSE = rmse;
+        MAPE = mape;
+        MedianAbsoluteError = medAbs;
+        MaxError = maxErr;
+        AUCPR = aucPR;
+        AUCROC = aucROC;
+        SMAPE = smape;
+        MeanSquaredLogError = msle;
+        CRPS = crps;
+        SampleStandardError = sampleStd;
+        PopulationStandardError = popStd;
+        MeanBiasError = bias;
+        TheilUStatistic = theil;
+        DurbinWatsonStatistic = dw;
+        AIC = aic;
+        BIC = bic;
+        AICAlt = aicAlt;
+        Accuracy = accuracy;
+        Precision = precision;
+        Recall = recall;
+        F1Score = f1;
+        ErrorList = residuals;
     }
 
     /// <summary>
