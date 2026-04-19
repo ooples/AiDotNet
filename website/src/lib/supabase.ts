@@ -31,28 +31,45 @@ function createDisabledClient(): SupabaseClient {
     console.error('[AiDotNet] Supabase env vars missing — auth disabled.', err.message);
   }
 
-  // Match Supabase's result-shape contract: every terminal call resolves to
-  // { data: null, error } instead of rejecting. That lets unguarded call sites
-  // like `const { error } = await supabase.auth.signInWithPassword(...)`
-  // destructure normally and fall through to their error-display paths without
-  // needing try/catch or an explicit supabaseConfigured check. Logout/sign-in
-  // flows that DO gate on supabaseConfigured still work the same way.
-  const disabledResult = { data: null, error: err };
-  const resolvingPromise = () => Promise.resolve(disabledResult);
-
-  const handler: ProxyHandler<object> = {
-    get(_target, prop) {
-      if (prop === 'then') return undefined; // don't accidentally become awaitable
-      // Nested access (e.g. supabase.auth.getSession) returns another proxy so the
-      // chain keeps working syntactically; terminal calls resolve to the
-      // disabled-result shape.
-      return new Proxy(resolvingPromise, handler);
-    },
-    apply() {
-      return resolvingPromise();
-    },
+  // Return auth-shaped no-op results so unguarded destructuring patterns stay
+  // safe. Multiple pages (Navbar, pricing, signup, login, licenses,
+  // AdminLayout, AccountLayout) do
+  //
+  //     const { data: { session } } = await supabase.auth.getSession()
+  //
+  // which crashes with "Cannot read property 'session' of null" if we return
+  // { data: null, ... }. Real Supabase returns:
+  //   - getSession()          → { data: { session: Session | null }, error }
+  //   - onAuthStateChange(cb) → { data: { subscription }, error: null }  (SYNC)
+  // Match those shapes so pages degrade gracefully.
+  const disabledSubscription = { unsubscribe() {} };
+  const resolveDisabledCall = (method?: PropertyKey): unknown => {
+    switch (method) {
+      case 'getSession':
+      case 'getUser':
+        return Promise.resolve({ data: { session: null, user: null }, error: err });
+      case 'onAuthStateChange':
+        // onAuthStateChange is synchronous in the real client, not thenable.
+        return { data: { subscription: disabledSubscription }, error: null };
+      default:
+        return Promise.resolve({ data: null, error: err });
+    }
   };
-  return new Proxy(resolvingPromise, handler) as unknown as SupabaseClient;
+
+  const createProxy = (path: PropertyKey[] = []): any =>
+    new Proxy(() => undefined, {
+      get(_target, prop) {
+        if (prop === 'then') return undefined; // don't accidentally become awaitable
+        // Walk the path (e.g. supabase.auth.getSession) so apply() knows which
+        // method was called and can return the right result shape.
+        return createProxy([...path, prop]);
+      },
+      apply() {
+        return resolveDisabledCall(path[path.length - 1]);
+      },
+    });
+
+  return createProxy() as SupabaseClient;
 }
 
 export const supabase: SupabaseClient = supabaseConfigured
