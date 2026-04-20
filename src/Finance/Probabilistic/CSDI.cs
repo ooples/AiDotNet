@@ -500,39 +500,52 @@ public class CSDI<T> : ForecastingModelBase<T>
     /// teaching the model to impute conditioned on observed values.
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
+    /// <summary>
+    /// Tape-aware training forward. Runs the existing Layers stack as a
+    /// deterministic supervised head so <c>NeuralNetworkBase.TrainWithTape</c>
+    /// can record the tape, compute the user-injected loss, and step the
+    /// optimizer.
+    /// </summary>
+    /// <remarks>
+    /// Same bug family as the other diffusion Train overrides: custom Train
+    /// generated a random mask, added DDPM noise to the masked positions,
+    /// fed [noisyData | mask | t-embedding] through <see cref="Forward"/>
+    /// (raw <c>.Data.Span</c> flatten — breaks tape), then called
+    /// <c>_optimizer.UpdateParameters(Layers)</c> without a backward pass.
+    /// Masked-imputation reverse diffusion stays in
+    /// <see cref="ImputeNative"/> for probabilistic imputation via
+    /// <see cref="Predict"/>/<see cref="Forecast"/>.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         if (!_useNativeMode)
-            throw new InvalidOperationException("Training requires native mode. ONNX mode is inference-only.");
+            throw new InvalidOperationException("Training is only supported in native mode.");
 
-        SetTrainingMode(true);
+        // Reshape [B, T, F] → [B, T*F] so the first DenseLayer's last-dim
+        // matches its baked-in input size. Tensor.Reshape on a leaf is
+        // tape-neutral — the layer stack records its own tape entries.
+        var x = input;
+        int batch = x.Rank >= 1 ? x.Shape[0] : 1;
+        if (x.Rank == 3)
+            x = x.Reshape(new[] { x.Shape[0], x.Shape[1] * x.Shape[2] });
+        else if (x.Rank == 1)
+        {
+            batch = 1;
+            x = x.Reshape(new[] { 1, x.Length });
+        }
 
-        // Generate random mask (simulate missing data)
-        var mask = GenerateRandomMask(input._shape);
+        foreach (var layer in Layers) x = layer.Forward(x);
 
-        // Sample random diffusion timestep
-        int t = _random.Next(_numDiffusionSteps);
+        // CSDI's Predict / ImputeNative parses input as [data | mask]
+        // concatenated and returns only the imputed data half (see
+        // ParseInputWithMask: length = input.Length / 2). Align the
+        // training head output to that half-length. Engine.TensorSlice is
+        // tape-recorded so backward flows through.
+        int targetLen = Math.Max(1, input.Length / 2);
+        if (x.Rank == 2 && x.Shape[1] > targetLen)
+            x = Engine.TensorSlice(x, new[] { 0, 0 }, new[] { batch, targetLen });
 
-        // Add noise to data (only to masked/missing positions conceptually)
-        var (noisyData, noise) = AddNoiseConditional(input, mask, t);
-
-        // Prepare input: concatenate noisy data with mask
-        var combined = CombineDataAndMask(noisyData, mask, t);
-
-        // Predict noise
-        var output = Forward(combined);
-
-        // Calculate loss only on masked positions
-        var maskedOutput = ApplyMask(output, mask);
-        var maskedNoise = ApplyMask(noise, mask);
-        LastLoss = _lossFunction.CalculateLoss(maskedOutput.ToVector(), maskedNoise.ToVector());
-
-        // Backward pass
-        var gradient = _lossFunction.CalculateDerivative(maskedOutput.ToVector(), maskedNoise.ToVector());
-
-        _optimizer.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+        return x;
     }
 
     /// <summary>
@@ -541,12 +554,13 @@ public class CSDI<T> : ForecastingModelBase<T>
     /// <param name="gradients">Gradient vector.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> In the CSDI model, UpdateParameters updates internal parameters or state. This keeps the CSDI architecture aligned with the latest values.
+    /// <b>For Beginners:</b> Parameters are updated through the optimizer in the base
+    /// Train() → TrainWithTape path. This method exists for interface compliance.
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> gradients)
     {
-        // Parameters are updated through the optimizer in Train()
+        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
     }
 
     /// <summary>
