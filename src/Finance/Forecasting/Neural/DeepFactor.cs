@@ -852,7 +852,14 @@ public class DeepFactor<T> : ForecastingModelBase<T>
     /// </remarks>
     private static Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
     {
-        return AiDotNetEngine.Current.TensorConcatenate([a, b], axis: 0);
+        // Flatten both inputs to rank-1 before concatenating so rank / shape
+        // mismatches between the factor branch (e.g. [1, horizon, F]) and the
+        // local branch (e.g. [1, horizon]) don't blow up TensorConcatenate,
+        // which requires every input to share every non-concat axis.
+        var engine = AiDotNetEngine.Current;
+        var flatA = a.Rank == 1 ? a : engine.Reshape(a, new[] { a.Length });
+        var flatB = b.Rank == 1 ? b : engine.Reshape(b, new[] { b.Length });
+        return engine.TensorConcatenate([flatA, flatB], axis: 0);
     }
 
     #endregion
