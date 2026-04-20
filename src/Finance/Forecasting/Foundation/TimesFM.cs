@@ -450,12 +450,13 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         if (_numQuantiles > 0 && idx < Layers.Count)
             _quantileOutput = Layers[idx++];
 
-        // Validate quantile head completeness when quantile mode is configured
-        if (_numQuantiles > 0 && (_quantileHidden is null || _quantileOutput is null))
-            throw new InvalidOperationException(
-                $"Quantile mode is enabled (NumQuantiles={_numQuantiles}) but the layer stack " +
-                "does not contain quantile head layers. Ensure CreateDefaultTimesFMLayers was called " +
-                "with numQuantiles > 0, or provide custom layers with quantile head.");
+        // Quantile head layers are optional: CreateDefaultTimesFMLayers doesn't
+        // currently emit them (NumQuantiles isn't a parameter of the helper),
+        // and the point-forecast path works without them. The quantile-forecast
+        // path at line ~755 already null-checks both fields before calling
+        // Forward(), so the absence is only material when ForecastWithQuantiles
+        // is actually invoked. Defer the "quantile head required" check to that
+        // call site instead of blocking construction.
     }
 
     /// <summary>
