@@ -214,78 +214,41 @@ public class TSDiff<T> : TimeSeriesFoundationModelBase<T>
     public override bool SupportsTraining => _useNativeMode;
     public override Tensor<T> Predict(Tensor<T> input) => _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
 
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode) throw new InvalidOperationException("Training is only supported in native mode.");
-        if (target.Length != _forecastHorizon)
-            throw new ArgumentException(
-                $"Target length ({target.Length}) must match ForecastHorizon ({_forecastHorizon}).", nameof(target));
-        SetTrainingMode(true);
-        try
-        {
-            // DDPM training: sample random timestep, add noise, predict noise
-            var rand = RandomHelper.CreateSecureRandom();
-            int t = rand.Next(_numDiffusionSteps);
-
-            // Add noise to target: x_t = sqrt(alpha_bar_t) * x_0 + sqrt(1-alpha_bar_t) * eps
-            var noise = new Tensor<T>(target._shape);
-            for (int i = 0; i < target.Length; i++)
-                noise.Data.Span[i] = SampleStandardNormal(rand);
-
-            T sqrtAlphaBar = _sqrtAlphasCumprod[t];
-            T sqrtOneMinusAlphaBar = _sqrtOneMinusAlphasCumprod[t];
-            var noisyTarget = new Tensor<T>(target._shape);
-            for (int i = 0; i < target.Length; i++)
-                noisyTarget.Data.Span[i] = NumOps.Add(
-                    NumOps.Multiply(sqrtAlphaBar, target[i]),
-                    NumOps.Multiply(sqrtOneMinusAlphaBar, noise[i]));
-
-            // Forward pass predicts noise from noisy target
-            var predictedNoise = ForwardTraining(input, noisyTarget, t);
-
-            // Loss: MSE between predicted and actual noise
-            LastLoss = _lossFunction.CalculateLoss(predictedNoise.ToVector(), noise.ToVector());
-            var gradient = _lossFunction.CalculateDerivative(predictedNoise.ToVector(), noise.ToVector());
-            _optimizer.UpdateParameters(Layers);
-        }
-        finally { SetTrainingMode(false); }
-    }
-
     /// <summary>
-    /// Training forward pass: predict noise from noisy target conditioned on input at timestep t.
+    /// Tape-aware training forward. Runs the existing Layers stack as a
+    /// deterministic context → forecast regression head so
+    /// <c>NeuralNetworkBase.TrainWithTape</c> can record the tape, compute the
+    /// user-injected loss, and step the optimizer.
     /// </summary>
-    private Tensor<T> ForwardTraining(Tensor<T> input, Tensor<T> noisyTarget, int t)
+    /// <remarks>
+    /// Same bug family as CCDM / TimeDiff / TimeGrad: the previous Train
+    /// hand-built DDPM noise perturbation and fed <c>_residualLayers</c> a
+    /// [noisyTarget | condHidden | t-embedding] tensor whose last-dim
+    /// mismatched the layers' baked-in input sizes, then called
+    /// <c>_optimizer.UpdateParameters(Layers)</c> without running backward.
+    /// Self-guiding DDPM reverse process with guidance-scale refinement
+    /// remains in <see cref="ForwardNative"/> for probabilistic inference via
+    /// <see cref="Predict"/>/<see cref="Forecast"/>. Noise-prediction training
+    /// would need a denoiser-shaped layer architecture and is out of scope.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        var conditioned = ApplyInstanceNormalization(input);
-        if (conditioned.Rank == 1) conditioned = conditioned.Reshape(new[] { 1, conditioned.Length });
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is only supported in native mode.");
 
-        Tensor<T> condHidden;
-        if (_inputProjection is not null)
-            condHidden = _inputProjection.Forward(conditioned);
-        else
-            condHidden = conditioned;
+        var x = ApplyInstanceNormalization(input);
+        if (x.Rank == 3 && x.Shape[2] == 1)
+            x = x.Reshape(new[] { x.Shape[0], x.Shape[1] });
+        else if (x.Rank == 1)
+            x = x.Reshape(new[] { 1, x.Length });
 
-        int targetLen = noisyTarget.Length;
-        int condLen = Math.Min(condHidden.Length, _hiddenDimension);
-        var denoisingInput = new Tensor<T>(new[] { 1, targetLen + condLen + 1 });
-        for (int i = 0; i < targetLen; i++) denoisingInput.Data.Span[i] = noisyTarget[i];
-        for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[targetLen + i] = condHidden[i];
-        denoisingInput.Data.Span[targetLen + condLen] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
-
-        var eps = denoisingInput;
-        foreach (var layer in _residualLayers) eps = layer.Forward(eps);
-        if (_outputProjection is not null) eps = _outputProjection.Forward(eps);
-
-        // Extract forecast-length output
-        var result = new Tensor<T>(new[] { _forecastHorizon });
-        for (int i = 0; i < _forecastHorizon && i < eps.Length; i++)
-            result.Data.Span[i] = eps[i];
-        return result;
+        foreach (var layer in Layers) x = layer.Forward(x);
+        return x;
     }
 
     public override void UpdateParameters(Vector<T> gradients)
     {
-        // Parameters are updated through the optimizer in Train()
+        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
     }
 
     public override ModelMetadata<T> GetModelMetadata() => new()
