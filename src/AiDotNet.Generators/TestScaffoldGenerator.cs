@@ -2366,16 +2366,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
-        // [Collection("LayerSerialization")] serialises Serialize_Deserialize_
-        // ShouldPreserveBehavior (and every other fact on the base class) so
-        // BLAS-heavy recurrent/attention layers can't contend for CPU under
-        // xUnit's default parallel scheduler. Matched in
-        // tests/AiDotNet.Tests/Fixtures/LayerSerializationCollection.cs.
-        // Keep this string and that CollectionDefinition name in lockstep;
-        // renaming one requires renaming the other. See issue #1166.
-        // Use the const reference so a rename of LayerSerializationCollection.Name
-        // fails the test-assembly compile rather than silently drifting out of
-        // sync with the [CollectionDefinition] name — issue #1166 comment.
+        // [Collection] serialises Serialize_Deserialize_ShouldPreserveBehavior
+        // (and every other fact on the base class) so BLAS-heavy recurrent/
+        // attention layers can't contend for CPU under xUnit's default parallel
+        // scheduler. The collection is defined in
+        // tests/AiDotNet.Tests/Fixtures/LayerSerializationCollection.cs;
+        // emitting the const reference (rather than a string literal) means a
+        // rename of LayerSerializationCollection.Name fails at test-assembly
+        // compile time if it drifts, instead of the old pattern of two
+        // strings-in-lockstep that could silently diverge. See issue #1166.
         sb.AppendLine("[Collection(global::AiDotNet.Tests.Fixtures.LayerSerializationCollection.Name)]");
         sb.AppendLine($"public class {testClassName} : LayerTestBase");
         sb.AppendLine("{");
