@@ -63,12 +63,26 @@ jobs:
         env:
           PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
           PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
+          PUBLIC_STRIPE_PRO_MONTHLY_LINK: ${{ secrets.PUBLIC_STRIPE_PRO_MONTHLY_LINK }}
+          PUBLIC_STRIPE_PRO_YEARLY_LINK: ${{ secrets.PUBLIC_STRIPE_PRO_YEARLY_LINK }}
+          PUBLIC_STRIPE_ENTERPRISE_MONTHLY_LINK: ${{ secrets.PUBLIC_STRIPE_ENTERPRISE_MONTHLY_LINK }}
+          PUBLIC_STRIPE_ENTERPRISE_YEARLY_LINK: ${{ secrets.PUBLIC_STRIPE_ENTERPRISE_YEARLY_LINK }}
         run: |
           # Fail the job here rather than deploying a site that silently
-          # disables auth. Astro bakes these at build time — a missing or
-          # rotated secret would otherwise produce a broken production bundle.
+          # disables auth or ships a pricing page with dead Subscribe buttons.
+          # Astro bakes these at build time — a missing or rotated secret
+          # would otherwise produce a broken production bundle.
           : "${PUBLIC_SUPABASE_URL:?Missing PUBLIC_SUPABASE_URL GitHub secret}"
           : "${PUBLIC_SUPABASE_ANON_KEY:?Missing PUBLIC_SUPABASE_ANON_KEY GitHub secret}"
+          # Stripe Payment Links are business-critical for /pricing/: without
+          # them the Subscribe buttons become dead-end alerts. Fail fast in
+          # the production deploy workflow rather than shipping a broken
+          # conversion funnel. Preview/PR builds aren't guarded by this job
+          # (it only runs on push to master), so contributors aren't blocked.
+          : "${PUBLIC_STRIPE_PRO_MONTHLY_LINK:?Missing PUBLIC_STRIPE_PRO_MONTHLY_LINK GitHub secret}"
+          : "${PUBLIC_STRIPE_PRO_YEARLY_LINK:?Missing PUBLIC_STRIPE_PRO_YEARLY_LINK GitHub secret}"
+          : "${PUBLIC_STRIPE_ENTERPRISE_MONTHLY_LINK:?Missing PUBLIC_STRIPE_ENTERPRISE_MONTHLY_LINK GitHub secret}"
+          : "${PUBLIC_STRIPE_ENTERPRISE_YEARLY_LINK:?Missing PUBLIC_STRIPE_ENTERPRISE_YEARLY_LINK GitHub secret}"
 
       - name: Build website
         run: npx astro build

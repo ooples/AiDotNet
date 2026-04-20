@@ -1,5 +1,37 @@
 ---
 import AdminLayout from '../../../layouts/AdminLayout.astro';
+
+// Single source of truth for the product list. Shared between:
+//   - the filter dropdown on the table
+//   - the Issue License modal's product selector
+//   - the client-side productBadge() helper (via the serialized version below)
+// Keep this aligned with the `license_product` Postgres enum in
+// website/supabase/migrations/20260419000000_add_product_to_license_keys.sql.
+// Adding a new product means editing this array + the enum migration, nothing else.
+interface ProductConfig {
+  value: string;
+  label: string;
+  prefix: string;
+  badgeClass: string;
+}
+const PRODUCTS: ProductConfig[] = [
+  {
+    value: 'aidotnet',
+    label: 'AiDotNet',
+    prefix: 'aidn',
+    badgeClass: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+  },
+  {
+    value: 'harmonic_engine',
+    label: 'Harmonic Engine',
+    prefix: 'harm',
+    badgeClass: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400',
+  },
+];
+// Serialized JSON blob the client <script> picks up — lets the browser
+// render product badges and validate issue-form input against the same
+// list the Astro frontmatter used to render the dropdowns above.
+const productsJson = JSON.stringify(PRODUCTS);
 ---
 
 <AdminLayout title="License Management - AiDotNet Admin" description="Manage BSL license keys, view activations, and administer license tiers." activeTab="licenses">
@@ -42,8 +74,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         class="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
       >
         <option value="">All Products</option>
-        <option value="aidotnet">AiDotNet</option>
-        <option value="harmonic_engine">Harmonic Engine</option>
+        {PRODUCTS.map((p) => <option value={p.value}>{p.label}</option>)}
       </select>
       <select
         id="filter-tier"
@@ -104,8 +135,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
               required
               class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
             >
-              <option value="aidotnet">AiDotNet</option>
-              <option value="harmonic_engine">Harmonic Engine</option>
+              {PRODUCTS.map((p) => <option value={p.value}>{p.label}</option>)}
             </select>
           </div>
           <div>
@@ -193,6 +223,15 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     </div>
   </div>
 
+  <!--
+    Serialized product list hand-off from the Astro frontmatter to the
+    browser-side script below. Using a data-attribute keeps the two-way
+    contract explicit (frontmatter defines, script consumes) and avoids
+    the `const PRODUCT_META = { ... }` duplication that previously had to
+    be maintained in lockstep with the HTML dropdown options.
+  -->
+  <div id="admin-licenses-config" data-products={productsJson} class="hidden"></div>
+
   <script>
     import { supabase } from '../../../lib/supabase';
 
@@ -217,19 +256,26 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     // Product metadata: display label + license-key prefix. The prefix must
     // match what the client library expects so that validation is O(1) based
     // on the key string alone and doesn't need a DB round-trip just to
-    // classify product. Keep in sync with the `license_product` Postgres enum.
-    const PRODUCT_META: Record<string, { label: string; prefix: string; badge: string }> = {
-      aidotnet: {
-        label: 'AiDotNet',
-        prefix: 'aidn',
-        badge: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
-      },
-      harmonic_engine: {
-        label: 'Harmonic Engine',
-        prefix: 'harm',
-        badge: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400',
-      },
-    };
+    // classify product.
+    //
+    // Source of truth lives in the Astro frontmatter (the `PRODUCTS` array)
+    // so the HTML dropdowns and the client-side helpers never drift apart.
+    // We read the serialized JSON from the #admin-licenses-config element
+    // the Astro template rendered for us.
+    interface ClientProduct { value: string; label: string; prefix: string; badgeClass: string; }
+    const __configEl = document.getElementById('admin-licenses-config');
+    const __productList: ClientProduct[] = __configEl
+      ? JSON.parse(__configEl.getAttribute('data-products') || '[]')
+      : [];
+    const PRODUCT_META: Record<string, { label: string; prefix: string; badge: string }> = {};
+    for (const p of __productList) {
+      PRODUCT_META[p.value] = { label: p.label, prefix: p.prefix, badge: p.badgeClass };
+    }
+    // Fallback key used by productBadge() when a DB row surfaces an unknown
+    // product string (e.g., a new product added to the enum but not yet
+    // reflected in the admin UI config). The first entry in the list is the
+    // canonical "home" product — currently AiDotNet.
+    const FALLBACK_PRODUCT_KEY: string | undefined = __productList[0]?.value;
 
     interface Activation {
       id: string;
@@ -344,9 +390,32 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       renderTable();
     }
 
+    // Tracks which unknown product values we've already warned about this
+    // page-load so a table with thousands of malformed rows doesn't spam the
+    // console with one warning per row.
+    const __warnedUnknownProducts = new Set<string>();
+
     function productBadge(product: string): string {
-      const meta = PRODUCT_META[product] || PRODUCT_META.aidotnet;
-      return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${meta.badge}">${meta.label}</span>`;
+      const meta = PRODUCT_META[product];
+      if (meta) {
+        return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${meta.badge}">${escapeHtml(meta.label)}</span>`;
+      }
+      // Unknown or malformed product value. Surface a warning once per
+      // distinct value so admins notice data drift (new enum value in the
+      // DB that the admin panel hasn't been updated for, stray NULL, typo in
+      // a manual insert) instead of silently papering over it with the
+      // default badge. Render the raw value so the row stays scannable.
+      if (!__warnedUnknownProducts.has(product)) {
+        __warnedUnknownProducts.add(product);
+        console.warn(
+          `[admin/licenses] Unknown product value "${product}" — ` +
+          'check that the PRODUCTS list in index.astro matches the license_product enum.'
+        );
+      }
+      const fallbackMeta = FALLBACK_PRODUCT_KEY ? PRODUCT_META[FALLBACK_PRODUCT_KEY] : undefined;
+      const badgeClass = fallbackMeta?.badge ?? 'bg-slate-100 dark:bg-slate-700 text-slate-500';
+      const displayLabel = product ? `Unknown: ${product}` : 'Unknown';
+      return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClass}" title="Unrecognized product value — see console">${escapeHtml(displayLabel)}</span>`;
     }
 
     function tierBadge(tier: string): string {

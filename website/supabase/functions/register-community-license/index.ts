@@ -11,6 +11,22 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// Product identity for the self-service community license. The marketing
+// site's "Get Free License" button is AiDotNet-specific; other products
+// have their own issuance paths. Keeping these as named constants avoids
+// string drift between the lookup and insert paths and makes
+// product-specific changes a one-liner.
+const COMMUNITY_PRODUCT = "aidotnet" as const;
+const COMMUNITY_PREFIX = "aidn" as const;
+const COMMUNITY_TIER = "community" as const;
+// Unique partial index name that enforces at-most-one active license per
+// (user, product, tier). See migration
+// 20260419000000_add_product_to_license_keys.sql. When a concurrent request
+// races us and wins the insert, Postgres surfaces this constraint name in
+// the error and we treat it as "the other request already issued the
+// license — go read it back".
+const UNIQUE_ACTIVE_INDEX = "idx_license_keys_one_active_per_user_product_tier";
+
 serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -63,16 +79,24 @@ serve(async (req: Request) => {
     // Use service role to check existing licenses and create new ones
     const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Check if the user already has an active AiDotNet community license.
-    // Scoped to product='aidotnet' so a Harmonic Engine community license
-    // doesn't shadow a pending AiDotNet signup and vice versa.
-    const { data: existingLicenses, error: queryError } = await serviceClient
-      .from("license_keys")
-      .select("id, license_key, status, tier")
-      .eq("user_id", user.id)
-      .eq("product", "aidotnet")
-      .eq("tier", "community")
-      .eq("status", "active");
+    // Helper that fetches the user's existing active community license for
+    // this product, if any. Used both as the fast path (skip insert if one
+    // already exists) and as the race-recovery path (another concurrent
+    // request inserted it while we were running — read back what they wrote).
+    async function fetchExistingActiveLicense() {
+      return await serviceClient
+        .from("license_keys")
+        .select("id, license_key, status, tier")
+        .eq("user_id", user.id)
+        .eq("product", COMMUNITY_PRODUCT)
+        .eq("tier", COMMUNITY_TIER)
+        .eq("status", "active")
+        .maybeSingle();
+    }
+
+    // Fast-path check: if the user already has an active community license
+    // for this product, return it without attempting an insert.
+    const { data: existingLicense, error: queryError } = await fetchExistingActiveLicense();
 
     if (queryError) {
       console.error("Query error:", queryError);
@@ -82,13 +106,12 @@ serve(async (req: Request) => {
       );
     }
 
-    if (existingLicenses && existingLicenses.length > 0) {
-      // Return the existing community license
+    if (existingLicense) {
       return new Response(
         JSON.stringify({
           success: true,
-          license_key: existingLicenses[0].license_key,
-          tier: "community",
+          license_key: existingLicense.license_key,
+          tier: COMMUNITY_TIER,
           is_existing: true,
           message: "You already have an active community license.",
         }),
@@ -96,27 +119,62 @@ serve(async (req: Request) => {
       );
     }
 
-    // Generate a new license key: aidn.{12-char-random}.{16-char-random}
+    // Generate a new license key: {prefix}.{12-char-random}.{16-char-random}.
+    // Prefix comes from COMMUNITY_PREFIX so the client library can classify
+    // the key by string alone without a DB round-trip.
     const keyPart1 = crypto.randomUUID().replace(/-/g, "").substring(0, 12);
     const keyPart2 = crypto.randomUUID().replace(/-/g, "").substring(0, 16);
-    const licenseKey = `aidn.${keyPart1}.${keyPart2}`;
+    const licenseKey = `${COMMUNITY_PREFIX}.${keyPart1}.${keyPart2}`;
 
-    // Insert the new community license, scoped to product='aidotnet'. The
-    // marketing site's Get Free License button is AiDotNet-specific; other
-    // products (Harmonic Engine, etc.) have their own issuance path.
+    // Insert the new community license. The at-most-one-active partial
+    // unique index (migration 20260419000000) guarantees atomicity: if a
+    // concurrent request from the same user wins the insert race, this
+    // insert fails with Postgres error code 23505 (unique_violation) and
+    // we recover by reading back the winner's row instead of creating a
+    // duplicate.
     const { error: insertError } = await serviceClient
       .from("license_keys")
       .insert({
         user_id: user.id,
         license_key: licenseKey,
-        product: "aidotnet",
-        tier: "community",
+        product: COMMUNITY_PRODUCT,
+        tier: COMMUNITY_TIER,
         status: "active",
         max_activations: 3,
         notes: "Self-registered community license",
       });
 
     if (insertError) {
+      // PostgREST surfaces the native Postgres SQLSTATE in `code`; 23505 is
+      // unique_violation. We additionally match on the constraint name so
+      // that other unique constraints (e.g., the license_key column's own
+      // uniqueness) don't get silently swallowed.
+      const isRaceViolation =
+        insertError.code === "23505" &&
+        typeof insertError.message === "string" &&
+        insertError.message.includes(UNIQUE_ACTIVE_INDEX);
+
+      if (isRaceViolation) {
+        // A concurrent request already issued an active community license
+        // for this user. Read it back and return that one.
+        const { data: racedLicense, error: refetchError } = await fetchExistingActiveLicense();
+        if (!refetchError && racedLicense) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              license_key: racedLicense.license_key,
+              tier: COMMUNITY_TIER,
+              is_existing: true,
+              message: "You already have an active community license.",
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        // The unique violation fired but we can't read the winner back.
+        // Fall through to the generic 500 so the caller retries cleanly.
+        console.error("Race-recovery refetch failed:", refetchError);
+      }
+
       console.error("Insert error:", insertError);
       return new Response(
         JSON.stringify({ success: false, error: "server_error", message: "Failed to create license. Please try again." }),
@@ -128,7 +186,7 @@ serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         license_key: licenseKey,
-        tier: "community",
+        tier: COMMUNITY_TIER,
         is_existing: false,
         message: "Community license created successfully! Set AIDOTNET_LICENSE_KEY or save to ~/.aidotnet/license.key",
       }),
