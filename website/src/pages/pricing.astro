@@ -313,15 +313,37 @@ const base = import.meta.env.BASE_URL;
             return;
           }
 
-          // Paid tiers — redirect to Stripe Payment Link
+          // Paid tiers — redirect to Stripe Payment Link. Before redirect,
+          // annotate the URL with the current user's Supabase ID + email so
+          // the stripe-webhook edge function can bind the resulting Stripe
+          // customer/subscription to the existing profile (instead of
+          // having to reconcile by email after the fact, which fails when
+          // the customer pays with a different email than they signed up
+          // with). Anonymous checkouts are allowed — they'll be linked on
+          // first login via the customer_details.email fallback path.
           if (PAYMENT_LINKS[tier]) {
             const interval = isYearly ? 'year' : 'month';
             const link = PAYMENT_LINKS[tier][interval];
-            if (link) {
-              window.location.href = link;
-            } else {
-              alert('Payment links are being configured. Please try again shortly or contact sales@ooples.com.');
+            if (!link) {
+              alert('Payment links are being configured. Please try again shortly or contact sales@aidotnet.dev.');
+              return;
             }
+
+            const { data: { session } } = await supabase.auth.getSession();
+            let url = link;
+            if (session?.user) {
+              const params = new URLSearchParams();
+              // client_reference_id is the documented Stripe Payment Link
+              // parameter for passing a customer identifier through to the
+              // Checkout Session. See
+              // https://stripe.com/docs/payment-links/customize#passing-custom-parameters
+              params.set('client_reference_id', session.user.id);
+              if (session.user.email) {
+                params.set('prefilled_email', session.user.email);
+              }
+              url += (link.includes('?') ? '&' : '?') + params.toString();
+            }
+            window.location.href = url;
           }
         });
       });
