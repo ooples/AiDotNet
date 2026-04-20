@@ -258,7 +258,14 @@ const productsJson = JSON.stringify(PRODUCTS);
       issued_at: string;
       expires_at: string | null;
       created_at: string;
+      // Admin-populated attribution fields. Used when a license was
+      // issued directly by an admin (e.g., training cohort bulk-issue)
+      // before the real customer has signed up, so the UI can show the
+      // real person instead of the synthetic bootstrap user_id.
+      customer_email: string | null;
+      customer_full_name: string | null;
       ownerName?: string;
+      ownerEmail?: string;
       activationCount?: number;
     }
 
@@ -336,7 +343,7 @@ const productsJson = JSON.stringify(PRODUCTS);
       // Load all license keys
       let licenses: LicenseKey[];
       try {
-        licenses = await fetchAllPaginated<LicenseKey>('license_keys', 'id, user_id, license_key, product, tier, status, max_activations, organization_name, notes, stripe_subscription_id, issued_at, expires_at, created_at', 'created_at');
+        licenses = await fetchAllPaginated<LicenseKey>('license_keys', 'id, user_id, license_key, product, tier, status, max_activations, organization_name, notes, stripe_subscription_id, issued_at, expires_at, created_at, customer_email, customer_full_name', 'created_at');
       } catch (err) {
         const loading = document.getElementById('licenses-loading');
         if (loading) loading.innerHTML = '<p class="text-sm text-red-500">Failed to load licenses.</p>';
@@ -358,11 +365,32 @@ const productsJson = JSON.stringify(PRODUCTS);
         }
       }
 
-      allLicenses = licenses.map(l => ({
-        ...l,
-        ownerName: nameMap.get(l.user_id) || 'Unknown',
-        activationCount: activationCounts.get(l.id) || 0,
-      }));
+      // Owner-attribution precedence:
+      //   1. customer_full_name (admin-set, e.g. bulk training issuance)
+      //   2. profile.full_name
+      //   3. profile.email
+      //   4. customer_email (when no profile exists yet)
+      //   5. 'Unknown'
+      //
+      // customer_full_name wins over profile.full_name deliberately: when
+      // an admin issued a license to someone whose profile is a synthetic
+      // bootstrap account (ci@aidotnet.dev, etc.), the admin-entered name
+      // is the authoritative label — it represents the real human this
+      // license was granted to, not the bot that inserted the row.
+      allLicenses = licenses.map(l => {
+        const profileLabel = nameMap.get(l.user_id);
+        const ownerName =
+          (l.customer_full_name && l.customer_full_name.trim()) ||
+          profileLabel ||
+          (l.customer_email && l.customer_email.trim()) ||
+          'Unknown';
+        return {
+          ...l,
+          ownerName,
+          ownerEmail: l.customer_email || undefined,
+          activationCount: activationCounts.get(l.id) || 0,
+        };
+      });
 
       // Stats
       const activeCount = allLicenses.filter(l => l.status === 'active').length;
@@ -387,7 +415,11 @@ const productsJson = JSON.stringify(PRODUCTS);
 
       filteredLicenses = allLicenses.filter(l => {
         if (search) {
-          const haystack = `${l.license_key} ${l.ownerName || ''} ${l.organization_name || ''}`.toLowerCase();
+          // Include customer_email + customer_full_name in the search
+          // haystack so admins can find a bulk-issued training license
+          // by typing the student's name or email even when the row's
+          // user_id still points at the synthetic bootstrap account.
+          const haystack = `${l.license_key} ${l.ownerName || ''} ${l.ownerEmail || ''} ${l.customer_full_name || ''} ${l.organization_name || ''}`.toLowerCase();
           if (!haystack.includes(search)) return false;
         }
         if (productFilter && l.product !== productFilter) return false;
@@ -488,7 +520,7 @@ const productsJson = JSON.stringify(PRODUCTS);
             <button class="activations-btn font-mono text-xs text-brand-blue hover:underline" data-id="${l.id}" title="View activations">${escapeHtml(keyPreview)}</button>
           </td>
           <td class="py-3 px-4">${productBadge(l.product)}</td>
-          <td class="py-3 px-4 text-slate-700 dark:text-slate-300">${escapeHtml(l.ownerName || 'Unknown')}${l.organization_name ? `<br><span class="text-xs text-slate-400">${escapeHtml(l.organization_name)}</span>` : ''}</td>
+          <td class="py-3 px-4 text-slate-700 dark:text-slate-300">${escapeHtml(l.ownerName || 'Unknown')}${l.ownerEmail && l.ownerEmail !== l.ownerName ? `<br><span class="text-xs text-slate-400">${escapeHtml(l.ownerEmail)}</span>` : ''}${l.organization_name ? `<br><span class="text-xs text-slate-400">${escapeHtml(l.organization_name)}</span>` : ''}</td>
           <td class="py-3 px-4">${tierBadge(l.tier)}</td>
           <td class="py-3 px-4">${statusBadge(l.status)}</td>
           <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-sm">${activations}</td>
