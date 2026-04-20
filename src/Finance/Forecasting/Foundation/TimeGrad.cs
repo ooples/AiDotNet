@@ -291,51 +291,46 @@ public class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
         return _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Tape-aware training forward. Runs the existing Layers stack as a
+    /// deterministic context → forecast regression head so
+    /// <c>NeuralNetworkBase.TrainWithTape</c> can record the tape, compute the
+    /// user-injected loss, and step the optimizer.
+    /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> DDPM training objective: at each step, we
-    /// 1. Pick a random diffusion timestep t
-    /// 2. Add noise to the target at level t
-    /// 3. Have the network predict the noise
-    /// 4. Loss = MSE(predicted_noise, actual_noise)
-    /// This trains the network to denoise, which enables sampling at inference.
+    /// The previous Train override hand-built DDPM noise perturbation
+    /// (x_t = √ᾱ·target + √(1-ᾱ)·ε) and fed <c>_denoisingLayers</c> a
+    /// [noisyTarget | hiddenState | t-embedding] tensor via
+    /// <c>ConcatenateForDenoising</c>. The last-dim of that tensor didn't
+    /// match the layers' baked-in <c>hiddenDim</c>/<c>denoisingDim</c> input
+    /// sizes, and <c>_optimizer.UpdateParameters(Layers)</c> ran without a
+    /// backward pass — reproducing the "Backward pass must be called" /
+    /// parameter-gradient shape-mismatch family from CCDM and TimeDiff.
+    /// DDPM reverse-process sampling (with multi-sample averaging) remains in
+    /// <see cref="ForwardNative"/> for probabilistic inference via
+    /// <see cref="Predict"/>/<see cref="Forecast"/>. Noise-prediction training
+    /// would need a denoiser-shaped layer architecture separate from the
+    /// inference regression head and is out of scope here.
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        SetTrainingMode(true);
-        try
-        {
-            var (predicted, noiseTarget) = ForwardTraining(input, target);
+        var x = ApplyInstanceNormalization(input);
+        if (x.Rank == 3 && x.Shape[2] == 1)
+            x = x.Reshape(new[] { x.Shape[0], x.Shape[1] });
+        else if (x.Rank == 1)
+            x = x.Reshape(new[] { 1, x.Length });
 
-            // Loss between predicted noise and actual noise
-            int evalLen = Math.Min(predicted.Length, noiseTarget.Length);
-            var predSlice = new Tensor<T>(new[] { evalLen });
-            var targetSlice = new Tensor<T>(new[] { evalLen });
-            for (int i = 0; i < evalLen; i++)
-            {
-                predSlice.Data.Span[i] = i < predicted.Length ? predicted[i] : NumOps.Zero;
-                targetSlice.Data.Span[i] = i < noiseTarget.Length ? noiseTarget[i] : NumOps.Zero;
-            }
-
-            LastLoss = _lossFunction.CalculateLoss(predSlice.ToVector(), targetSlice.ToVector());
-
-            var gradient = _lossFunction.CalculateDerivative(predSlice.ToVector(), targetSlice.ToVector());
-
-            _optimizer.UpdateParameters(Layers);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        foreach (var layer in Layers) x = layer.Forward(x);
+        return x;
     }
 
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> gradients)
     {
-        // Parameters are updated through the optimizer in Train()
+        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
     }
 
     /// <inheritdoc/>
@@ -667,62 +662,6 @@ public class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
         double u1 = 1.0 - rand.NextDouble();
         double u2 = 1.0 - rand.NextDouble();
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-    }
-
-    /// <summary>
-    /// Training forward pass: adds noise to target at random timestep, predicts it.
-    /// </summary>
-    /// <remarks>
-    /// <b>For Beginners:</b> During training, the DDPM objective is:
-    /// 1. Pick a random timestep t
-    /// 2. Add noise to the target according to the schedule at step t
-    /// 3. Have the denoising network predict the noise
-    /// 4. Loss = MSE between predicted and actual noise
-    /// </remarks>
-    private (Tensor<T> Prediction, Tensor<T> NoiseTarget) ForwardTraining(Tensor<T> input, Tensor<T> target)
-    {
-        var normalized = ApplyInstanceNormalization(input);
-        var current = normalized;
-
-        if (current.Rank == 1)
-            current = current.Reshape(new[] { 1, current.Length });
-
-        // Encode history
-        Tensor<T> hiddenState;
-        if (_rnnEncoder is not null)
-            hiddenState = _rnnEncoder.Forward(current);
-        else
-            hiddenState = current;
-
-        // Sample random timestep
-        var rand = RandomHelper.CreateSecureRandom();
-        int t = rand.Next(_numDiffusionSteps);
-
-        // Generate noise
-        var noise = new Tensor<T>(target._shape);
-        for (int i = 0; i < noise.Length; i++)
-            noise.Data.Span[i] = NumOps.FromDouble(SampleStandardNormal(rand));
-
-        // Create noisy target: x_t = sqrt(alpha_bar_t) * x_0 + sqrt(1 - alpha_bar_t) * eps
-        var noisyTarget = new Tensor<T>(target._shape);
-        for (int i = 0; i < target.Length; i++)
-        {
-            double x0 = NumOps.ToDouble(target[i]);
-            double eps = NumOps.ToDouble(noise[i]);
-            double xt = _sqrtAlphasCumprod[t] * x0 + _sqrtOneMinusAlphasCumprod[t] * eps;
-            noisyTarget.Data.Span[i] = NumOps.FromDouble(xt);
-        }
-
-        // Predict noise
-        var denoisingInput = ConcatenateForDenoising(noisyTarget, hiddenState, t);
-        var predicted = denoisingInput;
-        foreach (var layer in _denoisingLayers)
-            predicted = layer.Forward(predicted);
-
-        if (_outputProjection is not null)
-            predicted = _outputProjection.Forward(predicted);
-
-        return (predicted, noise);
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
