@@ -527,6 +527,21 @@ public class TSMixer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
+    /// Tape-aware training forward. Calls <see cref="Forward"/> directly — the
+    /// same path <see cref="Predict"/> uses — so the training output shape
+    /// matches the Predict target shape. Delegating to the default
+    /// FinancialModelBase.ForwardForTraining → Forecast path produced a
+    /// different shape (e.g. [1, 4, 8] vs Predict's [1, 8, 8]) and the MSE
+    /// loss rejected the pair.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is only supported in native mode.");
+        return Forward(input);
+    }
+
+    /// <summary>
     /// Updates network parameters based on gradients.
     /// </summary>
     /// <param name="gradients">Gradient vector for parameter updates.</param>

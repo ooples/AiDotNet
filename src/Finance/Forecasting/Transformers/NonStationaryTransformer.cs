@@ -629,6 +629,26 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
+    /// Tape-aware training forward. Calls <see cref="Forward"/> directly — the
+    /// same native path <see cref="Predict"/> uses — so the training output
+    /// shape matches the Predict target shape by construction.
+    /// </summary>
+    /// <remarks>
+    /// The base <see cref="FinancialModelBase{T}.ForwardForTraining"/> default
+    /// delegation runs through <see cref="Forecast"/> which for this model
+    /// calls ForecastNative and reshapes to a different horizon-aligned
+    /// contract than the raw <see cref="Forward"/> output. The resulting
+    /// Predict/Train shape disagreement (e.g. [1, 4, 8] from Forecast vs
+    /// [1, 8, 32] from Predict) blew up the MSE loss.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is only supported in native mode.");
+        return Forward(input);
+    }
+
+    /// <summary>
     /// Updates network parameters based on gradients.
     /// </summary>
     /// <param name="gradients">Gradient vector for parameter updates.</param>
