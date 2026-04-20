@@ -484,32 +484,6 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     }
 
 
-    #region IJitCompilable Implementation
-
-    /// <summary>
-    /// Gets whether this model currently supports JIT compilation.
-    /// </summary>
-    /// <value>True if the wrapped model supports JIT compilation, false otherwise.</value>
-    /// <remarks>
-    /// <para>
-    /// Sharded models delegate JIT compilation support to their wrapped model.
-    /// JIT compilation is performed on the full model representation, not on individual shards.
-    /// </para>
-    /// <para><b>For Beginners:</b> Distributed models can be JIT compiled if the underlying model supports it.
-    ///
-    /// The sharding strategy (splitting parameters across processes) doesn't prevent JIT compilation.
-    /// The JIT compiler works with the full computation graph, which is the same across all processes.
-    /// Individual processes execute the same compiled code but operate on different parameter shards.
-    /// </para>
-    /// </remarks>
-    public virtual bool SupportsJitCompilation => false;
-
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation has been removed.");
-    }
-
-    #endregion
     /// <summary>
     /// Saves the model's current state to a stream.
     /// </summary>

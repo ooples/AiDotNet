@@ -218,14 +218,6 @@ public class ElasticWeightConsolidationTests
             }
         }
 
-        // IJitCompilable<double>
-        public bool SupportsJitCompilation => false;
-
-        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-        {
-            throw new NotSupportedException("MockModel does not support JIT compilation.");
-        }
-
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 }

@@ -84,11 +84,6 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
 
     /// <summary>
-    /// Gets whether JIT compilation is supported.
-    /// </summary>
-    public virtual bool SupportsJitCompilation => false;
-
-    /// <summary>
     /// Initializes a new instance of the CausalModelBase class.
     /// </summary>
     protected CausalModelBase()
@@ -585,14 +580,6 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
         stream.CopyTo(memoryStream);
         byte[] serializedData = memoryStream.ToArray();
         Deserialize(serializedData);
-    }
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation is not supported for this causal model.");
     }
 
     /// <summary>

@@ -732,7 +732,4 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
 
     #endregion
 
-    #region IJitCompilable Override
-
-    #endregion
 }

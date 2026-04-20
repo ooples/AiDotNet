@@ -436,28 +436,6 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Applies the activation function to a computation node.
-    /// </summary>
-    private ComputationNode<T> ApplyActivationToComputationNode(ComputationNode<T> node)
-    {
-        // ScalarActivation is guaranteed non-null here since this method is only called when ScalarActivation is not null
-        if (ScalarActivation is null)
-            throw new InvalidOperationException("ScalarActivation cannot be null when applying activation to computation node.");
-
-        // Use ApplyToGraph - the layer's SupportsJitCompilation property ensures this is only
-        // called when the activation supports JIT compilation
-        if (ScalarActivation.SupportsJitCompilation)
-        {
-            return ScalarActivation.ApplyToGraph(node);
-        }
-
-        // This should never be reached if SupportsJitCompilation is checked before ExportComputationGraph
-        throw new InvalidOperationException(
-            $"Internal error: Activation function '{ScalarActivation.GetType().Name}' does not support JIT compilation. " +
-            "This indicates the layer's SupportsJitCompilation property was not checked before calling ExportComputationGraph.");
-    }
-
-    /// <summary>
     /// Transposes a matrix using O(1) stride-based view.
     /// </summary>
     private Matrix<T> TransposeMatrix(Matrix<T> matrix)

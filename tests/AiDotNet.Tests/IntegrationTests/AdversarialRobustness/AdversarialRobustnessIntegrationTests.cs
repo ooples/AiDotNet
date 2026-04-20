@@ -1849,7 +1849,6 @@ public class AdversarialRobustnessIntegrationTests
         public ILossFunction<double>? DefaultLossFunction => null;
         public int ParameterCount => _weights.Length;
         public bool SupportsParameterInitialization => ParameterCount > 0;
-        public bool SupportsJitCompilation => false;
 
         public Vector<double> Predict(Vector<double> input)
         {
@@ -1947,11 +1946,6 @@ public class AdversarialRobustnessIntegrationTests
             {
                 _weights[i] -= learningRate * gradients[i];
             }
-        }
-
-        public AiDotNet.Autodiff.ComputationNode<double> ExportComputationGraph(List<AiDotNet.Autodiff.ComputationNode<double>> inputNodes)
-        {
-            throw new NotImplementedException();
         }
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;

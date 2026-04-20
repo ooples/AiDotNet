@@ -93,7 +93,6 @@ public class QuantizedAttentionTests
         var quantized = new QuantizedAttentionLayer(mha);
 
         Assert.False(quantized.SupportsTraining);
-        Assert.False(quantized.SupportsJitCompilation);
         Assert.Equal(0, quantized.ParameterCount);
         Assert.Null(quantized.GetWeights());
         Assert.Null(quantized.GetBiases());

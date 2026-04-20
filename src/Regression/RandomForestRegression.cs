@@ -469,7 +469,4 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return clone;
     }
 
-    #region IJitCompilable Implementation Override
-
-    #endregion
 }

@@ -328,6 +328,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         LossFunction = lossFunction;
         _cachedParameterCount = null;
         _sensitiveFeatures = new Vector<int>(0);
+        // Concrete subclass's type name threads through so disk-cached plans in
+        // PlanCache.Current don't collide between different model classes.
+        _compileHost = new CompiledModelHost<T>(
+            shapeMode: SymbolicShapeMode.BatchDynamic,
+            modelIdentity: GetType().FullName ?? GetType().Name);
     }
 
     /// <summary>
@@ -2212,7 +2217,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// rather than re-implementing the compile+cache+fallback dance per
     /// model family.
     /// </remarks>
-    private readonly CompiledModelHost<T> _compileHost = new();
+    private readonly CompiledModelHost<T> _compileHost;
 
     /// <summary>
     /// Tracks input shapes whose compilation has previously failed on this
@@ -4925,90 +4930,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
         }
     }
-
-    #region IJitCompilable Implementation
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// Default is <c>true</c> because the base class's <see cref="Predict"/> now
-    /// routes through <see cref="PredictCompiled"/>, which auto-compiles when
-    /// <c>TensorCodecOptions.EnableCompilation</c> is on AND the model's op
-    /// graph is traceable, falling back to eager otherwise. So every
-    /// <see cref="NeuralNetworkBase{T}"/> subclass is "JIT-capable" in the
-    /// effective sense: JIT is attempted, and failures degrade gracefully
-    /// to eager without the user noticing.
-    /// </para>
-    /// <para>
-    /// Subclasses whose forward path is known to be incompatible with graph
-    /// capture (non-Engine tensor access, scalar control flow that bakes at
-    /// trace time, layers whose outputs depend on mutable instance state)
-    /// should override this to return <c>false</c> — that signals "don't even
-    /// try" so tooling can short-circuit and users know to expect eager-only
-    /// performance.
-    /// </para>
-    /// <para><b>For Beginners:</b> JIT (Just-In-Time) compilation optimizes neural networks for faster predictions.
-    ///
-    /// Instead of executing each layer one by one at runtime, JIT compilation:
-    /// - Analyzes the entire network structure
-    /// - Combines and optimizes operations
-    /// - Generates specialized native code
-    /// - Results in 5-10x faster predictions
-    ///
-    /// This is especially beneficial for:
-    /// - Production deployment (real-time predictions)
-    /// - Batch inference (processing many examples)
-    /// - Edge devices (mobile, embedded systems)
-    /// </para>
-    /// </remarks>
-    public virtual bool SupportsJitCompilation => true;
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// Exports the neural network as a computation graph for JIT compilation.
-    /// The graph represents the forward pass through all layers in sequence.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method converts the neural network into a computation graph.
-    ///
-    /// A computation graph is like a flowchart that describes:
-    /// 1. How data flows through each layer
-    /// 2. What operations each layer performs
-    /// 3. How layer outputs connect to the next layer's inputs
-    ///
-    /// The JIT compiler uses this graph to:
-    /// - Optimize the operations (remove redundancy)
-    /// - Fuse operations together (combine multiple steps)
-    /// - Generate fast native code
-    ///
-    /// For example, a simple network:
-    /// Input → Dense Layer → ReLU → Dense Layer → Output
-    ///
-    /// Becomes a graph:
-    /// input_node → matmul_node → add_bias_node → relu_node → matmul_node → add_bias_node
-    ///
-    /// The JIT compiler can then optimize this graph (e.g., fuse bias addition with matmul)
-    /// to create highly efficient code.
-    /// </para>
-    /// </remarks>
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation has been removed.");
-    }
-
-    protected virtual ComputationNode<T> ConvertLayerToGraph(ILayer<T> layer, ComputationNode<T> input)
-    {
-        if (layer is Layers.LayerBase<T> layerBase)
-        {
-            var layerInputs = new List<ComputationNode<T>> { input };
-            return layerBase.ExportComputationGraph(layerInputs);
-        }
-        throw new NotSupportedException(
-            $"Layer {layer.GetType().Name} does not support computation graph export.");
-    }
-
-
-    #endregion
 
     #region ILayeredModel<T> Implementation
 

@@ -497,10 +497,13 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="input">The input tensor to make a prediction for.</param>
     /// <returns>The predicted output tensor containing class probabilities.</returns>
-    public override Tensor<T> Predict(Tensor<T> input)
-    {
-        return Forward(input);
-    }
+    /// <summary>
+    /// Routes inference through <see cref="NeuralNetworkBase{T}.PredictCompiled"/> so the
+    /// forward pass gets traced and replayed by <c>CompiledModelHost</c> after warmup —
+    /// matching PyTorch's <c>torch.compile</c> default. The eager forward is
+    /// <see cref="Forward"/>, which retains the GPU-resident optimization path.
+    /// </summary>
+    protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
 
     /// <summary>
     /// Trains the ResNet network using the provided input and expected output.

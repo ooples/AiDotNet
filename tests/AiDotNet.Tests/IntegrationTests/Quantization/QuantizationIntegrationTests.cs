@@ -1706,14 +1706,6 @@ public class QuantizationIntegrationTests
             // No-op for test model
         }
 
-        // IJitCompilable
-        public AiDotNet.Autodiff.ComputationNode<T> ExportComputationGraph(List<AiDotNet.Autodiff.ComputationNode<T>> inputNodes)
-        {
-            throw new NotSupportedException("JIT compilation not supported for test model");
-        }
-
-        public bool SupportsJitCompilation => false;
-
     public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
     }
 

@@ -974,9 +974,6 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
 
     #endregion
 
-    #region IJitCompilable Override
-
-    #endregion
 
     #region Tensor Shape Helpers
 

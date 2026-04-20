@@ -25,7 +25,6 @@ namespace AiDotNet.Interfaces;
 /// - IParameterizable: Get/set model parameters (linear models, neural networks)
 /// - IGradientComputable: Compute and apply gradients (gradient-based optimization)
 /// - IFeatureAware: Feature selection and tracking
-/// - IJitCompilable: Export computation graph for JIT compilation
 ///
 /// Not all models support all capabilities. Tree-based and ensemble models
 /// may not implement IParameterizable or IGradientComputable.

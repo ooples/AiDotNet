@@ -519,13 +519,23 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
         EnsureInitialized();
         Input = input;
 
-        // Use Engine.TensorMatMul for GPU acceleration
-        var matmul = Engine.TensorMatMul(Input, _weights);
+        // Fuse MatMul + BiasAdd + Activation into a single FusedLinear call when the
+        // activation is one the engine's fused kernel supports (ReLU, GELU, Tanh,
+        // Sigmoid, Swish/SiLU, LeakyReLU). Saves 3 kernel launches per layer.
+        var fusedActivation = GetFusedActivationType();
 
-        // Add biases (broadcast [1, outputSize] to [batchSize, outputSize]) using engine op
-        var biasBroadcast = Engine.Reshape(_biases, [1, _weights.Shape[1]]);
-        var linearOutput = Engine.TensorBroadcastAdd(matmul, biasBroadcast);
+        if (fusedActivation != FusedActivationType.None && !IsTrainingMode)
+        {
+            // Pure-inference fast path — no activation-gradient cache needed.
+            Output = Engine.FusedLinear(input, _weights, _biases, fusedActivation);
+            return Output;
+        }
 
+        // Training or non-fusable activation: emit the linear pre-activation in one
+        // fused call, then apply activation separately so the tape records a single
+        // FusedLinear entry (calling FusedLinear twice per forward corrupts tape
+        // accounting via RemoveLastNTapeEntries).
+        var linearOutput = Engine.FusedLinear(input, _weights, _biases, FusedActivationType.None);
         PreActivationOutput = linearOutput;
         Output = ApplyActivation(linearOutput);
 

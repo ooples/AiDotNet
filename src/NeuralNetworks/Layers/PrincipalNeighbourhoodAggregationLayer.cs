@@ -31,7 +31,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <item>BatchMatMul for efficient batched graph operations</item>
 /// <item>Dual backward pass: BackwardManual() for efficiency, BackwardViaAutodiff() for accuracy</item>
 /// <item>Full gradient computation through all aggregators and scalers</item>
-/// <item>JIT compilation support via ExportComputationGraph()</item>
 /// <item>Complete GetParameters()/SetParameters() for model persistence</item>
 /// </list>
 /// </para>

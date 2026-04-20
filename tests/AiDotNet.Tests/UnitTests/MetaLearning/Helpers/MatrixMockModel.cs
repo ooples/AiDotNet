@@ -142,13 +142,5 @@ public class MatrixMockModel : IFullModel<double, Matrix<double>, Vector<double>
         }
     }
 
-    // IJitCompilable implementation
-    public bool SupportsJitCompilation => false;
-
-    public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation not supported in mock model");
-    }
-
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
 }

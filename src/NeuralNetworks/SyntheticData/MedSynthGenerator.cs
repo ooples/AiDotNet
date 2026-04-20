@@ -603,7 +603,8 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     #region Discriminator Layer List
 
     /// <summary>
-    /// Builds a combined list of discriminator layers for TapeLayerBridge.
+    /// Builds a combined list of discriminator layers (dense + dropout + output)
+    /// for gradient-penalty and related analyses.
     /// </summary>
     private IReadOnlyList<ILayer<T>> BuildDiscLayerList()
     {
@@ -867,7 +868,4 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
     #endregion
 
-    #region IJitCompilable Override
-
-    #endregion
 }

@@ -243,13 +243,5 @@ public class MockFullModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         }
     }
 
-    // IJitCompilable<T>
-    public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("Mock model does not support JIT compilation");
-    }
-
-    public bool SupportsJitCompilation => false;
-
     public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 }

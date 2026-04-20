@@ -101,10 +101,6 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// <param name="updateMode">How to update the teacher (default: EMA).</param>
     /// <param name="updateRate">Update rate for EMA or learning rate (default: 0.999 for EMA).</param>
     /// <param name="updateFrequency">How often to update (default: every step).</param>
-    /// <remarks>
-    /// <para><b>Note:</b> This constructor creates a non-JIT-compilable teacher.
-    /// For JIT support, use the constructor that accepts an IJitCompilable model.</para>
-    /// </remarks>
     public OnlineTeacherModel(
         Func<Vector<T>, Vector<T>> teacherForward,
         int inputDimension,

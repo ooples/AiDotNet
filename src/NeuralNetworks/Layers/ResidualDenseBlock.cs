@@ -769,39 +769,6 @@ public class ResidualDenseBlock<T> : LayerBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
-    {
-        // x0 = input
-        var x0 = inputNode;
-
-        // Conv1: x1 = LeakyReLU(Conv(x0))
-        var conv1Output = BuildConvNode(_convLayers[0], x0, $"{namePrefix}conv1_");
-        var x1 = TensorOperations<T>.LeakyReLU(conv1Output, 0.2);
-
-        // Conv2: x2 = LeakyReLU(Conv(concat(x0, x1)))
-        var concat1 = TensorOperations<T>.Concat([x0, x1], axis: 1);
-        var conv2Output = BuildConvNode(_convLayers[1], concat1, $"{namePrefix}conv2_");
-        var x2 = TensorOperations<T>.LeakyReLU(conv2Output, 0.2);
-
-        // Conv3: x3 = LeakyReLU(Conv(concat(x0, x1, x2)))
-        var concat2 = TensorOperations<T>.Concat([concat1, x2], axis: 1);
-        var conv3Output = BuildConvNode(_convLayers[2], concat2, $"{namePrefix}conv3_");
-        var x3 = TensorOperations<T>.LeakyReLU(conv3Output, 0.2);
-
-        // Conv4: x4 = LeakyReLU(Conv(concat(x0, x1, x2, x3)))
-        var concat3 = TensorOperations<T>.Concat([concat2, x3], axis: 1);
-        var conv4Output = BuildConvNode(_convLayers[3], concat3, $"{namePrefix}conv4_");
-        var x4 = TensorOperations<T>.LeakyReLU(conv4Output, 0.2);
-
-        // Conv5: x5 = Conv(concat(x0, x1, x2, x3, x4)) - NO activation
-        var concat4 = TensorOperations<T>.Concat([concat3, x4], axis: 1);
-        var x5 = BuildConvNode(_convLayers[4], concat4, $"{namePrefix}conv5_");
-
-        // Local residual: output = x5 * residualScale + x0
-        var scaledX5 = ScaleNode(x5, _residualScale, $"{namePrefix}residual_scale");
-        return TensorOperations<T>.Add(scaledX5, x0);
-    }
 
     /// <summary>
     /// Builds a Conv2D computation node from a ConvolutionalLayer.

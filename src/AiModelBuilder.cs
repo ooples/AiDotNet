@@ -185,6 +185,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private MixedPrecisionConfig? _mixedPrecisionConfig;
     private AiDotNet.Configuration.InferenceOptimizationConfig? _inferenceOptimizationConfig;
     private AiDotNet.Configuration.JitCompilationConfig? _jitCompilationConfig;
+    private bool _reportAccelerationAtBuild;
+    private Action<string>? _accelerationLogger;
+    private AiDotNet.Diagnostics.AccelerationSnapshot? _accelerationSnapshot;
+    private bool _tensorsOpProfilingEnabled;
+    private AiDotNet.Diagnostics.TensorsOperationProfile? _tensorsOperationProfile;
 
     /// <summary>
     /// When <c>true</c>, <see cref="BuildAsync"/> does NOT force deterministic
@@ -928,6 +933,90 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     }
 
     /// <summary>
+    /// Captures a snapshot of the active acceleration environment (SIMD, GPU, native BLAS)
+    /// at build time, logs it through <paramref name="logger"/> if supplied, and surfaces the
+    /// structured snapshot on <c>PredictionModelResult.AccelerationSnapshot</c>.
+    /// </summary>
+    /// <param name="logger">
+    /// Optional callback that receives the formatted report string. When null, the
+    /// report is written to <see cref="Console.WriteLine(string)"/>.
+    /// </param>
+    /// <returns>This builder for fluent chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Useful for production observability — shows exactly which of AVX2/AVX-512/NEON,
+    /// CUDA/OpenCL/HIP, OpenBLAS/CLBlast/MKL are active on the target host. Users can
+    /// assert against the returned snapshot in CI (e.g., fail build if AVX-512 isn't
+    /// detected on an Intel Xeon host).
+    /// </para>
+    /// <para>
+    /// Wraps <c>AiDotNet.Tensors.Engines.PlatformDetector</c> and
+    /// <c>AiDotNet.Tensors.Engines.NativeLibraryDetector</c>.
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ReportAccelerationStatus(Action<string>? logger = null)
+    {
+        _reportAccelerationAtBuild = true;
+        _accelerationLogger = logger;
+        return this;
+    }
+
+    /// <summary>
+    /// Enables disk-backed caching of compiled inference plans. Plans are saved after
+    /// the first compilation and loaded transparently on subsequent process starts,
+    /// skipping the trace+compile cost of cold start.
+    /// </summary>
+    /// <param name="directory">
+    /// Filesystem directory where plan files are stored. Created if missing. Plans are
+    /// keyed by (concrete model type, element type, structure version, input shape)
+    /// so one directory can host plans for multiple models.
+    /// </param>
+    /// <returns>This builder for fluent chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// PyTorch-parity equivalent: <c>torch.jit.save</c> + <c>torch.jit.load</c>.
+    /// Plans are tied to the host's hardware fingerprint (via Tensors'
+    /// <c>PlanCompatibilityInfo</c>); plans compiled on one host are rejected on
+    /// incompatible hardware, triggering a fresh compile.
+    /// </para>
+    /// <para>
+    /// Caching is opt-in — without this call, plans live only for the process
+    /// lifetime via the in-memory <c>CompiledModelCache</c>.
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigurePlanCaching(string directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory))
+            throw new ArgumentException("Plan cache directory must be a non-empty path.", nameof(directory));
+
+        AiDotNet.NeuralNetworks.PlanCache.SetCurrent(new AiDotNet.NeuralNetworks.PlanCache(directory));
+        return this;
+    }
+
+    /// <summary>
+    /// Enables low-level per-tensor-op profiling via Tensors'
+    /// <c>PerformanceProfiler.Instance</c>. After <c>BuildAsync()</c> returns, kernel
+    /// timings are captured on <c>AiModelResult.TensorsOperationProfile</c>.
+    /// Orthogonal to the higher-level <c>ConfigureProfiling</c> (AiDotNet workflow
+    /// timings) — both can be enabled together to get a full picture.
+    /// </summary>
+    /// <returns>This builder for fluent chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// The profiler wraps every engine op in a dispatchable scope — expect a small
+    /// overhead (~1-3%) during the measured window. Disable in production latency-
+    /// sensitive paths. PyTorch-parity equivalent: low-level
+    /// <c>torch.profiler.profile</c> CUDA/CPU op breakdown.
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> EnableTensorsOpProfiling()
+    {
+        _tensorsOpProfilingEnabled = true;
+        AiDotNet.Tensors.Engines.Optimization.PerformanceProfiler.Instance.Enabled = true;
+        return this;
+    }
+
+    /// <summary>
     /// Opts out of the builder's deterministic-by-default policy. Call this when
     /// you want the engine to pick the fastest available kernels even if they
     /// produce slightly different floating-point results across runs or hardware.
@@ -1505,7 +1594,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             MemoryConfig = _memoryConfig
         };
 
-        var programSynthesisResult = new AiModelResult<T, TInput, TOutput>(options);
+        var programSynthesisResult = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(options));
         ProcessKnowledgeGraphOptions(programSynthesisResult);
         AttachSafetyPipeline(programSynthesisResult);
         return programSynthesisResult;
@@ -1855,7 +1944,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             MemoryConfig = _memoryConfig
         };
 
-        var nnResult = new AiModelResult<T, TInput, TOutput>(options);
+        var nnResult = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(options));
         ProcessKnowledgeGraphOptions(nnResult);
         AttachSafetyPipeline(nnResult);
         return nnResult;
@@ -3071,7 +3160,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             HyperparameterTrialId = bestHyperparameterTrialId
         };
 
-        var finalResult = new AiModelResult<T, TInput, TOutput>(options);
+        var finalResult = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(options));
 
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);
@@ -3223,7 +3312,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             MemoryConfig = _memoryConfig
         };
 
-        var result = new AiModelResult<T, TInput, TOutput>(metaOptions);
+        var result = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(metaOptions));
         ProcessKnowledgeGraphOptions(result);
         AttachSafetyPipeline(result);
 
@@ -3548,7 +3637,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             MemoryConfig = _memoryConfig
         };
 
-        var result = new AiModelResult<T, TInput, TOutput>(rlOptions);
+        var result = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(rlOptions));
         ProcessKnowledgeGraphOptions(result);
         AttachSafetyPipeline(result);
 
@@ -3798,7 +3887,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 trialManager.RecordOperationOrThrow();
             }
 
-            var result = new AiModelResult<T, TInput, TOutput>();
+            var result = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>());
             result.Model = fullModel;
 
             // Reattach Graph RAG components if configured
@@ -3889,7 +3978,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             throw new ArgumentException("Model data cannot be empty.", nameof(modelData));
 
         ModelPersistenceGuard.EnforceBeforeLoad();
-        var result = new AiModelResult<T, TInput, TOutput>();
+        var result = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>());
         using (ModelPersistenceGuard.InternalOperation())
         {
             result.Deserialize(modelData);
@@ -6516,6 +6605,38 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     }
 
     private void ApplyGpuConfiguration()
+    {
+        ApplyGpuConfigurationCore();
+        ReportAccelerationIfRequested();
+    }
+
+    private void ReportAccelerationIfRequested()
+    {
+        if (!_reportAccelerationAtBuild)
+        {
+            return;
+        }
+
+        _accelerationSnapshot = AiDotNet.Diagnostics.AccelerationDiagnostics.GetSnapshot();
+        var report = AiDotNet.Diagnostics.AccelerationDiagnostics.GetReport();
+        (_accelerationLogger ?? Console.WriteLine).Invoke(report);
+    }
+
+    private AiModelResult<T, TInput, TOutput> AttachDiagnostics(AiModelResult<T, TInput, TOutput> result)
+    {
+        if (_accelerationSnapshot is not null)
+        {
+            result.AccelerationSnapshot = _accelerationSnapshot;
+        }
+        if (_tensorsOpProfilingEnabled)
+        {
+            _tensorsOperationProfile = AiDotNet.Diagnostics.TensorsOperationProfile.Capture();
+            result.TensorsOperationProfile = _tensorsOperationProfile;
+        }
+        return result;
+    }
+
+    private void ApplyGpuConfigurationCore()
     {
         // Skip if no GPU configuration was provided (null = default = auto-detect with CPU fallback)
         if (_gpuAccelerationConfig == null)

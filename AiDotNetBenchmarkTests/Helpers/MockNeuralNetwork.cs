@@ -137,13 +137,5 @@ public class MockNeuralNetwork<T, TInput, TOutput> : IFullModel<T, TInput, TOutp
         // Mock implementation
     }
 
-    // IJitCompilable implementation
-    public bool SupportsJitCompilation => false;
-
-    public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation not supported in mock model");
-    }
-
     public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 }

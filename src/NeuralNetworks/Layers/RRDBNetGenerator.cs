@@ -515,44 +515,6 @@ public class RRDBNetGenerator<T> : LayerBase<T>
 
     #region JIT Compilation
 
-    /// <inheritdoc />
-    public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
-    {
-        // Initial feature extraction
-        var x = BuildConvNode(_convFirst, inputNode, $"{namePrefix}conv_first_");
-
-        // Store for global residual
-        var conv1Output = x;
-
-        // RRDB blocks
-        for (int i = 0; i < _rrdbBlocks.Length; i++)
-        {
-            x = _rrdbBlocks[i].BuildComputationGraph(x, $"{namePrefix}rrdb{i}_");
-        }
-
-        // Trunk conv
-        x = BuildConvNode(_trunkConv, x, $"{namePrefix}trunk_conv_");
-
-        // Global residual
-        x = TensorOperations<T>.Add(x, conv1Output);
-
-        // Upsampling stages
-        for (int i = 0; i < _upsampleConvs.Length; i++)
-        {
-            x = BuildConvNode(_upsampleConvs[i], x, $"{namePrefix}upsample{i}_conv_");
-            x = TensorOperations<T>.PixelShuffle(x, 2);
-            x = TensorOperations<T>.LeakyReLU(x, 0.2);
-        }
-
-        // HR conv + LeakyReLU
-        x = BuildConvNode(_hrConv, x, $"{namePrefix}hr_conv_");
-        x = TensorOperations<T>.LeakyReLU(x, 0.2);
-
-        // Final conv
-        x = BuildConvNode(_convLast, x, $"{namePrefix}conv_last_");
-
-        return x;
-    }
 
     /// <summary>
     /// Builds a Conv2D computation node from a ConvolutionalLayer.

@@ -758,7 +758,4 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
     #endregion
 
-    #region IJitCompilable Override
-
-    #endregion
 }

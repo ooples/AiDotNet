@@ -189,10 +189,10 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.Helpers|FullyQualifiedName~UnitTests.Inference|FullyQualifiedName~UnitTests.Interpretability)'
-          - name: Unit - 06 JIT/KD/Schedulers/LA
+          - name: Unit - 06 KD/Schedulers/LA
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.JitCompiler|FullyQualifiedName~UnitTests.KnowledgeDistillation|FullyQualifiedName~UnitTests.LearningRateSchedulers|FullyQualifiedName~UnitTests.LinearAlgebra)'
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.KnowledgeDistillation|FullyQualifiedName~UnitTests.LearningRateSchedulers|FullyQualifiedName~UnitTests.LinearAlgebra)'
           - name: Unit - 07 Logging/Loss/Meta/Mixed/Compression
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -270,7 +270,6 @@ jobs:
               FullyQualifiedName!~UnitTests.Helpers&
               FullyQualifiedName!~UnitTests.Inference&
               FullyQualifiedName!~UnitTests.Interpretability&
-              FullyQualifiedName!~UnitTests.JitCompiler&
               FullyQualifiedName!~UnitTests.KnowledgeDistillation&
               FullyQualifiedName!~UnitTests.LearningRateSchedulers&
               FullyQualifiedName!~UnitTests.LinearAlgebra&
@@ -294,10 +293,6 @@ jobs:
           # =====================================================================
           # OTHER NON-UNIT TESTS (InferenceOpt, PromptEng, Recovery, Playground)
           # =====================================================================
-          - name: Other - InferenceOptimization
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.InferenceOptimization'
           - name: Other - PromptEngineering
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0

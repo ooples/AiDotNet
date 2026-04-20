@@ -1022,11 +1022,6 @@ public class ActiveLearningIntegrationTests
         public Vector<double> ComputeGradients(Tensor<double> input, Tensor<double> target, ILossFunction<double>? lossFunction = null) => new(0);
         public void ApplyGradients(Vector<double> gradients, double learningRate) { }
 
-        // IJitCompilable<T>
-        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-            => throw new NotSupportedException("Mock model does not support JIT compilation");
-        public bool SupportsJitCompilation => false;
-
         // IFullModel specific
         public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
 

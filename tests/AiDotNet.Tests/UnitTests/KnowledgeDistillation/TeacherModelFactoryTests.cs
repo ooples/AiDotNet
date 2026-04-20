@@ -364,22 +364,6 @@ public class TeacherModelFactoryTests
             return copy;
         }
 
-        // IJitCompilable implementation
-        public bool SupportsJitCompilation => true;
-
-        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-        {
-            // Create a computation graph for the mock model
-            var inputShape = new int[] { 1, _inputDim };
-            var inputTensor = new Tensor<double>(inputShape);
-            var inputNode = TensorOperations<double>.Variable(inputTensor, "input");
-            inputNodes.Add(inputNode);
-
-            // Simple computation: sum of input elements normalized
-            var sumNode = TensorOperations<double>.Sum(inputNode);
-            return sumNode;
-        }
-
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 }

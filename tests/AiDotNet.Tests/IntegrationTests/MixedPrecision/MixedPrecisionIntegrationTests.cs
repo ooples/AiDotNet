@@ -1646,7 +1646,6 @@ public class MixedPrecisionIntegrationTests
 
         public override string LayerName => _customName ?? base.LayerName;
 
-        public override bool SupportsJitCompilation => false;
         public override bool SupportsTraining => true;
 
         // Expose protected members for testing
@@ -1665,8 +1664,6 @@ public class MixedPrecisionIntegrationTests
         public override Vector<float> GetParameters() => new Vector<float>(0);
 
         public override void ResetState() { }
-
-        public override ComputationNode<float> ExportComputationGraph(List<ComputationNode<float>> nodes) => null!;
     }
 
     #endregion

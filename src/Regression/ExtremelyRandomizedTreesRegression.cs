@@ -575,7 +575,4 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
         return base.GetActiveFeatureIndices();
     }
 
-    #region IJitCompilable Implementation Override
-
-    #endregion
 }

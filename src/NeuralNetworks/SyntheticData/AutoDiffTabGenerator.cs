@@ -981,7 +981,4 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
 
     #endregion
 
-    #region IJitCompilable Override
-
-    #endregion
 }

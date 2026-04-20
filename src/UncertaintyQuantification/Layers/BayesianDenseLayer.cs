@@ -455,6 +455,4 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         _biasMeanGradient.Fill(NumOps.Zero);
         _biasLogVarGradient.Fill(NumOps.Zero);
     }
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-        => throw new NotSupportedException($"{GetType().Name} does not currently support JIT compilation.");
 }

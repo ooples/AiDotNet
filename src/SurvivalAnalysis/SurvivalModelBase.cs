@@ -98,20 +98,6 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape
 
 
     /// <summary>
-    /// Gets whether JIT compilation is supported.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> JIT (Just-In-Time) compilation can significantly accelerate
-    /// model inference by compiling the computation graph to optimized machine code.
-    /// Parametric models like Cox Proportional Hazards support JIT since their predictions
-    /// follow a clear mathematical formula. Non-parametric models like Kaplan-Meier are
-    /// harder to JIT compile since they rely on table lookups.
-    /// </para>
-    /// </remarks>
-    public virtual bool SupportsJitCompilation => false;
-
-    /// <summary>
     /// Initializes a new instance of the SurvivalModelBase class.
     /// </summary>
     protected SurvivalModelBase()
@@ -741,14 +727,6 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape
         stream.CopyTo(memoryStream);
         byte[] serializedData = memoryStream.ToArray();
         Deserialize(serializedData);
-    }
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation is not supported for survival models.");
     }
 
     #endregion

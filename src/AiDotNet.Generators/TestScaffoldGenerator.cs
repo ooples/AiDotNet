@@ -3839,8 +3839,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("        public void SetActiveFeatureIndices(System.Collections.Generic.IEnumerable<int> f) { }");
         sb.AppendLine("        public bool IsFeatureUsed(int i) => false;");
         sb.AppendLine("        public System.Collections.Generic.Dictionary<string, double> GetFeatureImportance() => new();");
-        sb.AppendLine("        public bool SupportsJitCompilation => false;");
-        sb.AppendLine("        public AiDotNet.Autodiff.ComputationNode<double> ExportComputationGraph(System.Collections.Generic.List<AiDotNet.Autodiff.ComputationNode<double>> n) => throw new System.NotSupportedException();");
         sb.AppendLine("    }");
     }
 

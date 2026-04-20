@@ -773,9 +773,6 @@ public class ActiveLearningDeepMathIntegrationTests
         public Vector<double> ComputeGradients(Tensor<double> input, Tensor<double> target, ILossFunction<double>? lossFunction = null)
             => new(ParameterCount);
         public void ApplyGradients(Vector<double> gradients, double learningRate) { }
-        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-            => throw new NotSupportedException();
-        public bool SupportsJitCompilation => false;
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }

@@ -16,7 +16,6 @@ public class RotaryPositionalEncodingLayerTests
         var layer = new RotaryPositionalEncodingLayer<float>(128, 64);
 
         Assert.NotNull(layer);
-        Assert.False(layer.SupportsJitCompilation);
         Assert.True(layer.SupportsTraining);
     }
 

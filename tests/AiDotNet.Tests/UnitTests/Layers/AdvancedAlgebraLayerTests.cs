@@ -119,9 +119,6 @@ public class AdvancedAlgebraLayerTests
         Assert.True(layer.SupportsTraining);
     }
 
-    // JIT compilation tests removed — JIT moved to Tensors engine level (Lazy Graph Compiler v0.28.0).
-    // Per-layer SupportsJitCompilation will be removed in a dedicated PR.
-
     #endregion
 
     #region HyperbolicLinearLayer Tests
