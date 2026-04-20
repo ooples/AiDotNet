@@ -2362,9 +2362,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("// Auto-generated layer test. Invariant tests are inherited from LayerTestBase.");
         sb.AppendLine("using AiDotNet.Interfaces;");
         sb.AppendLine("using AiDotNet.Tests.ModelFamilyTests.Base;");
+        sb.AppendLine("using Xunit;");
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
+        // [Collection("LayerSerialization")] serialises Serialize_Deserialize_
+        // ShouldPreserveBehavior (and every other fact on the base class) so
+        // BLAS-heavy recurrent/attention layers can't contend for CPU under
+        // xUnit's default parallel scheduler. Matched in
+        // tests/AiDotNet.Tests/Fixtures/LayerSerializationCollection.cs.
+        // Keep this string and that CollectionDefinition name in lockstep;
+        // renaming one requires renaming the other. See issue #1166.
+        sb.AppendLine("[Collection(\"LayerSerialization\")]");
         sb.AppendLine($"public class {testClassName} : LayerTestBase");
         sb.AppendLine("{");
         sb.AppendLine($"    protected override ILayer<double> CreateLayer()");
@@ -2413,9 +2422,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("// Auto-generated dual-input layer test. Invariant tests are inherited from DualInputLayerTestBase.");
         sb.AppendLine("using AiDotNet.Interfaces;");
         sb.AppendLine("using AiDotNet.Tests.ModelFamilyTests.Base;");
+        sb.AppendLine("using Xunit;");
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
+        // See EmitLayerTestClass for the rationale on this Collection name.
+        sb.AppendLine("[Collection(\"LayerSerialization\")]");
         sb.AppendLine($"public class {testClassName} : DualInputLayerTestBase");
         sb.AppendLine("{");
         sb.AppendLine($"    protected override ILayer<double> CreateLayer()");
@@ -2464,9 +2476,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("// Auto-generated multi-input layer test.");
         sb.AppendLine("using AiDotNet.Interfaces;");
         sb.AppendLine("using AiDotNet.Tests.ModelFamilyTests.Base;");
+        sb.AppendLine("using Xunit;");
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
+        // See EmitLayerTestClass for the rationale on this Collection name.
+        sb.AppendLine("[Collection(\"LayerSerialization\")]");
         sb.AppendLine($"public class {testClassName} : MultiInputLayerTestBase");
         sb.AppendLine("{");
         sb.AppendLine($"    protected override ILayer<double> CreateLayer()");
@@ -2510,9 +2525,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("using AiDotNet.Interfaces;");
         sb.AppendLine("using AiDotNet.Tensors;");
         sb.AppendLine("using AiDotNet.Tests.ModelFamilyTests.Base;");
+        sb.AppendLine("using Xunit;");
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
+        // See EmitLayerTestClass for the rationale on this Collection name.
+        sb.AppendLine("[Collection(\"LayerSerialization\")]");
         sb.AppendLine($"public class {testClassName} : GraphLayerTestBase");
         sb.AppendLine("{");
         sb.AppendLine($"    protected override ILayer<double> CreateLayer()");

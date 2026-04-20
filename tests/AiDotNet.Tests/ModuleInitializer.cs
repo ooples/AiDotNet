@@ -37,6 +37,29 @@ internal static class TestModuleInitializer
         if (_initialized) return;
         _initialized = true;
 
+        // Pin BLAS backends to a single thread per xUnit worker. Without this,
+        // MKL / OpenBLAS / OMP default to spinning up ProcessorCount threads
+        // PER xUnit worker thread — on a 32-core box with maxParallelThreads=0
+        // that is 32×32 = 1024 contending threads, and matmul-heavy tests
+        // (ResNet, layer-serialization roundtrips, diffusion forward passes)
+        // starve each other out and hit their [Fact(Timeout=30000)] ceiling.
+        // Pinning BLAS to 1 thread makes test-level xUnit parallelism the
+        // *only* source of concurrency — measured to cut flaky layer-test
+        // timeouts from 30 to 4 on a 16-core/32-thread Windows box and to
+        // leave BLAS-heavy shards (NN-Classic) slightly faster. See #1166.
+        //
+        // Must be set BEFORE the native BLAS DLL first resolves, which
+        // happens on the first matmul dispatch. [ModuleInitializer] runs
+        // on first reference to this assembly — i.e. before any test
+        // method body and so before any BLAS call. On net471 the
+        // CpuOnlyFixture ctor also calls EnsureInitialized() which flows
+        // here; that path is best-effort since the collection fixture may
+        // run after MKL is already pinned from an earlier process event,
+        // but MKL honours the env var on re-read via mkl_set_num_threads_local.
+        System.Environment.SetEnvironmentVariable("OMP_NUM_THREADS",      "1");
+        System.Environment.SetEnvironmentVariable("MKL_NUM_THREADS",      "1");
+        System.Environment.SetEnvironmentVariable("OPENBLAS_NUM_THREADS", "1");
+
         // Force CPU-only mode for all tests
         // This prevents GPU/OpenCL errors on systems without proper GPU support
         try
