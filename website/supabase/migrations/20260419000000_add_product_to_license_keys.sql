@@ -23,6 +23,14 @@ end $$;
 alter table public.license_keys
     add column if not exists product public.license_product not null default 'aidotnet';
 
+-- Drop the default now that existing rows are backfilled. Keeping the default
+-- in place would let any future insert path that forgets to populate `product`
+-- silently create an AiDotNet license — in a multi-product schema that turns
+-- a missing write into bad data. After this, every INSERT must name `product`
+-- explicitly or the DB rejects it with a NOT NULL violation.
+alter table public.license_keys
+    alter column product drop default;
+
 -- Index for product-scoped admin queries and the composite lookups used by
 -- the community-license registration endpoint (user_id + product + tier + status).
 create index if not exists idx_license_keys_product_tier_status

@@ -1,7 +1,14 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
-const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "https://aidotnet.com";
+// Default matches the production origin the marketing site actually serves
+// from. MUST stay in sync with register-community-license/index.ts — if
+// ALLOWED_ORIGIN is ever unset or misconfigured on only one function, the
+// same browser session would see divergent CORS responses from the two
+// license endpoints and one side of the register → validate flow would
+// fail. Override via the ALLOWED_ORIGIN function secret for staging /
+// preview envs.
+const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") ?? "https://www.aidotnet.dev";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": ALLOWED_ORIGIN,

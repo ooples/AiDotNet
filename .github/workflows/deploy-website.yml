@@ -95,11 +95,12 @@ jobs:
           # Keep these in lockstep with the Vercel project env vars.
           PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
           PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
-          # Stripe Payment Link URLs for /pricing/ Subscribe buttons. If any
-          # secret is unset the pricing page falls back to the "Payment links
-          # are being configured" alert — ship them as empty strings so the
-          # build doesn't fail, then set the secrets in GitHub once the Stripe
-          # Payment Links are created in the Stripe Dashboard.
+          # Stripe Payment Link URLs for /pricing/ Subscribe buttons.
+          # Missing / empty values are rejected earlier by the "Verify required
+          # build secrets" step above, which fails the job before the build
+          # runs. That keeps a production deploy from ever shipping a pricing
+          # page with dead-end Subscribe buttons — set the four secrets in
+          # GitHub repo settings before running this workflow.
           PUBLIC_STRIPE_PRO_MONTHLY_LINK: ${{ secrets.PUBLIC_STRIPE_PRO_MONTHLY_LINK }}
           PUBLIC_STRIPE_PRO_YEARLY_LINK: ${{ secrets.PUBLIC_STRIPE_PRO_YEARLY_LINK }}
           PUBLIC_STRIPE_ENTERPRISE_MONTHLY_LINK: ${{ secrets.PUBLIC_STRIPE_ENTERPRISE_MONTHLY_LINK }}

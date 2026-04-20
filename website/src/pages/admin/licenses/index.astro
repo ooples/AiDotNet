@@ -135,6 +135,15 @@ const productsJson = JSON.stringify(PRODUCTS);
               required
               class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
             >
+              {/*
+                Empty disabled placeholder — the issuance flow is
+                multi-product so HTML `required` must actually force an
+                explicit choice. Without this option the browser would
+                auto-select PRODUCTS[0] (AiDotNet), and an admin who
+                misses this field would accidentally issue an AiDotNet
+                license instead of being told to pick one.
+              */}
+              <option value="" selected disabled>Select a product</option>
               {PRODUCTS.map((p) => <option value={p.value}>{p.label}</option>)}
             </select>
           </div>
