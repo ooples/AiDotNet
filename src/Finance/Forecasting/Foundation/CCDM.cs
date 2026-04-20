@@ -217,87 +217,56 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
     public override bool SupportsTraining => _useNativeMode;
     public override Tensor<T> Predict(Tensor<T> input) => _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
 
-    public override void Train(Tensor<T> input, Tensor<T> target)
+    /// <summary>
+    /// Tape-aware training forward. Uses the same Layers stack that inference uses,
+    /// but skips the stochastic Langevin reverse loop in <see cref="ForwardNative"/>
+    /// so the tape records a clean parameter → loss chain that Adam/AdamW can step.
+    /// </summary>
+    /// <remarks>
+    /// The previous Train override hand-built a score-matching loop whose denoiser
+    /// input ([noisyTarget | condHidden | log σ]) had a different last-dim from the
+    /// input dim baked into the Layers by
+    /// <see cref="LayerHelper{T}.CreateDefaultCCDMLayers"/>
+    /// (contextLength → contextLength·hiddenDim → … → forecastHorizon), which blew
+    /// up in Adam as a parameter/gradient shape mismatch. The Layers are sized as a
+    /// plain context-to-forecast regression head, so training follows that same
+    /// shape contract and ships a supervised regression loss through the configured
+    /// <see cref="ILossFunction{T}"/> (MSE by default; any
+    /// <c>LossFunctionBase&lt;T&gt;</c>-derived loss works via
+    /// <c>ComputeTapeLoss</c>). Score-matching semantics still live in
+    /// <see cref="ForwardNative"/>'s Langevin reverse loop for probabilistic
+    /// inference — that path is untouched and reached through
+    /// <see cref="Predict"/>/<see cref="Forecast"/>. Wiring proper score-matching
+    /// through training would require a denoiser-shaped layer architecture
+    /// (separate context encoder + [x_t | cond | σ]-input noise predictor) and is
+    /// tracked separately.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        if (!_useNativeMode) throw new InvalidOperationException("Training is only supported in native mode.");
-        SetTrainingMode(true);
-        try
-        {
-            var rand = RandomHelper.CreateSecureRandom();
-            int t = rand.Next(_diffusionSteps);
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is only supported in native mode.");
 
-            // Score matching training: perturb target with noise at sigma level
-            T sigmaT = _sigmas[t];
-            T eps10 = NumOps.FromDouble(1e-10);
-            var noise = new Tensor<T>(target._shape);
-            for (int i = 0; i < target.Length; i++)
-                noise.Data.Span[i] = SampleStandardNormal(rand);
+        // Normalize and reshape to match the layer stack's expected feature layout.
+        // ApplyInstanceNormalization reads raw .Data.Span to compute per-series mean/var
+        // — safe here because `input` is a tape leaf and the produced tensor is itself
+        // a new leaf consumed by the layers. Gradients flow only through the layer
+        // parameters, not back through the input, so breaking the input's tape chain
+        // at normalization does not affect backward.
+        var x = ApplyInstanceNormalization(input);
+        // Collapse trailing singleton feature dim [B, T, 1] → [B, T] so the first
+        // DenseLayer's input-dim matches its baked `inputSize = contextLength`.
+        if (x.Rank == 3 && x.Shape[2] == 1)
+            x = x.Reshape(new[] { x.Shape[0], x.Shape[1] });
+        else if (x.Rank == 1)
+            x = x.Reshape(new[] { 1, x.Length });
 
-            // x_noisy = x_0 + sigma * eps
-            var noisyTarget = new Tensor<T>(target._shape);
-            for (int i = 0; i < target.Length; i++)
-                noisyTarget.Data.Span[i] = NumOps.Add(target[i], NumOps.Multiply(sigmaT, noise[i]));
-
-            // Score target: -eps/sigma (the gradient of log p_sigma(x))
-            T negSigmaInv = NumOps.Negate(NumOps.Divide(NumOps.One, NumOps.Add(sigmaT, eps10)));
-            var scoreTarget = new Tensor<T>(target._shape);
-            for (int i = 0; i < target.Length; i++)
-                scoreTarget.Data.Span[i] = NumOps.Multiply(negSigmaInv, noise[i]);
-
-            var predictedScore = ForwardTraining(input, noisyTarget, t);
-
-            // Weighted score matching loss: sigma^2 * ||score_pred - score_target||^2
-            T sigmaSquared = NumOps.Multiply(sigmaT, sigmaT);
-            T weightedLoss = NumOps.Zero;
-            int count = Math.Min(predictedScore.Length, scoreTarget.Length);
-            for (int i = 0; i < count; i++)
-            {
-                T diff = NumOps.Subtract(predictedScore[i], scoreTarget[i]);
-                weightedLoss = NumOps.Add(weightedLoss, NumOps.Multiply(sigmaSquared, NumOps.Multiply(diff, diff)));
-            }
-            LastLoss = count > 0 ? NumOps.Divide(weightedLoss, NumOps.FromDouble(count)) : NumOps.Zero;
-
-            var gradient = _lossFunction.CalculateDerivative(predictedScore.ToVector(), scoreTarget.ToVector());
-            // Scale gradient by sigmaSquared to match the weighted loss objective
-            for (int i = 0; i < gradient.Length; i++)
-                gradient[i] = NumOps.Multiply(sigmaSquared, gradient[i]);
-            _optimizer.UpdateParameters(Layers);
-        }
-        finally { SetTrainingMode(false); }
-    }
-
-    private Tensor<T> ForwardTraining(Tensor<T> input, Tensor<T> noisyTarget, int t)
-    {
-        var conditioned = ApplyInstanceNormalization(input);
-        if (conditioned.Rank == 1) conditioned = conditioned.Reshape(new[] { 1, conditioned.Length });
-
-        Tensor<T> condHidden;
-        if (_inputProjection is not null)
-            condHidden = _inputProjection.Forward(conditioned);
-        else
-            condHidden = conditioned;
-
-        int targetLen = noisyTarget.Length;
-        int condLen = Math.Min(condHidden.Length, _hiddenDimension);
-        var denoisingInput = new Tensor<T>(new[] { 1, targetLen + condLen + 1 });
-        for (int i = 0; i < targetLen; i++) denoisingInput.Data.Span[i] = noisyTarget[i];
-        for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[targetLen + i] = condHidden[i];
-        // Encode sigma level as log(sigma) for continuous conditioning
-        denoisingInput.Data.Span[targetLen + condLen] = NumOps.FromDouble(Math.Log(Math.Max(1e-10, NumOps.ToDouble(_sigmas[t]))));
-
-        var eps = denoisingInput;
-        foreach (var layer in _denoisingLayers) eps = layer.Forward(eps);
-        if (_outputProjection is not null) eps = _outputProjection.Forward(eps);
-
-        var result = new Tensor<T>(new[] { _forecastHorizon });
-        for (int i = 0; i < _forecastHorizon && i < eps.Length; i++)
-            result.Data.Span[i] = eps[i];
-        return result;
+        foreach (var layer in Layers) x = layer.Forward(x);
+        return x;
     }
 
     public override void UpdateParameters(Vector<T> gradients)
     {
-        // Parameters are updated through the optimizer in Train()
+        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
     }
 
     public override ModelMetadata<T> GetModelMetadata() => new()
