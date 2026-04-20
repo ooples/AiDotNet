@@ -249,33 +249,15 @@ public class Mamba2<T> : ForecastingModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        SetTrainingMode(true);
-        var output = Forward(input);
-
-        var outputVec = output.ToVector();
-        var targetVec = target.ToVector();
-        int minLength = Math.Min(outputVec.Length, targetVec.Length);
-
-        var matchedOutput = new T[minLength];
-        var matchedTarget = new T[minLength];
-        for (int i = 0; i < minLength; i++)
-        {
-            matchedOutput[i] = outputVec[i];
-            matchedTarget[i] = targetVec[i];
-        }
-
-        var matchedOutputVec = new Vector<T>(matchedOutput);
-        var matchedTargetVec = new Vector<T>(matchedTarget);
-        LastLoss = _lossFunction.CalculateLoss(matchedOutputVec, matchedTargetVec);
-
-        var gradient = _lossFunction.CalculateDerivative(matchedOutputVec, matchedTargetVec);
-        var fullGradient = new T[output.Length];
-        for (int i = 0; i < Math.Min(gradient.Length, fullGradient.Length); i++)
-            fullGradient[i] = gradient[i];
-
-        var gradTensor = new Tensor<T>(new[] { 1, output.Length }, new Vector<T>(fullGradient));
-        _optimizer.UpdateParameters(Layers);
-        SetTrainingMode(false);
+        // Issue #1166: the old body computed a loss + gradient and then
+        // called _optimizer.UpdateParameters(Layers) without a backward
+        // pass, so every layer's UpdateParameters threw "Backward pass
+        // must be called before updating parameters." Delegate to
+        // FinancialModelBase.Train — it routes through the tape-based
+        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
+        // tape.ComputeGradients + optimizer.Step) that every other
+        // NeuralNetworkBase subclass uses.
+        base.Train(input, target);
     }
 
     /// <inheritdoc/>

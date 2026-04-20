@@ -587,19 +587,17 @@ public class DCRNN<T> : ForecastingModelBase<T>
     public override void Train(Tensor<T> input, Tensor<T> target)
     {
         if (!_useNativeMode)
-            throw new InvalidOperationException("Cannot train in ONNX mode");
+            throw new InvalidOperationException("Training is only supported in native mode.");
 
-        SetTrainingMode(true);
-
-        var prediction = Forward(input);
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), target.ToVector());
-
-        var gradient = _lossFunction.CalculateDerivative(prediction.ToVector(), target.ToVector());
-
-        _optimizer.UpdateParameters(Layers);
-
-        _trainingStep++;
-        SetTrainingMode(false);
+        // Issue #1166: the old body computed a loss + gradient and then
+        // called _optimizer.UpdateParameters(Layers) without a backward
+        // pass, so every layer's UpdateParameters threw "Backward pass
+        // must be called before updating parameters." Delegate to
+        // FinancialModelBase.Train — it routes through the tape-based
+        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
+        // tape.ComputeGradients + optimizer.Step) that every other
+        // NeuralNetworkBase subclass uses.
+        base.Train(input, target);
     }
 
     /// <summary>

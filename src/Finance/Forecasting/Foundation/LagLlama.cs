@@ -514,79 +514,15 @@ public class LagLlama<T> : ForecastingModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        SetTrainingMode(true);
-        try
-        {
-            var predictions = Forward(input);
-
-            // Extract point predictions from distribution parameters (use mean)
-            var pointPredictions = ExtractPointPredictions(predictions);
-            var predVector = pointPredictions.ToVector();
-
-            // Align target to match point predictions length
-            // Target may be raw distribution params or point values of different size
-            var targetVector = target.ToVector();
-            Vector<T> alignedTarget;
-            if (targetVector.Length == predVector.Length)
-            {
-                alignedTarget = targetVector;
-            }
-            else if (targetVector.Length >= predVector.Length)
-            {
-                // Take first N elements if target is larger
-                alignedTarget = new Vector<T>(predVector.Length);
-                for (int i = 0; i < predVector.Length; i++)
-                {
-                    alignedTarget[i] = targetVector[i];
-                }
-            }
-            else
-            {
-                // Pad with last value if target is smaller
-                alignedTarget = new Vector<T>(predVector.Length);
-                for (int i = 0; i < targetVector.Length; i++)
-                {
-                    alignedTarget[i] = targetVector[i];
-                }
-                T lastVal = targetVector.Length > 0 ? targetVector[targetVector.Length - 1] : NumOps.Zero;
-                for (int i = targetVector.Length; i < predVector.Length; i++)
-                {
-                    alignedTarget[i] = lastVal;
-                }
-            }
-
-            LastLoss = _lossFunction.CalculateLoss(predVector, alignedTarget);
-
-            // Calculate gradient w.r.t. point predictions (mu values)
-            var pointGradient = _lossFunction.CalculateDerivative(predVector, alignedTarget);
-
-            // Map the point-prediction gradient back to full distribution-parameter gradient
-            // Forward outputs [mu, sigma, nu] per step (3 params), but loss is computed on mu only
-            // We need to create a full-sized gradient matching predictions.Shape with:
-            // - Gradient for mu positions = pointGradient values
-            // - Gradient for sigma/nu positions = 0 (no direct loss contribution)
-            int paramsPerStep = 3; // mu, sigma, nu for StudentT
-            int fullGradientLength = predictions.Length;
-            var fullGradient = new Vector<T>(fullGradientLength);
-
-            // Insert point gradients at mu positions (every 3rd value starting at 0)
-            for (int i = 0; i < pointGradient.Length; i++)
-            {
-                int muIdx = i * paramsPerStep;
-                if (muIdx < fullGradientLength)
-                {
-                    fullGradient[muIdx] = pointGradient[i];
-                }
-                // sigma (idx+1) and nu (idx+2) remain zero - no direct loss gradient
-            }
-
-
-            _optimizer.UpdateParameters(Layers);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        // Issue #1166: the old body computed a loss + gradient and then
+        // called _optimizer.UpdateParameters(Layers) without a backward
+        // pass, so every layer's UpdateParameters threw "Backward pass
+        // must be called before updating parameters." Delegate to
+        // FinancialModelBase.Train — it routes through the tape-based
+        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
+        // tape.ComputeGradients + optimizer.Step) that every other
+        // NeuralNetworkBase subclass uses.
+        base.Train(input, target);
     }
 
     /// <inheritdoc/>

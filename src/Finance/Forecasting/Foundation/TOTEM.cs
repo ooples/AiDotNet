@@ -306,27 +306,15 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        SetTrainingMode(true);
-        try
-        {
-            // VQ-VAE training: reconstruction loss + commitment loss
-            var output = ForwardNative(input);
-            T reconstructionLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
-
-            // Total loss = reconstruction + commitment (commitment computed during VectorQuantize)
-            // Note: commitment loss gradient flows via the straight-through estimator (STE) in
-            // VectorQuantize — the encoder receives reconstruction gradients, and codebook entries
-            // are updated via exponential moving average during the forward pass.
-            LastLoss = NumOps.Add(reconstructionLoss, _lastCommitmentLoss);
-
-            var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-
-            _optimizer.UpdateParameters(Layers);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        // Issue #1166: the old body computed a loss + gradient and then
+        // called _optimizer.UpdateParameters(Layers) without a backward
+        // pass, so every layer's UpdateParameters threw "Backward pass
+        // must be called before updating parameters." Delegate to
+        // FinancialModelBase.Train — it routes through the tape-based
+        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
+        // tape.ComputeGradients + optimizer.Step) that every other
+        // NeuralNetworkBase subclass uses.
+        base.Train(input, target);
     }
 
     /// <inheritdoc/>

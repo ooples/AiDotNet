@@ -429,21 +429,15 @@ public class Crossformer<T> : ForecastingModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        SetTrainingMode(true);
-
-        // Forward pass
-        var predictions = Forward(input);
-
-        // Compute loss - convert to vectors for loss function
-        LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
-
-        // Backward pass - convert gradient back to tensor
-        var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-
-        // Update weights via optimizer
-        _optimizer.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+        // Issue #1166: the old body computed a loss + gradient and then
+        // called _optimizer.UpdateParameters(Layers) without a backward
+        // pass, so every layer's UpdateParameters threw "Backward pass
+        // must be called before updating parameters." Delegate to
+        // FinancialModelBase.Train — it routes through the tape-based
+        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
+        // tape.ComputeGradients + optimizer.Step) that every other
+        // NeuralNetworkBase subclass uses.
+        base.Train(input, target);
     }
 
     /// <inheritdoc/>
