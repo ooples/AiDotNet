@@ -33240,13 +33240,21 @@ public static class LayerHelper<T>
         patchSizes ??= [8, 16, 32, 64];
         if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
 
-        int minPatch = patchSizes[0];
-        int numPatches = contextLength / minPatch;
+        // Filter patch sizes that can actually produce at least one patch at this context
+        // length. Without this clamp, smaller contexts (smoke-test defaults, e.g. 8) with
+        // the wider patch options (16/32/64) yielded patches=0 → DenseLayer(outputSize=0),
+        // which rightly throws "Output size must be greater than zero".
+        var validPatchSizes = patchSizes.Where(p => p > 0 && contextLength / p >= 1).ToArray();
+        if (validPatchSizes.Length == 0)
+            validPatchSizes = new[] { Math.Max(1, contextLength) };
+
+        int minPatch = validPatchSizes[0];
+        int numPatches = Math.Max(1, contextLength / minPatch);
 
         // Multi-size patch embeddings
-        foreach (var ps in patchSizes)
+        foreach (var ps in validPatchSizes)
         {
-            int patches = contextLength / ps;
+            int patches = Math.Max(1, contextLength / ps);
             yield return new DenseLayer<T>(inputSize: contextLength, outputSize: patches * hiddenDim, activationFunction: null);
         }
 
