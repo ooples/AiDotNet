@@ -46,55 +46,42 @@ public class RobustFileOpsMoveRetryTests
     }
 
     /// <summary>
-    /// Simulates the Windows antivirus / indexer lock pattern: open the source
-    /// file with exclusive sharing for a short window, then release it.
-    /// The retry loop must tolerate the transient IOException and succeed
-    /// once the lock is released.
+    /// Cross-platform retry-trigger: the destination's parent directory
+    /// doesn't exist when the move starts, so File.Move throws
+    /// DirectoryNotFoundException (a subclass of IOException). A
+    /// background task creates the parent ~250 ms later, after which a
+    /// retry attempt succeeds. This exercises the same retry path as
+    /// the Windows AV / indexer scenario without depending on Windows-
+    /// specific FileShare.None semantics — on Linux, opening a
+    /// FileStream with FileShare.None does not actually block File.Move,
+    /// so the original lock-based simulation passed trivially without
+    /// ever exercising retry on the Linux CI runner.
     /// </summary>
     [Fact]
-    public async Task Move_SucceedsAfter_TransientSharingViolation()
+    public async Task Move_SucceedsAfter_TransientMissingParentDirectory()
     {
         string src = Path.Combine(Path.GetTempPath(), $"aidotnet_move_{Guid.NewGuid()}.bin");
-        string dst = Path.Combine(Path.GetTempPath(), $"aidotnet_move_dst_{Guid.NewGuid()}.bin");
+        string parentDir = Path.Combine(Path.GetTempPath(), $"aidotnet_move_parent_{Guid.NewGuid()}");
+        string dst = Path.Combine(parentDir, "dst.bin");
         File.WriteAllBytes(src, [9, 9, 9]);
 
-        // Acquire an exclusive handle on the source, synchronize with the
-        // main test so the retry path is actually exercised (otherwise
-        // Task.Run scheduling could let the main thread call File.Move
-        // before the lock exists and the test passes trivially without
-        // ever triggering retry), hold the handle for ~250 ms, then
-        // release so the retry loop eventually succeeds. Retry delay is
-        // scaled up to 100 ms per attempt here to keep the race window
-        // deterministic; production default is 200 ms.
-        var lockAcquired = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var lockRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Background task creates the parent directory after ~250 ms,
+        // letting the retry loop succeed once the directory exists.
+        // Retry schedule: 100, 200, 300, 400 ms (initialDelayMs * attempt),
+        // so by attempt 3 or 4 the directory will be in place.
+        var dirReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _ = Task.Run(async () =>
         {
             try
             {
-                using var holder = new FileStream(src, FileMode.Open, FileAccess.Read, FileShare.None);
-                lockAcquired.TrySetResult(true);
                 await Task.Delay(TimeSpan.FromMilliseconds(250));
-            }
-            catch (Exception ex)
-            {
-                // If the FileStream open itself fails, release both
-                // synchronization primitives so the main test fails fast
-                // with a clear error rather than hanging on the wait.
-                lockAcquired.TrySetException(ex);
+                Directory.CreateDirectory(parentDir);
             }
             finally
             {
-                lockRelease.TrySetResult(true);
+                dirReady.TrySetResult(true);
             }
         });
-
-        // Wait for the background task to actually acquire the exclusive
-        // handle before we start the move. Without this await the test
-        // is a race between Task.Run scheduling and the main thread, and
-        // the retry path would not be exercised on the "fast" side of
-        // the race — a silently-passing test.
-        await lockAcquired.Task;
 
         try
         {
@@ -105,14 +92,12 @@ public class RobustFileOpsMoveRetryTests
         }
         finally
         {
-            // Drain the background task before teardown regardless of the
-            // assertion outcome. If we didn't await here and an assertion
-            // above threw, the background task could still own the
-            // FileStream when File.Delete(src) runs, masking the real
-            // failure with a confusing "file in use" IOException.
-            await lockRelease.Task;
+            // Drain the background task before teardown so cleanup is
+            // deterministic regardless of which assertion threw.
+            await dirReady.Task;
             if (File.Exists(src)) File.Delete(src);
             if (File.Exists(dst)) File.Delete(dst);
+            if (Directory.Exists(parentDir)) Directory.Delete(parentDir, recursive: true);
         }
     }
 
@@ -175,29 +160,35 @@ public class RobustFileOpsMoveRetryTests
     /// <summary>
     /// If every retry attempt fails, the final attempt must propagate the
     /// underlying exception rather than silently succeed or hang.
+    ///
+    /// Cross-platform retry-trigger: destination's parent directory never
+    /// exists, so every File.Move attempt throws DirectoryNotFoundException
+    /// (an IOException subclass). Assert.ThrowsAsync&lt;DirectoryNotFoundException&gt;
+    /// verifies the specific cross-platform trigger used by this test.
     /// </summary>
     [Fact]
-    public async Task Move_Propagates_WhenLockNeverReleases()
+    public async Task Move_Propagates_WhenParentDirectoryNeverCreated()
     {
         string src = Path.Combine(Path.GetTempPath(), $"aidotnet_move_{Guid.NewGuid()}.bin");
-        string dst = Path.Combine(Path.GetTempPath(), $"aidotnet_move_dst_{Guid.NewGuid()}.bin");
+        string parentDir = Path.Combine(Path.GetTempPath(), $"aidotnet_move_parent_{Guid.NewGuid()}");
+        string dst = Path.Combine(parentDir, "dst.bin");
         File.WriteAllBytes(src, [1]);
 
-        // Hold an exclusive read handle for the duration of the call — all
-        // attempts will fail with IOException and the final one should
-        // surface.
-        using var holder = new FileStream(src, FileMode.Open, FileAccess.Read, FileShare.None);
+        // Parent directory is never created — every retry attempt fails,
+        // and the final attempt must propagate the IOException to the
+        // caller (rather than swallow it).
         try
         {
-            await Assert.ThrowsAsync<IOException>(
+            await Assert.ThrowsAsync<DirectoryNotFoundException>(
                 () => RobustFileOps.MoveWithRetryAsync(src, dst, CancellationToken.None, maxAttempts: 3, initialDelayMs: 1));
             Assert.False(File.Exists(dst), "Destination must not exist when the move fails");
+            Assert.True(File.Exists(src), "Source must remain in place when the move fails");
         }
         finally
         {
-            holder.Dispose();
             if (File.Exists(src)) File.Delete(src);
             if (File.Exists(dst)) File.Delete(dst);
+            if (Directory.Exists(parentDir)) Directory.Delete(parentDir, recursive: true);
         }
     }
 }

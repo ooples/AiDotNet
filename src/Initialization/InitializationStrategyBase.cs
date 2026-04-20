@@ -118,26 +118,15 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
 
         if (typeof(T) == typeof(double))
         {
-            for (int i = 0; i < span.Length; i++)
-            {
-                double value;
-                do { value = SampleGaussian(0, stddev); }
-                while (Math.Abs(value) > clipBound);
-                span[i] = System.Runtime.CompilerServices.Unsafe.As<double, T>(ref value);
-            }
+            var rawArr = (double[])(object)weights.GetDataArray();
+            XavierFillDouble(rawArr, 0, weights.Length, stddev, clipBound);
             return;
         }
 
         if (typeof(T) == typeof(float))
         {
-            for (int i = 0; i < span.Length; i++)
-            {
-                double value;
-                do { value = SampleGaussian(0, stddev); }
-                while (Math.Abs(value) > clipBound);
-                float fv = (float)value;
-                span[i] = System.Runtime.CompilerServices.Unsafe.As<float, T>(ref fv);
-            }
+            var rawArr = (float[])(object)weights.GetDataArray();
+            XavierFillFloat(rawArr, 0, weights.Length, stddev, clipBound);
             return;
         }
 
@@ -258,5 +247,160 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
         var u2 = Random.NextDouble();
         var randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
         return mean + stddev * randStdNormal;
+    }
+
+    /// <summary>
+    /// Fills a span with <c>N(0, stddev)</c> samples clipped to ±<paramref name="clipBound"/>,
+    /// using a paired Box-Muller transform that produces two samples per pair of uniform
+    /// draws — halves the <see cref="Math.Log"/>/<see cref="Math.Sqrt"/> call count vs.
+    /// calling <see cref="SampleGaussian"/> per element.
+    /// </summary>
+    /// <remarks>
+    /// Replaces the per-element <c>while (Math.Abs(value) &gt; clipBound) do ...</c>
+    /// rejection loop which was the dominant cost of DiT-XL lazy weight init (each
+    /// block's Dense / SelfAttention layer paid 1–30 s of RNG overhead on first
+    /// forward). Rejection rate at 2σ is ~5 %, so in the common case each iteration
+    /// produces two usable samples with one log + one sqrt + one sin + one cos + two
+    /// multiplies. The inner loop is a tight unvirtualized local function so JIT can
+    /// keep everything in registers and auto-vectorize the clip check.
+    /// </remarks>
+    private void XavierFillDouble(double[] dst, int offset, int length, double stddev, double clipBound)
+    {
+        if (length == 0) return;
+
+        const int ParallelThreshold = 1 << 18; // 256K doubles ≈ 2MB
+        int cores = Math.Max(1, Environment.ProcessorCount);
+
+        if (length < ParallelThreshold || cores == 1)
+        {
+            FillChunkDouble(dst.AsSpan(offset, length), stddev, clipBound, Random);
+            return;
+        }
+
+        // For large tensors (typical DiT-XL hidden×4 ≈ 100M elements), partition
+        // across cores so init amortizes over the thread pool instead of running
+        // single-threaded. Pre-seed per-chunk RNGs from the master so the parallel
+        // work remains deterministic relative to the master seed. System.Random
+        // is NOT thread-safe, so we MUST use per-thread instances.
+        int chunkSize = (length + cores - 1) / cores;
+        var seeds = new int[cores];
+        for (int c = 0; c < cores; c++) seeds[c] = Random.Next();
+
+        System.Threading.Tasks.Parallel.For(0, cores, c =>
+        {
+            int chunkStart = c * chunkSize;
+            int chunkEnd = Math.Min(chunkStart + chunkSize, length);
+            if (chunkStart >= chunkEnd) return;
+            var chunkRng = new Random(seeds[c]);
+            FillChunkDouble(dst.AsSpan(offset + chunkStart, chunkEnd - chunkStart), stddev, clipBound, chunkRng);
+        });
+    }
+
+    /// <summary>
+    /// Sequential Box-Muller fill of a span — inner helper used by both the
+    /// sequential fast path and the parallel chunk workers.
+    /// </summary>
+    private static void FillChunkDouble(Span<double> dst, double stddev, double clipBound, Random rng)
+    {
+        double z1 = 0;
+        bool havePending = false;
+
+        for (int i = 0; i < dst.Length; i++)
+        {
+            double sample;
+            while (true)
+            {
+                if (havePending)
+                {
+                    sample = z1;
+                    havePending = false;
+                }
+                else
+                {
+                    double u1 = 1.0 - rng.NextDouble();
+                    double u2 = rng.NextDouble();
+                    double r = Math.Sqrt(-2.0 * Math.Log(u1));
+                    double theta = 2.0 * Math.PI * u2;
+                    sample = r * Math.Sin(theta);
+                    z1 = r * Math.Cos(theta);
+                    havePending = true;
+                }
+                sample *= stddev;
+                if (!(sample > clipBound) && !(sample < -clipBound))
+                {
+                    dst[i] = sample;
+                    break;
+                }
+                havePending = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Float variant of <see cref="XavierFillDouble"/>. Uses double-precision
+    /// Box-Muller internally (accuracy matters more than the tiny cost) and
+    /// narrows to float on store.
+    /// </summary>
+    private void XavierFillFloat(float[] dst, int offset, int length, double stddev, double clipBound)
+    {
+        if (length == 0) return;
+
+        const int ParallelThreshold = 1 << 18;
+        int cores = Math.Max(1, Environment.ProcessorCount);
+
+        if (length < ParallelThreshold || cores == 1)
+        {
+            FillChunkFloat(dst.AsSpan(offset, length), stddev, clipBound, Random);
+            return;
+        }
+
+        int chunkSize = (length + cores - 1) / cores;
+        var seeds = new int[cores];
+        for (int c = 0; c < cores; c++) seeds[c] = Random.Next();
+
+        System.Threading.Tasks.Parallel.For(0, cores, c =>
+        {
+            int chunkStart = c * chunkSize;
+            int chunkEnd = Math.Min(chunkStart + chunkSize, length);
+            if (chunkStart >= chunkEnd) return;
+            var chunkRng = new Random(seeds[c]);
+            FillChunkFloat(dst.AsSpan(offset + chunkStart, chunkEnd - chunkStart), stddev, clipBound, chunkRng);
+        });
+    }
+
+    private static void FillChunkFloat(Span<float> dst, double stddev, double clipBound, Random rng)
+    {
+        double z1 = 0;
+        bool havePending = false;
+
+        for (int i = 0; i < dst.Length; i++)
+        {
+            double sample;
+            while (true)
+            {
+                if (havePending)
+                {
+                    sample = z1;
+                    havePending = false;
+                }
+                else
+                {
+                    double u1 = 1.0 - rng.NextDouble();
+                    double u2 = rng.NextDouble();
+                    double r = Math.Sqrt(-2.0 * Math.Log(u1));
+                    double theta = 2.0 * Math.PI * u2;
+                    sample = r * Math.Sin(theta);
+                    z1 = r * Math.Cos(theta);
+                    havePending = true;
+                }
+                sample *= stddev;
+                if (!(sample > clipBound) && !(sample < -clipBound))
+                {
+                    dst[i] = (float)sample;
+                    break;
+                }
+                havePending = false;
+            }
+        }
     }
 }

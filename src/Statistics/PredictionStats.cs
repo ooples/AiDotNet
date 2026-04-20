@@ -663,34 +663,72 @@ public class PredictionStats<T>
     /// </remarks>
     private void CalculatePredictionStats(Vector<T> actual, Vector<T> predicted, int numberOfParameters, T confidenceLevel, int learningCurveSteps, PredictionType predictionType)
     {
-        BestDistributionFit = StatisticsHelper<T>.DetermineBestFitDistribution(predicted);
+        // All intermediate values computed into locals; properties are set
+        // together at the bottom. Before this rewrite the method read
+        // AdjustedR2's dependency via R2's property getter, which calls
+        // EnsureFullStatsComputed and re-enters this method — unbounded
+        // recursion + StackOverflowException in the test host. Same class
+        // of bug as BasicStats / ErrorStats; see those files for context.
+        var bestDist = StatisticsHelper<T>.DetermineBestFitDistribution(predicted);
 
-        MeanPredictionError = StatisticsHelper<T>.CalculateMeanPredictionError(actual, predicted);
-        MedianPredictionError = StatisticsHelper<T>.CalculateMedianPredictionError(actual, predicted);
+        T meanPredErr = StatisticsHelper<T>.CalculateMeanPredictionError(actual, predicted);
+        T medianPredErr = StatisticsHelper<T>.CalculateMedianPredictionError(actual, predicted);
 
-        R2 = StatisticsHelper<T>.CalculateR2(actual, predicted);
-        AdjustedR2 = StatisticsHelper<T>.CalculateAdjustedR2(R2, actual.Length, numberOfParameters);
-        ExplainedVarianceScore = StatisticsHelper<T>.CalculateExplainedVarianceScore(actual, predicted);
-        LearningCurve = StatisticsHelper<T>.CalculateLearningCurve(actual, predicted, learningCurveSteps);
-        PearsonCorrelation = StatisticsHelper<T>.CalculatePearsonCorrelationCoefficient(actual, predicted);
-        SpearmanCorrelation = StatisticsHelper<T>.CalculateSpearmanRankCorrelationCoefficient(actual, predicted);
-        KendallTau = StatisticsHelper<T>.CalculateKendallTau(actual, predicted);
-        DynamicTimeWarping = StatisticsHelper<T>.CalculateDynamicTimeWarping(actual, predicted);
+        // R2 and AdjustedR2 were already computed eagerly in the ctor
+        // (see lines 570-571) with the same Actual/Predicted/NumberOfParameters
+        // inputs. Reuse the stored values instead of calling StatisticsHelper
+        // a second time — cuts a redundant O(n) scan per metric over the
+        // prediction vector on the lazy-compute path.
+        T r2 = R2;
+        T adjR2 = AdjustedR2;
+        T evs = StatisticsHelper<T>.CalculateExplainedVarianceScore(actual, predicted);
+        var lc = StatisticsHelper<T>.CalculateLearningCurve(actual, predicted, learningCurveSteps);
+        T pearson = StatisticsHelper<T>.CalculatePearsonCorrelationCoefficient(actual, predicted);
+        T spearman = StatisticsHelper<T>.CalculateSpearmanRankCorrelationCoefficient(actual, predicted);
+        T kendall = StatisticsHelper<T>.CalculateKendallTau(actual, predicted);
+        T dtw = StatisticsHelper<T>.CalculateDynamicTimeWarping(actual, predicted);
 
-        PredictionInterval = StatisticsHelper<T>.CalculatePredictionIntervals(actual, predicted, confidenceLevel);
-        PredictionIntervalCoverage = StatisticsHelper<T>.CalculatePredictionIntervalCoverage(actual, predicted, PredictionInterval.Lower, PredictionInterval.Upper);
-        ConfidenceInterval = StatisticsHelper<T>.CalculateConfidenceIntervals(predicted, confidenceLevel, BestDistributionFit.DistributionType);
-        CredibleInterval = StatisticsHelper<T>.CalculateCredibleIntervals(predicted, confidenceLevel, BestDistributionFit.DistributionType);
-        ToleranceInterval = StatisticsHelper<T>.CalculateToleranceInterval(actual, predicted, confidenceLevel);
-        ForecastInterval = StatisticsHelper<T>.CalculateForecastInterval(actual, predicted, confidenceLevel);
-        QuantileIntervals = StatisticsHelper<T>.CalculateQuantileIntervals(actual, predicted, new T[] { _numOps.FromDouble(0.25), _numOps.FromDouble(0.5), _numOps.FromDouble(0.75) });
-        BootstrapInterval = StatisticsHelper<T>.CalculateBootstrapInterval(actual, predicted, confidenceLevel);
-        SimultaneousPredictionInterval = StatisticsHelper<T>.CalculateSimultaneousPredictionInterval(actual, predicted, confidenceLevel);
-        JackknifeInterval = StatisticsHelper<T>.CalculateJackknifeInterval(actual, predicted);
-        PercentileInterval = StatisticsHelper<T>.CalculatePercentileInterval(predicted, confidenceLevel);
+        (T Lower, T Upper) predInterval = StatisticsHelper<T>.CalculatePredictionIntervals(actual, predicted, confidenceLevel);
+        T predIntervalCov = StatisticsHelper<T>.CalculatePredictionIntervalCoverage(actual, predicted, predInterval.Lower, predInterval.Upper);
+        var confInterval = StatisticsHelper<T>.CalculateConfidenceIntervals(predicted, confidenceLevel, bestDist.DistributionType);
+        var credInterval = StatisticsHelper<T>.CalculateCredibleIntervals(predicted, confidenceLevel, bestDist.DistributionType);
+        var tolInterval = StatisticsHelper<T>.CalculateToleranceInterval(actual, predicted, confidenceLevel);
+        var forecastInterval = StatisticsHelper<T>.CalculateForecastInterval(actual, predicted, confidenceLevel);
+        var quantiles = StatisticsHelper<T>.CalculateQuantileIntervals(actual, predicted, new T[] { _numOps.FromDouble(0.25), _numOps.FromDouble(0.5), _numOps.FromDouble(0.75) });
+        var bootstrap = StatisticsHelper<T>.CalculateBootstrapInterval(actual, predicted, confidenceLevel);
+        var simulPred = StatisticsHelper<T>.CalculateSimultaneousPredictionInterval(actual, predicted, confidenceLevel);
+        var jackknife = StatisticsHelper<T>.CalculateJackknifeInterval(actual, predicted);
+        var percentile = StatisticsHelper<T>.CalculatePercentileInterval(predicted, confidenceLevel);
 
-        Accuracy = StatisticsHelper<T>.CalculateAccuracy(actual, predicted, predictionType);
-        (Precision, Recall, F1Score) = StatisticsHelper<T>.CalculatePrecisionRecallF1(actual, predicted, predictionType);
+        T accuracy = StatisticsHelper<T>.CalculateAccuracy(actual, predicted, predictionType);
+        var (precision, recall, f1) = StatisticsHelper<T>.CalculatePrecisionRecallF1(actual, predicted, predictionType);
+
+        BestDistributionFit = bestDist;
+        MeanPredictionError = meanPredErr;
+        MedianPredictionError = medianPredErr;
+        R2 = r2;
+        AdjustedR2 = adjR2;
+        ExplainedVarianceScore = evs;
+        LearningCurve = lc;
+        PearsonCorrelation = pearson;
+        SpearmanCorrelation = spearman;
+        KendallTau = kendall;
+        DynamicTimeWarping = dtw;
+        PredictionInterval = predInterval;
+        PredictionIntervalCoverage = predIntervalCov;
+        ConfidenceInterval = confInterval;
+        CredibleInterval = credInterval;
+        ToleranceInterval = tolInterval;
+        ForecastInterval = forecastInterval;
+        QuantileIntervals = quantiles;
+        BootstrapInterval = bootstrap;
+        SimultaneousPredictionInterval = simulPred;
+        JackknifeInterval = jackknife;
+        PercentileInterval = percentile;
+        Accuracy = accuracy;
+        Precision = precision;
+        Recall = recall;
+        F1Score = f1;
     }
 
     /// <summary>

@@ -239,13 +239,53 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-
+        // Accept 3D [C, H, W] (single unbatched sample) or 4D [B, C, H, W].
+        // Internal layers — especially BatchNormalizationLayer —
+        // broadcast their channel-scale/shift tensors as [1, C, 1, 1] and
+        // require the input to be 4D for that broadcast to apply along the
+        // channel dimension. A 3D input would otherwise line up the 16-channel
+        // scale tensor against the spatial H=32 dimension and throw
+        //   "Tensors with shapes [16, 32, 32] and [1, 16, 1] cannot be
+        //    broadcast: dimension 1 has sizes 32 and 16 (must be equal or
+        //    one must be 1)."
+        // inside BatchNormalizationLayer.ApplyInferenceAnyRank. The fix
+        // mirrors ResNet/VGG's input-shape contract.
+        bool addedBatch = false;
         Tensor<T> output = input;
+        if (input.Rank == 3)
+        {
+            output = PromoteToBatchedTensor(input);
+            addedBatch = true;
+        }
+
         foreach (var layer in Layers)
         {
             output = layer.Forward(output);
         }
+
+        // If the caller passed a 3D input we expanded to 4D; squeeze the
+        // leading batch dim off so the output shape matches the input's
+        // un-batched contract.
+        if (addedBatch && output.Rank >= 1 && output.Shape[0] == 1)
+        {
+            int[] squeezed = new int[output.Rank - 1];
+            for (int i = 0; i < squeezed.Length; i++) squeezed[i] = output.Shape[i + 1];
+            output = Engine.Reshape(output, squeezed);
+        }
         return output;
+    }
+
+    /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        // Mirror Forward's 3D → 4D expansion so the channel-broadcasted
+        // BatchNormalizationLayer inside every InvertedResidualBlock sees
+        // the 4D tensor it requires. Without this, callers that probe
+        // activations layer-by-layer with a 3D test input hit the same
+        // "[16,32,32] vs [1,16,1] cannot be broadcast" failure that the
+        // Forward override already handles.
+        Tensor<T> probeInput = input.Rank == 3 ? PromoteToBatchedTensor(input) : input;
+        return base.GetNamedLayerActivations(probeInput);
     }
 
     /// <inheritdoc />
@@ -257,7 +297,12 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        TrainWithTape(input, expectedOutput, _optimizer);
+        // Mirror Forward's shape contract — expand 3D inputs (and their
+        // targets) to 4D so ForwardForTraining's raw layer iteration
+        // receives the 4D tensor BatchNormalizationLayer needs. See
+        // ResNet/VGG Train() for the same pattern.
+        var (processedInput, processedTarget) = EnsureBatchForCnnTraining(input, expectedOutput);
+        TrainWithTape(processedInput, processedTarget, _optimizer);
     }
 
     /// <inheritdoc />

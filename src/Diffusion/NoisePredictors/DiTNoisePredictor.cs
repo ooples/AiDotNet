@@ -574,8 +574,20 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
-    /// Converts image to patches.
+    /// Converts image to patches via a single reshape + permute + reshape.
     /// </summary>
+    /// <remarks>
+    /// Equivalent to the nested 6-loop scalar copy this used to be:
+    /// <c>[B, C, H, W]</c> → reshape <c>[B, C, H/p, p, W/p, p]</c>
+    /// → permute to <c>[B, H/p, W/p, C, p, p]</c>
+    /// → reshape <c>[B, numPatches, C·p·p]</c>.
+    /// All three ops route through <see cref="IEngine"/>, so the permutation
+    /// runs through the engine's vectorized memcpy kernel instead of a
+    /// scalar C# nested loop. The two reshape steps are zero-copy views; the
+    /// permute is the only step that materializes (and only because the
+    /// downstream <see cref="DenseLayer{T}.Forward"/> requires contiguous
+    /// input).
+    /// </remarks>
     private Tensor<T> Patchify(Tensor<T> x)
     {
         var shape = x._shape;
@@ -589,48 +601,23 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         var numPatches = numPatchesH * numPatchesW;
         var patchDim = channels * _patchSize * _patchSize;
 
-        var patches = TensorAllocator.Rent<T>(new[] { batch, numPatches, patchDim });
-        var patchSpan = patches.AsWritableSpan();
-        var xSpan = x.AsSpan();
-
-        for (int b = 0; b < batch; b++)
-        {
-            int patchIdx = 0;
-            for (int ph = 0; ph < numPatchesH; ph++)
-            {
-                for (int pw = 0; pw < numPatchesW; pw++)
-                {
-                    // Extract patch
-                    int dimIdx = 0;
-                    for (int c = 0; c < channels; c++)
-                    {
-                        for (int py = 0; py < _patchSize; py++)
-                        {
-                            for (int px = 0; px < _patchSize; px++)
-                            {
-                                var ih = ph * _patchSize + py;
-                                var iw = pw * _patchSize + px;
-                                var srcIdx = b * channels * height * width +
-                                             c * height * width +
-                                             ih * width + iw;
-                                var dstIdx = b * numPatches * patchDim +
-                                             patchIdx * patchDim + dimIdx;
-                                patchSpan[dstIdx] = xSpan[srcIdx];
-                                dimIdx++;
-                            }
-                        }
-                    }
-                    patchIdx++;
-                }
-            }
-        }
-
-        return patches;
+        // [B, C, H, W] -> [B, C, H/p, p, W/p, p]
+        var split = Engine.Reshape(x,
+            new[] { batch, channels, numPatchesH, _patchSize, numPatchesW, _patchSize });
+        // -> [B, H/p, W/p, C, p, p]  (axes: 0, 2, 4, 1, 3, 5)
+        var permuted = Engine.TensorPermute(split, new[] { 0, 2, 4, 1, 3, 5 });
+        // -> [B, numPatches, patchDim]
+        return Engine.Reshape(permuted, new[] { batch, numPatches, patchDim });
     }
 
     /// <summary>
     /// Embeds patches through linear projection using batched forward pass.
     /// </summary>
+    /// <remarks>
+    /// Uses zero-copy <see cref="IEngine.Reshape"/> views around the dense
+    /// projection — the previous <c>TensorAllocator.Rent + CopyTo</c> scratch
+    /// buffers were unnecessary because Patchify's output is contiguous.
+    /// </remarks>
     private Tensor<T> EmbedPatches(Tensor<T> patches)
     {
         if (_patchEmbed == null)
@@ -641,18 +628,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         var numPatches = shape[1];
         var patchDim = shape[2];
 
-        // Reshape [batch, numPatches, patchDim] -> [batch*numPatches, patchDim] for batched forward
-        var flatPatches = TensorAllocator.Rent<T>(new[] { batch * numPatches, patchDim });
-        patches.AsSpan().CopyTo(flatPatches.AsWritableSpan());
-
-        // Single batched forward pass through the linear layer
+        // [B, numPatches, patchDim] -> [B·numPatches, patchDim] view, batched dense forward, reshape back as view.
+        var flatPatches = Engine.Reshape(patches, new[] { batch * numPatches, patchDim });
         var projected = _patchEmbed.Forward(flatPatches);
-
-        // Reshape back to [batch, numPatches, hiddenSize]
-        var embedded = TensorAllocator.Rent<T>(new[] { batch, numPatches, _hiddenSize });
-        projected.AsSpan().CopyTo(embedded.AsWritableSpan());
-
-        return embedded;
+        return Engine.Reshape(projected, new[] { batch, numPatches, _hiddenSize });
     }
 
     /// <summary>
@@ -700,6 +679,14 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <summary>
     /// Forward pass through a single DiT block with AdaLN.
     /// </summary>
+    /// <remarks>
+    /// AdaLN modulation tensor is reshaped to [B, 6, 1, hidden] and the six
+    /// shift/scale/gate parameters are obtained as zero-copy
+    /// <see cref="IEngine.TensorSliceAxis"/> views — no <c>T[]</c> allocations,
+    /// no scalar fill loops. The <c>(1 + scale)</c> precomputation in AdaLN
+    /// uses the SIMD <see cref="IEngine.TensorAddScalar"/> primitive instead
+    /// of a per-element <c>NumOps.Add(NumOps.One, scale[h])</c> loop.
+    /// </remarks>
     private Tensor<T> ForwardBlock(
         Tensor<T> x,
         Tensor<T> timeEmbed,
@@ -713,18 +700,33 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             throw new InvalidOperationException("Block layers not initialized.");
         }
 
-        // Get AdaLN modulation parameters (shift1, scale1, gate1, shift2, scale2, gate2)
+        // Get AdaLN modulation parameters (shift1, scale1, gate1, shift2, scale2, gate2).
+        // AdaLNModulation forward output is hidden*6 elements per batch — derive
+        // batchM from total length so we don't depend on whether the layer
+        // returns [B, hidden*6] (rank 2) or [hidden*6] (rank 1, when B=1 and the
+        // dense layer collapses leading dims). Reshape to [B, 6, 1, hidden] so
+        // TensorSliceAxis(axis=1, index=i) yields a [B, 1, hidden] view directly,
+        // broadcastable over [B, seq, hidden] without further reshape.
         var modulation = block.AdaLNModulation.Forward(timeEmbed);
-        var modSpan = modulation.AsSpan();
+        int stride = 6 * _hiddenSize;
+        if (modulation.Length % stride != 0)
+        {
+            throw new InvalidOperationException(
+                $"AdaLNModulation output length {modulation.Length} is not divisible by 6 * hiddenSize " +
+                $"({stride}). This indicates the modulation MLP's output size is misconfigured — " +
+                $"each DiT block needs exactly 6 * {_hiddenSize} = {stride} modulation parameters per " +
+                $"sample (shift/scale/gate × 2 for attention and MLP branches). " +
+                $"Check the layer that produced `timeEmbed` and `block.AdaLNModulation`.");
+        }
+        int batchM = modulation.Length / stride;
+        var modReshaped = Engine.Reshape(modulation, new[] { batchM, 6, 1, _hiddenSize });
 
-        // Split modulation into 6 parts
-        var modSize = _hiddenSize;
-        var shift1 = ExtractModulation(modSpan, 0, modSize);
-        var scale1 = ExtractModulation(modSpan, modSize, modSize);
-        var gate1 = ExtractModulation(modSpan, modSize * 2, modSize);
-        var shift2 = ExtractModulation(modSpan, modSize * 3, modSize);
-        var scale2 = ExtractModulation(modSpan, modSize * 4, modSize);
-        var gate2 = ExtractModulation(modSpan, modSize * 5, modSize);
+        var shift1 = Engine.TensorSliceAxis(modReshaped, axis: 1, index: 0);
+        var scale1 = Engine.TensorSliceAxis(modReshaped, axis: 1, index: 1);
+        var gate1  = Engine.TensorSliceAxis(modReshaped, axis: 1, index: 2);
+        var shift2 = Engine.TensorSliceAxis(modReshaped, axis: 1, index: 3);
+        var scale2 = Engine.TensorSliceAxis(modReshaped, axis: 1, index: 4);
+        var gate2  = Engine.TensorSliceAxis(modReshaped, axis: 1, index: 5);
 
         // Self-attention with AdaLN
         var normed = block.Norm1.Forward(x);
@@ -751,43 +753,18 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
-    /// Extracts modulation parameters from combined tensor.
+    /// Applies adaptive layer normalization (Peebles &amp; Xie, 2023):
+    /// <c>y = x * (1 + scale) + shift</c>. Both <paramref name="scaleView"/>
+    /// and <paramref name="shiftView"/> are <c>[B, 1, hidden]</c> tensor views
+    /// sliced from the AdaLN modulation tensor — no scratch allocation, no
+    /// scalar fill. The <c>(1 + scale)</c> precomputation runs through the
+    /// SIMD <see cref="IEngine.TensorAddScalar"/> kernel.
     /// </summary>
-    private T[] ExtractModulation(ReadOnlySpan<T> modSpan, int offset, int size)
+    private Tensor<T> ApplyAdaLN(Tensor<T> x, Tensor<T> scaleView, Tensor<T> shiftView)
     {
-        var result = new T[size];
-        for (int i = 0; i < size; i++)
-        {
-            result[i] = modSpan[offset + i];
-        }
-        return result;
-    }
-
-    /// <summary>
-    /// Applies adaptive layer normalization using IEngine for hardware acceleration.
-    /// y = x * (1 + scale) + shift
-    /// </summary>
-    private Tensor<T> ApplyAdaLN(Tensor<T> x, T[] scale, T[] shift)
-    {
-        var shape = x._shape;
-        var hidden = shape[^1];
-
-        // Create broadcastable tensors for scale and shift: [1, 1, hidden]
-        var scaleTensor = TensorAllocator.Rent<T>(new[] { 1, 1, hidden });
-        var shiftTensor = TensorAllocator.Rent<T>(new[] { 1, 1, hidden });
-        var scaleSpan = scaleTensor.AsWritableSpan();
-        var shiftSpan = shiftTensor.AsWritableSpan();
-
-        for (int h = 0; h < hidden; h++)
-        {
-            scaleSpan[h] = NumOps.Add(NumOps.One, scale[h % scale.Length]);
-            shiftSpan[h] = shift[h % shift.Length];
-        }
-
-        // y = x * (1 + scale) + shift — per DiT paper (Peebles & Xie, 2023)
-        // scale/shift are [1,1,hidden], x is [batch, seq, hidden] — requires broadcasting
-        var scaled = Engine.TensorBroadcastMultiply<T>(x, scaleTensor);
-        return Engine.TensorBroadcastAdd<T>(scaled, shiftTensor);
+        var scalePlusOne = Engine.TensorAddScalar<T>(scaleView, NumOps.One);
+        var scaled = Engine.TensorBroadcastMultiply<T>(x, scalePlusOne);
+        return Engine.TensorBroadcastAdd<T>(scaled, shiftView);
     }
 
     /// <summary>
@@ -861,166 +838,117 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
-    /// Reshapes tensor from [batch, seq, hidden] to [batch*heads, seq, headDim] for multi-head attention.
+    /// Reshapes tensor from <c>[batch, seq, hidden]</c> to
+    /// <c>[batch*heads, seq, headDim]</c> for multi-head attention via a
+    /// reshape + permute + reshape pipeline (no scalar nested copy loops).
     /// </summary>
-    private static Tensor<T> ReshapeForHeads(Tensor<T> tensor, int batch, int seq, int numHeads, int headDim)
+    private Tensor<T> ReshapeForHeads(Tensor<T> tensor, int batch, int seq, int numHeads, int headDim)
     {
-        var result = TensorAllocator.Rent<T>(new[] { batch * numHeads, seq, headDim });
-        var srcSpan = tensor.AsSpan();
-        var dstSpan = result.AsWritableSpan();
-        var hidden = numHeads * headDim;
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < numHeads; h++)
-            {
-                for (int s = 0; s < seq; s++)
-                {
-                    var srcBase = b * seq * hidden + s * hidden + h * headDim;
-                    var dstBase = (b * numHeads + h) * seq * headDim + s * headDim;
-                    srcSpan.Slice(srcBase, headDim).CopyTo(dstSpan.Slice(dstBase, headDim));
-                }
-            }
-        }
-
-        return result;
+        // [B, S, H·D] -> [B, S, H, D]
+        var split = Engine.Reshape(tensor, new[] { batch, seq, numHeads, headDim });
+        // -> [B, H, S, D]
+        var permuted = Engine.TensorPermute(split, new[] { 0, 2, 1, 3 });
+        // -> [B·H, S, D]
+        return Engine.Reshape(permuted, new[] { batch * numHeads, seq, headDim });
     }
 
     /// <summary>
-    /// Reshapes tensor from [batch*heads, seq, headDim] back to [batch, seq, hidden].
+    /// Inverse of <see cref="ReshapeForHeads"/> — collapses head and batch
+    /// back together via reshape + permute + reshape.
     /// </summary>
-    private static Tensor<T> ReshapeFromHeads(Tensor<T> tensor, int batch, int seq, int numHeads, int headDim)
+    private Tensor<T> ReshapeFromHeads(Tensor<T> tensor, int batch, int seq, int numHeads, int headDim)
     {
-        var result = TensorAllocator.Rent<T>(new[] { batch, seq, numHeads * headDim });
-        var srcSpan = tensor.AsSpan();
-        var dstSpan = result.AsWritableSpan();
-        var hidden = numHeads * headDim;
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < numHeads; h++)
-            {
-                for (int s = 0; s < seq; s++)
-                {
-                    var srcBase = (b * numHeads + h) * seq * headDim + s * headDim;
-                    var dstBase = b * seq * hidden + s * hidden + h * headDim;
-                    srcSpan.Slice(srcBase, headDim).CopyTo(dstSpan.Slice(dstBase, headDim));
-                }
-            }
-        }
-
-        return result;
+        // [B·H, S, D] -> [B, H, S, D]
+        var split = Engine.Reshape(tensor, new[] { batch, numHeads, seq, headDim });
+        // -> [B, S, H, D]
+        var permuted = Engine.TensorPermute(split, new[] { 0, 2, 1, 3 });
+        // -> [B, S, H·D]
+        return Engine.Reshape(permuted, new[] { batch, seq, numHeads * headDim });
     }
 
     /// <summary>
-    /// Adds with gating using IEngine for hardware acceleration.
-    /// result = x + gate * residual
+    /// Gated residual add: <c>result = x + gateView * residual</c>.
+    /// <paramref name="gateView"/> is a <c>[B, 1, hidden]</c> view sliced from
+    /// the AdaLN modulation tensor — no scratch allocation, no scalar fill.
+    /// Uses <see cref="IEngine.TensorBroadcastMultiply"/> for the per-channel
+    /// gate broadcast.
     /// </summary>
-    private Tensor<T> AddWithGate(Tensor<T> x, Tensor<T> residual, T[] gate)
+    private Tensor<T> AddWithGate(Tensor<T> x, Tensor<T> residual, Tensor<T> gateView)
     {
-        var hidden = x.Shape[^1];
-
-        // Create broadcastable gate tensor: [1, 1, hidden]
-        var gateTensor = TensorAllocator.Rent<T>(new[] { 1, 1, hidden });
-        var gateSpan = gateTensor.AsWritableSpan();
-        for (int h = 0; h < hidden; h++)
-        {
-            gateSpan[h] = gate[h % gate.Length];
-        }
-
-        // result = x + gate * residual
-        var gated = Engine.TensorMultiply<T>(residual, gateTensor);
+        var gated = Engine.TensorBroadcastMultiply<T>(residual, gateView);
         return Engine.TensorAdd<T>(x, gated);
     }
 
     /// <summary>
-    /// Final layer with AdaLN zero using batched forward pass.
+    /// Final layer with AdaLN-zero using batched forward pass.
     /// </summary>
+    /// <remarks>
+    /// Modulation slicing matches <see cref="ForwardBlock"/>: reshape to
+    /// <c>[B, 2, 1, hidden]</c> then <see cref="IEngine.TensorSliceAxis"/> for
+    /// shift/scale views. Reshape between the projection input and output uses
+    /// <see cref="IEngine.Reshape"/> views instead of
+    /// <c>TensorAllocator.Rent</c>+<c>CopyTo</c> scratch buffers, eliminating
+    /// two allocations per inference step.
+    /// </remarks>
     private Tensor<T> FinalLayerWithAdaLN(Tensor<T> x, Tensor<T> timeEmbed)
     {
         if (_finalNorm == null || _adaln_modulation == null || _outputProj == null)
             throw new InvalidOperationException("Final layers not initialized.");
 
-        // Get final modulation (scale, shift)
         var modulation = _adaln_modulation.Forward(timeEmbed);
-        var modSpan = modulation.AsSpan();
+        int stride = 2 * _hiddenSize;
+        if (modulation.Length % stride != 0)
+        {
+            throw new InvalidOperationException(
+                $"Final-layer AdaLN modulation output length {modulation.Length} is not divisible " +
+                $"by 2 * hiddenSize ({stride}). The final-layer modulation MLP must emit exactly " +
+                $"2 * {_hiddenSize} = {stride} parameters per sample (shift + scale). Check the " +
+                $"layer that produced `timeEmbed` and `_adaln_modulation`.");
+        }
+        int batchM = modulation.Length / stride;
+        var modReshaped = Engine.Reshape(modulation, new[] { batchM, 2, 1, _hiddenSize });
+        var shiftView = Engine.TensorSliceAxis(modReshaped, axis: 1, index: 0);
+        var scaleView = Engine.TensorSliceAxis(modReshaped, axis: 1, index: 1);
 
-        var shift = ExtractModulation(modSpan, 0, _hiddenSize);
-        var scale = ExtractModulation(modSpan, _hiddenSize, _hiddenSize);
-
-        // Apply final norm with AdaLN
         var normed = _finalNorm.Forward(x);
-        normed = ApplyAdaLN(normed, scale, shift);
+        normed = ApplyAdaLN(normed, scaleView, shiftView);
 
-        // Project to output dimension using batched forward pass
         var shape = normed._shape;
         var batch = shape[0];
         var numPatches = shape[1];
         var patchDim = _inputChannels * _patchSize * _patchSize;
 
-        // Reshape [batch, numPatches, hiddenSize] -> [batch*numPatches, hiddenSize]
-        var flatNormed = TensorAllocator.Rent<T>(new[] { batch * numPatches, _hiddenSize });
-        normed.AsSpan().CopyTo(flatNormed.AsWritableSpan());
-
-        // Single batched forward pass
+        // [batch, numPatches, hiddenSize] -> [batch*numPatches, hiddenSize] via view.
+        var flatNormed = Engine.Reshape(normed, new[] { batch * numPatches, _hiddenSize });
         var projected = _outputProj.Forward(flatNormed);
-
-        // Reshape back to [batch, numPatches, patchDim]
-        var output = TensorAllocator.Rent<T>(new[] { batch, numPatches, patchDim });
-        projected.AsSpan().CopyTo(output.AsWritableSpan());
-
-        return output;
+        // Back to [batch, numPatches, patchDim] via view.
+        return Engine.Reshape(projected, new[] { batch, numPatches, patchDim });
     }
 
     /// <summary>
-    /// Converts patches back to image.
+    /// Inverse of <see cref="Patchify"/> — reconstructs the spatial image.
     /// </summary>
+    /// <remarks>
+    /// <c>[B, numPatches, C·p·p]</c> → reshape <c>[B, H/p, W/p, C, p, p]</c>
+    /// → permute to <c>[B, C, H/p, p, W/p, p]</c>
+    /// → reshape <c>[B, C, H, W]</c>. Same vectorized-memcpy + view pattern
+    /// as <see cref="Patchify"/> — zero scalar loops, one materialization.
+    /// </remarks>
     private Tensor<T> Unpatchify(Tensor<T> patches, int height, int width)
     {
         var shape = patches._shape;
         var batch = shape[0];
-        var patchDim = shape[2];
 
         var numPatchesH = height / _patchSize;
         var numPatchesW = width / _patchSize;
 
-        var output = TensorAllocator.Rent<T>(new[] { batch, _inputChannels, height, width });
-        var outputSpan = output.AsWritableSpan();
-        var patchSpan = patches.AsSpan();
-
-        for (int b = 0; b < batch; b++)
-        {
-            int patchIdx = 0;
-            for (int ph = 0; ph < numPatchesH; ph++)
-            {
-                for (int pw = 0; pw < numPatchesW; pw++)
-                {
-                    // Reconstruct patch
-                    int dimIdx = 0;
-                    for (int c = 0; c < _inputChannels; c++)
-                    {
-                        for (int py = 0; py < _patchSize; py++)
-                        {
-                            for (int px = 0; px < _patchSize; px++)
-                            {
-                                var ih = ph * _patchSize + py;
-                                var iw = pw * _patchSize + px;
-                                var dstIdx = b * _inputChannels * height * width +
-                                             c * height * width +
-                                             ih * width + iw;
-                                var srcIdx = b * numPatchesH * numPatchesW * patchDim +
-                                             patchIdx * patchDim + dimIdx;
-                                outputSpan[dstIdx] = patchSpan[srcIdx];
-                                dimIdx++;
-                            }
-                        }
-                    }
-                    patchIdx++;
-                }
-            }
-        }
-
-        return output;
+        // [B, numPatches, C·p·p] -> [B, H/p, W/p, C, p, p]
+        var unsplit = Engine.Reshape(patches,
+            new[] { batch, numPatchesH, numPatchesW, _inputChannels, _patchSize, _patchSize });
+        // -> [B, C, H/p, p, W/p, p]  (inverse permutation: axes 0, 3, 1, 4, 2, 5)
+        var permuted = Engine.TensorPermute(unsplit, new[] { 0, 3, 1, 4, 2, 5 });
+        // -> [B, C, H, W]
+        return Engine.Reshape(permuted, new[] { batch, _inputChannels, height, width });
     }
 
     /// <inheritdoc />

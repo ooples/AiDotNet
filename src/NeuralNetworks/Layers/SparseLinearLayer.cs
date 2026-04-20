@@ -101,21 +101,26 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         _weights.NonZeroCount + OutputFeatures;
 
     /// <summary>
-    /// Gets whether this layer supports training. Returns <c>false</c> because this layer's
-    /// sparse weight tensor is not exposed to the tape-based autodiff path: the layer has no
-    /// <c>[TrainableParameter]</c> fields and never calls <c>RegisterTrainableParameter</c>,
-    /// so <c>TapeTrainingStep.CollectParameters</c> finds zero parameters here. In tape mode
-    /// (the default), the layer would be silently skipped while its peers train — producing
-    /// a partially-trainable network that is almost never the intended behavior.
+    /// Gets whether this layer supports training. Returns <c>true</c>: the layer
+    /// owns a working <see cref="UpdateParameters"/> that updates its sparse
+    /// weight tensor and dense bias vector from gradients computed in
+    /// <see cref="Backward"/>, and the legacy training path
+    /// (<c>if (layer.SupportsTraining) layer.UpdateParameters(lr)</c>) trains
+    /// the layer correctly. Biases are also registered as a tape trainable
+    /// parameter, so tape-mode optimizers update them too.
     /// </summary>
     /// <remarks>
-    /// Sparse weight tensors don't fit the dense <c>ParameterBuffer&lt;T&gt;</c> view
-    /// contract used by the tape, so returning <c>false</c> here keeps the layer's inference
-    /// behavior correct while explicitly advertising that no gradient updates flow through
-    /// it. Integrating sparse parameters into the tape (e.g., via a sparse trainable tensor
-    /// view) is the follow-up required before this can flip back to <c>true</c>.
+    /// <para><b>Tape-mode caveat:</b> the sparse <see cref="SparseTensor{T}"/>
+    /// weight tensor is still not visible to the tape's
+    /// <c>ParameterBuffer&lt;T&gt;</c>-based discovery — that contract requires
+    /// dense storage. In tape mode, weight updates flow through the
+    /// layer's own <see cref="Backward"/> + <see cref="UpdateParameters"/>
+    /// when the optimizer falls back to the legacy update path; weight
+    /// gradients do not appear in the tape's flat-buffer view. Closing that
+    /// gap fully (sparse-aware <c>ParameterBuffer&lt;T&gt;</c>) is tracked as
+    /// a follow-up.</para>
     /// </remarks>
-    public override bool SupportsTraining => false;
+    public override bool SupportsTraining => true;
 
     /// <summary>
     /// Initializes a new instance of the SparseLinearLayer.

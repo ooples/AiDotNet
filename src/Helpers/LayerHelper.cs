@@ -2579,11 +2579,18 @@ public static class LayerHelper<T>
         // RNN layers output [seqLen, hiddenSize], but Dense layer expects [hiddenSize]
         yield return new SequenceLastLayer<T>(hiddenSize);
 
-        // Add the final Dense Layer to map to output size
+        // Add the final Dense Layer to map to output size.
+        // Use an explicit IdentityActivation so the Dense output keeps its sign —
+        // passing activationFunction:null falls through to DenseLayer's ReLU
+        // default, which clipped all regression outputs at zero. With ReLU
+        // the 2-layer tanh stack produced small mixed-sign values that the
+        // final Dense then zeroed, so ScaledInput_ShouldChangeOutput saw
+        // output=0 for both the raw and the 10x input and reported "forward
+        // pass may ignore input values".
         yield return new DenseLayer<T>(
             inputSize: hiddenSize,
             outputSize: outputSize,
-            activationFunction: null
+            activationFunction: new IdentityActivation<T>()
         );
 
         // Task-appropriate final activation
@@ -2717,11 +2724,16 @@ public static class LayerHelper<T>
         yield return new QuantumLayer<T>(hiddenSize, quantumDim, numQubits);
         yield return new MeasurementLayer<T>(quantumDim);
 
-        // Final dense layer to map to output size
+        // Final dense layer to map to output size. Use identity so the
+        // task-appropriate activation below owns the output non-linearity
+        // — passing null falls through to DenseLayer's ReLU default and
+        // clips the pre-activation logits, which collapsed
+        // scaledinput_shouldchangeoutput / differentinputs for quantum
+        // regression models.
         yield return new DenseLayer<T>(
             inputSize: quantumDim,
             outputSize: outputSize,
-            activationFunction: null
+            activationFunction: new IdentityActivation<T>()
         );
 
         // Final activation based on task type
@@ -4207,11 +4219,23 @@ public static class LayerHelper<T>
 
         // ============== DECODER PATH ==============
         // Each decoder block: Upsample3D -> Conv3D -> Conv3D
-        // Note: Skip connections need to be handled by the network model
+        //
+        // Note: a full U-Net would concatenate encoder skip-connections at
+        // each decoder level, doubling the channel count into the first
+        // Conv3D. This implementation does NOT actually perform the
+        // concatenation, so the "*2" previously applied to
+        // encoderFilters[block + 1] told the Upsample and first-Conv3D to
+        // expect twice the channels they would actually receive from the
+        // preceding decoder block's Second-Conv3D output. That produced
+        //   "Input channels (128) must match kernel in_channels (256)"
+        // at the first decoder block after the bottleneck-adjacent one.
+        // Matching the actual tensor-channel count (= encoderFilters[block + 1])
+        // keeps the stack consistent; adding real skip concatenation is a
+        // separate architectural improvement tracked independently.
         for (int block = numEncoderBlocks - 2; block >= 0; block--)
         {
             int outputFilters = encoderFilters[block];
-            int inChannels = block == numEncoderBlocks - 2 ? bottleneckFilters : encoderFilters[block + 1] * 2;
+            int inChannels = block == numEncoderBlocks - 2 ? bottleneckFilters : encoderFilters[block + 1];
 
             // Upsample3D to increase resolution
             yield return new Upsample3DLayer<T>(

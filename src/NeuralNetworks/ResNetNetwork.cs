@@ -441,7 +441,7 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
                 nameof(ResNetNetwork<T>),
                 "forward pass");
             addedBatch = true;
-            processedInput = AddBatchDimension(input);
+            processedInput = PromoteToBatchedTensor(input);
         }
         else if (input.Rank == 4)
         {
@@ -475,20 +475,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Adds a batch dimension to a single input tensor.
-    /// </summary>
-    private static Tensor<T> AddBatchDimension(Tensor<T> input)
-    {
-        int[] inputShape = input._shape;
-        int[] resultShape = new int[inputShape.Length + 1];
-        resultShape[0] = 1;
-        for (int i = 0; i < inputShape.Length; i++)
-        {
-            resultShape[i + 1] = inputShape[i];
-        }
-        return input.Reshape(resultShape);
-    }
 
     /// <summary>
     /// Updates the parameters of all layers in the network.
@@ -521,12 +507,26 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="input">The input tensor for training.</param>
     /// <param name="expectedOutput">The expected output tensor (one-hot encoded class labels).</param>
+    /// <remarks>
+    /// Accepts both 3D <c>[C, H, W]</c> (single unbatched example) and 4D
+    /// <c>[B, C, H, W]</c> inputs — matches <see cref="Forward"/>'s contract.
+    /// When a 3D input arrives, a leading batch dimension is added so every
+    /// downstream layer sees the conv-standard 4D tensor. The corresponding
+    /// target is also expanded to <c>[1, numClasses]</c> so the loss sees
+    /// matching batch dims on both operands. Previously
+    /// <see cref="NeuralNetworkBase{T}.ForwardForTraining"/> fed the raw 3D
+    /// tensor straight to the layer stack, which caused the FlattenLayer to
+    /// treat the 512-channel dimension as a batch and produce a
+    /// <c>[512, 10]</c> prediction — failing the loss shape check in
+    /// <c>EnsureTargetMatchesPredicted</c>.
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
+            var (processedInput, processedTarget) = EnsureBatchForCnnTraining(input, expectedOutput);
+            TrainWithTape(processedInput, processedTarget, _optimizer);
         }
         finally
         {

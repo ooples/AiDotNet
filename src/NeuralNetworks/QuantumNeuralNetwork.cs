@@ -281,20 +281,26 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Set training mode on all layers for proper gradient storage
         SetTrainingMode(true);
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
 
-        // Forward pass
-        var prediction = Predict(input);
-
-        // Calculate and set the loss
-        LastLoss = CalculateLoss(prediction, expectedOutput);
-
-        // Tape-based training handles gradient computation
-        var gradients = new List<Tensor<T>>();
-        UpdateQuantumParameters(gradients);
+        try
+        {
+            // Use the tape-based training path like other networks. The previous
+            // imperative implementation ran Predict() and then called the
+            // optimizer's UpdateParameters(Layers), which dispatched to each
+            // layer's UpdateParameters(learningRate) — that expects a prior
+            // Backward() to have populated the per-layer gradient tensors,
+            // but none of that happens here, so every training call failed
+            // with "Backward pass must be called before updating parameters."
+            _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            TrainWithTape(input, expectedOutput, _trainOptimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

@@ -59,10 +59,28 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify required build secrets
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          # Fail the job here rather than deploying a site that silently
+          # disables auth. Astro bakes these at build time — a missing or
+          # rotated secret would otherwise produce a broken production bundle.
+          : "${PUBLIC_SUPABASE_URL:?Missing PUBLIC_SUPABASE_URL GitHub secret}"
+          : "${PUBLIC_SUPABASE_ANON_KEY:?Missing PUBLIC_SUPABASE_ANON_KEY GitHub secret}"
+
       - name: Build website
         run: npx astro build
         env:
           VERCEL: '1'
+          # Astro bakes import.meta.env.PUBLIC_* values at build time. Without these
+          # the client-side Supabase client throws "Missing Supabase environment
+          # variables" at page load, which in turn means every script that imports
+          # src/lib/supabase.ts crashes — sign-in buttons silently become no-ops.
+          # Keep these in lockstep with the Vercel project env vars.
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: Verify build output
         run: |

@@ -1019,7 +1019,28 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateSpatialResBlock(int inChannels, int outChannels)
     {
-        return LazyDense(inChannels, outChannels, new SiLUActivation<T>());
+        // A diffusion spatial ResBlock transforms the channel dimension of a
+        // 4D [B, C, H, W] feature map. The previous implementation used
+        // LazyDense(inChannels, outChannels), but DenseLayer projects the
+        // *last* dimension of its input — for a 4D tensor that is the width
+        // axis, not channels. The block therefore left C unchanged while
+        // scrambling W to outChannels, and every subsequent TimeCondProjection
+        // (sized for the planned outChannels) saw a feature map still at the
+        // incoming channel count — hence "FiLM conditioning projection width
+        // mismatch: expected 640, got 1280" on upscaleavideomodel and
+        // streamingt2vmodel tests.
+        // A 1x1 Conv2D is the standard channel-mixing primitive: it consumes
+        // [B, inChannels, H, W] and produces [B, outChannels, H, W] while
+        // leaving spatial dims alone.
+        return LazyConv2D(
+            inputDepth: inChannels,
+            inputHeight: 1,
+            inputWidth: 1,
+            outputDepth: outChannels,
+            kernelSize: 1,
+            stride: 1,
+            padding: 0,
+            activation: new SiLUActivation<T>());
     }
 
     /// <summary>

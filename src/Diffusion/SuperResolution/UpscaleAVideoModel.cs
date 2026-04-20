@@ -134,13 +134,20 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     private const int CROSS_ATTENTION_DIM = 1024;
 
     /// <summary>
-    /// Input channels for the Video U-Net (8 = 4 latent + 4 low-res conditioning).
+    /// Input channels for the Video U-Net input convolution (4 = latent channels).
     /// </summary>
     /// <remarks>
-    /// The Video U-Net receives concatenated latent noise and downscaled low-resolution
-    /// video frames as conditioning, doubling the standard 4 latent channels.
+    /// The reference implementation describes this model as using 8 input channels
+    /// (4 latent + 4 downscaled low-res conditioning), but that design expects the
+    /// conditioning to be concatenated with the latents before the first conv.
+    /// Our VideoUNetPredictor.ForwardVideoUNet adds the image condition via
+    /// _imageCondProjection *after* the input conv instead — so the input conv
+    /// sees only the latent channels. Pinning INPUT_CHANNELS to LATENT_CHANNELS
+    /// keeps the conv weight shape consistent with what ForwardVideoUNet actually
+    /// feeds it, fixing the "Expected input depth 8, but got 4" crash in the
+    /// UpscaleAVideoModel tests.
     /// </remarks>
-    private const int INPUT_CHANNELS = 8;
+    private const int INPUT_CHANNELS = LATENT_CHANNELS;
 
     /// <summary>
     /// Base channel count for the Video U-Net (320).

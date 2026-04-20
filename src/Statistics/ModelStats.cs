@@ -552,14 +552,16 @@ public class ModelStats<T, TInput, TOutput>
     /// </remarks>
     private void CalculateModelStats(ModelStatsInputs<T, TInput, TOutput> inputs)
     {
-        // Convert input matrix to Matrix<T> for statistical calculations
+        // All intermediate values held in locals until the end. Previous code
+        // read CorrelationMatrix and CovarianceMatrix through their property
+        // getters during computation; those getters call
+        // EnsureFullStatsComputed, which re-enters this method — unbounded
+        // recursion + StackOverflowException. Same bug class as BasicStats /
+        // ErrorStats / PredictionStats.
         Matrix<T> matrix = ConversionsHelper.ConvertToMatrix<T, TInput>(inputs.XMatrix);
-
-        // Convert actual and predicted values to Vector<T> for statistical calculations
         Vector<T> actual = ConversionsHelper.ConvertToVector<T, TOutput>(inputs.Actual);
         Vector<T> predicted = ConversionsHelper.ConvertToVector<T, TOutput>(inputs.Predicted);
 
-        // Convert coefficients if available
         Vector<T> coefficients = Vector<T>.Empty();
         if (inputs.Coefficients != null)
         {
@@ -568,64 +570,89 @@ public class ModelStats<T, TInput, TOutput>
 
         var featureCount = inputs.FeatureCount;
 
-        // Calculate all statistical metrics using the converted data types
-        CorrelationMatrix = StatisticsHelper<T>.CalculateCorrelationMatrix(matrix, _options);
-        CovarianceMatrix = StatisticsHelper<T>.CalculateCovarianceMatrix(matrix);
-        VIFList = StatisticsHelper<T>.CalculateVIF(CorrelationMatrix, _options);
-        ConditionNumber = StatisticsHelper<T>.CalculateConditionNumber(matrix, _options);
-        LogPointwisePredictiveDensity = StatisticsHelper<T>.CalculateLogPointwisePredictiveDensity(actual, predicted);
+        var correlationMatrix = StatisticsHelper<T>.CalculateCorrelationMatrix(matrix, _options);
+        var covarianceMatrix = StatisticsHelper<T>.CalculateCovarianceMatrix(matrix);
+        var vifList = StatisticsHelper<T>.CalculateVIF(correlationMatrix, _options);
+        T conditionNumber = StatisticsHelper<T>.CalculateConditionNumber(matrix, _options);
+        T logPpd = StatisticsHelper<T>.CalculateLogPointwisePredictiveDensity(actual, predicted);
 
+        List<T>? looPd = null;
         if (inputs.FitFunction != null)
         {
-            // Convert the fit function to work with Matrix<T> and Vector<T>
             var convertedFitFunction = ConversionsHelper.ConvertFitFunction<T, TInput, TOutput>(inputs.FitFunction);
-
-            // Create a wrapper function that matches the expected signature
             Vector<T> wrappedFitFunction(Matrix<T> m, Vector<T> v) => convertedFitFunction(m);
-            LeaveOneOutPredictiveDensities = StatisticsHelper<T>.CalculateLeaveOneOutPredictiveDensities(matrix, actual, wrappedFitFunction);
+            looPd = StatisticsHelper<T>.CalculateLeaveOneOutPredictiveDensities(matrix, actual, wrappedFitFunction);
         }
 
-        ObservedTestStatistic = StatisticsHelper<T>.CalculateObservedTestStatistic(actual, predicted);
-        PosteriorPredictiveSamples = StatisticsHelper<T>.CalculatePosteriorPredictiveSamples(actual, predicted, featureCount);
-        MarginalLikelihood = StatisticsHelper<T>.CalculateMarginalLikelihood(actual, predicted, featureCount);
-        ReferenceModelMarginalLikelihood = StatisticsHelper<T>.CalculateReferenceModelMarginalLikelihood(actual);
-        LogLikelihood = StatisticsHelper<T>.CalculateLogLikelihood(actual, predicted);
-        EffectiveNumberOfParameters = StatisticsHelper<T>.CalculateEffectiveNumberOfParameters(matrix, coefficients);
-        MutualInformation = StatisticsHelper<T>.CalculateMutualInformation(actual, predicted);
-        NormalizedMutualInformation = StatisticsHelper<T>.CalculateNormalizedMutualInformation(actual, predicted);
-        VariationOfInformation = StatisticsHelper<T>.CalculateVariationOfInformation(actual, predicted);
-        SilhouetteScore = StatisticsHelper<T>.CalculateSilhouetteScore(matrix, predicted);
-        CalinskiHarabaszIndex = StatisticsHelper<T>.CalculateCalinskiHarabaszIndex(matrix, predicted);
-        DaviesBouldinIndex = StatisticsHelper<T>.CalculateDaviesBouldinIndex(matrix, predicted);
-        MeanAveragePrecision = StatisticsHelper<T>.CalculateMeanAveragePrecision(actual, predicted, _options.MapTopK);
-        NormalizedDiscountedCumulativeGain = StatisticsHelper<T>.CalculateNDCG(actual, predicted, _options.NdcgTopK);
-        MeanReciprocalRank = StatisticsHelper<T>.CalculateMeanReciprocalRank(actual, predicted);
+        T observedTest = StatisticsHelper<T>.CalculateObservedTestStatistic(actual, predicted);
+        var posteriorSamples = StatisticsHelper<T>.CalculatePosteriorPredictiveSamples(actual, predicted, featureCount);
+        T marginalLik = StatisticsHelper<T>.CalculateMarginalLikelihood(actual, predicted, featureCount);
+        T refModelML = StatisticsHelper<T>.CalculateReferenceModelMarginalLikelihood(actual);
+        T logLik = StatisticsHelper<T>.CalculateLogLikelihood(actual, predicted);
+        T effParams = StatisticsHelper<T>.CalculateEffectiveNumberOfParameters(matrix, coefficients);
+        T mi = StatisticsHelper<T>.CalculateMutualInformation(actual, predicted);
+        T nmi = StatisticsHelper<T>.CalculateNormalizedMutualInformation(actual, predicted);
+        T voi = StatisticsHelper<T>.CalculateVariationOfInformation(actual, predicted);
+        T silhouette = StatisticsHelper<T>.CalculateSilhouetteScore(matrix, predicted);
+        T ch = StatisticsHelper<T>.CalculateCalinskiHarabaszIndex(matrix, predicted);
+        T db = StatisticsHelper<T>.CalculateDaviesBouldinIndex(matrix, predicted);
+        T mAP = StatisticsHelper<T>.CalculateMeanAveragePrecision(actual, predicted, _options.MapTopK);
+        T ndcg = StatisticsHelper<T>.CalculateNDCG(actual, predicted, _options.NdcgTopK);
+        T mrr = StatisticsHelper<T>.CalculateMeanReciprocalRank(actual, predicted);
 
-        // Calculate residuals and time series metrics
         var residuals = StatisticsHelper<T>.CalculateResiduals(actual, predicted);
-        AutoCorrelationFunction = StatisticsHelper<T>.CalculateAutoCorrelationFunction(residuals, _options.AcfMaxLag);
-        PartialAutoCorrelationFunction = StatisticsHelper<T>.CalculatePartialAutoCorrelationFunction(residuals, _options.PacfMaxLag);
+        var acf = StatisticsHelper<T>.CalculateAutoCorrelationFunction(residuals, _options.AcfMaxLag);
+        var pacf = StatisticsHelper<T>.CalculatePartialAutoCorrelationFunction(residuals, _options.PacfMaxLag);
 
-        // Calculate distance metrics
-        EuclideanDistance = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Euclidean);
-        ManhattanDistance = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Manhattan);
-        CosineSimilarity = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Cosine);
-        JaccardSimilarity = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Jaccard);
-        HammingDistance = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Hamming);
+        T euclidean = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Euclidean);
+        T manhattan = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Manhattan);
+        T cosine = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Cosine);
+        T jaccard = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Jaccard);
+        T hamming = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Hamming);
 
-        // Mahalanobis distance requires vector dimensions to match covariance matrix dimensions
-        // Skip calculation if dimensions don't match (covariance is feature x feature, not sample x sample)
+        T mahalanobis = _numOps.Zero;
         try
         {
-            if (CovarianceMatrix.Rows == actual.Length && CovarianceMatrix.Columns == actual.Length)
+            if (covarianceMatrix.Rows == actual.Length && covarianceMatrix.Columns == actual.Length)
             {
-                MahalanobisDistance = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Mahalanobis, CovarianceMatrix);
+                mahalanobis = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Mahalanobis, covarianceMatrix);
             }
         }
         catch (ArgumentException)
         {
-            // Silently skip Mahalanobis distance calculation when dimensions don't match
+            // Silently skip Mahalanobis distance calculation when dimensions don't match.
         }
+
+        // Assign properties once every dependency is a local — no re-entry.
+        CorrelationMatrix = correlationMatrix;
+        CovarianceMatrix = covarianceMatrix;
+        VIFList = vifList;
+        ConditionNumber = conditionNumber;
+        LogPointwisePredictiveDensity = logPpd;
+        if (looPd != null) LeaveOneOutPredictiveDensities = looPd;
+        ObservedTestStatistic = observedTest;
+        PosteriorPredictiveSamples = posteriorSamples;
+        MarginalLikelihood = marginalLik;
+        ReferenceModelMarginalLikelihood = refModelML;
+        LogLikelihood = logLik;
+        EffectiveNumberOfParameters = effParams;
+        MutualInformation = mi;
+        NormalizedMutualInformation = nmi;
+        VariationOfInformation = voi;
+        SilhouetteScore = silhouette;
+        CalinskiHarabaszIndex = ch;
+        DaviesBouldinIndex = db;
+        MeanAveragePrecision = mAP;
+        NormalizedDiscountedCumulativeGain = ndcg;
+        MeanReciprocalRank = mrr;
+        AutoCorrelationFunction = acf;
+        PartialAutoCorrelationFunction = pacf;
+        EuclideanDistance = euclidean;
+        ManhattanDistance = manhattan;
+        CosineSimilarity = cosine;
+        JaccardSimilarity = jaccard;
+        HammingDistance = hamming;
+        MahalanobisDistance = mahalanobis;
     }
 
     /// <summary>

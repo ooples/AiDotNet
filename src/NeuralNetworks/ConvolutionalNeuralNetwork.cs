@@ -260,7 +260,18 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
+            // Accept both 3D [C, H, W] and 4D [B, C, H, W] inputs — matches the
+            // Forward contract. ForwardForTraining runs the raw tensor through
+            // every layer without adjusting rank, so a 3D input would make the
+            // final FlattenLayer treat the 32-channel dimension as a batch
+            // (flatten preserves dim 0), producing a [32, 10] prediction
+            // against a [10] one-hot target — fails the loss shape check:
+            //   "Target shape dimension 0 (10) does not match predicted
+            //    shape dimension 0 (32)."
+            // Mirror ResNet/VGG/MobileNetV2's fix: expand input and target to
+            // 4D (and 2D respectively) before dispatching to TrainWithTape.
+            var (processedInput, processedTarget) = EnsureBatchForCnnTraining(input, expectedOutput);
+            TrainWithTape(processedInput, processedTarget, _optimizer);
         }
         finally
         {
