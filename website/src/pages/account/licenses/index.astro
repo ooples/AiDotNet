@@ -42,6 +42,42 @@ const base = import.meta.env.BASE_URL;
       <p class="text-sm text-slate-500 dark:text-slate-400">Loading your licenses...</p>
     </div>
 
+    <!--
+      Post-checkout provisioning banner. Shown only when the URL carries
+      ?new=true (set by Stripe Payment Links' success redirect). The page
+      polls license_keys until the Stripe webhook creates the new row, so
+      the customer doesn't see an empty "No licenses yet" state in the
+      ~1-3 second window between Stripe redirect and webhook fan-out.
+    -->
+    <div id="new-license-banner" class="hidden bg-gradient-to-r from-brand-blue/10 to-brand-purple/10 border border-brand-blue/30 rounded-2xl p-6">
+      <div class="flex items-center gap-4">
+        <!--
+          Three pre-rendered SVG icons for the banner's three states:
+          loading (spinner), success (checkmark), and timeout (warning).
+          The client-side script toggles the `hidden` class on each —
+          it never calls innerHTML. Keeping the SVGs in the markup means
+          no future change to the status-display code can accidentally
+          introduce an HTML-injection surface.
+        -->
+        <div class="shrink-0">
+          <svg id="new-license-icon-loading" class="w-6 h-6 text-brand-blue animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <svg id="new-license-icon-success" class="hidden w-6 h-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+          <svg id="new-license-icon-warning" class="hidden w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+          </svg>
+        </div>
+        <div class="flex-1">
+          <p id="new-license-title" class="text-sm font-semibold text-slate-900 dark:text-white">Issuing your license...</p>
+          <p id="new-license-subtitle" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">This usually takes a couple of seconds.</p>
+        </div>
+      </div>
+    </div>
+
     <!-- License cards -->
     <div id="licenses-container" class="hidden space-y-4">
     </div>
@@ -93,16 +129,55 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
       is_active: boolean;
     }
 
+    // Checkout success redirect arrives with ?new=true. When set, we
+    // render the spinner banner instead of the "No licenses yet" empty
+    // state and poll license_keys until the stripe-webhook edge function's
+    // INSERT lands.
+    //
+    // Timing assumptions:
+    //   - p50 webhook latency: ~1.5s (Stripe redirect → webhook event
+    //                                 delivered → INSERT visible).
+    //   - p99 webhook latency: ~5-8s (Stripe retries + edge function
+    //                                 cold-start worst case).
+    //   - POLL_INTERVAL_MS = 1s keeps us under the read-rate limit with
+    //     a wide margin and matches the p50 so first-paint of the new
+    //     license happens within ~2s of arrival.
+    //   - POLL_TIMEOUT_MS = 30s is 3-5x the p99 so any legitimate slow
+    //     webhook still wins, while a truly stuck webhook surfaces to
+    //     the user as the amber "taking longer than expected" banner
+    //     instead of an infinite spinner.
+    //   - baseline count: how many licenses exist BEFORE the new one
+    //                     arrives. Polling waits for count to INCREASE
+    //                     so a customer who already held other-tier
+    //                     licenses sees the new row specifically, not
+    //                     their old ones.
+    //
+    // Revisit these numbers if the webhook pipeline changes (e.g., if
+    // stripe-webhook starts calling an external API during provisioning).
+    const POLL_INTERVAL_MS = 1000;
+    const POLL_TIMEOUT_MS = 30_000;
+    const urlParams = new URLSearchParams(window.location.search);
+    const isPostCheckout = urlParams.get('new') === 'true';
+
     async function loadLicenses() {
       const loadingEl = document.getElementById('licenses-loading');
       const noLicensesEl = document.getElementById('no-licenses');
       const containerEl = document.getElementById('licenses-container');
       const setupEl = document.getElementById('setup-section');
+      const bannerEl = document.getElementById('new-license-banner');
 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        window.location.href = `${import.meta.env.BASE_URL}login/?redirect=${encodeURIComponent(window.location.pathname)}`;
+        window.location.href = `${import.meta.env.BASE_URL}login/?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
         return;
+      }
+
+      // Post-checkout flow: reveal the provisioning banner before the
+      // first fetch so the user sees the spinner instantly rather than
+      // any flash of the default loading state.
+      if (isPostCheckout && bannerEl) {
+        bannerEl.classList.remove('hidden');
+        if (loadingEl) loadingEl.classList.add('hidden');
       }
 
       const { data: licenses, error } = await supabase
@@ -111,7 +186,68 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: false });
 
-      if (loadingEl) loadingEl.classList.add('hidden');
+      if (loadingEl && !isPostCheckout) loadingEl.classList.add('hidden');
+
+      // Post-checkout: if the license list hasn't grown since we arrived,
+      // the Stripe webhook hasn't landed yet. Keep polling until it does
+      // (or we hit the deadline). First render sets the baseline to the
+      // current count; subsequent renders short-circuit the poll when the
+      // count goes up.
+      if (isPostCheckout && !error) {
+        const initialCount = licenses?.length ?? 0;
+        const ok = await pollUntilNewLicenseAppears(session.user.id, initialCount);
+        // Toggle one of three pre-rendered SVG icons instead of rewriting
+        // innerHTML. Static markup in the template makes future status
+        // additions a matter of adding another element + toggle, not a
+        // new innerHTML sink.
+        const iconLoading = document.getElementById('new-license-icon-loading');
+        const iconSuccess = document.getElementById('new-license-icon-success');
+        const iconWarning = document.getElementById('new-license-icon-warning');
+        if (ok && bannerEl) {
+          // Success: swap banner copy + icon, then hide the banner after
+          // a brief celebratory pause so the new license row can render.
+          const title = document.getElementById('new-license-title');
+          const subtitle = document.getElementById('new-license-subtitle');
+          if (title) title.textContent = 'License issued!';
+          if (subtitle) subtitle.textContent = 'Your new key is ready below.';
+          iconLoading?.classList.add('hidden');
+          iconSuccess?.classList.remove('hidden');
+          setTimeout(() => bannerEl.classList.add('hidden'), 2500);
+        } else if (bannerEl) {
+          const title = document.getElementById('new-license-title');
+          const subtitle = document.getElementById('new-license-subtitle');
+          if (title) title.textContent = 'License issuance is taking longer than expected.';
+          if (subtitle) {
+            // Build the subtitle via DOM APIs instead of innerHTML. The
+            // content is static today, but swapping it out with a builder
+            // means future maintainers can't accidentally introduce an
+            // HTML-injection vector by interpolating a user-supplied
+            // value (error message, email address, etc.) into the string.
+            subtitle.textContent = 'Please refresh in a minute. If the license still isn\'t here, email ';
+            const mailLink = document.createElement('a');
+            mailLink.href = 'mailto:support@aidotnet.dev';
+            mailLink.className = 'underline';
+            mailLink.textContent = 'support@aidotnet.dev';
+            subtitle.appendChild(mailLink);
+            subtitle.append('.');
+          }
+          iconLoading?.classList.add('hidden');
+          iconWarning?.classList.remove('hidden');
+        }
+        // Replace the URL so the banner doesn't reappear if the user
+        // clicks browser-back or refreshes after success.
+        const cleanUrl = window.location.pathname + window.location.hash;
+        history.replaceState(null, '', cleanUrl);
+        // Re-fetch once more to render the final list with the new row.
+        const { data: refreshed } = await supabase
+          .from('license_keys')
+          .select('id, license_key, tier, status, max_activations, organization_name, issued_at, expires_at')
+          .eq('user_id', session.user.id)
+          .order('created_at', { ascending: false });
+        if (refreshed) await renderLicenses(refreshed);
+        if (loadingEl) loadingEl.classList.add('hidden');
+        return;
+      }
 
       if (error) {
         console.error('Failed to load licenses:', error);
@@ -122,19 +258,70 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
         return;
       }
 
+      await renderLicenses(licenses);
+    }
+
+    /**
+     * Polls license_keys until the user's license count exceeds
+     * `initialCount`, or POLL_TIMEOUT_MS elapses. Resolves `true` when a
+     * new row appears, `false` on timeout.
+     *
+     * Used exclusively after a Stripe Payment Link success redirect
+     * (`?new=true`) to cover the async gap between Stripe's redirect and
+     * the stripe-webhook edge function's INSERT.
+     */
+    async function pollUntilNewLicenseAppears(userId: string, initialCount: number): Promise<boolean> {
+      const deadline = Date.now() + POLL_TIMEOUT_MS;
+      // Check first, sleep between retries. If the Stripe webhook already
+      // landed while the initial loadLicenses() fetch was in flight, the
+      // first poll wins immediately and we save a full POLL_INTERVAL_MS
+      // of spinner time on the happy path.
+      while (true) {
+        // head=true + count=exact asks PostgREST for just the Content-Range
+        // row count, not the rows themselves. Saves fetching every license
+        // ID on every poll iteration — negligible for a handful of licenses
+        // but a real win for enterprise users with many.
+        const { count, error: pollError } = await supabase
+          .from('license_keys')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId);
+        if (pollError) {
+          console.error('License poll failed:', pollError);
+        } else if ((count ?? 0) > initialCount) {
+          return true;
+        }
+        if (Date.now() >= deadline) return false;
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      }
+    }
+
+    /**
+     * Renders the license list + setup instructions. Extracted so both the
+     * normal load path and the post-checkout polling path can share the
+     * exact same rendering behavior.
+     */
+    async function renderLicenses(licenses: LicenseKey[]) {
+      const noLicensesEl = document.getElementById('no-licenses');
+      const containerEl = document.getElementById('licenses-container');
+      const setupEl = document.getElementById('setup-section');
+
       if (!licenses || licenses.length === 0) {
         if (noLicensesEl) noLicensesEl.classList.remove('hidden');
+        if (containerEl) containerEl.classList.add('hidden');
+        if (setupEl) setupEl.classList.add('hidden');
         return;
       }
 
-      // Store licenses for secure key lookup (copy button handler)
-      loadedLicenses = licenses.map(l => ({ id: l.id, license_key: l.license_key }));
+      // Store for secure Copy-Key handler lookup (keeps the raw key out of
+      // the rendered DOM — we only show a masked preview).
+      loadedLicenses = licenses.map((l) => ({ id: l.id, license_key: l.license_key }));
 
+      if (noLicensesEl) noLicensesEl.classList.add('hidden');
       if (containerEl) containerEl.classList.remove('hidden');
       if (setupEl) setupEl.classList.remove('hidden');
 
       // Load activations for all licenses
-      const licenseIds = licenses.map(l => l.id);
+      const licenseIds = licenses.map((l) => l.id);
       const { data: activations, error: activationsError } = await supabase
         .from('license_activations')
         .select('id, license_key_id, machine_id_hash, hostname, os_description, first_seen_at, last_seen_at, is_active')
@@ -155,10 +342,11 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
       }
 
       if (containerEl) {
-        containerEl.innerHTML = licenses.map(l => renderLicenseCard(l, activationsByLicense.get(l.id) || [])).join('');
+        containerEl.innerHTML = licenses
+          .map((l) => renderLicenseCard(l, activationsByLicense.get(l.id) || []))
+          .join('');
 
-        // Update setup instructions with first active key
-        const activeKey = licenses.find(l => l.status === 'active');
+        const activeKey = licenses.find((l) => l.status === 'active');
         if (activeKey) {
           const envCode = document.getElementById('env-var-code');
           if (envCode) envCode.textContent = `AIDOTNET_LICENSE_KEY=${activeKey.license_key}`;
