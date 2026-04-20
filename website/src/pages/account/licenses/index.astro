@@ -115,15 +115,31 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
       is_active: boolean;
     }
 
-    // Checkout success redirect arrives with ?new=true. When set, we need
-    // to show a spinner instead of the "No licenses yet" empty state and
-    // poll for the Stripe webhook's INSERT to land. Polling config:
-    //   - cadence:         1 second
-    //   - total timeout:   30 seconds (well past the p99 webhook latency)
-    //   - baseline count:  how many licenses exist BEFORE the new one
-    //                      arrives. If the customer already held licenses
-    //                      at other tiers, we can't just wait for "any"
-    //                      license — we wait for count to increase.
+    // Checkout success redirect arrives with ?new=true. When set, we
+    // render the spinner banner instead of the "No licenses yet" empty
+    // state and poll license_keys until the stripe-webhook edge function's
+    // INSERT lands.
+    //
+    // Timing assumptions:
+    //   - p50 webhook latency: ~1.5s (Stripe redirect → webhook event
+    //                                 delivered → INSERT visible).
+    //   - p99 webhook latency: ~5-8s (Stripe retries + edge function
+    //                                 cold-start worst case).
+    //   - POLL_INTERVAL_MS = 1s keeps us under the read-rate limit with
+    //     a wide margin and matches the p50 so first-paint of the new
+    //     license happens within ~2s of arrival.
+    //   - POLL_TIMEOUT_MS = 30s is 3-5x the p99 so any legitimate slow
+    //     webhook still wins, while a truly stuck webhook surfaces to
+    //     the user as the amber "taking longer than expected" banner
+    //     instead of an infinite spinner.
+    //   - baseline count: how many licenses exist BEFORE the new one
+    //                     arrives. Polling waits for count to INCREASE
+    //                     so a customer who already held other-tier
+    //                     licenses sees the new row specifically, not
+    //                     their old ones.
+    //
+    // Revisit these numbers if the webhook pipeline changes (e.g., if
+    // stripe-webhook starts calling an external API during provisioning).
     const POLL_INTERVAL_MS = 1000;
     const POLL_TIMEOUT_MS = 30_000;
     const urlParams = new URLSearchParams(window.location.search);
@@ -181,7 +197,20 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
           const subtitle = document.getElementById('new-license-subtitle');
           const spinner = document.getElementById('new-license-spinner');
           if (title) title.textContent = 'License issuance is taking longer than expected.';
-          if (subtitle) subtitle.innerHTML = 'Please refresh in a minute. If the license still isn\'t here, email <a href="mailto:support@aidotnet.dev" class="underline">support@aidotnet.dev</a>.';
+          if (subtitle) {
+            // Build the subtitle via DOM APIs instead of innerHTML. The
+            // content is static today, but swapping it out with a builder
+            // means future maintainers can't accidentally introduce an
+            // HTML-injection vector by interpolating a user-supplied
+            // value (error message, email address, etc.) into the string.
+            subtitle.textContent = 'Please refresh in a minute. If the license still isn\'t here, email ';
+            const mailLink = document.createElement('a');
+            mailLink.href = 'mailto:support@aidotnet.dev';
+            mailLink.className = 'underline';
+            mailLink.textContent = 'support@aidotnet.dev';
+            subtitle.appendChild(mailLink);
+            subtitle.append('.');
+          }
           if (spinner) spinner.innerHTML = '<svg class="w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>';
         }
         // Replace the URL so the banner doesn't reappear if the user
@@ -222,21 +251,23 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
      */
     async function pollUntilNewLicenseAppears(userId: string, initialCount: number): Promise<boolean> {
       const deadline = Date.now() + POLL_TIMEOUT_MS;
-      while (Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      // Check first, sleep between retries. If the Stripe webhook already
+      // landed while the initial loadLicenses() fetch was in flight, the
+      // first poll wins immediately and we save a full POLL_INTERVAL_MS
+      // of spinner time on the happy path.
+      while (true) {
         const { data: pollResult, error: pollError } = await supabase
           .from('license_keys')
           .select('id', { count: 'exact' })
           .eq('user_id', userId);
         if (pollError) {
           console.error('License poll failed:', pollError);
-          continue;
-        }
-        if ((pollResult?.length ?? 0) > initialCount) {
+        } else if ((pollResult?.length ?? 0) > initialCount) {
           return true;
         }
+        if (Date.now() >= deadline) return false;
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       }
-      return false;
     }
 
     /**

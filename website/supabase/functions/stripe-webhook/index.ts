@@ -163,12 +163,16 @@ async function handleCheckoutCompleted(
     throw new Error("cannot_resolve_user");
   }
 
+  // Derive the set of allowed tiers from TIER_MAX_ACTIVATIONS rather
+  // than hardcoding a parallel list. Adding a new paid tier becomes a
+  // one-line change to the map instead of needing to also update a
+  // separate validator list that can drift out of sync.
   const tier = session.metadata?.tier;
-  if (!tier || !["professional", "enterprise"].includes(tier)) {
+  if (!tier || !(tier in TIER_MAX_ACTIVATIONS)) {
     throw new Error(`checkout.session.completed: invalid or missing tier '${tier}' in session metadata`);
   }
 
-  const maxActivations = TIER_MAX_ACTIVATIONS[tier] ?? 10;
+  const maxActivations = TIER_MAX_ACTIVATIONS[tier];
 
   const stripeCustomerId = typeof session.customer === "string"
     ? session.customer
@@ -179,13 +183,19 @@ async function handleCheckoutCompleted(
     : session.subscription?.id ?? null;
 
   // Update profile with customer/sub info + subscription tier so the
-  // billing page renders the right UI on next load.
+  // billing page renders the right UI on next load. Log (but don't
+  // throw) on failure — the license insert below is the critical path
+  // for the customer; a stale profile row is a recoverable nit that
+  // can be fixed manually via the admin panel.
   const profileUpdate: Record<string, string> = {
     subscription_tier: tier,
     subscription_status: "active",
   };
   if (stripeCustomerId) profileUpdate.stripe_customer_id = stripeCustomerId;
-  await client.from("profiles").update(profileUpdate).eq("id", userId);
+  const { error: profileError } = await client.from("profiles").update(profileUpdate).eq("id", userId);
+  if (profileError) {
+    console.warn(`Failed to update profile for user ${userId} (license will still be issued):`, profileError);
+  }
 
   // At-most-one-active-per-(user, product, tier) is enforced in the DB by
   // idx_license_keys_one_active_per_user_product_tier (migration
@@ -319,7 +329,16 @@ async function handleSubscriptionUpdated(
   if (stripeCustomerId) {
     const profileUpdate: Record<string, string> = { subscription_status: licenseStatus };
     if (tier) profileUpdate.subscription_tier = tier;
-    await client.from("profiles").update(profileUpdate).eq("stripe_customer_id", stripeCustomerId);
+    const { error: profileError } = await client
+      .from("profiles")
+      .update(profileUpdate)
+      .eq("stripe_customer_id", stripeCustomerId);
+    if (profileError) {
+      // Don't throw — the license row already has the canonical status
+      // and the admin panel can reconcile the profile. Swallowing silent
+      // would hide future RLS / permission regressions.
+      console.warn(`Failed to mirror subscription state to profile for customer ${stripeCustomerId}:`, profileError);
+    }
   }
 }
 
@@ -349,10 +368,16 @@ async function handleSubscriptionDeleted(
     : subscription.customer?.id;
 
   if (stripeCustomerId) {
-    await client
+    const { error: profileError } = await client
       .from("profiles")
       .update({ subscription_tier: "free", subscription_status: "expired" })
       .eq("stripe_customer_id", stripeCustomerId);
+    if (profileError) {
+      // Non-fatal — the license row is already marked expired, which
+      // is the source of truth for access control. A stale profile row
+      // only affects the billing page's tier display.
+      console.warn(`Failed to downgrade profile for customer ${stripeCustomerId}:`, profileError);
+    }
   }
 
   console.log(`Expired licenses for subscription ${subscriptionId}`);
