@@ -276,6 +276,31 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
         base.Train(input, target);
     }
 
+    /// <summary>
+    /// Tape-aware training forward. Routes through the same native layer
+    /// stack <see cref="Predict"/> uses (ForwardNative) so the training
+    /// output shape matches the Predict output shape — namely the raw
+    /// [batch, horizon, numQuantiles] produced by the quantile head.
+    /// </summary>
+    /// <remarks>
+    /// The base <see cref="FinancialModelBase{T}.ForwardForTraining"/>
+    /// default delegates to <c>Forecast(input, quantiles: null)</c>, which
+    /// for ChronosBolt extracts the median slice ([_forecastHorizon]) and
+    /// drops every other quantile. Training target from
+    /// <see cref="Predict"/> is the full raw head output (e.g.
+    /// [1, horizon, numQuantiles] = [1, 8, 4096] at smoke-test scale) —
+    /// the two disagree and the MSE loss throws
+    /// "Tensor shapes must match. Got [4] and [1, 8, 4096]". Routing
+    /// through ForwardNative keeps the training forward shape aligned
+    /// with the target.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is only supported in native mode.");
+        return ForwardNative(input);
+    }
+
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> gradients)
     {
