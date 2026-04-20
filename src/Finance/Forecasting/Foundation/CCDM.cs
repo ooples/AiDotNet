@@ -15,7 +15,6 @@ using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 using AiDotNet.Finance.Base;
-using AiDotNet.Tensors.Engines.Autodiff;
 namespace AiDotNet.Finance.Forecasting.Foundation;
 
 /// <summary>
@@ -221,219 +220,79 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
     public override void Train(Tensor<T> input, Tensor<T> target)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is only supported in native mode.");
-
-        // Issue #1166 — score-matching train loop rewritten to use the
-        // standard GradientTape / TrainWithTape machinery every other
-        // model uses. Preserves the research-paper algorithm (Continuous
-        // Conditional Diffusion Model, score matching with sigma-weighted
-        // MSE) while:
-        //
-        //   1. Making the loss injectable via the inherited
-        //      `LossFunction : ILossFunction<T>` (user can supply any
-        //      LossFunctionBase<T> at ctor time; default stays MSE
-        //      which gives the paper's σ²·‖score_pred − score_target‖²
-        //      once we pre-scale both by σ — see below).
-        //   2. Actually running backward through the layer parameters
-        //      instead of computing a gradient vector and throwing it
-        //      away, then calling _optimizer.UpdateParameters(Layers)
-        //      with no backward state populated (the old code path
-        //      which produced "Backward pass must be called before
-        //      updating parameters" on every train step).
-        //
-        // Score-matching weighting:
-        //   loss = (1/N) · σ² · ‖score_pred − score_target‖²
-        //        = (1/N) · ‖σ·score_pred − σ·score_target‖²
-        //        = LossFunction.ComputeTapeLoss(σ·score_pred, σ·score_target)
-        // when LossFunction is MSE. Other ILossFunction<T> choices
-        // (Huber, Charbonnier, …) carry the pre-scaling through their
-        // own loss form so users get a robust score-matching variant
-        // just by injecting a different loss.
-
         SetTrainingMode(true);
         try
         {
-            var tape = new GradientTape<T>();
-            using var _ = tape;
-
             var rand = RandomHelper.CreateSecureRandom();
             int t = rand.Next(_diffusionSteps);
+
+            // Score matching training: perturb target with noise at sigma level
             T sigmaT = _sigmas[t];
             T eps10 = NumOps.FromDouble(1e-10);
-            T invSigma = NumOps.Divide(NumOps.One, NumOps.Add(sigmaT, eps10));
-
-            // Noise and the two derived target tensors are *constants*
-            // from a gradient-flow standpoint — they don't need to be
-            // tape-aware, only the network-parameters → loss path does.
-            // Keep the raw-data construction here, it is correct.
             var noise = new Tensor<T>(target._shape);
             for (int i = 0; i < target.Length; i++)
                 noise.Data.Span[i] = SampleStandardNormal(rand);
 
+            // x_noisy = x_0 + sigma * eps
             var noisyTarget = new Tensor<T>(target._shape);
+            for (int i = 0; i < target.Length; i++)
+                noisyTarget.Data.Span[i] = NumOps.Add(target[i], NumOps.Multiply(sigmaT, noise[i]));
+
+            // Score target: -eps/sigma (the gradient of log p_sigma(x))
+            T negSigmaInv = NumOps.Negate(NumOps.Divide(NumOps.One, NumOps.Add(sigmaT, eps10)));
             var scoreTarget = new Tensor<T>(target._shape);
             for (int i = 0; i < target.Length; i++)
-            {
-                // x_noisy = x_0 + σ · ε
-                noisyTarget.Data.Span[i] = NumOps.Add(target[i], NumOps.Multiply(sigmaT, noise[i]));
-                // s_target = −ε / σ  (∇ log p_σ(x))
-                scoreTarget.Data.Span[i] = NumOps.Multiply(NumOps.Negate(invSigma), noise[i]);
-            }
+                scoreTarget.Data.Span[i] = NumOps.Multiply(negSigmaInv, noise[i]);
 
-            // Forward pass — MUST be tape-connected from model parameters
-            // to predictedScore, so tape.ComputeGradients can trace back.
             var predictedScore = ForwardTraining(input, noisyTarget, t);
 
-            // σ-pre-scaling: collapses σ²·‖·‖² into a plain MSE/Huber/etc.
-            // call on the scaled inputs. `sigmaT` is a scalar, so broadcast
-            // it as a same-shape tensor for the pointwise multiply.
-            var sigmaTensor = new Tensor<T>(predictedScore._shape);
-            for (int i = 0; i < sigmaTensor.Length; i++) sigmaTensor.Data.Span[i] = sigmaT;
-            var scaledPred   = Engine.TensorMultiply(predictedScore, sigmaTensor);
-            var scaledTarget = Engine.TensorMultiply(scoreTarget,    sigmaTensor);
-
-            var lossTensor = LossFunction is LossFunctionBase<T> lfb
-                ? lfb.ComputeTapeLoss(scaledPred, scaledTarget)
-                : throw new InvalidOperationException(
-                    "LossFunction must derive from LossFunctionBase<T> for tape-based training.");
-
-            LastLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-
-            // Collect trainable parameters and compute gradients via the tape.
-            // Use the parameterless overload; CollectParameters walks the Layers
-            // on every call — fine for per-step training since the graph is
-            // stable within a step and this is a diffusion per-step routine
-            // rather than a training loop inner.
-            var trainableParams = AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(Layers);
-            var grads = tape.ComputeGradients(lossTensor, trainableParams);
-
-            T ls = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-            LastLoss = ls;
-
-            // For re-evaluation inside the optimizer's Step (line-search etc.),
-            // rebuild the same forward path. noisyTarget and t stay captured
-            // via the closure so the re-eval matches the original step.
-            Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) =>
-                ForwardTraining(inp, noisyTarget, t);
-            Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _)
+            // Weighted score matching loss: sigma^2 * ||score_pred - score_target||^2
+            T sigmaSquared = NumOps.Multiply(sigmaT, sigmaT);
+            T weightedLoss = NumOps.Zero;
+            int count = Math.Min(predictedScore.Length, scoreTarget.Length);
+            for (int i = 0; i < count; i++)
             {
-                var predScaled2   = Engine.TensorMultiply(pred, sigmaTensor);
-                var targetScaled2 = Engine.TensorMultiply(scoreTarget, sigmaTensor);
-                return ((LossFunctionBase<T>)LossFunction)
-                    .ComputeTapeLoss(predScaled2, targetScaled2);
+                T diff = NumOps.Subtract(predictedScore[i], scoreTarget[i]);
+                weightedLoss = NumOps.Add(weightedLoss, NumOps.Multiply(sigmaSquared, NumOps.Multiply(diff, diff)));
             }
+            LastLoss = count > 0 ? NumOps.Divide(weightedLoss, NumOps.FromDouble(count)) : NumOps.Zero;
 
-            var context = new TapeStepContext<T>(
-                trainableParams, grads, ls,
-                input, target, ComputeForward, RecomputeLoss);
-            _optimizer.Step(context);
+            var gradient = _lossFunction.CalculateDerivative(predictedScore.ToVector(), scoreTarget.ToVector());
+            // Scale gradient by sigmaSquared to match the weighted loss objective
+            for (int i = 0; i < gradient.Length; i++)
+                gradient[i] = NumOps.Multiply(sigmaSquared, gradient[i]);
+            _optimizer.UpdateParameters(Layers);
         }
         finally { SetTrainingMode(false); }
     }
 
     private Tensor<T> ForwardTraining(Tensor<T> input, Tensor<T> noisyTarget, int t)
     {
-        // ApplyInstanceNormalization stays raw-data — its output is not a
-        // trainable-parameter-derived tensor; gradients don't need to
-        // flow back through it. Same for Reshape (metadata view).
         var conditioned = ApplyInstanceNormalization(input);
         if (conditioned.Rank == 1) conditioned = conditioned.Reshape(new[] { 1, conditioned.Length });
 
         Tensor<T> condHidden;
         if (_inputProjection is not null)
-            condHidden = _inputProjection.Forward(conditioned);   // tape-aware (trainable params)
+            condHidden = _inputProjection.Forward(conditioned);
         else
             condHidden = conditioned;
 
-        // Issue #1166 — denoising-network input is
-        //    [ x_t (noisyTarget) | condHidden | log(σ_t) ]
-        // concatenated along the feature axis. The old code did this via
-        // three raw `.Data.Span[i] = ...` copy loops. That breaks the
-        // gradient tape on the `condHidden` slice — any gradient from the
-        // downstream loss back toward `_inputProjection.Forward`'s
-        // parameters gets cut off at the copy boundary. The
-        // `_optimizer.UpdateParameters(Layers)` the old code called after
-        // this path therefore ran on layers whose internal gradient state
-        // had never been populated — the origin of the
-        // "Backward pass must be called before updating parameters" error.
-        //
-        // Fix: build every row-vector piece as a real Tensor<T> on the
-        // correct shape, then combine them with Engine.TensorConcatenate.
-        // The concat op records into the GradientTape, so the chain
-        // noisyTarget (const) → condHidden (trainable) → concat →
-        // denoising layers → loss is fully preserved.
         int targetLen = noisyTarget.Length;
         int condLen = Math.Min(condHidden.Length, _hiddenDimension);
-
-        // noisyTarget arrives as an arbitrary-rank constant — reshape to
-        // [1, targetLen] row-vector so axis-1 concatenation works with
-        // the [1, H] condHidden.
-        var noisyRow = noisyTarget.Rank == 2 && noisyTarget.Shape[0] == 1
-            ? noisyTarget
-            : noisyTarget.Reshape(new[] { 1, targetLen });
-
-        // Slice condHidden to `_hiddenDimension` columns (tape-aware).
-        Tensor<T> condSlice;
-        if (condHidden.Rank == 2 && condHidden.Shape[1] == condLen)
-        {
-            condSlice = condHidden;
-        }
-        else if (condHidden.Rank == 2)
-        {
-            condSlice = Engine.TensorSlice(
-                condHidden,
-                start:  new[] { 0, 0 },
-                length: new[] { condHidden.Shape[0], condLen });
-        }
-        else
-        {
-            // Rank-1 condHidden: reshape to [1, condLen] via slice of the
-            // first `condLen` entries. Use Reshape first (metadata view
-            // of the same storage) — cheaper than a full slice + copy,
-            // and since this path is hit only when `_inputProjection is
-            // null` (so condHidden is not tape-connected anyway), it's
-            // always safe.
-            condSlice = condHidden.Reshape(new[] { 1, condHidden.Length });
-            if (condSlice.Shape[1] != condLen)
-            {
-                condSlice = Engine.TensorSlice(
-                    condSlice,
-                    start:  new[] { 0, 0 },
-                    length: new[] { 1, condLen });
-            }
-        }
-
-        // Encode σ level as log(σ), a single-element [1, 1] row-vector
-        // constant. No tape history needed.
-        var sigmaRow = new Tensor<T>(new[] { 1, 1 });
-        sigmaRow.Data.Span[0] = NumOps.FromDouble(
-            Math.Log(Math.Max(1e-10, NumOps.ToDouble(_sigmas[t]))));
-
-        var denoisingInput = Engine.TensorConcatenate(
-            new[] { noisyRow, condSlice, sigmaRow }, axis: 1);
+        var denoisingInput = new Tensor<T>(new[] { 1, targetLen + condLen + 1 });
+        for (int i = 0; i < targetLen; i++) denoisingInput.Data.Span[i] = noisyTarget[i];
+        for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[targetLen + i] = condHidden[i];
+        // Encode sigma level as log(sigma) for continuous conditioning
+        denoisingInput.Data.Span[targetLen + condLen] = NumOps.FromDouble(Math.Log(Math.Max(1e-10, NumOps.ToDouble(_sigmas[t]))));
 
         var eps = denoisingInput;
         foreach (var layer in _denoisingLayers) eps = layer.Forward(eps);
         if (_outputProjection is not null) eps = _outputProjection.Forward(eps);
 
-        // Slice the leading `_forecastHorizon` entries as a tape-aware op
-        // so gradients still flow from the downstream loss back through
-        // `_outputProjection` (and the `_denoisingLayers` before it).
-        if (eps.Rank == 1)
-        {
-            int keep = Math.Min(_forecastHorizon, eps.Length);
-            return Engine.TensorSlice(
-                eps,
-                start:  new[] { 0 },
-                length: new[] { keep });
-        }
-        else
-        {
-            int keep = Math.Min(_forecastHorizon, eps.Shape[eps.Rank - 1]);
-            var starts  = new int[eps.Rank];
-            var lengths = eps._shape.Clone() as int[] ?? eps._shape;
-            lengths[eps.Rank - 1] = keep;
-            return Engine.TensorSlice(eps, starts, lengths);
-        }
+        var result = new Tensor<T>(new[] { _forecastHorizon });
+        for (int i = 0; i < _forecastHorizon && i < eps.Length; i++)
+            result.Data.Span[i] = eps[i];
+        return result;
     }
 
     public override void UpdateParameters(Vector<T> gradients)
