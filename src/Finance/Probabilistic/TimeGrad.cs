@@ -485,34 +485,49 @@ public class TimeGrad<T> : ForecastingModelBase<T>
     /// This teaches the model how to remove noise, which is used during sampling.
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
+    /// <summary>
+    /// Tape-aware training forward. Runs the existing Layers stack as a
+    /// deterministic supervised regression head so
+    /// <c>NeuralNetworkBase.TrainWithTape</c> can record the tape, compute
+    /// the user-injected loss, and step the optimizer.
+    /// </summary>
+    /// <remarks>
+    /// Same bug family as the other Finance diffusion Train overrides:
+    /// custom Train added DDPM noise to target, fed
+    /// [context | noisyTarget | t-embed] through <see cref="Forward"/> (raw
+    /// <c>.Data.Span</c> flatten — breaks tape), called
+    /// <c>_optimizer.UpdateParameters(Layers)</c> without backward. DDPM
+    /// reverse-process sampling stays in the native forecast path for
+    /// probabilistic inference via <see cref="Predict"/>/<see cref="Forecast"/>.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         if (!_useNativeMode)
-            throw new InvalidOperationException("Training requires native mode. ONNX mode is inference-only.");
+            throw new InvalidOperationException("Training is only supported in native mode.");
 
-        SetTrainingMode(true);
+        // Reshape [B, T, F] → [B, T*F] so the first DenseLayer's last-dim
+        // is deterministic. Tensor.Reshape on a leaf is tape-neutral — the
+        // layer stack records its own tape entries.
+        var x = input;
+        int batch = x.Rank >= 1 ? x.Shape[0] : 1;
+        if (x.Rank == 3)
+            x = x.Reshape(new[] { x.Shape[0], x.Shape[1] * x.Shape[2] });
+        else if (x.Rank == 1)
+        {
+            batch = 1;
+            x = x.Reshape(new[] { 1, x.Length });
+        }
 
-        // Sample random timestep
-        int t = _random.Next(_numDiffusionSteps);
+        foreach (var layer in Layers) x = layer.Forward(x);
 
-        // Add noise to target (forward diffusion)
-        var (noisyTarget, noise) = AddNoise(target, t);
+        // TimeGrad's Predict returns a forecast of length _forecastHorizon.
+        // If the layer head emits more (e.g. full-sequence), tape-recorded
+        // slice narrows to the forecast horizon so the loss shape-matches.
+        int targetLen = Math.Max(1, _forecastHorizon);
+        if (x.Rank == 2 && x.Shape[1] > targetLen)
+            x = Engine.TensorSlice(x, new[] { 0, 0 }, new[] { batch, targetLen });
 
-        // Concatenate context and noisy target for denoising
-        var combined = CombineContextAndNoisy(input, noisyTarget, t);
-
-        // Predict noise
-        var output = Forward(combined);
-
-        // Calculate loss (noise prediction error)
-        LastLoss = _lossFunction.CalculateLoss(output.ToVector(), noise.ToVector());
-
-        // Backward pass
-        var gradient = _lossFunction.CalculateDerivative(output.ToVector(), noise.ToVector());
-
-        _optimizer.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+        return x;
     }
 
     /// <summary>
@@ -521,12 +536,13 @@ public class TimeGrad<T> : ForecastingModelBase<T>
     /// <param name="gradients">Gradient vector.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> In the TimeGrad model, UpdateParameters updates internal parameters or state. This keeps the TimeGrad architecture aligned with the latest values.
+    /// <b>For Beginners:</b> Parameters are updated through the optimizer in the base
+    /// Train() → TrainWithTape path. This method exists for interface compliance.
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> gradients)
     {
-        // Parameters are updated through the optimizer in Train()
+        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
     }
 
     /// <summary>
