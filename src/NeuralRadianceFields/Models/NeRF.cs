@@ -1151,6 +1151,55 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         return ForwardWithMemory(input);
     }
 
+    /// <summary>
+    /// Tape-aware forward pass used by <c>TrainWithTape</c>. Produces the
+    /// same <c>[N, 4]</c> (RGB + density) output that <see cref="Predict"/>
+    /// does, but every intermediate op goes through <see cref="IEngine"/>
+    /// so the gradient tape can record it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base-class default for <c>ForwardForTraining</c> iterates
+    /// <see cref="AiDotNet.NeuralNetworks.NeuralNetworkBase{T}.Layers"/>
+    /// in order. NeRF is not a flat pipeline — its density and colour
+    /// heads are fed different slices of the <c>[N, 6]</c> input and
+    /// their outputs are concatenated into <c>[N, 4]</c>. Flat
+    /// iteration therefore produces <c>[N, 3]</c> (only the colour
+    /// head's output), which blew up the loss with
+    /// <c>"Tensor shapes must match. Got [N, 3] and [N, 4]"</c>
+    /// against the <c>[N, 4]</c> targets the training tests supply.
+    /// </para>
+    /// <para>
+    /// <see cref="ForwardWithMemory"/> already produces the correct
+    /// <c>[N, 4]</c> shape but finishes with a raw <c>.Data.Span[]</c>
+    /// copy loop — that breaks the tape and cannot be used from the
+    /// training path. This override uses <c>Engine.TensorSlice</c> to
+    /// split the input and <c>Engine.TensorConcatenate</c> to join
+    /// <c>rgb</c> and <c>density</c>, both of which record op nodes on
+    /// the <c>GradientTape</c>.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (input.Shape.Length != 2 || input.Shape[1] != 6)
+        {
+            throw new ArgumentException(
+                "Input must have shape [N, 6] (position + direction).", nameof(input));
+        }
+
+        int numPoints = input.Shape[0];
+
+        // Tape-aware split: [N, 6] -> positions [N, 3], directions [N, 3].
+        var positions = Engine.TensorSlice(input, new[] { 0, 0 }, new[] { numPoints, 3 });
+        var directions = Engine.TensorSlice(input, new[] { 0, 3 }, new[] { numPoints, 3 });
+
+        // QueryField records every internal op on the gradient tape.
+        var (rgb, density) = QueryField(positions, directions);
+
+        // rgb: [N, 3], density: [N, 1]. Join along the feature axis.
+        return Engine.TensorConcatenate(new[] { rgb, density }, axis: 1);
+    }
+
     #endregion
 
     #region Metadata and Serialization
