@@ -1,8 +1,12 @@
+using AiDotNet;
+using AiDotNet.Classification.Linear;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Enums;
 using AiDotNet.Exceptions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -520,34 +524,22 @@ public class ModelPersistenceGuardTests : IDisposable
     }
 
     /// <summary>
-    /// Runs an action with a transient fresh real trial. Backs up and
-    /// restores the user's real ~/.aidotnet/trial.json around the action
-    /// so tests can exercise the guard against a known-state trial file
-    /// without permanently disturbing the developer's local state.
+    /// Runs an action with an isolated trial file (the fixture's temp path,
+    /// not the developer's real <c>~/.aidotnet/trial.json</c>). The
+    /// production <see cref="ModelPersistenceGuard.EnforceCore"/> path is
+    /// redirected to the temp path for the duration of the action via the
+    /// internal <c>SetTestTrialFilePathOverride</c> hook, so the guard's
+    /// trial-counting / license-checking branches see a fresh or
+    /// test-controlled file without mutating anything on the real user
+    /// profile.
     /// </summary>
-    private static void WithFreshRealTrial(Action action)
+    private void WithIsolatedTrial(Action action)
     {
-        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        string trialPath = Path.Combine(homeDir, ".aidotnet", "trial.json");
-        string? backupContent = File.Exists(trialPath) ? File.ReadAllText(trialPath) : null;
-        try
+        // Make sure the isolated path starts empty so trial state is fresh.
+        if (File.Exists(_trialFilePath)) File.Delete(_trialFilePath);
+        using (ModelPersistenceGuard.SetTestTrialFilePathOverride(_trialFilePath))
         {
-            if (File.Exists(trialPath)) File.Delete(trialPath);
             action();
-        }
-        finally
-        {
-            try
-            {
-                if (backupContent != null)
-                    File.WriteAllText(trialPath, backupContent);
-                else if (File.Exists(trialPath))
-                    File.Delete(trialPath);
-            }
-            catch
-            {
-                // Best-effort restore.
-            }
         }
     }
 
@@ -567,14 +559,14 @@ public class ModelPersistenceGuardTests : IDisposable
         // exhausted trial. This test proves neither happens now.
         ClearAllLicenseSources();
 
-        WithFreshRealTrial(() =>
+        WithIsolatedTrial(() =>
         {
             // Record one save to materialize the trial file and set a baseline.
             ModelPersistenceGuard.EnforceBeforeSave();
 
             int before;
             {
-                var m = new TrialStateManager();
+                var m = new TrialStateManager(_trialFilePath);
                 before = m.GetStatus().OperationsUsed;
             }
 
@@ -589,10 +581,19 @@ public class ModelPersistenceGuardTests : IDisposable
 
             int after;
             {
-                var m = new TrialStateManager();
+                var m = new TrialStateManager(_trialFilePath);
                 after = m.GetStatus().OperationsUsed;
             }
             Assert.Equal(before, after);
+
+            // Round-trip structural equivalence check. Trial isn't exhausted
+            // here, so the public Serialize() doesn't throw — use it to
+            // assert that DeepCopy actually produces a byte-identical clone
+            // rather than a malformed partial-deserialization result.
+            var copy = (FeedForwardNeuralNetwork<double>)network.DeepCopy();
+            Assert.NotSame(network, copy);
+            Assert.IsType<FeedForwardNeuralNetwork<double>>(copy);
+            Assert.Equal(network.Serialize(), copy.Serialize());
         });
     }
 
@@ -628,6 +629,13 @@ public class ModelPersistenceGuardTests : IDisposable
         // "Cannot find MultiHeadAttentionLayer constructor ...".
         var copy = transformer.DeepCopy();
         Assert.NotNull(copy);
+        Assert.NotSame(transformer, copy);
+        Assert.IsType<Transformer<float>>(copy);
+
+        // Full round-trip semantics: the serialized bytes must match
+        // byte-for-byte between original and clone. Validates that every
+        // layer (including MultiHeadAttentionLayer) reconstructed correctly.
+        Assert.Equal(transformer.Serialize(), copy.Serialize());
     }
 
     [Fact(Timeout = 60000)]
@@ -639,11 +647,14 @@ public class ModelPersistenceGuardTests : IDisposable
         // via the private SerializeInternalUnchecked path.
         ClearAllLicenseSources();
 
-        WithFreshRealTrial(() =>
+        WithIsolatedTrial(() =>
         {
-            // Exhaust the trial (same pattern as the existing
-            // InternalOperation_SuppressesSerializeEnforcement test above).
-            var manager = new TrialStateManager();
+            // Exhaust the trial on the isolated path. This uses the same
+            // TrialStateManager file the guard is now pointed at via
+            // SetTestTrialFilePathOverride, so subsequent Save/Load/
+            // Serialize/Deserialize calls from the guard would throw
+            // LicenseRequiredException if they were reached.
+            var manager = new TrialStateManager(_trialFilePath);
             for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
             {
                 manager.RecordOperationOrThrow();
@@ -653,11 +664,21 @@ public class ModelPersistenceGuardTests : IDisposable
 
             // DeepCopy / Clone must succeed — training-internal, not user
             // save/load. Before the fix this would throw.
+            //
+            // Byte-level round-trip equivalence is asserted separately in
+            // NeuralNetwork_DeepCopy_DoesNotCountTrialOperation (fresh trial)
+            // because the public Serialize() fires the guard on an
+            // exhausted trial — that's the exact boundary enforced by
+            // DeepCopy_Output_Serialize_StillFiresGuard below.
             var copy = network.DeepCopy();
             Assert.NotNull(copy);
+            Assert.NotSame(network, copy);
+            Assert.IsType<FeedForwardNeuralNetwork<double>>(copy);
 
             var cloned = network.Clone();
             Assert.NotNull(cloned);
+            Assert.NotSame(network, cloned);
+            Assert.IsType<FeedForwardNeuralNetwork<double>>(cloned);
         });
     }
 
@@ -684,11 +705,12 @@ public class ModelPersistenceGuardTests : IDisposable
         // `model.DeepCopy().Serialize()` would be a trivial license-bypass.
         ClearAllLicenseSources();
 
-        WithFreshRealTrial(() =>
+        WithIsolatedTrial(() =>
         {
-            // Exhaust the trial so any unguarded call would NOT throw but a
-            // guarded one would.
-            var manager = new TrialStateManager();
+            // Exhaust the trial on the isolated file so any call that
+            // routes through the guard throws, but any call that bypasses
+            // it (DeepCopy, per the fix) stays silent.
+            var manager = new TrialStateManager(_trialFilePath);
             for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
             {
                 manager.RecordOperationOrThrow();
@@ -769,4 +791,39 @@ public class ModelPersistenceGuardTests : IDisposable
             Assert.Equal(0, typedCopy.SerializeOverrideCalls);
         }
     }
+
+    // ---------------------------------------------------------------------
+    // Facade-level regression for issue #1161 — DEFERRED.
+    //
+    // The review asked for an end-to-end test exercising the reported
+    // failure path: AiModelBuilder.BuildAsync() → NormalOptimizer.
+    // InitializeRandomSolution() → Clone() → DeepCopy() → (was)
+    // Serialize()+guard. The intent is solid and we attempted it, but
+    // every `AiModelBuilder.BuildAsync` test in the repo currently
+    // StackOverflows on master (verified against both `RidgeClassifier`
+    // and `RidgeRegression` — see `AiModelBuilderClassificationTests`
+    // and `AiModelBuilderLicensingTests.SerializeModel_WithLicenseKey_Succeeds`,
+    // both of which abort the test host under the current dependency
+    // set). Adding a facade test here would make this PR's CI red for a
+    // reason unrelated to the license-guard fix.
+    //
+    // The unit-level coverage below is strong — it exercises exactly the
+    // `DeepCopy()` path the optimizer-snapshot call hits, on an exhausted
+    // trial, and verifies no throw. Once the StackOverflow in
+    // `BuildAsync` is fixed upstream, adding a facade regression here is
+    // straightforward: instantiate a classifier or regressor, exhaust
+    // the isolated trial via `WithIsolatedTrial`, await `BuildAsync`,
+    // assert no throw + trial counter unchanged. Template:
+    //
+    //   using (ModelPersistenceGuard.SetTestTrialFilePathOverride(_trialFilePath))
+    //   {
+    //       // exhaust trial on _trialFilePath
+    //       var built = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    //           .ConfigureDataLoader(loader)
+    //           .ConfigureModel(classifier)
+    //           .BuildAsync();
+    //       Assert.NotNull(built);
+    //       // assert trial count unchanged
+    //   }
+    // ---------------------------------------------------------------------
 }

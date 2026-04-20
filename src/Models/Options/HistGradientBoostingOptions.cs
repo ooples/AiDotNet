@@ -292,4 +292,26 @@ public class HistGradientBoostingOptions : ModelOptions
     /// </remarks>
     public int EarlyStoppingRounds { get; set; } = 10;
 
+    /// <summary>
+    /// Returns a deep copy of this options instance. Every configuration
+    /// value is copied by value into a fresh instance so that mutating the
+    /// clone never affects the original. Used by
+    /// <c>HistGradientBoostingRegression.DeepCopy</c> to ensure the cloned
+    /// model owns an independent options object.
+    /// </summary>
+    public HistGradientBoostingOptions Clone() => new()
+    {
+        MaxBins = this.MaxBins,
+        NumberOfIterations = this.NumberOfIterations,
+        LearningRate = this.LearningRate,
+        MaxDepth = this.MaxDepth,
+        MaxLeafNodes = this.MaxLeafNodes,
+        MinSamplesLeaf = this.MinSamplesLeaf,
+        L2Regularization = this.L2Regularization,
+        MinGainToSplit = this.MinGainToSplit,
+        SubsampleRatio = this.SubsampleRatio,
+        ColsampleByTree = this.ColsampleByTree,
+        UseEarlyStopping = this.UseEarlyStopping,
+        EarlyStoppingRounds = this.EarlyStoppingRounds,
+    };
 }

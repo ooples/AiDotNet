@@ -122,6 +122,39 @@ internal static class ModelPersistenceGuard
     private static AiDotNet.Models.AiDotNetLicenseKey? _activeBuilderLicenseKey;
 
     /// <summary>
+    /// Thread-static trial-file path override used by the test suite so
+    /// regression tests can exercise <see cref="EnforceCore"/> against an
+    /// isolated trial.json without mutating <c>~/.aidotnet/trial.json</c>
+    /// on the developer's real machine. <see langword="null"/> (default)
+    /// means the real default path is used.
+    /// </summary>
+    [ThreadStatic]
+    private static string? _testTrialFilePathOverride;
+
+    /// <summary>
+    /// Sets an isolated trial-file path for the current thread's
+    /// <see cref="EnforceCore"/> trial-counting path. Returns an
+    /// <see cref="IDisposable"/> that restores the previous override on
+    /// dispose. Intended for test isolation only — not a public API.
+    /// </summary>
+    /// <param name="path">The trial-file path to use for the duration of
+    /// the scope. Pass <see langword="null"/> to clear any existing
+    /// override.</param>
+    internal static IDisposable SetTestTrialFilePathOverride(string? path)
+    {
+        string? previous = _testTrialFilePathOverride;
+        _testTrialFilePathOverride = path;
+        return new TestTrialFilePathOverrideScope(previous);
+    }
+
+    private sealed class TestTrialFilePathOverrideScope : IDisposable
+    {
+        private readonly string? _previous;
+        public TestTrialFilePathOverrideScope(string? previous) => _previous = previous;
+        public void Dispose() => _testTrialFilePathOverride = _previous;
+    }
+
+    /// <summary>
     /// Sets the active builder license key for the current thread.
     /// Called by AiModelBuilder at the start of BuildAsync.
     /// </summary>
@@ -184,7 +217,9 @@ internal static class ModelPersistenceGuard
         }
 
         // No license key — enforce trial limits
-        var trialManager = new TrialStateManager();
+        var trialManager = _testTrialFilePathOverride is not null
+            ? new TrialStateManager(_testTrialFilePathOverride)
+            : new TrialStateManager();
         try
         {
             trialManager.RecordOperationOrThrow();
