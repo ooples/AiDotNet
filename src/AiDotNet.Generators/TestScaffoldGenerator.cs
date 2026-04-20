@@ -2373,7 +2373,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // tests/AiDotNet.Tests/Fixtures/LayerSerializationCollection.cs.
         // Keep this string and that CollectionDefinition name in lockstep;
         // renaming one requires renaming the other. See issue #1166.
-        sb.AppendLine("[Collection(\"LayerSerialization\")]");
+        // Use the const reference so a rename of LayerSerializationCollection.Name
+        // fails the test-assembly compile rather than silently drifting out of
+        // sync with the [CollectionDefinition] name — issue #1166 comment.
+        sb.AppendLine("[Collection(global::AiDotNet.Tests.Fixtures.LayerSerializationCollection.Name)]");
         sb.AppendLine($"public class {testClassName} : LayerTestBase");
         sb.AppendLine("{");
         sb.AppendLine($"    protected override ILayer<double> CreateLayer()");
@@ -2427,7 +2430,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
         // See EmitLayerTestClass for the rationale on this Collection name.
-        sb.AppendLine("[Collection(\"LayerSerialization\")]");
+        // Use the const reference so a rename of LayerSerializationCollection.Name
+        // fails the test-assembly compile rather than silently drifting out of
+        // sync with the [CollectionDefinition] name — issue #1166 comment.
+        sb.AppendLine("[Collection(global::AiDotNet.Tests.Fixtures.LayerSerializationCollection.Name)]");
         sb.AppendLine($"public class {testClassName} : DualInputLayerTestBase");
         sb.AppendLine("{");
         sb.AppendLine($"    protected override ILayer<double> CreateLayer()");
@@ -2481,7 +2487,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
         // See EmitLayerTestClass for the rationale on this Collection name.
-        sb.AppendLine("[Collection(\"LayerSerialization\")]");
+        // Use the const reference so a rename of LayerSerializationCollection.Name
+        // fails the test-assembly compile rather than silently drifting out of
+        // sync with the [CollectionDefinition] name — issue #1166 comment.
+        sb.AppendLine("[Collection(global::AiDotNet.Tests.Fixtures.LayerSerializationCollection.Name)]");
         sb.AppendLine($"public class {testClassName} : MultiInputLayerTestBase");
         sb.AppendLine("{");
         sb.AppendLine($"    protected override ILayer<double> CreateLayer()");
@@ -2530,7 +2539,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
         // See EmitLayerTestClass for the rationale on this Collection name.
-        sb.AppendLine("[Collection(\"LayerSerialization\")]");
+        // Use the const reference so a rename of LayerSerializationCollection.Name
+        // fails the test-assembly compile rather than silently drifting out of
+        // sync with the [CollectionDefinition] name — issue #1166 comment.
+        sb.AppendLine("[Collection(global::AiDotNet.Tests.Fixtures.LayerSerializationCollection.Name)]");
         sb.AppendLine($"public class {testClassName} : GraphLayerTestBase");
         sb.AppendLine("{");
         sb.AppendLine($"    protected override ILayer<double> CreateLayer()");
