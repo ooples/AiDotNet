@@ -533,8 +533,11 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> gradients)
     {
-        // Chronos is a pretrained foundation model — parameters are updated through the optimizer in Train()
-        throw new NotSupportedException("Chronos is a pretrained foundation model. Use Train() for parameter updates via the optimizer.");
+        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
+        // Throwing here broke NeuralNetworkBase.WithParameters (which calls DeepCopy + UpdateParameters)
+        // — the IParameterizable contract has to succeed for smoke tests, clone flows, and parameter
+        // sweeps even on pretrained foundation checkpoints. Leave the body empty, same convention as
+        // the rest of the Finance foundation models.
     }
 
     /// <inheritdoc/>
