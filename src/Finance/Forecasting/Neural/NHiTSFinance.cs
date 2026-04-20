@@ -918,6 +918,12 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
             return result;
         }
 
+        // Equal element count but possibly different ranks (e.g. [1, 8, 1] vs [1, 8])
+        // — reshape b to a's shape before delegating to the engine, which requires
+        // strictly matching shapes rather than just matching element counts.
+        if (!a._shape.SequenceEqual(b._shape))
+            b = Engine.Reshape(b, a._shape);
+
         return Engine.TensorSubtract(a, b);
     }
 
@@ -941,6 +947,9 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
                 result[i] = a[i];
             return result;
         }
+
+        if (!a._shape.SequenceEqual(b._shape))
+            b = Engine.Reshape(b, a._shape);
 
         return Engine.TensorAdd(a, b);
     }
