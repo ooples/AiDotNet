@@ -985,6 +985,66 @@ public static class DeserializationHelper
                 throw new NotSupportedException($"Cannot find ContinuumMemorySystemLayer constructor for deserialization.");
             }
         }
+        else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".FeedForwardLayer`1"))
+        {
+            // FeedForwardLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
+            // Resolve (inputSize, outputSize) from the serialized shapes — FeedForwardLayer
+            // uses flat 1D shapes ([inputSize] → [outputSize]).
+            int inputSize = inputShape.Length > 0 ? inputShape[^1] : 0;
+            int outputSize = outputShape.Length > 0 ? outputShape[^1] : 0;
+            if (inputSize <= 0 || outputSize <= 0)
+                throw new InvalidOperationException(
+                    $"FeedForwardLayer deserialization requires positive inputSize/outputSize; got ({inputSize}, {outputSize}).");
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType });
+            if (ctor is null)
+                throw new InvalidOperationException(
+                    "Cannot find FeedForwardLayer constructor with (int, int, IActivationFunction<T>).");
+            instance = ctor.Invoke(new object?[] { inputSize, outputSize, activation });
+        }
+        else if (openGenericType.FullName != null
+            && (openGenericType.FullName.EndsWith(".RWKVLayer`1")
+                || openGenericType.FullName.EndsWith(".Mamba2Block`1")))
+        {
+            // RWKVLayer(int sequenceLength, int modelDimension = 256, int numHeads = 8, …)
+            // Mamba2Block(int sequenceLength, int modelDimension = 256, int stateDimension = 64,
+            //             int numHeads = 8, int expandFactor = 2, int convKernelSize = 4,
+            //             int chunkSize = 64, IActivationFunction?, IInitializationStrategy?)
+            // Both take (sequenceLength, modelDimension) derived from the 2D input shape,
+            // with remaining positional int parameters matched from metadata by parameter name.
+            int sequenceLength = inputShape.Length > 0 ? inputShape[0] : 1;
+            int modelDimension = inputShape.Length > 1 ? inputShape[1] : 256;
+
+            var ctor = type.GetConstructors()
+                .Where(c =>
+                {
+                    var p = c.GetParameters();
+                    return p.Length >= 1 && p[0].ParameterType == typeof(int);
+                })
+                .OrderByDescending(c => c.GetParameters().Length)
+                .FirstOrDefault();
+            if (ctor is null)
+                throw new InvalidOperationException(
+                    $"Cannot find {layerType} constructor for deserialization.");
+
+            var parameters = ctor.GetParameters();
+            var args = new object?[parameters.Length];
+            for (int pi = 0; pi < parameters.Length; pi++)
+            {
+                string name = parameters[pi].Name ?? string.Empty;
+                if (name == "sequenceLength") args[pi] = sequenceLength;
+                else if (name == "modelDimension") args[pi] = modelDimension;
+                else if (parameters[pi].ParameterType == typeof(int))
+                    args[pi] = TryGetInt(additionalParams, char.ToUpperInvariant(name[0]) + name.Substring(1))
+                        ?? (parameters[pi].HasDefaultValue ? (int?)parameters[pi].DefaultValue : null);
+                else
+                    args[pi] = parameters[pi].HasDefaultValue ? parameters[pi].DefaultValue : null;
+            }
+            instance = ctor.Invoke(args);
+        }
         else
         {
             // Default: pass inputShape as first parameter
