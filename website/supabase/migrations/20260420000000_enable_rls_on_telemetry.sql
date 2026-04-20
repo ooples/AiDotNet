@@ -46,6 +46,16 @@ create table if not exists public.gpu_profiles (
 
 alter table public.gpu_profiles enable row level security;
 
+-- Indexes for admin analytics. The admin panel slices GPU profiles by
+-- vendor/model (device-specific charts) and filters to recent samples
+-- ("GPUs seen in the last 30 days"). Without indexes both queries are
+-- full-scans — cheap at current volume but painful once the library
+-- ships telemetry to real users.
+create index if not exists gpu_profiles_vendor_model_idx
+  on public.gpu_profiles (gpu_vendor, gpu_model);
+create index if not exists gpu_profiles_created_at_idx
+  on public.gpu_profiles (created_at desc);
+
 create policy "gpu_profiles_insert_anon"
   on public.gpu_profiles
   for insert
@@ -126,6 +136,47 @@ create policy "exception_telemetry_select_admin"
   to authenticated
   using (public.is_admin());
 
+-- Retention policy for exception_telemetry.
+--
+-- Stack traces + messages + additional_context can inadvertently carry
+-- PII, file paths, or secrets even though the client library scrubs
+-- aggressively. To bound the exposure window we time-box retention to
+-- 90 days and delete older rows on a schedule.
+--
+-- The function below is idempotent, non-transactional in the sense
+-- that every call deletes only what's older than 90 days from now,
+-- and safe to invoke repeatedly. Callers (pg_cron / the scheduler
+-- Edge Function / an admin-triggered run) do not need to coordinate.
+-- Returns the delete count so the caller can log it.
+--
+-- Scheduling: this migration does NOT enable pg_cron or schedule the
+-- function — doing so requires dashboard-level settings on Supabase
+-- (the pg_cron extension has to be whitelisted at project level).
+-- Until scheduled, run manually from SQL Editor when needed:
+--     select public.cleanup_old_exception_telemetry(90);
+-- Follow-up task tracked outside this migration: enable pg_cron and
+-- add `select cron.schedule('exception_telemetry_daily_cleanup',
+--   '0 3 * * *', $$select public.cleanup_old_exception_telemetry(90)$$);`
+create or replace function public.cleanup_old_exception_telemetry(retention_days integer default 90)
+returns integer
+language plpgsql
+security definer
+set search_path = 'public', 'pg_catalog'
+as $$
+declare
+  deleted_count integer;
+begin
+  delete from public.exception_telemetry
+   where submitted_at < (now() - make_interval(days => retention_days));
+  get diagnostics deleted_count = row_count;
+  return deleted_count;
+end;
+$$;
+
+comment on function public.cleanup_old_exception_telemetry(integer) is
+  'Deletes exception_telemetry rows older than `retention_days` (default 90). '
+  'Intended to be invoked by pg_cron or an admin-triggered maintenance job.';
+
 -- ---------- telemetry_consent ----------
 create table if not exists public.telemetry_consent (
   client_hash text primary key,
@@ -142,32 +193,46 @@ create policy "telemetry_consent_insert_anon"
   to anon, authenticated
   with check (true);
 
--- UPDATE policy — the client_hash column acts as the capability.
+-- UPDATE policy — row-level targeting enforced via X-Client-Hash header.
 --
--- Threat model, stated explicitly: telemetry_consent is a pseudonymous
--- opt-out table keyed by a one-way SHA-256 of the machine fingerprint.
--- We cannot bind updates to a Supabase JWT because the consent record
--- has to work for anonymous library users who never signed up, and we
--- cannot verify the hash over the wire because it IS the identifier.
+-- Threat model: telemetry_consent is a pseudonymous opt-out table keyed
+-- by a one-way SHA-256 of the machine fingerprint. We cannot bind
+-- updates to a Supabase JWT because the consent record has to work for
+-- anonymous library users who never signed up.
 --
--- So knowing a machine's client_hash IS the capability to flip that
--- machine's opt-out state. That mirrors the asymmetry of an emailed
--- "unsubscribe" URL — anyone who holds the token can exercise it. The
--- hash is not meaningfully enumerable (SHA-256 of a machine fingerprint)
--- so an attacker can't target a specific user's consent without already
--- knowing their hash; and the worst case is flipping one machine's
--- telemetry preference, which has no PII exposure.
+-- A previous revision of this policy used `using (true)` on the theory
+-- that knowing a machine's client_hash was already the capability to
+-- flip that row. That was wrong: `using (true)` also permits bulk
+-- updates without a WHERE filter, so a single PATCH with `{opted_out:
+-- true}` could toggle every row in the table at once. The downside is
+-- low (no PII leak, just an annoyance) but it's a trivial-to-exploit
+-- amplification we don't need to accept.
 --
--- If the library ever exposes a user's client_hash externally (support
--- tickets, public logs, etc.) this policy needs to tighten to a signed
--- opt-out token flow — but at that point the write path reshapes
--- entirely anyway.
-create policy "telemetry_consent_update_anon_capability"
+-- Fix: require the caller to send an `X-Client-Hash` header whose
+-- value matches the row's client_hash. PostgREST exposes request
+-- headers via `request.headers`; if the header is missing,
+-- `current_setting(..., true)` returns NULL and the match fails.
+--
+-- Client-side pattern (library code, once implemented):
+--   1. Compute the machine's client_hash locally.
+--   2. PATCH /telemetry_consent with:
+--        header:  X-Client-Hash: <hash>
+--        body:    { "opted_out": true, "opted_out_at": now() }
+--        filter:  ?client_hash=eq.<hash>
+--   3. Only the row whose client_hash matches the header updates.
+--
+-- Bulk updates are now structurally impossible: the RLS filter binds
+-- every update to the single row named by the header.
+create policy "telemetry_consent_update_own_row"
   on public.telemetry_consent
   for update
   to anon, authenticated
-  using (true)
-  with check (true);
+  using (
+    client_hash = (current_setting('request.headers', true)::jsonb ->> 'x-client-hash')
+  )
+  with check (
+    client_hash = (current_setting('request.headers', true)::jsonb ->> 'x-client-hash')
+  );
 
 create policy "telemetry_consent_select_admin"
   on public.telemetry_consent
