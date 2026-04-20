@@ -13,8 +13,10 @@ test.describe('Admin — overview', () => {
 
     // Admin badge is how the sidebar signals the role-gate succeeded. If
     // the admin layout ever flips back to the AccountLayout for an admin
-    // user by mistake, this disappears.
-    await expect(page.getByText('Admin Panel')).toBeVisible();
+    // user by mistake, this disappears. Scope to <aside> so the navbar's
+    // admin nav-link doesn't accidentally satisfy the assertion when
+    // the sidebar itself is missing.
+    await expect(page.getByRole('complementary').getByText('Admin Panel')).toBeVisible();
 
     // Five nav items: Overview, Users, API Keys, Licenses, Usage Analytics.
     // The exact text is the source of truth; if a refactor changes
@@ -56,12 +58,12 @@ test.describe('Admin — overview', () => {
     expect(consoleErrors, 'admin overview should emit zero console errors').toEqual([]);
   });
 
-  test('sidebar "Back to User Dashboard" link exits the admin layout', async ({ page }) => {
+  test('sidebar "Back to Account" link exits the admin layout', async ({ page }) => {
     await page.goto('/admin/');
     // The /account/ back-link is the escape hatch for an admin who wants
     // to view their own (non-admin) view. If it regresses to point at
     // /admin/ itself, admin-test users get stuck in the admin shell.
-    const backLink = page.getByRole('link', { name: /User Dashboard|Back to.*Dashboard/i }).last();
+    const backLink = page.getByRole('link', { name: 'Back to Account' });
     await expect(backLink).toHaveAttribute('href', /\/account\/?$/);
   });
 });

@@ -33,7 +33,11 @@ setup('authenticate as admin', async ({ page }) => {
   // below catches both cases.
   await page.goto('/admin/');
   await expect(page).toHaveURL(/\/admin\/?$/);
-  await expect(page.getByText('Admin Panel')).toBeVisible();
+  // "Admin Panel" matches three nodes (mobile nav link, desktop nav link,
+  // sidebar badge). We scope to the sidebar's <aside> so a hidden nav-link
+  // fallback doesn't satisfy the assertion when the sidebar actually
+  // failed to render.
+  await expect(page.getByRole('complementary').getByText('Admin Panel')).toBeVisible();
 
   await page.context().storageState({ path: ADMIN_STORAGE_STATE });
 });

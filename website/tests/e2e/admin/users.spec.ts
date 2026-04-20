@@ -42,17 +42,34 @@ test.describe('Admin — users', () => {
     await page.goto('/admin/users/');
     await expect(page.locator('#users-table')).toBeVisible({ timeout: 15_000 });
 
+    // Capture the pre-filter total so we can synchronously wait on the
+    // filter having applied. renderTable() awaits loadKeyCountsForPage()
+    // before swapping innerHTML, so a naive count() right after
+    // selectOption() races the async re-render.
+    const totalBefore = parseInt((await page.locator('#user-count').textContent()) || '0', 10);
+
     await page.locator('#filter-role').selectOption('admin');
 
-    // After filter applies, every visible row should show the admin
-    // role badge. A regression in the client-side filter (e.g., matching
-    // on subscription_tier instead of role) would leave non-admin rows
-    // mixed in.
+    // If every profile is role='admin' already, the filter wouldn't change
+    // the count — and then this test has nothing useful to assert. Skip
+    // early so the admin suite stays green in that (unlikely) scenario.
+    if (totalBefore <= 1) {
+      test.skip(true, 'not enough users to prove the filter narrowed anything');
+    }
+
+    // Wait for the admin-filter to actually narrow the list. The strict
+    // inequality catches the race where the old unfiltered table is still
+    // mounted: if we didn't wait, count() could return the pre-filter row
+    // count and then `.nth(totalBefore-1)` times out on a row that
+    // shouldn't be there anymore.
+    await expect
+      .poll(async () => parseInt((await page.locator('#user-count').textContent()) || '0', 10), {
+        timeout: 10_000,
+      })
+      .toBeLessThan(totalBefore);
+
     const visibleRows = page.locator('#users-body tr');
     const count = await visibleRows.count();
-    if (count === 0) {
-      test.skip(true, 'no admin accounts present — filter check skipped');
-    }
     for (let i = 0; i < count; i++) {
       await expect(visibleRows.nth(i)).toContainText(/admin/i);
     }
