@@ -353,6 +353,17 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     public virtual byte[] Serialize()
     {
         ModelPersistenceGuard.EnforceBeforeSerialize();
+        return SerializeInternalUnchecked();
+    }
+
+    /// <summary>
+    /// Internal, non-virtual, no-guard serialization used by trusted framework
+    /// call sites such as <see cref="DeepCopy"/>. Subclasses cannot override
+    /// this method, so a subclass override of <see cref="Serialize"/> cannot
+    /// intercept the clone path.
+    /// </summary>
+    private byte[] SerializeInternalUnchecked()
+    {
         var modelData = new Dictionary<string, object>
         {
             { "NumFeatures", NumFeatures },
@@ -377,6 +388,17 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     public virtual void Deserialize(byte[] modelData)
     {
         ModelPersistenceGuard.EnforceBeforeDeserialize();
+        DeserializeInternalUnchecked(modelData);
+    }
+
+    /// <summary>
+    /// Internal, non-virtual, no-guard deserialization used by trusted framework
+    /// call sites such as <see cref="DeepCopy"/>. Subclasses cannot override
+    /// this method, so a subclass override of <see cref="Deserialize"/> cannot
+    /// intercept the clone path.
+    /// </summary>
+    private void DeserializeInternalUnchecked(byte[] modelData)
+    {
         var jsonString = Encoding.UTF8.GetString(modelData);
         var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
 
@@ -489,12 +511,23 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     public virtual IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
         // In-memory clone, not a user save/load — wrap in InternalOperation
-        // so the persistence guard does not treat this as a billable op.
+        // so the persistence guard does not treat this as a billable op, AND
+        // route through the private non-virtual SerializeInternalUnchecked /
+        // DeserializeInternalUnchecked helpers so a subclass override of the
+        // public virtual Serialize / Deserialize methods cannot intercept the
+        // clone path (closes the subclass-override bypass surface).
         using (ModelPersistenceGuard.InternalOperation())
         {
-            byte[] serialized = Serialize();
+            byte[] serialized = SerializeInternalUnchecked();
             var copy = CreateNewInstance();
-            copy.Deserialize(serialized);
+            if (copy is CausalModelBase<T> copyBase)
+            {
+                copyBase.DeserializeInternalUnchecked(serialized);
+            }
+            else
+            {
+                copy.Deserialize(serialized);
+            }
             return copy;
         }
     }
