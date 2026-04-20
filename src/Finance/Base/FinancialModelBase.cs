@@ -583,6 +583,44 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
         return Forecast(input);
     }
 
+    /// <summary>
+    /// Tape-aware forward pass used by <c>NeuralNetworkBase.TrainWithTape</c>.
+    /// Delegates to <see cref="Forecast(Tensor{T}, double[])"/> — the same
+    /// entry point <see cref="Predict"/> uses — so the training-path output
+    /// shape matches the inference-path output shape by construction, at a
+    /// single point in the Finance hierarchy.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base-class default
+    /// (<see cref="AiDotNet.NeuralNetworks.NeuralNetworkBase{T}.ForwardForTraining"/>)
+    /// iterates <c>Layers</c> in order. That is correct only for models
+    /// whose <see cref="Forecast"/> pipeline IS just flat layer iteration.
+    /// Every finance model with a custom forward (patching, channel split,
+    /// hierarchical decode, pos-encoding projection, …) instead applies
+    /// those steps inside its own <c>ForecastNative</c> / <c>ForwardNative</c>
+    /// / <c>Forward</c> override, so flat iteration produces a wrong
+    /// intermediate shape and the loss dies with <c>"Tensor shapes must
+    /// match"</c>. Delegating to <see cref="Forecast"/> uses the same
+    /// dispatch each model has already wired up for inference.
+    /// </para>
+    /// <para>
+    /// A model whose forward contains non-tape-aware ops (raw
+    /// <c>.Data.Span</c> copies, <c>.ToArray</c>/<c>.ToVector</c>
+    /// round-trips, <c>new Tensor&lt;T&gt;(data, shape)</c> wrappers that
+    /// replace an Engine op) will break backward with a tape error when
+    /// this path runs — that's the signal to convert those helpers to
+    /// <see cref="IEngine"/> ops.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (!UseNativeMode)
+            throw new InvalidOperationException(
+                "Training is only supported in native mode.");
+        return Forecast(input, quantiles: null);
+    }
+
     #endregion
 
     #region Serialization
