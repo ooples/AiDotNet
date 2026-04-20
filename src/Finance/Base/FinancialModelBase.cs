@@ -500,20 +500,54 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
         if (expectedOutput is null)
             throw new ArgumentNullException(nameof(expectedOutput));
 
-        // Perform forward pass
-        var output = Predict(input);
+        // Previously this method ran Predict() (NoGrad), computed an
+        // eager loss value, and delegated to TrainCore() for the actual
+        // backward + parameter update. TrainCore either threw
+        // NotSupportedException (the base default) or, in the ~12 derived
+        // overrides that implemented it, just called
+        //     _optimizer.UpdateParameters(Layers);
+        // WITHOUT running a backward pass first — which layers reject
+        // with "Backward pass must be called before updating parameters."
+        // The end result: Train() was 100% broken for every derived model
+        // that didn't ship its own Train override.
+        //
+        // Route through NeuralNetworkBase.TrainWithTape instead. That
+        // opens a GradientTape, runs a tape-connected forward via
+        // ForwardForTraining, computes the loss, calls
+        // tape.ComputeGradients, and hands the gradients to the
+        // configured optimizer — i.e., the same flow every other
+        // NeuralNetworkBase subclass uses. TrainWithTape sets LastLoss
+        // itself; we read it back here to preserve the _lastTrainingLoss
+        // / _lossHistory contract the rest of this base class exposes.
+        //
+        // TrainCore() remains for source compatibility but is now dead
+        // code — none of the ~12 overrides are invoked. See the
+        // "Backward pass must be called…" thread on PR #1177 for the
+        // scope discussion on the further Foundation-model Train
+        // overrides (CCDM, TimeMoE, etc.) which need model-specific
+        // fixes (diffusion score matching, mixture-of-experts routing)
+        // and are tracked as follow-up.
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
 
-        // Calculate loss
-        var loss = LossFunction.CalculateLoss(output.ToVector(), expectedOutput.ToVector());
-        _lastTrainingLoss = loss;
-
-        // Track loss history
-        _lossHistory.Add(loss);
+        // TrainWithTape populates LastLoss from the tape's scalar loss
+        // tensor; mirror that into the legacy per-instance field + the
+        // bounded history list that IFinancialModel consumers read.
+        // LastLoss is T? on NeuralNetworkBase and remains null until the
+        // first successful training step — fall back to NumOps.Zero so
+        // callers reading _lastTrainingLoss never see the default(T).
+        T currentLoss = LastLoss is null ? NumOps.Zero : LastLoss;
+        _lastTrainingLoss = currentLoss;
+        _lossHistory.Add(currentLoss);
         if (_lossHistory.Count > 1000)
             _lossHistory.RemoveAt(0);
-
-        // Perform backward pass and update parameters
-        TrainCore(input, expectedOutput, output);
     }
 
     /// <summary>
