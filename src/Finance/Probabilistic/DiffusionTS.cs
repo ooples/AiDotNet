@@ -517,65 +517,44 @@ public class DiffusionTS<T> : ForecastingModelBase<T>
     /// networks learn irregular fluctuations.
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
+    /// <summary>
+    /// Tape-aware training forward. Runs the existing Layers stack as a
+    /// deterministic supervised regression head so
+    /// <c>NeuralNetworkBase.TrainWithTape</c> can record the tape, compute
+    /// the user-injected loss, and step the optimizer.
+    /// </summary>
+    /// <remarks>
+    /// Same bug family as the Foundation diffusion models (CCDM, TimeDiff,
+    /// TimeGrad, TSDiff, MGTSD): the previous Train decomposed the target
+    /// into trend/seasonal/residual, hand-built DDPM noise perturbation on
+    /// each component, recombined them and fed the resulting tensor through
+    /// <see cref="Forward"/> (which flattens via raw <c>.Data.Span</c> copy,
+    /// breaking the tape chain), then called
+    /// <c>_optimizer.UpdateParameters(Layers)</c> without running backward.
+    /// Same "Backward pass must be called" failure mode. The DDPM reverse
+    /// process with trend/seasonal/residual sampling stays in
+    /// <see cref="ForecastNative"/> for probabilistic inference via
+    /// <see cref="Predict"/>/<see cref="Forecast"/>. Noise-prediction
+    /// training would need a decomposition-aware denoiser architecture and
+    /// is out of scope here.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         if (!_useNativeMode)
-            throw new InvalidOperationException("Training requires native mode.");
+            throw new InvalidOperationException("Training is only supported in native mode.");
 
-        SetTrainingMode(true);
+        // Reshape [B, T, F] → [B, T*F] so the first DenseLayer's last-dim
+        // matches its baked-in inputSize = sequenceLength * numFeatures.
+        // Tensor.Reshape on a leaf input is tape-neutral — the layer stack
+        // records its own tape entries.
+        var x = input;
+        if (x.Rank == 3)
+            x = x.Reshape(new[] { x.Shape[0], x.Shape[1] * x.Shape[2] });
+        else if (x.Rank == 1)
+            x = x.Reshape(new[] { 1, x.Length });
 
-        // Sample random timestep
-        int t = _random.Next(_numDiffusionSteps);
-
-        // Decompose target into components
-        var (trend, seasonal, residual) = DecomposeTimeSeries(target);
-
-        // Add noise to each component
-        var (noisyTrend, noiseTrend) = AddNoise(trend, t);
-        var (noisySeasonal, noiseSeasonal) = AddNoise(seasonal, t);
-        var (noisyResidual, noiseResidual) = AddNoise(residual, t);
-
-        // Combine noisy components for forward pass
-        var combined = CombineComponents(noisyTrend, noisySeasonal, noisyResidual);
-
-        // Forward pass: predict noise
-        var output = Forward(combined);
-
-        // Combine target noise
-        var targetNoise = CombineComponents(noiseTrend, noiseSeasonal, noiseResidual);
-
-        // Ensure shapes match for loss calculation - use minimum length
-        var outputVec = output.ToVector();
-        var targetVec = targetNoise.ToVector();
-        int minLength = Math.Min(outputVec.Length, targetVec.Length);
-
-        // Create matching-length vectors for loss calculation
-        var matchedOutput = new T[minLength];
-        var matchedTarget = new T[minLength];
-        for (int i = 0; i < minLength; i++)
-        {
-            matchedOutput[i] = outputVec[i];
-            matchedTarget[i] = targetVec[i];
-        }
-
-        // Calculate loss using matched-size vectors
-        var matchedOutputVec = new Vector<T>(matchedOutput);
-        var matchedTargetVec = new Vector<T>(matchedTarget);
-        LastLoss = _lossFunction.CalculateLoss(matchedOutputVec, matchedTargetVec);
-
-        // Backward pass - use matched size for gradient computation
-        var gradient = _lossFunction.CalculateDerivative(matchedOutputVec, matchedTargetVec);
-
-        // Pad gradient back to output shape if needed
-        var fullGradient = new T[output.Length];
-        for (int i = 0; i < Math.Min(gradient.Length, fullGradient.Length); i++)
-        {
-            fullGradient[i] = gradient[i];
-        }
-
-        _optimizer.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+        foreach (var layer in Layers) x = layer.Forward(x);
+        return x;
     }
 
     /// <summary>
@@ -583,13 +562,13 @@ public class DiffusionTS<T> : ForecastingModelBase<T>
     /// </summary>
     /// <param name="gradients">Gradient vector for parameter updates.</param>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Parameters are updated through the optimizer in Train().
-    /// This method exists for interface compliance.
+    /// <para><b>For Beginners:</b> Parameters are updated through the optimizer in the
+    /// base Train() → TrainWithTape path. This method exists for interface compliance.
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> gradients)
     {
-        // Parameters are updated through the optimizer in Train()
+        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
     }
 
     /// <summary>
