@@ -22,16 +22,24 @@ namespace AiDotNet.Helpers;
 internal static class ModelPersistenceGuard
 {
     /// <summary>
-    /// Thread-static nesting counter for internal persistence operations.
+    /// Ambient nesting counter for internal persistence operations.
     /// When greater than zero, <see cref="EnforceBeforeSerialize"/> and
     /// <see cref="EnforceBeforeDeserialize"/> are no-ops to avoid double-counting.
     /// Uses a counter instead of a boolean to support nested InternalOperation scopes.
     /// </summary>
-    [ThreadStatic]
-    private static int _internalOperationDepth;
+    /// <remarks>
+    /// Uses <see cref="AsyncLocal{T}"/> instead of <c>[ThreadStatic]</c>: an
+    /// <c>await</c> inside an <see cref="InternalOperation"/> scope can resume
+    /// on a different thread-pool thread, at which point a thread-static
+    /// counter reads as <c>0</c> on the new thread and the guard fires on an
+    /// operation that should have been suppressed. <see cref="AsyncLocal{T}"/>
+    /// flows with the logical call context, so the counter survives the
+    /// continuation.
+    /// </remarks>
+    private static readonly AsyncLocal<int> _internalOperationDepth = new();
 
     /// <summary>
-    /// Marks the current thread as executing an internal persistence operation.
+    /// Marks the current logical call context as executing an internal persistence operation.
     /// While the returned scope is active, <see cref="EnforceBeforeSerialize"/> and
     /// <see cref="EnforceBeforeDeserialize"/> will not count operations.
     /// Supports nesting — only the outermost scope's disposal re-enables enforcement.
@@ -47,7 +55,7 @@ internal static class ModelPersistenceGuard
     /// </example>
     internal static IDisposable InternalOperation()
     {
-        _internalOperationDepth++;
+        _internalOperationDepth.Value++;
         return new InternalOperationScope();
     }
 
@@ -60,7 +68,7 @@ internal static class ModelPersistenceGuard
     /// </exception>
     internal static void EnforceBeforeSave()
     {
-        if (_internalOperationDepth > 0) return;
+        if (_internalOperationDepth.Value > 0) return;
         EnforceCore();
     }
 
@@ -73,7 +81,7 @@ internal static class ModelPersistenceGuard
     /// </exception>
     internal static void EnforceBeforeLoad()
     {
-        if (_internalOperationDepth > 0) return;
+        if (_internalOperationDepth.Value > 0) return;
         EnforceCore();
     }
 
@@ -87,7 +95,7 @@ internal static class ModelPersistenceGuard
     /// </exception>
     internal static void EnforceBeforeSerialize()
     {
-        if (_internalOperationDepth > 0) return;
+        if (_internalOperationDepth.Value > 0) return;
         EnforceCore();
     }
 
@@ -101,7 +109,7 @@ internal static class ModelPersistenceGuard
     /// </exception>
     internal static void EnforceBeforeDeserialize()
     {
-        if (_internalOperationDepth > 0) return;
+        if (_internalOperationDepth.Value > 0) return;
         EnforceCore();
     }
 
@@ -114,36 +122,41 @@ internal static class ModelPersistenceGuard
     private static readonly object _validatorLock = new();
 
     /// <summary>
-    /// Thread-static license key set by AiModelBuilder during BuildAsync.
-    /// Allows EnforceCore to use the builder's configured license key
-    /// without requiring it in the environment variable or file.
+    /// License key set by AiModelBuilder during BuildAsync. Flows through
+    /// async continuations via <see cref="AsyncLocal{T}"/> so a
+    /// <c>BuildAsync</c> that <c>await</c>s and resumes on a different
+    /// thread still sees the same key when the guard fires on the post-
+    /// await thread.
     /// </summary>
-    [ThreadStatic]
-    private static AiDotNet.Models.AiDotNetLicenseKey? _activeBuilderLicenseKey;
+    private static readonly AsyncLocal<AiDotNet.Models.AiDotNetLicenseKey?> _activeBuilderLicenseKey = new();
 
     /// <summary>
-    /// Thread-static trial-file path override used by the test suite so
-    /// regression tests can exercise <see cref="EnforceCore"/> against an
-    /// isolated trial.json without mutating <c>~/.aidotnet/trial.json</c>
-    /// on the developer's real machine. <see langword="null"/> (default)
-    /// means the real default path is used.
+    /// Trial-file path override used by the test suite so regression tests
+    /// can exercise <see cref="EnforceCore"/> against an isolated trial.json
+    /// without mutating <c>~/.aidotnet/trial.json</c> on the developer's
+    /// real machine. <see langword="null"/> (default) means the real
+    /// default path is used.
     /// </summary>
-    [ThreadStatic]
-    private static string? _testTrialFilePathOverride;
+    /// <remarks>
+    /// <see cref="AsyncLocal{T}"/>, not <c>[ThreadStatic]</c>: tests may
+    /// <c>await</c> inside the scope (e.g., <c>AiModelBuilder.BuildAsync</c>
+    /// regressions) and continuations often resume on a different thread-pool
+    /// thread; a thread-static override would be lost after the await.
+    /// </remarks>
+    private static readonly AsyncLocal<string?> _testTrialFilePathOverride = new();
 
     /// <summary>
-    /// Sets an isolated trial-file path for the current thread's
-    /// <see cref="EnforceCore"/> trial-counting path. Returns an
-    /// <see cref="IDisposable"/> that restores the previous override on
-    /// dispose. Intended for test isolation only — not a public API.
+    /// Sets an isolated trial-file path for the current logical call context.
+    /// Returns an <see cref="IDisposable"/> that restores the previous override
+    /// on dispose. Intended for test isolation only — not a public API.
     /// </summary>
     /// <param name="path">The trial-file path to use for the duration of
     /// the scope. Pass <see langword="null"/> to clear any existing
     /// override.</param>
     internal static IDisposable SetTestTrialFilePathOverride(string? path)
     {
-        string? previous = _testTrialFilePathOverride;
-        _testTrialFilePathOverride = path;
+        string? previous = _testTrialFilePathOverride.Value;
+        _testTrialFilePathOverride.Value = path;
         return new TestTrialFilePathOverrideScope(previous);
     }
 
@@ -151,22 +164,25 @@ internal static class ModelPersistenceGuard
     {
         private readonly string? _previous;
         public TestTrialFilePathOverrideScope(string? previous) => _previous = previous;
-        public void Dispose() => _testTrialFilePathOverride = _previous;
+        public void Dispose() => _testTrialFilePathOverride.Value = _previous;
     }
 
     /// <summary>
-    /// Sets the active builder license key for the current thread.
+    /// Sets the active builder license key for the current logical call context.
     /// Called by AiModelBuilder at the start of BuildAsync.
     /// </summary>
     internal static IDisposable SetActiveLicenseKey(AiDotNet.Models.AiDotNetLicenseKey? key)
     {
-        _activeBuilderLicenseKey = key;
-        return new ActiveLicenseKeyScope();
+        AiDotNet.Models.AiDotNetLicenseKey? previous = _activeBuilderLicenseKey.Value;
+        _activeBuilderLicenseKey.Value = key;
+        return new ActiveLicenseKeyScope(previous);
     }
 
     private sealed class ActiveLicenseKeyScope : IDisposable
     {
-        public void Dispose() => _activeBuilderLicenseKey = null;
+        private readonly AiDotNet.Models.AiDotNetLicenseKey? _previous;
+        public ActiveLicenseKeyScope(AiDotNet.Models.AiDotNetLicenseKey? previous) => _previous = previous;
+        public void Dispose() => _activeBuilderLicenseKey.Value = _previous;
     }
 
     /// <summary>
@@ -179,7 +195,7 @@ internal static class ModelPersistenceGuard
         // 1. Builder's configured key (thread-static, set during BuildAsync)
         // 2. Environment variable (AIDOTNET_LICENSE_KEY)
         // 3. File (~/.aidotnet-license)
-        string? resolvedKey = LicenseKeyResolver.Resolve(_activeBuilderLicenseKey);
+        string? resolvedKey = LicenseKeyResolver.Resolve(_activeBuilderLicenseKey.Value);
         if (resolvedKey is not null && resolvedKey.Trim().Length > 0)
         {
             string licenseKey = resolvedKey.Trim();
@@ -217,8 +233,9 @@ internal static class ModelPersistenceGuard
         }
 
         // No license key — enforce trial limits
-        var trialManager = _testTrialFilePathOverride is not null
-            ? new TrialStateManager(_testTrialFilePathOverride)
+        string? overridePath = _testTrialFilePathOverride.Value;
+        var trialManager = overridePath is not null
+            ? new TrialStateManager(overridePath)
             : new TrialStateManager();
         try
         {
@@ -283,15 +300,16 @@ internal static class ModelPersistenceGuard
     }
 
     /// <summary>
-    /// Disposable scope that resets the internal operation flag on disposal.
+    /// Disposable scope that decrements the internal operation depth on dispose.
     /// </summary>
     private sealed class InternalOperationScope : IDisposable
     {
         public void Dispose()
         {
-            if (_internalOperationDepth > 0)
+            int current = _internalOperationDepth.Value;
+            if (current > 0)
             {
-                _internalOperationDepth--;
+                _internalOperationDepth.Value = current - 1;
             }
         }
     }

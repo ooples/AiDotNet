@@ -784,12 +784,25 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.NotNull(copy);
         Assert.Equal(before, network.SerializeOverrideCalls);
 
-        // And the returned copy, whose override also exists, must not have
-        // been called either during DeepCopy's Deserialize.
-        if (copy is ExfilTrackingFeedForward typedCopy)
-        {
-            Assert.Equal(0, typedCopy.SerializeOverrideCalls);
-        }
+        // Contract: DeepCopy round-trips through private
+        // SerializeInternalUnchecked / Deserialize. The serialized bytes
+        // carry only the base-class layer catalogue, so the concrete type
+        // reconstructed by Deserialize is always the declared base —
+        // user subclasses such as ExfilTrackingFeedForward are
+        // intentionally NOT preserved. That property IS the defence:
+        //   (a) Primary invariant — the original's override counter never
+        //       incremented during DeepCopy (checked above at line 785).
+        //   (b) Secondary invariant — the returned copy is the base
+        //       FeedForwardNeuralNetwork type, so there is no subclass
+        //       override on the copy that could be invoked even in theory.
+        //
+        // This assertion is deliberately unconditional: if a future
+        // refactor teaches DeepCopy to preserve subclass identity, this
+        // test must fail loudly rather than silently skip its second half —
+        // because at that point an explicit check on
+        // `((ExfilTrackingFeedForward)copy).SerializeOverrideCalls == 0`
+        // must be added to keep the exfil guarantee.
+        Assert.IsType<FeedForwardNeuralNetwork<double>>(copy);
     }
 
     // ---------------------------------------------------------------------
