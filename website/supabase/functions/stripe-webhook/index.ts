@@ -299,9 +299,28 @@ async function handleSubscriptionUpdated(
       licenseStatus = "suspended";
   }
 
-  // Determine tier from the subscription item's price metadata.
-  const priceMetadata = subscription.items?.data?.[0]?.price?.metadata;
-  const tier = priceMetadata?.tier as string | undefined;
+  // Determine tier from the subscription's price metadata. Today each
+  // Stripe subscription has exactly one line item (one plan per sub),
+  // but multi-item subscriptions — say, a main plan bundled with an
+  // add-on — are allowed by Stripe and the webhook should degrade
+  // gracefully if one lands.
+  //
+  // Strategy: walk every item, collect the tiers advertised in each
+  // price's metadata, and pick the highest-ranked tier we know about.
+  // Enterprise wins over professional; anything not in the known set
+  // is ignored rather than trusted. That means adding a "premium"
+  // tier later requires appending it to TIER_RANK below — which keeps
+  // the precedence explicit, unlike a blind `first item wins` fallback.
+  const TIER_RANK: Record<string, number> = {
+    professional: 1,
+    enterprise: 2,
+  };
+  const seenTiers = (subscription.items?.data ?? [])
+    .map((item) => item.price?.metadata?.tier as string | undefined)
+    .filter((t): t is string => typeof t === "string" && t in TIER_RANK);
+  const tier = seenTiers.length > 0
+    ? seenTiers.reduce((a, b) => (TIER_RANK[a] >= TIER_RANK[b] ? a : b))
+    : undefined;
 
   const updateData: Record<string, string | number> = { status: licenseStatus };
   if (tier && TIER_MAX_ACTIVATIONS[tier] !== undefined) {
