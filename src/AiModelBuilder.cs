@@ -1371,9 +1371,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     try
                     {
                         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-                        // Discard return: CompiledModelCache treats the last recorded
-                        // op's output tensor as the plan's output.
-                        nnModel.Predict(input);
+                        // Tensors 0.50.1 changed GetOrCompileInference from Action to
+                        // Func<Tensor<T>> — the tracer now binds the plan output to
+                        // whatever the lambda returns, rather than inferring it from
+                        // the last recorded op. Return the Predict result explicitly.
+                        return nnModel.Predict(input);
                     }
                     finally
                     {

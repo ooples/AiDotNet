@@ -138,8 +138,12 @@ public static class CompiledTapeTrainingStep<T>
                 compositeKey,
                 () =>
                 {
+                    // Tensors 0.50.1 changed GetOrCompileTraining to take a
+                    // Func<Tensor<T>> — the trace lambda must return the
+                    // scalar output (loss) so the compile-graph has a single
+                    // terminal node to differentiate from.
                     var predicted = forward(input);
-                    computeLoss(predicted, target);
+                    return computeLoss(predicted, target);
                 },
                 parameters);
 
@@ -268,8 +272,12 @@ public static class CompiledTapeTrainingStep<T>
                 compositeKey,
                 () =>
                 {
+                    // Tensors 0.50.1 changed GetOrCompileTraining to take a
+                    // Func<Tensor<T>> — the trace lambda must return the
+                    // scalar output (loss) so the compile-graph has a single
+                    // terminal node to differentiate from.
                     var predicted = forward(input);
-                    computeLoss(predicted, target);
+                    return computeLoss(predicted, target);
                 },
                 parameters);
 
