@@ -490,57 +490,54 @@ public class TSDiff<T> : ForecastingModelBase<T>
     /// Self-guidance is learned implicitly through this noise prediction objective.
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
+    /// <summary>
+    /// Tape-aware training forward. Runs the existing Layers stack as a
+    /// deterministic supervised regression head so
+    /// <c>NeuralNetworkBase.TrainWithTape</c> can record the tape, compute
+    /// the user-injected loss, and step the optimizer.
+    /// </summary>
+    /// <remarks>
+    /// Same bug family as the Foundation diffusion models / DiffusionTS:
+    /// custom Train added DDPM noise to target, fed the noisy target through
+    /// <see cref="Forward"/> (which flattens via raw <c>.Data.Span</c> copy,
+    /// breaking the tape chain), then called
+    /// <c>_optimizer.UpdateParameters(Layers)</c> without running backward.
+    /// Self-guiding DDPM reverse process with guidance-scale refinement
+    /// remains in <see cref="ForecastNative"/> for probabilistic inference
+    /// via <see cref="Predict"/>/<see cref="Forecast"/>.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         if (!_useNativeMode)
-            throw new InvalidOperationException("Training requires native mode.");
+            throw new InvalidOperationException("Training is only supported in native mode.");
 
-        SetTrainingMode(true);
-
-        // Sample random timestep
-        int t = _random.Next(_numDiffusionSteps);
-
-        // Add noise to target
-        var (noisyTarget, noise) = AddNoise(target, t);
-
-        // Forward pass: predict noise
-        var output = Forward(noisyTarget);
-
-        // Flatten noise to match output shape (Forward flattens input)
-        var noiseFlattened = FlattenInput(noise);
-
-        // Ensure shapes match for loss calculation - use minimum length
-        var outputVec = output.ToVector();
-        var noiseVec = noiseFlattened.ToVector();
-        int minLength = Math.Min(outputVec.Length, noiseVec.Length);
-
-        // Create matching-length vectors for loss calculation
-        var matchedOutput = new T[minLength];
-        var matchedNoise = new T[minLength];
-        for (int i = 0; i < minLength; i++)
+        // Reshape [B, T, F] → [B, T*F] so the first DenseLayer's last-dim
+        // matches its baked-in flatSize = sequenceLength * numFeatures.
+        // Tensor.Reshape on a leaf is tape-neutral — the layer stack records
+        // its own tape entries.
+        var x = input;
+        int batch = x.Rank >= 1 ? x.Shape[0] : 1;
+        if (x.Rank == 3)
+            x = x.Reshape(new[] { x.Shape[0], x.Shape[1] * x.Shape[2] });
+        else if (x.Rank == 1)
         {
-            matchedOutput[i] = outputVec[i];
-            matchedNoise[i] = noiseVec[i];
+            batch = 1;
+            x = x.Reshape(new[] { 1, x.Length });
         }
 
-        // Calculate loss using matched-size vectors
-        var matchedOutputVec = new Vector<T>(matchedOutput);
-        var matchedNoiseVec = new Vector<T>(matchedNoise);
-        LastLoss = _lossFunction.CalculateLoss(matchedOutputVec, matchedNoiseVec);
+        foreach (var layer in Layers) x = layer.Forward(x);
 
-        // Backward pass - use matched size for gradient computation
-        var gradient = _lossFunction.CalculateDerivative(matchedOutputVec, matchedNoiseVec);
+        // The TSDiff layer head emits shape [B, flatSize] where
+        // flatSize = sequenceLength * numFeatures (the full sequence
+        // reconstruction, not just the forecast). Training target from
+        // Predict/ForecastNative is only the forecast slice of shape
+        // [forecastHorizon * numFeatures]. Slice the head output to match,
+        // tape-recorded so backward flows through the slice.
+        int targetLen = _forecastHorizon * Math.Max(1, _numFeatures);
+        if (x.Rank == 2 && x.Shape[1] > targetLen)
+            x = Engine.TensorSlice(x, new[] { 0, 0 }, new[] { batch, targetLen });
 
-        // Pad gradient back to output shape if needed
-        var fullGradient = new T[output.Length];
-        for (int i = 0; i < Math.Min(gradient.Length, fullGradient.Length); i++)
-        {
-            fullGradient[i] = gradient[i];
-        }
-
-        _optimizer.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+        return x;
     }
 
     /// <summary>
@@ -549,12 +546,13 @@ public class TSDiff<T> : ForecastingModelBase<T>
     /// <param name="gradients">Gradient vector.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> In the TSDiff model, UpdateParameters updates internal parameters or state. This keeps the TSDiff architecture aligned with the latest values.
+    /// <b>For Beginners:</b> Parameters are updated through the optimizer in the base
+    /// Train() → TrainWithTape path. This method exists for interface compliance.
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> gradients)
     {
-        // Parameters are updated through the optimizer in Train()
+        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
     }
 
     /// <summary>
