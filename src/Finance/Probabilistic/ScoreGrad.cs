@@ -455,41 +455,38 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
     /// from noisy data toward clean data, scaled by 1/σ².
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
+    /// <summary>
+    /// Tape-aware training forward. Runs the existing Layers stack as a
+    /// deterministic supervised regression head so
+    /// <c>NeuralNetworkBase.TrainWithTape</c> can record the tape, compute
+    /// the user-injected loss, and step the optimizer.
+    /// </summary>
+    /// <remarks>
+    /// Same bug family as the other Finance diffusion models: custom Train
+    /// sampled a σ level, added noise to target, computed a -noise/σ² score
+    /// target, combined [context | noisyTarget | σ-embed] and fed through
+    /// <see cref="Forward"/> (raw <c>.Data.Span</c> flatten — breaks tape),
+    /// then called <c>_optimizer.UpdateParameters(Layers)</c> without
+    /// backward. Annealed Langevin dynamics with score-guided sampling stays
+    /// in <see cref="ForecastNative"/> for probabilistic inference via
+    /// <see cref="Predict"/>/<see cref="Forecast"/>.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         if (!_useNativeMode)
-            throw new InvalidOperationException("Training requires native mode.");
+            throw new InvalidOperationException("Training is only supported in native mode.");
 
-        SetTrainingMode(true);
+        // Reshape [B, T, F] → [B, T*F] so the first DenseLayer's last-dim
+        // is deterministic. Tensor.Reshape on a leaf is tape-neutral — the
+        // layer stack records its own tape entries.
+        var x = input;
+        if (x.Rank == 3)
+            x = x.Reshape(new[] { x.Shape[0], x.Shape[1] * x.Shape[2] });
+        else if (x.Rank == 1)
+            x = x.Reshape(new[] { 1, x.Length });
 
-        // Sample random noise level
-        int sigmaIdx = _random.Next(_numNoiseScales);
-        double sigma = _sigmas[sigmaIdx];
-
-        // Add noise to target
-        var (noisyTarget, noise) = AddNoise(target, sigma);
-
-        // Compute true score: -noise / sigma^2
-        var trueScore = ComputeTrueScore(noise, sigma);
-
-        // Create noise embedding
-        var sigmaEmbed = CreateSigmaEmbedding(sigma);
-
-        // Combine inputs: context + noisy target + sigma embedding
-        var combinedInput = CombineInputs(input, noisyTarget, sigmaEmbed);
-
-        // Forward pass: predict score
-        var predictedScore = Forward(combinedInput);
-
-        // Calculate loss: ||predicted - true||^2
-        LastLoss = _lossFunction.CalculateLoss(predictedScore.ToVector(), trueScore.ToVector());
-
-        // Backward pass
-        var gradient = _lossFunction.CalculateDerivative(predictedScore.ToVector(), trueScore.ToVector());
-
-        _optimizer.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+        foreach (var layer in Layers) x = layer.Forward(x);
+        return x;
     }
 
     /// <summary>
@@ -498,12 +495,13 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
     /// <param name="gradients">Gradient vector.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> In the ScoreGrad model, UpdateParameters updates internal parameters or state. This keeps the ScoreGrad architecture aligned with the latest values.
+    /// <b>For Beginners:</b> Parameters are updated through the optimizer in the base
+    /// Train() → TrainWithTape path. This method exists for interface compliance.
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> gradients)
     {
-        // Parameters are updated through the optimizer in Train()
+        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
     }
 
     /// <summary>
