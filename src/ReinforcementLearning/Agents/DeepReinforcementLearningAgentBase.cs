@@ -30,9 +30,10 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// - Model-based methods (Dreamer, MuZero, World Models)
 /// - Transformer-based methods (Decision Transformer)
 /// </para>
-/// <para><b>JIT Compilation Support:</b> Deep RL agents support JIT compilation for policy inference
-/// when their underlying neural networks support IJitCompilable. The JIT-compiled policy network
-/// provides fast, deterministic action selection (without exploration) suitable for deployment.
+/// <para><b>Auto-Compile:</b> Policy inference goes through the standard neural-network path,
+/// which is auto-compiled by Tensors' AutoTracer once the input-shape pattern repeats. No
+/// explicit compile call is required. Users can opt out via
+/// <c>TensorCodecOptions.Current.EnableCompilation = false</c>.
 /// </para>
 /// </remarks>
 public abstract class DeepReinforcementLearningAgentBase<T> : ReinforcementLearningAgentBase<T>

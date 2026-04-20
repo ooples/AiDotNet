@@ -1206,25 +1206,6 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         return result;
     }
 
-    private Autodiff.ComputationNode<T> ApplyActivationToGraphNode(Autodiff.ComputationNode<T> input, bool isFirst)
-    {
-        if (isFirst)
-        {
-            if (_firstVectorActivation != null && _firstVectorActivation.SupportsJitCompilation)
-                return _firstVectorActivation.ApplyToGraph(input);
-            if (_firstActivation != null && _firstActivation.SupportsJitCompilation)
-                return _firstActivation.ApplyToGraph(input);
-        }
-        else
-        {
-            if (_secondVectorActivation != null && _secondVectorActivation.SupportsJitCompilation)
-                return _secondVectorActivation.ApplyToGraph(input);
-            if (_secondActivation != null && _secondActivation.SupportsJitCompilation)
-                return _secondActivation.ApplyToGraph(input);
-        }
-        return input;
-    }
-
     /// <summary>
     /// Updates the layer's parameters using the calculated gradients and the specified learning rate.
     /// </summary>
@@ -1585,56 +1566,6 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         return diagnostics;
     }
 
-    /// <inheritdoc />
-    public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
-    {
-        if (_weights1 == null || _weights2 == null || _bias1 == null || _bias2 == null)
-            throw new InvalidOperationException("Layer weights not initialized. Initialize the layer before compiling.");
-
-        // Squeeze: Global Average Pooling across spatial dimensions
-        var squeezed = TensorOperations<T>.ReduceMean(inputNode, axes: new[] { 1, 2 }, keepDims: false);
-
-        // Excitation: First fully connected layer (weights and biases are already Tensor<T>)
-        var weights1Node = TensorOperations<T>.Constant(_weights1, $"{namePrefix}se_weights1");
-        var bias1Node = TensorOperations<T>.Constant(_bias1, $"{namePrefix}se_bias1");
-
-        var fc1Output = TensorOperations<T>.MatrixMultiply(squeezed, weights1Node);
-        fc1Output = TensorOperations<T>.Add(fc1Output, bias1Node);
-
-        // Apply first activation (default: ReLU)
-        if (_firstActivation != null && _firstActivation.SupportsJitCompilation)
-        {
-            fc1Output = _firstActivation.ApplyToGraph(fc1Output);
-        }
-        else if (_firstVectorActivation == null)
-        {
-            fc1Output = TensorOperations<T>.ReLU(fc1Output);
-        }
-
-        // Excitation: Second fully connected layer (weights and biases are already Tensor<T>)
-        var weights2Node = TensorOperations<T>.Constant(_weights2, $"{namePrefix}se_weights2");
-        var bias2Node = TensorOperations<T>.Constant(_bias2, $"{namePrefix}se_bias2");
-
-        var fc2Output = TensorOperations<T>.MatrixMultiply(fc1Output, weights2Node);
-        fc2Output = TensorOperations<T>.Add(fc2Output, bias2Node);
-
-        // Apply second activation (default: Sigmoid)
-        if (_secondActivation != null && _secondActivation.SupportsJitCompilation)
-        {
-            fc2Output = _secondActivation.ApplyToGraph(fc2Output);
-        }
-        else if (_secondVectorActivation == null)
-        {
-            fc2Output = TensorOperations<T>.Sigmoid(fc2Output);
-        }
-
-        // Scale: Multiply input by excitation weights (with broadcasting)
-        // fc2Output has shape [batch, channels], inputNode has shape [batch, height, width, channels]
-        // ElementwiseMultiply should handle broadcasting automatically
-        var scaledOutput = TensorOperations<T>.ElementwiseMultiply(inputNode, fc2Output);
-
-        return scaledOutput;
-    }
 
     public override void ClearGradients()
     {

@@ -1070,7 +1070,4 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
     #endregion
 
-    #region IJitCompilable Override
-
-    #endregion
 }

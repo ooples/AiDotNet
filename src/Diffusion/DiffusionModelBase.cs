@@ -238,9 +238,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </remarks>
     public NeuralNetworkArchitecture<T>? Architecture => _architecture;
 
-    /// <inheritdoc />
-    public virtual bool SupportsJitCompilation => false;
-
     /// <summary>
     /// Initializes a new instance of the DiffusionModelBase class.
     /// </summary>
@@ -937,15 +934,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
     #endregion
 
-    #region IJitCompilable<T> Implementation
-
-    /// <inheritdoc />
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("This diffusion model does not support JIT compilation. Override ExportComputationGraph in derived class if needed.");
-    }
-
-    #endregion
 
     #region Helper Methods
 

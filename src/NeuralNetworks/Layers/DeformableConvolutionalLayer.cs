@@ -636,58 +636,6 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
         return [_outputChannels, outH, outW];
     }
 
-    /// <inheritdoc/>
-    public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
-    {
-        if (!SupportsJitCompilation)
-            throw new InvalidOperationException("Layer weights not initialized. Cannot build computation graph.");
-
-        // Create constant nodes for weights
-        var kernelNode = TensorOperations<T>.Constant(_weights, $"{namePrefix}kernel");
-        var biasNode = TensorOperations<T>.Constant(_bias, $"{namePrefix}bias");
-        var offsetWeightsNode = TensorOperations<T>.Constant(_offsetWeights, $"{namePrefix}offset_weights");
-        var offsetBiasNode = TensorOperations<T>.Constant(_offsetBias, $"{namePrefix}offset_bias");
-
-        // First compute offsets using standard convolution
-        var offsetsNode = TensorOperations<T>.Conv2D(
-            inputNode,
-            offsetWeightsNode,
-            offsetBiasNode,
-            stride: new int[] { _stride, _stride },
-            padding: new int[] { _padding, _padding });
-
-        // Optionally compute modulation mask
-        ComputationNode<T>? maskNode = null;
-        if (_useModulation && _maskWeights != null && _maskBias != null)
-        {
-            var maskWeightsNode = TensorOperations<T>.Constant(_maskWeights, $"{namePrefix}mask_weights");
-            var maskBiasNode = TensorOperations<T>.Constant(_maskBias, $"{namePrefix}mask_bias");
-
-            var rawMaskNode = TensorOperations<T>.Conv2D(
-                inputNode,
-                maskWeightsNode,
-                maskBiasNode,
-                stride: new int[] { _stride, _stride },
-                padding: new int[] { _padding, _padding });
-
-            // Apply sigmoid activation to mask
-            maskNode = TensorOperations<T>.Sigmoid(rawMaskNode);
-        }
-
-        // Apply deformable convolution with computed offsets and mask
-        var deformConvNode = TensorOperations<T>.DeformableConv2D(
-            inputNode,
-            kernelNode,
-            offsetsNode,
-            maskNode,
-            biasNode,
-            stride: new int[] { _stride, _stride },
-            padding: new int[] { _padding, _padding },
-            dilation: new int[] { 1, 1 });
-
-        return deformConvNode;
-    }
-
     #endregion
 
     #region Parameter Management

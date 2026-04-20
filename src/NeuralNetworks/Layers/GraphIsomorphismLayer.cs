@@ -29,7 +29,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <item>Tensor-based weights for all parameters</item>
 /// <item>Dual backward pass: BackwardManual() for efficiency, BackwardViaAutodiff() for accuracy</item>
 /// <item>Full gradient computation through MLP and aggregation paths</item>
-/// <item>JIT compilation support via ExportComputationGraph()</item>
 /// <item>Complete GetParameters()/SetParameters() for model persistence</item>
 /// </list>
 /// </para>

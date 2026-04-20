@@ -90,9 +90,6 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc />
     public ILossFunction<T> DefaultLossFunction => LossFunction;
 
-    /// <inheritdoc />
-    public virtual bool SupportsJitCompilation => false;
-
     /// <summary>
     /// Initializes a new instance of the VAEModelBase class.
     /// </summary>
@@ -589,16 +586,6 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         var parameters = GetParameters();
         parameters = Engine.Subtract(parameters, Engine.Multiply(gradients, learningRate));
         SetParameters(parameters);
-    }
-
-    #endregion
-
-    #region IJitCompilable<T> Implementation
-
-    /// <inheritdoc />
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("This VAE does not support JIT compilation. Override ExportComputationGraph in derived class if needed.");
     }
 
     #endregion

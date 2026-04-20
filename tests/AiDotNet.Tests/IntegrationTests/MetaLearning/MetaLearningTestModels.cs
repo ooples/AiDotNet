@@ -202,13 +202,6 @@ internal class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<dou
         return importance;
     }
 
-    public bool SupportsJitCompilation => false;
-
-    public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation is not supported.");
-    }
-
     private string SerializeParameters()
     {
         return string.Join(",", _parameters.Select(p => p.ToString("R", CultureInfo.InvariantCulture)));
@@ -454,13 +447,6 @@ internal class TensorEmbeddingModel : IFullModel<double, Matrix<double>, Tensor<
         }
 
         return importance;
-    }
-
-    public bool SupportsJitCompilation => false;
-
-    public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-    {
-        throw new NotSupportedException("JIT compilation is not supported.");
     }
 
     private string SerializeParameters()

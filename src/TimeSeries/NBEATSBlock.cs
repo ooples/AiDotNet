@@ -87,6 +87,14 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
             {
                 count += bias.Length;
             }
+            // Generic blocks: V_b and V_f bases are learnable per Oreshkin et al.
+            // 2020 Section 3.2. Interpretable blocks use fixed polynomial bases
+            // that aren't trainable, so don't include them in the parameter count.
+            if (!_useInterpretableBasis)
+            {
+                count += _basisBackcast.Length;
+                count += _basisForecast.Length;
+            }
             return count;
         }
     }
@@ -111,16 +119,26 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
     /// - useInterpretableBasis: Whether to use human-understandable basis functions
     /// </para>
     /// </remarks>
-    public NBEATSBlock(
-        int lookbackWindow,
-        int forecastHorizon,
-        int hiddenLayerSize,
-        int numHiddenLayers,
-        int thetaSizeBackcast,
-        int thetaSizeForecast,
-        bool useInterpretableBasis,
-        int polynomialDegree = 3)
-        : base(new[] { lookbackWindow }, new[] { lookbackWindow + forecastHorizon })
+    /// <summary>
+    /// Validates <paramref name="lookbackWindow"/> and returns the corresponding
+    /// LayerBase input shape. Runs BEFORE the base ctor so invalid values surface
+    /// as <see cref="ArgumentException"/> with the argument name instead of a
+    /// downstream shape error.
+    /// </summary>
+    private static int[] CreateInputShape(int lookbackWindow)
+    {
+        if (lookbackWindow <= 0)
+        {
+            throw new ArgumentException("Lookback window must be positive.", nameof(lookbackWindow));
+        }
+        return new[] { lookbackWindow };
+    }
+
+    /// <summary>
+    /// Validates <paramref name="forecastHorizon"/> (and re-checks lookback for
+    /// consistency) and returns the corresponding LayerBase output shape.
+    /// </summary>
+    private static int[] CreateOutputShape(int lookbackWindow, int forecastHorizon)
     {
         if (lookbackWindow <= 0)
         {
@@ -130,6 +148,28 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         {
             throw new ArgumentException("Forecast horizon must be positive.", nameof(forecastHorizon));
         }
+        return new[] { lookbackWindow + forecastHorizon };
+    }
+
+    public NBEATSBlock(
+        int lookbackWindow,
+        int forecastHorizon,
+        int hiddenLayerSize,
+        int numHiddenLayers,
+        int thetaSizeBackcast,
+        int thetaSizeForecast,
+        bool useInterpretableBasis,
+        int polynomialDegree = 3)
+        : base(
+            CreateInputShape(lookbackWindow),
+            CreateOutputShape(lookbackWindow, forecastHorizon))
+    {
+        // Primary-argument validation happens inside the static shape factories
+        // above so `lookbackWindow` / `forecastHorizon` are rejected BEFORE
+        // LayerBase<T> consumes them — users see the nameof(...)-tagged
+        // ArgumentException instead of a downstream shape error from the base.
+        // (The two blocks that previously validated those here are now in
+        // CreateInputShape / CreateOutputShape below.)
         if (hiddenLayerSize <= 0)
         {
             throw new ArgumentException("Hidden layer size must be positive.", nameof(hiddenLayerSize));
@@ -137,6 +177,36 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         if (numHiddenLayers <= 0)
         {
             throw new ArgumentException("Number of hidden layers must be positive.", nameof(numHiddenLayers));
+        }
+        if (thetaSizeBackcast <= 0)
+        {
+            throw new ArgumentException("Backcast theta size must be positive.", nameof(thetaSizeBackcast));
+        }
+        if (thetaSizeForecast <= 0)
+        {
+            throw new ArgumentException("Forecast theta size must be positive.", nameof(thetaSizeForecast));
+        }
+        if (useInterpretableBasis && polynomialDegree < 0)
+        {
+            throw new ArgumentException("Polynomial degree must be non-negative for interpretable basis.", nameof(polynomialDegree));
+        }
+        // Interpretable-basis builders cap usable theta at polynomialDegree + 1
+        // (ComputeBasisTensor populates only that many rows; ApplyBasisExpansion
+        // slices to the same count). Silently accepting oversized theta sizes
+        // would allocate trainable weights that are mathematically disconnected
+        // from the output — dead parameters that waste memory and mask bugs
+        // during gradient checks.
+        if (useInterpretableBasis && thetaSizeBackcast > polynomialDegree + 1)
+        {
+            throw new ArgumentException(
+                $"Backcast theta size ({thetaSizeBackcast}) cannot exceed polynomialDegree + 1 ({polynomialDegree + 1}) for interpretable basis.",
+                nameof(thetaSizeBackcast));
+        }
+        if (useInterpretableBasis && thetaSizeForecast > polynomialDegree + 1)
+        {
+            throw new ArgumentException(
+                $"Forecast theta size ({thetaSizeForecast}) cannot exceed polynomialDegree + 1 ({polynomialDegree + 1}) for interpretable basis.",
+                nameof(thetaSizeForecast));
         }
 
         _lookbackWindow = lookbackWindow;
@@ -362,9 +432,24 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
     public override void ResetState() { /* stateless layer -- no recurrent state to reset */ }
 
     /// <summary>
-    /// No-op: tape-based training handles parameter updates through the optimizer.
+    /// Throws <see cref="InvalidOperationException"/>: this block is trained
+    /// through the tape-based optimizer path and has no eager scalar-step update.
     /// </summary>
-    public override void UpdateParameters(T learningRate) { }
+    /// <remarks>
+    /// N-BEATS blocks register their parameters via <c>RegisterTrainableParameter</c>
+    /// and are updated by the compiled training plan that <see cref="CompiledTapeTrainingStep{T}"/>
+    /// drives. Calling <c>UpdateParameters(learningRate)</c> directly bypasses
+    /// that path and would silently lose updates, so fail fast to catch the
+    /// misuse at the training boundary rather than later as a silent accuracy
+    /// regression.
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        throw new InvalidOperationException(
+            $"{nameof(NBEATSBlock<T>)} uses tape-based optimization. " +
+            "Update parameters through the optimizer / training step, " +
+            "not directly via UpdateParameters(learningRate).");
+    }
 
     /// <summary>
     /// Non-tape forward pass for inference (used by PredictSingle).
@@ -423,9 +508,12 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
             thetaForecast[i] = NumOps.Add(fcBiasVec[i], fcWx[i, 0]);
         }
 
-        // Apply basis expansion
-        Vector<T> backcast = ApplyBasisExpansion(thetaBackcast, _lookbackWindow);
-        Vector<T> forecast = ApplyBasisExpansion(thetaForecast, _forecastHorizon);
+        // Apply basis expansion. Pass the matching basis tensor so generic
+        // blocks multiply by their learned V_b / V_f matrices (keeping this
+        // path consistent with Forward() / ForwardTape() and with the
+        // parameter export/import of _basisBackcast / _basisForecast).
+        Vector<T> backcast = ApplyBasisExpansion(thetaBackcast, _basisBackcast, _lookbackWindow);
+        Vector<T> forecast = ApplyBasisExpansion(thetaForecast, _basisForecast, _forecastHorizon);
 
         return (backcast, forecast);
     }
@@ -502,7 +590,17 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         return basis;
     }
 
-    private Vector<T> ApplyBasisExpansion(Vector<T> theta, int outputLength)
+    /// <summary>
+    /// Expands the theta coefficients into an output time series of the requested length.
+    /// </summary>
+    /// <param name="theta">The theta coefficient vector produced by the fc head.</param>
+    /// <param name="basis">
+    /// The basis matrix for the generic branch — shape [outputLength, theta.Length].
+    /// Ignored when <see cref="_useInterpretableBasis"/> is <c>true</c> (the closed-form
+    /// polynomial basis is computed on the fly from <see cref="_polynomialDegree"/>).
+    /// </param>
+    /// <param name="outputLength">Length of the expanded output vector.</param>
+    private Vector<T> ApplyBasisExpansion(Vector<T> theta, Tensor<T> basis, int outputLength)
     {
         Vector<T> output = new Vector<T>(outputLength);
 
@@ -528,10 +626,20 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         }
         else
         {
-            // Generic basis: identity — theta[t] maps directly to output[t]
+            // Generic basis: output = basis · theta. Must use the learned V_b/V_f
+            // matrices per Oreshkin et al. 2020 Section 3.2 — they round-trip through
+            // GetParameters/SetParameters as trainable weights, and the tape-based
+            // Forward path multiplies by the same tensors. Returning theta directly
+            // here (as the pre-fix code did) made PredictSingle diverge from both
+            // training and model-load state.
             for (int t = 0; t < outputLength; t++)
             {
-                output[t] = (t < theta.Length) ? theta[t] : NumOps.Zero;
+                T value = NumOps.Zero;
+                for (int k = 0; k < theta.Length; k++)
+                {
+                    value = NumOps.Add(value, NumOps.Multiply(basis[t, k], theta[k]));
+                }
+                output[t] = value;
             }
         }
 
@@ -555,6 +663,15 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         {
             var vec = bias.ToVector();
             parameters.AddRange(vec);
+        }
+
+        // Generic blocks: include trainable V_b / V_f bases so export round-trips
+        // don't drop learned basis state. Ordering (fc weights, fc biases, then
+        // bases) must match SetParameters.
+        if (!_useInterpretableBasis)
+        {
+            parameters.AddRange(_basisBackcast.ToVector());
+            parameters.AddRange(_basisForecast.ToVector());
         }
 
         return new Vector<T>(parameters.ToArray());
@@ -600,6 +717,27 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
             _fcBiases[b] = new Tensor<T>(new[] { len }, new Vector<T>(data));
         }
 
+        // Generic blocks: restore trainable V_b / V_f bases. Must match the
+        // order GetParameters produced them in.
+        if (!_useInterpretableBasis)
+        {
+            int backcastLen = _basisBackcast.Length;
+            var backcastData = new T[backcastLen];
+            for (int i = 0; i < backcastLen; i++)
+            {
+                backcastData[i] = parameters[idx++];
+            }
+            _basisBackcast = new Tensor<T>(_basisBackcast.Shape.ToArray(), new Vector<T>(backcastData));
+
+            int forecastLen = _basisForecast.Length;
+            var forecastData = new T[forecastLen];
+            for (int i = 0; i < forecastLen; i++)
+            {
+                forecastData[i] = parameters[idx++];
+            }
+            _basisForecast = new Tensor<T>(_basisForecast.Shape.ToArray(), new Vector<T>(forecastData));
+        }
+
         // Re-register trainable parameters after replacing tensors
         ReRegisterParameters();
     }
@@ -615,96 +753,15 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
             RegisterTrainableParameter(w, PersistentTensorRole.Weights);
         foreach (var b in _fcBiases)
             RegisterTrainableParameter(b, PersistentTensorRole.Biases);
-    }
 
-    /// <summary>
-    /// Exports the block as computation graph nodes for JIT compilation.
-    /// </summary>
-    public (ComputationNode<T> backcast, ComputationNode<T> forecast) ExportComputationGraph(ComputationNode<T> inputNode)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var x = inputNode;
-
-        for (int layer = 0; layer < _numHiddenLayers; layer++)
+        // Generic blocks also learn the basis matrices — re-register them after
+        // SetParameters replaces the tensor instances. Interpretable blocks use
+        // fixed polynomial bases that are not trainable, so skip.
+        if (!_useInterpretableBasis)
         {
-            var weightTensor = _fcWeights[layer];
-            var weightNode = TensorOperations<T>.Constant(weightTensor, $"block_fc{layer}_weight");
-
-            var biasTensor = _fcBiases[layer];
-            var biasNode = TensorOperations<T>.Constant(biasTensor, $"block_fc{layer}_bias");
-
-            var linear = TensorOperations<T>.MatrixVectorMultiply(weightNode, x);
-            linear = TensorOperations<T>.Add(linear, biasNode);
-
-            x = TensorOperations<T>.ReLU(linear);
-        }
-
-        // Compute theta for backcast
-        var backcastWeightNode = TensorOperations<T>.Constant(_fcWeights[_numHiddenLayers], "block_backcast_weight");
-        var backcastBiasNode = TensorOperations<T>.Constant(_fcBiases[_numHiddenLayers], "block_backcast_bias");
-
-        var thetaBackcast = TensorOperations<T>.MatrixVectorMultiply(backcastWeightNode, x);
-        thetaBackcast = TensorOperations<T>.Add(thetaBackcast, backcastBiasNode);
-
-        // Compute theta for forecast
-        var forecastWeightNode = TensorOperations<T>.Constant(_fcWeights[_numHiddenLayers + 1], "block_forecast_weight");
-        var forecastBiasNode = TensorOperations<T>.Constant(_fcBiases[_numHiddenLayers + 1], "block_forecast_bias");
-
-        var thetaForecast = TensorOperations<T>.MatrixVectorMultiply(forecastWeightNode, x);
-        thetaForecast = TensorOperations<T>.Add(thetaForecast, forecastBiasNode);
-
-        // Apply basis expansion
-        var backcastNode = ApplyBasisExpansionGraph(thetaBackcast, _lookbackWindow, isBackcast: true);
-        var forecastNode = ApplyBasisExpansionGraph(thetaForecast, _forecastHorizon, isBackcast: false);
-
-        return (backcastNode, forecastNode);
-    }
-
-    /// <summary>
-    /// Applies basis expansion in the computation graph.
-    /// </summary>
-    private ComputationNode<T> ApplyBasisExpansionGraph(ComputationNode<T> theta, int outputLength, bool isBackcast)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-
-        if (_useInterpretableBasis)
-        {
-            var basisData = new T[outputLength * theta.Value.Shape[0]];
-            int thetaSize = theta.Value.Shape[0];
-
-            for (int t = 0; t < outputLength; t++)
-            {
-                double tNormalized = (double)t / outputLength;
-                for (int p = 0; p < Math.Min(thetaSize, _polynomialDegree + 1); p++)
-                {
-                    double power = Math.Pow(tNormalized, p);
-                    basisData[t * thetaSize + p] = numOps.FromDouble(power);
-                }
-            }
-
-            var basisTensor = new Tensor<T>(new[] { outputLength, thetaSize }, new Vector<T>(basisData));
-            var basisNode = TensorOperations<T>.Constant(basisTensor, isBackcast ? "backcast_basis" : "forecast_basis");
-
-            return TensorOperations<T>.MatrixVectorMultiply(basisNode, theta);
-        }
-        else
-        {
-            var basisData = new T[outputLength * theta.Value.Shape[0]];
-            int thetaSize = theta.Value.Shape[0];
-
-            for (int t = 0; t < outputLength; t++)
-            {
-                for (int k = 0; k < thetaSize; k++)
-                {
-                    double cosValue = Math.Cos(2.0 * Math.PI * k * t / outputLength);
-                    basisData[t * thetaSize + k] = numOps.FromDouble(cosValue);
-                }
-            }
-
-            var basisTensor = new Tensor<T>(new[] { outputLength, thetaSize }, new Vector<T>(basisData));
-            var basisNode = TensorOperations<T>.Constant(basisTensor, isBackcast ? "backcast_basis" : "forecast_basis");
-
-            return TensorOperations<T>.MatrixVectorMultiply(basisNode, theta);
+            RegisterTrainableParameter(_basisBackcast, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_basisForecast, PersistentTensorRole.Weights);
         }
     }
+
 }

@@ -275,7 +275,6 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
         return output;
     }
 
-    /// <inheritdoc />
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
     {
         // Mirror Forward's 3D → 4D expansion so the channel-broadcasted
@@ -289,10 +288,11 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input)
-    {
-        return Forward(input);
-    }
+    /// <summary>
+    /// Routes inference through <see cref="NeuralNetworkBase{T}.PredictCompiled"/> for
+    /// compiled-plan replay; <see cref="Forward"/> remains the eager fallback.
+    /// </summary>
+    protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
 
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)

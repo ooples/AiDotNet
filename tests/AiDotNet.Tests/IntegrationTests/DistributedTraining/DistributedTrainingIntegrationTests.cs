@@ -2253,21 +2253,6 @@ public class DistributedTrainingIntegrationTests
                 .ToDictionary(i => $"feature_{i}", i => 1.0 / _parameterCount);
         }
 
-        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
-        {
-            var node = new ComputationNode<double>(
-                new Tensor<double>(new[] { _parameterCount }),
-                false,
-                null,
-                null,
-                "mock_graph"
-            );
-            inputNodes.Add(node);
-            return node;
-        }
-
-        public bool SupportsJitCompilation => false;
-
         public IFullModel<double, Vector<double>, Vector<double>> Clone()
         {
             var cloned = new MockDistributedModel(_parameterCount);

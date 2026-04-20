@@ -106,14 +106,6 @@ public class LoRAIntegrationTests
     }
 
 
-    [Fact(Timeout = 120000)]
-    public async Task LoRALayer_SupportsJitCompilation_ReturnsTrueWhenInitialized()
-    {
-        var layer = new LoRALayer<double>(InputSize, OutputSize, Rank, Alpha);
-
-        Assert.True(layer.SupportsJitCompilation);
-    }
-
     #endregion
 
     #region StandardLoRAAdapter Tests

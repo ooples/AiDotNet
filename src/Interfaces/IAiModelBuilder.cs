@@ -1404,6 +1404,33 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> AllowNondeterminism();
 
     /// <summary>
+    /// Captures SIMD/GPU/native-BLAS acceleration status at build time, logs it, and
+    /// surfaces a structured snapshot on <c>PredictionModelResult.AccelerationSnapshot</c>.
+    /// </summary>
+    /// <param name="logger">
+    /// Optional callback receiving the formatted report. Defaults to <see cref="Console.WriteLine(string)"/>.
+    /// </param>
+    /// <returns>This builder for fluent chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ReportAccelerationStatus(Action<string>? logger = null);
+
+    /// <summary>
+    /// Enables disk-backed caching of compiled inference plans in the supplied directory.
+    /// Plans are saved after first compile and loaded transparently on next process
+    /// start, skipping cold-start compile cost.
+    /// </summary>
+    /// <param name="directory">Filesystem directory to store plan files. Created if missing.</param>
+    /// <returns>This builder for fluent chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigurePlanCaching(string directory);
+
+    /// <summary>
+    /// Enables low-level per-tensor-op profiling via Tensors'
+    /// <c>PerformanceProfiler.Instance</c>. After BuildAsync, timings are captured
+    /// on <c>AiModelResult.TensorsOperationProfile</c>.
+    /// </summary>
+    /// <returns>This builder for fluent chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> EnableTensorsOpProfiling();
+
+    /// <summary>
     /// Configures mixed-precision training for faster neural network training with reduced memory usage.
     /// </summary>
     /// <param name="config">Mixed precision configuration (optional, uses defaults if null).</param>

@@ -652,7 +652,4 @@ public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<
         }
     }
 
-    #region IJitCompilable Implementation
-
-    #endregion
 }

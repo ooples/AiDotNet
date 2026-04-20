@@ -1731,22 +1731,4 @@ public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretable
         }
     }
 
-    #region IJitCompilable Implementation
-
-    /// <summary>
-    /// Converts a Vector to a Tensor for use in computation graphs.
-    /// </summary>
-    private Tensor<T> VectorToTensor(Vector<T> vector)
-    {
-        // Convert Vector to 2D Tensor: (length,) -> (length, 1)
-        var shape = new int[] { vector.Length, 1 };
-        var data = new T[vector.Length];
-        for (int i = 0; i < vector.Length; i++)
-        {
-            data[i] = vector[i];
-        }
-        return new Tensor<T>(shape, new Vector<T>(data));
-    }
-
-    #endregion
 }

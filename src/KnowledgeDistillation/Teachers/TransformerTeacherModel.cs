@@ -13,12 +13,13 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations (e.g., double, float).</typeparam>
 /// <remarks>
-/// <para><b>Architecture Note:</b> This class supports two construction modes:</para>
-/// <list type="bullet">
-/// <item><description>Function delegate mode: Uses a Func&lt;&gt; for forward pass (not JIT-compilable)</description></item>
-/// <item><description>IJitCompilable mode: Uses a JIT-compilable model for forward pass (JIT-compilable)</description></item>
-/// </list>
-///
+/// <para>
+/// This wrapper takes a <c>Func&lt;Vector&lt;T&gt;, Vector&lt;T&gt;&gt;</c> forward-pass
+/// delegate and invokes it directly on every <see cref="GetLogits"/> call.
+/// The wrapper performs no caching or graph compilation itself — any
+/// optimizations (including Tensors' AutoTracer auto-compile) depend on what
+/// the supplied delegate does internally.
+/// </para>
 /// <para>For attention-based distillation strategies that need attention weights, implement
 /// a custom IDistillationStrategy that can extract attention from the underlying model.</para>
 /// </remarks>
@@ -53,10 +54,6 @@ public class TransformerTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
     /// <param name="outputDimension">The number of output dimensions.</param>
     /// <exception cref="ArgumentNullException">Thrown when forwardFunc is null.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when dimensions are not positive.</exception>
-    /// <remarks>
-    /// <para><b>Note:</b> This constructor creates a non-JIT-compilable teacher.
-    /// For JIT support, use the constructor that accepts an IJitCompilable model.</para>
-    /// </remarks>
     public TransformerTeacherModel(
         Func<Vector<T>, Vector<T>> forwardFunc,
         int inputDimension,

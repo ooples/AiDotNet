@@ -496,24 +496,6 @@ public class KernelRegressionIntegrationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task LocallyWeightedRegression_SoftMode_EnablesJitCompilation()
-    {
-        // Arrange
-        var options = new LocallyWeightedRegressionOptions
-        {
-            Bandwidth = 1.0,
-            UseSoftMode = true
-        };
-        var lwr = new LocallyWeightedRegression<double>(options);
-        var X = CreateMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
-        var y = CreateVector(new double[] { 1, 4, 9 });
-        lwr.Train(X, y);
-
-        // Act & Assert
-        Assert.True(lwr.SupportsJitCompilation);
-    }
-
     #endregion
 
     #region KNearestNeighborsRegression Tests
@@ -604,23 +586,6 @@ public class KernelRegressionIntegrationTests
         {
             Assert.Equal(originalPredictions[i], deserializedPredictions[i], 6);
         }
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task KNearestNeighborsRegression_SoftKNN_EnablesJitCompilation()
-    {
-        // Arrange
-        var options = new KNearestNeighborsOptions { K = 3 };
-        var knn = new KNearestNeighborsRegression<double>(options);
-        var X = CreateMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
-        var y = CreateVector(new double[] { 1, 4, 9 });
-        knn.Train(X, y);
-
-        // Act
-        knn.UseSoftKNN = true;
-
-        // Assert
-        Assert.True(knn.SupportsJitCompilation);
     }
 
     [Fact(Timeout = 120000)]

@@ -60,6 +60,43 @@ internal sealed class CompiledModelHost<T> : IDisposable
     private bool _disposed;
 
     /// <summary>
+    /// Symbolic-shape strategy that governs which input dims the compile cache
+    /// treats as variable. BatchDynamic (default) lets a single compiled plan
+    /// serve batch-size 1, 4, 32, 128 etc. without recompiling each time —
+    /// matching PyTorch's default <c>torch.compile(dynamic=True)</c> posture.
+    /// </summary>
+    private readonly SymbolicShapeMode _shapeMode;
+
+    /// <summary>
+    /// Stable identity string for this model (typically the full type name plus any
+    /// architecture hash). Used as the filename prefix for disk-cached compiled plans
+    /// so multiple model types can share the same <see cref="PlanCache"/> directory
+    /// without collision. Null = disk caching disabled for this host.
+    /// </summary>
+    private readonly string? _modelIdentity;
+
+    /// <summary>
+    /// Set of shape keys we've already attempted to load from disk for a given
+    /// structure version. Prevents repeated failed-load IO on every Predict call.
+    /// Keyed as "v{structureVersion}_s{shapeHash}".
+    /// </summary>
+    private HashSet<string>? _diskCheckedShapes;
+
+    /// <summary>
+    /// Plans loaded from disk for this host. Preempt <see cref="_cache"/> so we skip
+    /// the compile pass entirely on cold-start replay.
+    /// </summary>
+    private Dictionary<string, ICompiledPlan<T>>? _preloadedPlans;
+
+    public CompiledModelHost(
+        SymbolicShapeMode shapeMode = SymbolicShapeMode.BatchDynamic,
+        string? modelIdentity = null)
+    {
+        _shapeMode = shapeMode;
+        _modelIdentity = modelIdentity;
+    }
+
+    /// <summary>
     /// Synchronizes lifecycle mutations on <c>_cache</c>, <c>_lastCompiledVersion</c>,
     /// and <c>_disposed</c>. Without it a concurrent <c>Dispose</c>/<c>Invalidate</c>
     /// racing with <c>Predict</c> on the same model instance can tear down the
@@ -178,6 +215,17 @@ internal sealed class CompiledModelHost<T> : IDisposable
         {
             try
             {
+                var concreteShape = (int[])input._shape.Clone();
+
+                // Disk-cache preload: first time we see a shape at this structure
+                // version, try to load a previously-compiled plan from PlanCache.
+                // Skips the compile cost entirely on cold-start replay.
+                if (TryUseDiskCachedPlan(concreteShape, structureVersion, out var preloadedResult))
+                {
+                    _lastCompiledVersion = structureVersion;
+                    return preloadedResult;
+                }
+
                 // Preserve the Tensor<T> return from eagerForward so the compile
                 // pass can explicitly identify the output tensor. Discarding the
                 // return (previously `() => { eagerForward(); }`) can select a
@@ -185,9 +233,13 @@ internal sealed class CompiledModelHost<T> : IDisposable
                 // tensor ambiguous to the tracer, producing wrong outputs on
                 // replay. Keep the expression-bodied lambda so the value threads
                 // through unchanged.
-                var plan = cache.GetOrCompileInference(
-                    (int[])input._shape.Clone(),
-                    () => eagerForward());
+                var symbolicShape = BuildSymbolicShape(concreteShape, _shapeMode);
+                var plan = symbolicShape is null
+                    ? cache.GetOrCompileInference(concreteShape, () => eagerForward())
+                    : cache.GetOrCompileInference(concreteShape, () => eagerForward(), symbolicShape);
+
+                // Fire-and-forget disk save so subsequent cold starts skip the compile.
+                MaybeSavePlanToDisk(plan, concreteShape, structureVersion);
 
                 // Safe to write _lastCompiledVersion outside the lock — int writes
                 // are atomic in .NET, and the value is only used as a hint by the
@@ -386,4 +438,164 @@ internal sealed class CompiledModelHost<T> : IDisposable
             }
         }
     }
+
+    /// <summary>
+    /// Checks <see cref="PlanCache.Current"/> for a previously-saved plan matching
+    /// the current shape + structure version, and executes it if found. Returns
+    /// true when the disk-cached plan was used (caller should skip compilation).
+    /// </summary>
+    private bool TryUseDiskCachedPlan(
+        int[] concreteShape,
+        int structureVersion,
+        out Tensor<T> result)
+    {
+        result = null!;
+        var planCache = PlanCache.Current;
+        if (planCache is null || _modelIdentity is null)
+        {
+            return false;
+        }
+
+        var shapeKey = ComputeShapeKey(concreteShape, structureVersion);
+
+        // Preloaded-in-memory hit: skip disk entirely.
+        Dictionary<string, ICompiledPlan<T>>? preloaded;
+        lock (_sync)
+        {
+            preloaded = _preloadedPlans;
+        }
+        if (preloaded is not null && preloaded.TryGetValue(shapeKey, out var cachedPlan))
+        {
+            if (cachedPlan.IsValid(concreteShape))
+            {
+                result = cachedPlan.Execute();
+                return true;
+            }
+        }
+
+        // First-time-miss: check disk once per (shape, version).
+        bool shouldCheckDisk;
+        lock (_sync)
+        {
+            _diskCheckedShapes ??= new HashSet<string>();
+            shouldCheckDisk = _diskCheckedShapes.Add(shapeKey);
+        }
+        if (!shouldCheckDisk)
+        {
+            return false;
+        }
+
+        try
+        {
+            var loaded = planCache.TryLoadInferenceAsync<T>(
+                _modelIdentity, structureVersion, concreteShape, AiDotNetEngine.Current)
+                .GetAwaiter().GetResult();
+
+            if (loaded is null || !loaded.IsValid(concreteShape))
+            {
+                return false;
+            }
+
+            lock (_sync)
+            {
+                (_preloadedPlans ??= new Dictionary<string, ICompiledPlan<T>>())[shapeKey] = loaded;
+            }
+
+            result = loaded.Execute();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"CompiledModelHost: disk-cached plan load failed: {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Fires a fire-and-forget disk save so subsequent process starts skip compile.
+    /// Errors are swallowed — disk caching is an optimization, not a correctness
+    /// dependency.
+    /// </summary>
+    private void MaybeSavePlanToDisk(ICompiledPlan<T> plan, int[] concreteShape, int structureVersion)
+    {
+        var planCache = PlanCache.Current;
+        if (planCache is null || _modelIdentity is null)
+        {
+            return;
+        }
+
+        var shapeKey = ComputeShapeKey(concreteShape, structureVersion);
+        lock (_sync)
+        {
+            // Remember the plan in-memory too; avoids re-saving on next call.
+            (_preloadedPlans ??= new Dictionary<string, ICompiledPlan<T>>())[shapeKey] = plan;
+        }
+
+        var identity = _modelIdentity;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await planCache.SaveInferenceAsync(plan, identity, structureVersion, concreteShape)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"CompiledModelHost: background plan save failed: {ex.GetType().Name}: {ex.Message}");
+            }
+        });
+    }
+
+    private static string ComputeShapeKey(int[] shape, int structureVersion)
+    {
+        var sb = new System.Text.StringBuilder(16 + shape.Length * 4);
+        sb.Append('v').Append(structureVersion).Append('_');
+        for (int i = 0; i < shape.Length; i++)
+        {
+            if (i > 0) sb.Append('x');
+            sb.Append(shape[i]);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Translates <see cref="SymbolicShapeMode"/> + concrete shape into a Tensors
+    /// <see cref="SymbolicShape"/> (or null to fall back to the purely concrete
+    /// overload when the rank is too small for the requested mode).
+    /// </summary>
+    private static SymbolicShape? BuildSymbolicShape(int[] shape, SymbolicShapeMode mode)
+    {
+        switch (mode)
+        {
+            case SymbolicShapeMode.Static:
+                return null;
+            case SymbolicShapeMode.BatchDynamic:
+                return shape.Length >= 2 ? SymbolicShape.BatchDynamic(shape) : null;
+            case SymbolicShapeMode.BatchAndSeqDynamic:
+                return shape.Length >= 3 ? SymbolicShape.BatchAndSeqDynamic(shape) : null;
+            case SymbolicShapeMode.AllDynamic:
+                return SymbolicShape.AllDynamic(shape);
+            default:
+                return null;
+        }
+    }
+}
+
+/// <summary>
+/// Strategy for how <see cref="CompiledModelHost{T}"/> keys the compile cache. Dynamic
+/// dims let one compiled plan serve multiple concrete shapes — essential for bursty
+/// inference traffic where every request has a different batch size.
+/// </summary>
+public enum SymbolicShapeMode
+{
+    /// <summary>Every dim treated as static. Recompile on any shape change.</summary>
+    Static,
+    /// <summary>Dim 0 (batch) dynamic; all others static. PyTorch-default behavior.</summary>
+    BatchDynamic,
+    /// <summary>Dims 0 (batch) and 1 (seq-len) dynamic. For transformer-style inputs.</summary>
+    BatchAndSeqDynamic,
+    /// <summary>Every dim dynamic. Maximum reuse; slight dispatch overhead on replay.</summary>
+    AllDynamic,
 }

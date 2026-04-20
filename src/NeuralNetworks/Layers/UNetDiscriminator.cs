@@ -391,48 +391,6 @@ public class UNetDiscriminator<T> : LayerBase<T>
 
     #endregion
 
-    #region JIT Compilation
-
-    /// <inheritdoc />
-    public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
-    {
-        // Initial conv + LeakyReLU
-        var x = BuildConvNode(_convFirst, inputNode, $"{namePrefix}conv_first_");
-        x = TensorOperations<T>.LeakyReLU(x, 0.2);
-
-        // Encoder path - store skip connections
-        var skipConnections = new ComputationNode<T>[_numBlocks];
-        for (int i = 0; i < _numBlocks; i++)
-        {
-            skipConnections[i] = x;
-            x = _encoderBlocks[i].BuildComputationGraph(x, $"{namePrefix}enc{i}_");
-        }
-
-        // Decoder path - use skip connections
-        for (int i = 0; i < _numBlocks; i++)
-        {
-            int skipIdx = _numBlocks - 1 - i;
-            x = _decoderBlocks[i].BuildComputationGraph(x, skipConnections[skipIdx], $"{namePrefix}dec{i}_");
-        }
-
-        // Final conv
-        x = BuildConvNode(_convLast, x, $"{namePrefix}conv_last_");
-
-        return x;
-    }
-
-    private static ComputationNode<T> BuildConvNode(ConvolutionalLayer<T> conv, ComputationNode<T> input, string namePrefix)
-    {
-        var biases = conv.GetBiases();
-        return TensorOperations<T>.Conv2D(
-            input,
-            TensorOperations<T>.Constant(conv.GetFilters(), $"{namePrefix}kernel"),
-            biases is not null ? TensorOperations<T>.Constant(biases, $"{namePrefix}bias") : null,
-            stride: new int[] { conv.Stride, conv.Stride },
-            padding: new int[] { conv.Padding, conv.Padding });
-    }
-
-    #endregion
 
 }
 
@@ -562,28 +520,6 @@ internal partial class UNetConvBlock<T> : LayerBase<T>
         _conv2.ResetState();
     }
 
-    public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
-    {
-        var biases1 = _conv1.GetBiases();
-        var x = TensorOperations<T>.Conv2D(
-            inputNode,
-            TensorOperations<T>.Constant(_conv1.GetFilters(), $"{namePrefix}conv1_kernel"),
-            biases1 is not null ? TensorOperations<T>.Constant(biases1, $"{namePrefix}conv1_bias") : null,
-            stride: new int[] { _downsample ? 2 : 1, _downsample ? 2 : 1 },
-            padding: new int[] { 1, 1 });
-        x = TensorOperations<T>.LeakyReLU(x, 0.2);
-
-        var biases2 = _conv2.GetBiases();
-        x = TensorOperations<T>.Conv2D(
-            x,
-            TensorOperations<T>.Constant(_conv2.GetFilters(), $"{namePrefix}conv2_kernel"),
-            biases2 is not null ? TensorOperations<T>.Constant(biases2, $"{namePrefix}conv2_bias") : null,
-            stride: new int[] { 1, 1 },
-            padding: new int[] { 1, 1 });
-        x = TensorOperations<T>.LeakyReLU(x, 0.2);
-
-        return x;
-    }
 
 }
 
@@ -830,44 +766,7 @@ internal partial class UNetUpBlock<T> : LayerBase<T>
         _conv2.ResetState();
     }
 
-    public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
-    {
-        return BuildComputationGraph(inputNode, null, namePrefix);
-    }
 
-    public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, ComputationNode<T>? skipNode, string namePrefix)
-    {
-        // Upsample (bilinear)
-        var x = TensorOperations<T>.Upsample(inputNode, 2);
-
-        // Concatenate with skip
-        if (skipNode != null)
-        {
-            x = TensorOperations<T>.Concat([x, skipNode], axis: 1);
-        }
-
-        // Conv1 + LeakyReLU
-        var biases1 = _conv1.GetBiases();
-        x = TensorOperations<T>.Conv2D(
-            x,
-            TensorOperations<T>.Constant(_conv1.GetFilters(), $"{namePrefix}conv1_kernel"),
-            biases1 is not null ? TensorOperations<T>.Constant(biases1, $"{namePrefix}conv1_bias") : null,
-            stride: new int[] { 1, 1 },
-            padding: new int[] { 1, 1 });
-        x = TensorOperations<T>.LeakyReLU(x, 0.2);
-
-        // Conv2 + LeakyReLU
-        var biases2 = _conv2.GetBiases();
-        x = TensorOperations<T>.Conv2D(
-            x,
-            TensorOperations<T>.Constant(_conv2.GetFilters(), $"{namePrefix}conv2_kernel"),
-            biases2 is not null ? TensorOperations<T>.Constant(biases2, $"{namePrefix}conv2_bias") : null,
-            stride: new int[] { 1, 1 },
-            padding: new int[] { 1, 1 });
-        x = TensorOperations<T>.LeakyReLU(x, 0.2);
-
-        return x;
-    }
 
 }
 

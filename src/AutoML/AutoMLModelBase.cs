@@ -1157,35 +1157,6 @@ namespace AiDotNet.AutoML
         }
 
         #endregion
-        #region IJitCompilable Implementation
-
-        /// <summary>
-        /// Gets whether this model currently supports JIT compilation.
-        /// </summary>
-        /// <value>True if the best model found supports JIT compilation, false otherwise.</value>
-        /// <remarks>
-        /// <para>
-        /// AutoML models delegate JIT compilation support to their best model.
-        /// If no best model has been found yet, JIT compilation is not supported.
-        /// </para>
-        /// <para><b>For Beginners:</b> AutoML models can only be JIT compiled if the best model they found supports it.
-        ///
-        /// Since AutoML searches across multiple model types, JIT support depends on:
-        /// - Whether a best model has been selected
-        /// - Whether that specific model supports JIT compilation
-        ///
-        /// Before running SearchAsync, this will return false.
-        /// After finding a best model, it delegates to that model's JIT support.
-        /// </para>
-        /// </remarks>
-        public virtual bool SupportsJitCompilation => false;
-
-        public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-        {
-            throw new NotSupportedException("JIT compilation has been removed.");
-        }
-
-        #endregion
 
         /// <summary>
         /// Saves the AutoML model's current state to a stream.

@@ -42,7 +42,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// loop. First call traces, subsequent calls replay. Falls back to eager when
     /// compilation is disabled or fails.
     /// </summary>
-    private readonly AiDotNet.NeuralNetworks.CompiledModelHost<T> _compileHost = new();
+    private readonly AiDotNet.NeuralNetworks.CompiledModelHost<T> _compileHost;
 
     /// <summary>
     /// Monotonic layer-graph version. Concrete predictors bump this via
@@ -233,9 +233,6 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public ILossFunction<T> DefaultLossFunction => LossFunction;
 
-    /// <inheritdoc />
-    public virtual bool SupportsJitCompilation => false;
-
     /// <summary>
     /// Initializes a new instance of the NoisePredictorBase class.
     /// </summary>
@@ -247,6 +244,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         RandomGenerator = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
             : RandomHelper.CreateSecureRandom();
+        _compileHost = new AiDotNet.NeuralNetworks.CompiledModelHost<T>(
+            shapeMode: AiDotNet.NeuralNetworks.SymbolicShapeMode.BatchDynamic,
+            modelIdentity: GetType().FullName ?? GetType().Name);
     }
 
     #region Lazy Layer Factories
@@ -720,16 +720,6 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         var updated = Engine.Subtract(parameters, scaledGradients);
 
         SetParameters(updated);
-    }
-
-    #endregion
-
-    #region IJitCompilable<T> Implementation
-
-    /// <inheritdoc />
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("This noise predictor does not support JIT compilation. Override ExportComputationGraph in derived class if needed.");
     }
 
     #endregion

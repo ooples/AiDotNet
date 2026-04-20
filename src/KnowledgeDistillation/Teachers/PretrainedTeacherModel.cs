@@ -12,11 +12,16 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 /// Pretrained teacher model from external source (e.g., ImageNet, BERT).
 /// </summary>
 /// <remarks>
-/// <para><b>Architecture Note:</b> This class supports two construction modes:</para>
-/// <list type="bullet">
-/// <item><description>Function delegate mode: Uses a Func&lt;&gt; for forward pass (not JIT-compilable)</description></item>
-/// <item><description>IJitCompilable mode: Uses a JIT-compilable model for forward pass (JIT-compilable)</description></item>
-/// </list>
+/// <para>
+/// This wrapper takes a <c>Func&lt;Vector&lt;T&gt;, Vector&lt;T&gt;&gt;</c> forward-pass
+/// delegate and invokes it directly on every <see cref="GetLogits"/> call.
+/// The wrapper itself performs no caching or graph compilation — any
+/// optimizations (including Tensors' AutoTracer auto-compile) depend entirely
+/// on what happens inside the supplied delegate. A delegate that wraps a
+/// standard neural-network model's <c>Predict</c> path will pick up those
+/// engine-level optimizations; a delegate that invokes external code
+/// (pre-converted ONNX, a REST call, etc.) will not.
+/// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

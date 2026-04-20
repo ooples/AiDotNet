@@ -20,10 +20,6 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 /// <item><description>Faster inference on hardware with integer support</description></item>
 /// <item><description>Reduced memory bandwidth requirements</description></item>
 /// </list>
-/// <para><b>JIT Support:</b> When constructed with an IJitCompilable base model, this teacher
-/// supports JIT compilation using FakeQuantization with Straight-Through Estimator (STE).
-/// This allows the quantized model to be differentiated during training while simulating
-/// quantization effects.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -57,8 +53,9 @@ public class QuantizedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T
     /// <param name="baseTeacher">The base teacher model to quantize.</param>
     /// <param name="quantizationBits">Number of bits for quantization (1-32).</param>
     /// <remarks>
-    /// <para>This constructor uses dynamic quantization (per-batch min/max finding) which
-    /// does not support JIT compilation. Use the constructor with IJitCompilable for JIT support.</para>
+    /// <para>Uses dynamic quantization (per-batch min/max). The underlying teacher's forward
+    /// pass goes through Tensors' AutoTracer and is auto-compiled after the input-shape
+    /// pattern repeats.</para>
     /// </remarks>
     public QuantizedTeacherModel(
         ITeacherModel<Vector<T>, Vector<T>> baseTeacher,
