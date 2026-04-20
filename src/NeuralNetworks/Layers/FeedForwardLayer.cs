@@ -117,7 +117,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// <summary>
     /// Stored input dimension for lazy initialization.
     /// </summary>
-    private readonly int _inputSize;
+    private int _inputSize;
 
     /// <summary>
     /// Stored output dimension for lazy initialization.
@@ -519,6 +519,19 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
         EnsureInitialized();
         Input = input;
 
+        // Mirror DenseLayer: dynamically resize the weight matrix when the caller's
+        // input last-dim doesn't match the baked-in inputSize. Several Finance
+        // foundation models (LagLlama, MOIRAI, UniTS, TimeGPT, TimeLLM, Timer,
+        // Chronos, etc.) construct FeedForwardLayer with a hidden dim derived from
+        // options that differs from the actual feature width at Forward time
+        // (e.g. layer expects last-dim=8 but smoke-test input arrives with
+        // last-dim=1). Without this adaptation the matmul rejects the pair with
+        // "Matrix dimensions incompatible for batched matmul: last dim of a is 1,
+        // first dim of b is 8" — exactly the DenseLayer already-solved problem.
+        int actualInputSize = input.Shape[^1];
+        if (_weights.Shape[0] != actualInputSize)
+            EnsureWeightShapeForInput(actualInputSize);
+
         // Fuse MatMul + BiasAdd + Activation into a single FusedLinear call when the
         // activation is one the engine's fused kernel supports (ReLU, GELU, Tanh,
         // Sigmoid, Swish/SiLU, LeakyReLU). Saves 3 kernel launches per layer.
@@ -540,6 +553,45 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
         Output = ApplyActivation(linearOutput);
 
         return Output;
+    }
+
+    /// <summary>
+    /// Rebuilds the weight matrix around a new input-feature width, preserving the
+    /// overlapping slice of pretrained weights and Xavier-initializing the new rows.
+    /// Mirrors <c>DenseLayer&lt;T&gt;.EnsureWeightShapeForInput</c>.
+    /// </summary>
+    private void EnsureWeightShapeForInput(int actualInputSize)
+    {
+        int existingInputSize = _weights.Shape[0];
+        int outputSize = _weights.Shape[1];
+        var resizedWeights = new Tensor<T>([actualInputSize, outputSize]);
+
+        int sharedInputSize = Math.Min(existingInputSize, actualInputSize);
+        for (int i = 0; i < sharedInputSize; i++)
+        {
+            for (int o = 0; o < outputSize; o++)
+            {
+                resizedWeights[i, o] = _weights[i, o];
+            }
+        }
+
+        if (actualInputSize > sharedInputSize)
+        {
+            T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputSize + outputSize)));
+            var random = RandomHelper.CreateSecureRandom();
+            for (int i = sharedInputSize; i < actualInputSize; i++)
+            {
+                for (int o = 0; o < outputSize; o++)
+                {
+                    resizedWeights[i, o] = NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1));
+                }
+            }
+        }
+
+        _weights = resizedWeights;
+        _weightsGradient = new Tensor<T>([actualInputSize, outputSize]);
+        _inputSize = actualInputSize;
+        UpdateInputShape([actualInputSize]);
     }
 
     /// <summary>
