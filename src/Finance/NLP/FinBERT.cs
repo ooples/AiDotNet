@@ -463,6 +463,21 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
     }
 
     /// <summary>
+    /// Tape-aware training forward. FinBERT is an NLP model, not a forecaster,
+    /// so the base <see cref="FinancialModelBase{T}.ForwardForTraining"/> (which
+    /// routes through <c>Forecast → ForecastNative</c>) throws "ForecastNative
+    /// is not implemented for this model". Route through <see cref="Predict"/>'s
+    /// native path directly instead — it hits the same Layers stack the smoke
+    /// test already validated under inference.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is only supported in native mode.");
+        return ForwardNative(input);
+    }
+
+    /// <summary>
     /// Updates parameters using the provided gradients.
     /// </summary>
     /// <param name="gradients">Gradient vector.</param>
