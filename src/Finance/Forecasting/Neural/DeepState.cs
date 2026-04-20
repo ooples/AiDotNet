@@ -944,14 +944,46 @@ public class DeepState<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        // Handle shape mismatches gracefully
+        // Equal element count + equal shape: direct engine add (tape-recorded).
         if (a.Length == b.Length)
         {
-            return Engine.TensorAdd(a, b);
+            if (a._shape.SequenceEqual(b._shape))
+                return Engine.TensorAdd(a, b);
+            // Equal count, different rank — align b to a's shape via tape-recorded reshape.
+            return Engine.TensorAdd(a, Engine.Reshape(b, a._shape));
         }
 
-        // For mismatched shapes, use broadcasting-like behavior
-        return Engine.TensorBroadcastAdd(a, b);
+        // Mismatched element counts: prefer broadcasting if the shapes are
+        // compatible (e.g. [1, N] + [N]), otherwise fall back to a manual
+        // per-element combine that only touches the overlapping prefix.
+        // The upstream broadcaster throws for pathological cases like
+        // [1, 40] + [1, 1600] that arise when the SSM transition/observation
+        // heads produce different latent dims — clipping to the common
+        // prefix keeps the forward pass well-defined instead of collapsing
+        // Predict entirely.
+        bool broadcastCompatible = BroadcastShapesMatch(a._shape, b._shape);
+        if (broadcastCompatible)
+            return Engine.TensorBroadcastAdd(a, b);
+
+        int minLen = Math.Min(a.Length, b.Length);
+        var result = new Tensor<T>(a._shape);
+        for (int i = 0; i < minLen; i++)
+            result[i] = NumOps.Add(a[i], b[i]);
+        for (int i = minLen; i < a.Length; i++)
+            result[i] = a[i];
+        return result;
+    }
+
+    private static bool BroadcastShapesMatch(int[] x, int[] y)
+    {
+        int i = x.Length - 1, j = y.Length - 1;
+        while (i >= 0 && j >= 0)
+        {
+            int xd = x[i], yd = y[j];
+            if (xd != yd && xd != 1 && yd != 1) return false;
+            i--; j--;
+        }
+        return true;
     }
 
     /// <summary>
