@@ -502,13 +502,22 @@ public class DeepState<T> : ForecastingModelBase<T>
 
         // Issue #1166: the old body computed a loss + gradient and then
         // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
+        // pass. Delegate to FinancialModelBase.Train → TrainWithTape.
+        // The ForwardNativeForTraining override below keeps dropout and
+        // other train-only layer behavior active; see its remarks.
         base.Train(input, target);
+    }
+
+    /// <summary>
+    /// Training-mode forward: calls <see cref="Forward"/> directly so
+    /// the tape forward stays in training mode. The default path goes
+    /// through <c>ForecastNative</c> which calls
+    /// <c>SetTrainingMode(false)</c>, silencing dropout / train-time
+    /// behavior during the gradient-taped pass.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        return Forward(input);
     }
 
     /// <inheritdoc/>

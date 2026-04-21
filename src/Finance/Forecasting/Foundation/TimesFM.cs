@@ -554,10 +554,21 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         // pass, so every layer's UpdateParameters threw "Backward pass
         // must be called before updating parameters." Delegate to
         // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
+        // NeuralNetworkBase.TrainWithTape flow. The ForwardNativeForTraining
+        // override below keeps training mode on; see its remarks.
         base.Train(input, target);
+    }
+
+    /// <summary>
+    /// TimesFM training-mode forward. Bypasses <see cref="Forecast"/> /
+    /// <c>ForecastNative</c> because that path calls
+    /// <c>SetTrainingMode(false)</c> before running the model — which
+    /// silences dropout and attention noise during training. Going
+    /// directly through <c>Forward</c> preserves training-mode behavior.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        return Forward(input);
     }
 
     /// <inheritdoc/>

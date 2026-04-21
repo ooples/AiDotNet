@@ -548,15 +548,18 @@ public class FEDformer<T> : ForecastingModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
         base.Train(input, expectedOutput);
+    }
+
+    /// <summary>
+    /// Training-mode forward: calls <see cref="Forward"/> directly so
+    /// the frequency-enhanced attention runs under its training-mode
+    /// behavior (e.g. mode-selection dropout). Default path would hit
+    /// <c>ForecastNative</c>, which switches to inference mode.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        return Forward(input);
     }
 
     /// <inheritdoc/>
