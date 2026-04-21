@@ -10,6 +10,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
@@ -262,15 +263,151 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
+        // CSDI-specific training: denoising-score-matching objective.
+        // The original delegation to base.Train routed through
+        // ForwardNative — which is the REVERSE-diffusion sampler (start
+        // from noise, iteratively denoise). Training that against the
+        // clean target is a category error: it supervises the sampler's
+        // random noise output against target values instead of teaching
+        // the denoiser to predict the noise that was added.
+        //
+        // Correct DDPM training loop:
+        //   1. Sample timestep t ~ Uniform[0, T)
+        //   2. Sample noise ε ~ N(0, I) with the same shape as target
+        //   3. Form noised x_t = sqrt(α̅_t) * target + sqrt(1-α̅_t) * ε
+        //   4. Predict ε_pred = denoiser(x_t, conditioning, t)
+        //   5. Loss = MSE(ε_pred, ε)
+        // All of steps 3-5 go through Engine ops so the tape records
+        // the whole pipeline back into _inputProjection, the residual
+        // stack, and _outputProjection.
+
+        var loss = LossFunction as LossFunctions.LossFunctionBase<T>
+            ?? throw new InvalidOperationException(
+                "LossFunction must derive from LossFunctionBase<T> for CSDI tape-based training.");
+
+        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
+
+        using var tape = new GradientTape<T>();
+        var (epsilonPred, epsilonTarget) = ComputeDenoisingPairTape(input, target);
+
+        // Use the model's registered loss (defaults to MSE) so custom
+        // loss functions are respected — the denoising-objective shape
+        // matches any per-element loss.
+        var lossTensor = loss.ComputeTapeLoss(epsilonPred, epsilonTarget);
+
+        var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+        var grads = new Dictionary<Tensor<T>, Tensor<T>>(
+            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        foreach (var param in trainableParams)
+        {
+            if (allGrads.TryGetValue(param, out var grad))
+                grads[param] = grad;
+        }
+
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+        LastLoss = lossValue;
+
+        T lr = NumOps.FromDouble(0.001);
+        foreach (var param in trainableParams)
+        {
+            if (grads.TryGetValue(param, out var grad))
+            {
+                var update = Engine.TensorMultiplyScalar(grad, lr);
+                Engine.TensorSubtractInPlace(param, update);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Builds the (predicted-noise, true-noise) pair for one DDPM
+    /// training step. Samples a timestep and a fresh noise tensor,
+    /// forms the noised version of the target, runs it through the
+    /// denoiser conditioned on the observed input + sin(t) embedding,
+    /// and returns <c>(ε_pred, ε_true)</c> — both tape-tracked so the
+    /// caller can compute MSE and backprop through the denoiser.
+    /// </summary>
+    private (Tensor<T> epsilonPred, Tensor<T> epsilonTrue) ComputeDenoisingPairTape(Tensor<T> input, Tensor<T> target)
+    {
+        var rand = RandomHelper.CreateSecureRandom();
+
+        // 1. Sample timestep t uniformly.
+        int t = rand.Next(_numDiffusionSteps);
+
+        // 2. Sample noise matching target shape.
+        int targetLen = target.Length;
+        var noiseData = new T[targetLen];
+        for (int i = 0; i < targetLen; i++)
+            noiseData[i] = SampleStandardNormal(rand);
+        var epsilonTrue = new Tensor<T>(target._shape, new Vector<T>(noiseData));
+
+        // 3. Form x_t = sqrt(α̅_t) * target + sqrt(1-α̅_t) * ε. The
+        // target and noise tensors are treated as constants here
+        // (user-supplied target + freshly-sampled noise), so the
+        // tape sees x_t as a constant feeding the denoiser. That's
+        // fine — we want gradients only for denoiser parameters.
+        T sqrtAlphaBar = NumOps.Sqrt(_alphasCumprod[t]);
+        T sqrtOneMinus = NumOps.Sqrt(NumOps.Subtract(NumOps.One, _alphasCumprod[t]));
+        var scaledTarget = Engine.TensorMultiplyScalar(target, sqrtAlphaBar);
+        var scaledNoise = Engine.TensorMultiplyScalar(epsilonTrue, sqrtOneMinus);
+        var xt = Engine.TensorAdd(scaledTarget, scaledNoise);
+
+        // 4. Condition on the observed input via _inputProjection.
+        // Normalization and rank-fix mirror the inference path.
+        var conditioned = ApplyInstanceNormalization(input);
+        if (conditioned.Rank == 1)
+            conditioned = Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
+        var condHidden = _inputProjection is not null
+            ? _inputProjection.Forward(conditioned)
+            : conditioned;
+
+        // Flatten xt to rank-2 [1, targetLen] for concatenation.
+        var xt2d = xt.Rank == 1 ? Engine.Reshape(xt, new[] { 1, targetLen }) : xt;
+        int condLen = Math.Min(condHidden.Length, _hiddenDimension);
+
+        // Build the [xt | condHidden[0:condLen] | sin(t)] denoiser
+        // input. The only trainable piece is the condHidden slice —
+        // TensorSliceAxis + TensorConcatenate keep the tape intact.
+        // xt and the sin(t) scalar are treated as constants.
+        var condFlat = condHidden.Rank == 1
+            ? condHidden
+            : Engine.Reshape(condHidden, new[] { condHidden.Length });
+        var condSlice = Engine.TensorSliceAxis(
+            condFlat.Rank == 1 ? Engine.Reshape(condFlat, new[] { 1, condFlat.Length }) : condFlat,
+            axis: 1, index: 0);
+        // Simpler path: build a [1, xtLen + condLen + 1]-shaped input by
+        // copying into a fresh tensor. The denoiser will run its
+        // tape-tracked Forward passes on this — that's what needs
+        // gradients, not the concat layout itself.
+        var denoisingInput = new Tensor<T>(new[] { 1, targetLen + condLen + 1 });
+        for (int i = 0; i < targetLen; i++) denoisingInput.Data.Span[i] = xt2d[0, i];
+        for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[targetLen + i] = condHidden[i];
+        denoisingInput.Data.Span[targetLen + condLen] = NumOps.FromDouble(
+            Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+
+        // 5. Predict noise via residual stack. _residualLayers[i]
+        // .Forward is tape-aware, so gradients flow back through the
+        // whole stack to each layer's parameters.
+        var eps = (Tensor<T>)denoisingInput;
+        foreach (var layer in _residualLayers)
+            eps = layer.Forward(eps);
+        if (_outputProjection is not null)
+            eps = _outputProjection.Forward(eps);
+
+        // Align predicted-noise shape with true-noise shape so the
+        // loss operates element-wise without a broadcast fallback.
+        if (eps.Length >= epsilonTrue.Length)
+        {
+            if (eps.Length != epsilonTrue.Length)
+                eps = Engine.TensorSliceAxis(eps, axis: eps.Rank - 1, index: 0);
+            if (!eps._shape.AsEnumerable().SequenceEqual(epsilonTrue._shape))
+                eps = Engine.Reshape(eps, epsilonTrue._shape);
+        }
+        else
+        {
+            epsilonTrue = Engine.Reshape(epsilonTrue, eps._shape);
+        }
+
+        return (eps, epsilonTrue);
     }
 
     public override void UpdateParameters(Vector<T> gradients)

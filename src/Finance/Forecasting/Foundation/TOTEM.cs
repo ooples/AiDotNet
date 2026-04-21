@@ -11,6 +11,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
@@ -306,15 +307,109 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
+        // TOTEM-specific training: reconstruction loss + commitment
+        // term for the vector-quantized encoder. The base trainer's
+        // supervised path only sees reconstruction, which drops the
+        // VQ-VAE commitment penalty and lets the encoder drift
+        // arbitrarily far from the codebook. Run a custom tape step
+        // that combines both.
+
+        var loss = LossFunction as LossFunctions.LossFunctionBase<T>
+            ?? throw new InvalidOperationException(
+                "LossFunction must derive from LossFunctionBase<T> for TOTEM tape-based training.");
+
+        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
+
+        using var tape = new GradientTape<T>();
+        var (forecast, commitmentLoss) = ForwardNativeForTrainingWithCommitment(input);
+
+        var alignedTarget = target;
+        if (forecast.Rank > target.Rank && forecast.Shape[0] == 1 && forecast.Length == target.Length)
+            forecast = Engine.Reshape(forecast, target._shape);
+        else if (target.Rank > forecast.Rank && target.Shape[0] == 1 && target.Length == forecast.Length)
+            alignedTarget = Engine.Reshape(target, forecast._shape);
+        var reconLoss = loss.ComputeTapeLoss(forecast, alignedTarget);
+
+        var totalLoss = Engine.TensorAdd(reconLoss, commitmentLoss);
+
+        var allGrads = tape.ComputeGradients(totalLoss, sources: null);
+        var grads = new Dictionary<Tensor<T>, Tensor<T>>(
+            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        foreach (var param in trainableParams)
+        {
+            if (allGrads.TryGetValue(param, out var grad))
+                grads[param] = grad;
+        }
+
+        T lossValue = totalLoss.Length > 0 ? totalLoss[0] : NumOps.Zero;
+        LastLoss = lossValue;
+
+        T lr = NumOps.FromDouble(0.001);
+        foreach (var param in trainableParams)
+        {
+            if (grads.TryGetValue(param, out var grad))
+            {
+                var update = Engine.TensorMultiplyScalar(grad, lr);
+                Engine.TensorSubtractInPlace(param, update);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Training-mode forward. Routes the encoder → VQ → decoder →
+    /// forecast head pipeline through the tape with a straight-through
+    /// vector quantizer so gradients flow into the encoder and
+    /// forecast head while the codebook lookup's argmin stays non-
+    /// differentiable (it has to — there's no gradient to an argmin).
+    /// Also emits the commitment loss as a tape-aware tensor for the
+    /// caller to add to the reconstruction loss.
+    /// </summary>
+    private (Tensor<T> forecast, Tensor<T> commitmentLoss) ForwardNativeForTrainingWithCommitment(Tensor<T> input)
+    {
+        var normalized = ApplyInstanceNormalization(input);
+        var current = normalized;
+        if (current.Rank == 1)
+            current = Engine.Reshape(current, new[] { 1, current.Length });
+
+        if (_encoder is not null)
+            current = _encoder.Forward(current);
+        foreach (var layer in _transformerLayers)
+            current = layer.Forward(current);
+        if (_quantizationProjection is not null)
+            current = _quantizationProjection.Forward(current);
+
+        // Non-differentiable lookup: find nearest codebook entry per
+        // position. VectorQuantize returns a plain Tensor<T> built by
+        // .Data.Span — this is intentional here; we use it as the
+        // stop-gradient target in the straight-through trick.
+        var codebookValues = VectorQuantize(current);
+
+        // Straight-through estimator:
+        //   quantized = encoder + sg(codebook - encoder)
+        //   forward: evaluates to codebook values (VQ behavior)
+        //   backward: d quantized / d encoder = 1 (gradient passes through)
+        var diff = Engine.TensorSubtract(codebookValues, current);
+        var diffDetached = Engine.StopGradient(diff);
+        var quantizedST = Engine.TensorAdd(current, diffDetached);
+
+        // Commitment loss: mean((encoder - sg(codebook))^2), weighted.
+        // Pulling encoder toward codebook encourages discrete
+        // quantization without destabilizing codebook values.
+        var codebookDetached = Engine.StopGradient(codebookValues);
+        var commitDiff = Engine.TensorSubtract(current, codebookDetached);
+        var commitSq = Engine.TensorMultiply(commitDiff, commitDiff);
+        var allAxes = Enumerable.Range(0, commitSq.Rank).ToArray();
+        var commitmentLoss = Engine.ReduceMean(commitSq, allAxes, keepDims: false);
+        commitmentLoss = Engine.TensorMultiplyScalar(commitmentLoss,
+            NumOps.FromDouble(_commitmentWeight));
+
+        var decoded = quantizedST;
+        if (_decoder is not null)
+            decoded = _decoder.Forward(decoded);
+        if (_forecastHead is not null)
+            decoded = _forecastHead.Forward(decoded);
+
+        return (decoded, commitmentLoss);
     }
 
     /// <inheritdoc/>

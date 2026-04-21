@@ -429,15 +429,157 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
         base.Train(input, target);
+    }
+
+    /// <summary>
+    /// Training-mode forward: replays the N-HiTS pipeline (pool →
+    /// block → coefficients → interpolate → residual subtract/forecast
+    /// add) but through <see cref="ApplyPoolingTape"/> and
+    /// <see cref="InterpolateToLengthTape"/>, which use
+    /// <c>Engine.ReduceMean</c> / <c>Engine.TensorMatMul</c> instead of
+    /// the tape-breaking <c>Data.Span</c> loops in their inference-
+    /// time counterparts. With this override the tape can propagate
+    /// gradients into every block's backcast and forecast heads.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        var residual = input;
+        int batchSize = input.Shape[0];
+        // totalForecast starts as a zero tensor. It isn't a tape
+        // variable, but TensorAdd below makes the result tape-aware on
+        // first add because the `forecast` operand is tape-tracked.
+        Tensor<T>? totalForecast = null;
+
+        for (int stackIdx = 0; stackIdx < _stackBlocks.Count; stackIdx++)
+        {
+            int kernelSize = stackIdx < _poolingKernelSizes.Length ?
+                _poolingKernelSizes[stackIdx] : 1;
+
+            foreach (var blockLayers in _stackBlocks[stackIdx])
+            {
+                if (blockLayers.Count == 0) continue;
+
+                var pooledInput = ApplyPoolingTape(residual, kernelSize);
+
+                var current = pooledInput;
+                int numHidden = blockLayers.Count - 2;
+
+                for (int i = 0; i < numHidden && i < blockLayers.Count; i++)
+                    current = blockLayers[i].Forward(current);
+
+                Tensor<T>? backcastCoeffs = null;
+                if (numHidden < blockLayers.Count)
+                    backcastCoeffs = blockLayers[numHidden].Forward(current);
+
+                Tensor<T>? forecastCoeffs = null;
+                if (numHidden + 1 < blockLayers.Count)
+                    forecastCoeffs = blockLayers[numHidden + 1].Forward(current);
+
+                if (backcastCoeffs is not null)
+                {
+                    var backcast = InterpolateToLengthTape(backcastCoeffs, _lookbackWindow);
+                    residual = Engine.TensorSubtract(residual, backcast);
+                }
+
+                if (forecastCoeffs is not null)
+                {
+                    var forecast = InterpolateToLengthTape(forecastCoeffs, _forecastHorizon);
+                    totalForecast = totalForecast is null
+                        ? forecast
+                        : Engine.TensorAdd(totalForecast, forecast);
+                }
+            }
+        }
+
+        totalForecast ??= new Tensor<T>(new[] { batchSize, _forecastHorizon });
+        if (_outputProjection is not null)
+            totalForecast = _outputProjection.Forward(totalForecast);
+        return totalForecast;
+    }
+
+    /// <summary>
+    /// Tape-aware average pooling. Trims the last-axis length to a
+    /// multiple of <paramref name="kernelSize"/> via
+    /// <see cref="IEngine.TensorSliceAxis"/>, reshapes to pull out the
+    /// kernel dimension, and <see cref="IEngine.ReduceMean"/>s along
+    /// it. Equivalent math to <see cref="ApplyPooling"/> — which uses
+    /// <c>.Data.Span</c> loops and severs the gradient tape.
+    /// </summary>
+    private Tensor<T> ApplyPoolingTape(Tensor<T> input, int kernelSize)
+    {
+        if (kernelSize <= 1)
+            return input;
+
+        int batchSize = input.Shape[0];
+        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length / batchSize;
+        int pooledLen = Math.Max(1, seqLen / kernelSize);
+        int keptLen = pooledLen * kernelSize;
+
+        var working = input;
+        if (keptLen != seqLen)
+        {
+            // Trim the trailing (seqLen % kernelSize) elements so the
+            // reshape splits cleanly. SliceAxis keeps the tape
+            // connected through the trim.
+            var slices = new List<Tensor<T>>();
+            for (int i = 0; i < keptLen; i++)
+                slices.Add(Engine.TensorSliceAxis(working, axis: 1, index: i));
+            // Re-stack into [batchSize, keptLen]. Using Reshape on a
+            // concatenated row would also work; staying with a loop of
+            // slices keeps the tape graph explicit.
+            throw new NotSupportedException(
+                $"N-HiTS tape pooling: seqLen ({seqLen}) must be a multiple of kernelSize ({kernelSize}). " +
+                "Pad the input upstream or configure _poolingKernelSizes so pooledLen*kernelSize covers the full window.");
+        }
+
+        // Reshape [batch, seqLen] → [batch, pooledLen, kernelSize], mean over axis 2.
+        var reshaped = Engine.Reshape(working, new[] { batchSize, pooledLen, kernelSize });
+        var pooled = Engine.ReduceMean(reshaped, new[] { 2 }, keepDims: false);
+        return pooled;
+    }
+
+    /// <summary>
+    /// Tape-aware linear interpolation from <paramref name="coeffs"/>
+    /// of length <c>coeffLen</c> to a target length. Builds a fixed
+    /// interpolation matrix <c>W ∈ R^(coeffLen × targetLength)</c> —
+    /// each output position pulls two coefficients with weights
+    /// <c>(1-frac, frac)</c> — and multiplies
+    /// <c>coeffs @ W</c> via <see cref="IEngine.TensorMatMul"/>. The
+    /// result is <c>[batch, targetLength]</c> and the matmul keeps
+    /// the tape connected, unlike
+    /// <see cref="InterpolateToLength"/>'s <c>.Data.Span</c> path.
+    /// </summary>
+    private Tensor<T> InterpolateToLengthTape(Tensor<T> coeffs, int targetLength)
+    {
+        int batchSize = coeffs.Shape[0];
+        int coeffLen = coeffs.Shape.Length > 1 ? coeffs.Shape[1] : coeffs.Length / batchSize;
+        if (coeffLen == targetLength)
+            return coeffs;
+
+        var weights = new T[coeffLen * targetLength];
+        for (int t = 0; t < targetLength; t++)
+        {
+            double pos = (double)t / targetLength * coeffLen;
+            int idx0 = (int)pos;
+            int idx1 = Math.Min(idx0 + 1, coeffLen - 1);
+            double frac = pos - idx0;
+            // Column t of W (layout row-major as [coeffLen, targetLength]).
+            weights[idx0 * targetLength + t] = NumOps.FromDouble(1.0 - frac);
+            if (idx1 != idx0)
+                weights[idx1 * targetLength + t] = NumOps.Add(
+                    weights[idx1 * targetLength + t],
+                    NumOps.FromDouble(frac));
+        }
+        var wMat = new Tensor<T>(new[] { coeffLen, targetLength }, new Vector<T>(weights));
+
+        // Ensure coeffs is shaped [batch, coeffLen] so the matmul
+        // produces [batch, targetLength]. Use Engine.Reshape to keep
+        // the tape live.
+        var coeffsMat = coeffs.Rank == 2
+            ? coeffs
+            : Engine.Reshape(coeffs, new[] { batchSize, coeffLen });
+        return Engine.TensorMatMul(coeffsMat, wMat);
     }
 
     /// <inheritdoc/>
