@@ -499,7 +499,12 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
+        // Go through Forecast (which dequantizes token logits into a scalar
+        // trajectory) so Predict's output shape matches what
+        // FinancialModelBase.ForwardForTraining → Forecast produces during
+        // tape training. Otherwise the smoke-test loss pair collides with
+        // raw [1, seq, vocab] vs dequantized [horizon] shapes.
+        return Forecast(input, quantiles: null);
     }
 
     /// <inheritdoc/>

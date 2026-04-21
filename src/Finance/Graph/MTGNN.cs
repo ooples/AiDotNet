@@ -608,11 +608,23 @@ public class MTGNN<T> : ForecastingModelBase<T>
     /// </summary>
     protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
     {
-        var current = input;
+        // Match Predict's input-flattening. Predict → Forward calls
+        // FlattenInput (raw .Data.Span copy, breaks tape); we preserve
+        // the tape via Engine.Reshape to the same [totalSize] 1D shape,
+        // so the layer chain sees identical input to inference and
+        // produces a matching output shape.
+        var current = input.Rank > 1
+            ? Engine.Reshape(input, new[] { input.Length })
+            : input;
         foreach (var layer in Layers)
             current = layer.Forward(current);
         if (_adaptiveAdjacency is not null && _useNativeMode)
             current = ApplyMixHopPropagationTape(current);
+        // Belt-and-suspenders final flatten in case any layer restored
+        // rank (batch-norm variants, etc.) so Predict's flat [N] target
+        // and our training output share one contract.
+        if (current.Rank > 1)
+            current = Engine.Reshape(current, new[] { current.Length });
         return current;
     }
 

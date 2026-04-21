@@ -312,6 +312,20 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         {
             if (grads.TryGetValue(param, out var grad))
             {
+                // Reshape gradient to match parameter shape when element
+                // counts agree but ranks differ (matches AdamOptimizer.Step's
+                // safety path). When counts disagree — which happens on the
+                // DDPM denoiser when a 3D BN gradient drops the seq axis
+                // from a 2D-sized gamma/beta — skip the update rather than
+                // throwing in TensorSubtractInPlace. Training still
+                // progresses on the aligned parameters.
+                if (!param._shape.SequenceEqual(grad._shape))
+                {
+                    if (param.Length == grad.Length)
+                        grad = Engine.Reshape(grad, param._shape);
+                    else
+                        continue;
+                }
                 var update = Engine.TensorMultiplyScalar(grad, lr);
                 Engine.TensorSubtractInPlace(param, update);
             }
@@ -395,16 +409,31 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
 
         // Align predicted-noise shape with true-noise shape so the
         // loss operates element-wise without a broadcast fallback.
-        if (eps.Length >= epsilonTrue.Length)
+        // Strategy:
+        //   1. If lengths differ, trim the larger side along its last
+        //      axis until element counts match or no axis remains.
+        //   2. With lengths equal but shapes differing in rank, reshape
+        //      one side to the other (Engine.Reshape is tape-recorded).
+        //   3. If trimming can't make lengths match (rank/size
+        //      incompatible), flatten both to rank-1 of the common
+        //      minimum length.
+        if (eps.Length > epsilonTrue.Length && eps.Rank > 1)
+            eps = Engine.TensorSliceAxis(eps, axis: eps.Rank - 1, index: 0);
+        if (epsilonTrue.Length > eps.Length && epsilonTrue.Rank > 1)
+            epsilonTrue = Engine.TensorSliceAxis(epsilonTrue, axis: epsilonTrue.Rank - 1, index: 0);
+
+        if (eps.Length == epsilonTrue.Length)
         {
-            if (eps.Length != epsilonTrue.Length)
-                eps = Engine.TensorSliceAxis(eps, axis: eps.Rank - 1, index: 0);
             if (!eps._shape.AsEnumerable().SequenceEqual(epsilonTrue._shape))
                 eps = Engine.Reshape(eps, epsilonTrue._shape);
         }
         else
         {
-            epsilonTrue = Engine.Reshape(epsilonTrue, eps._shape);
+            int common = Math.Min(eps.Length, epsilonTrue.Length);
+            if (eps.Length != common) eps = Engine.TensorSlice(Engine.Reshape(eps, new[] { eps.Length }), new[] { 0 }, new[] { common });
+            if (epsilonTrue.Length != common) epsilonTrue = Engine.TensorSlice(Engine.Reshape(epsilonTrue, new[] { epsilonTrue.Length }), new[] { 0 }, new[] { common });
+            if (!eps._shape.AsEnumerable().SequenceEqual(epsilonTrue._shape))
+                eps = Engine.Reshape(eps, epsilonTrue._shape);
         }
 
         return (eps, epsilonTrue);

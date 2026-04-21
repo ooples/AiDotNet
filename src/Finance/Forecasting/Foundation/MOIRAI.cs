@@ -495,7 +495,13 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        return _useNativeMode ? Forward(input) : ForecastOnnx(input);
+        // Go through Forecast (which extracts point/median predictions from the
+        // mixture/quantile head) so Predict's output shape matches what
+        // FinancialModelBase.ForwardForTraining → Forecast produces during
+        // tape training. Otherwise the smoke-test loss pair — Predict(input)
+        // as target vs Forecast output as training forward — collides with
+        // raw [1, horizon, numMixtures] vs extracted [horizon] shapes.
+        return Forecast(input, quantiles: null);
     }
 
     /// <inheritdoc/>

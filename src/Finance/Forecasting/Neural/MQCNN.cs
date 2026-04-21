@@ -567,18 +567,43 @@ public class MQCNN<T> : ForecastingModelBase<T>
                 throw new InvalidOperationException(
                     $"MQCNN output length {predFlat.Length} is smaller than horizon*quantiles " +
                     $"({horizon}*{numQ}={total}); check _forecastHorizon / _quantiles.");
+            // Trim to exactly horizon*numQ elements before reshape. A
+            // rank-3 network output [batch, seq, numQ] or an oversized
+            // flat buffer would otherwise fail Engine.Reshape (which
+            // requires strict element-count parity). Flatten, slice
+            // to the expected window, then reshape — all tape-recorded.
+            if (predFlat.Length > total)
+            {
+                predFlat = Engine.Reshape(predFlat, new[] { predFlat.Length });
+                predFlat = Engine.TensorSlice(predFlat, new[] { 0 }, new[] { total });
+            }
             predFlat = Engine.Reshape(predFlat, new[] { horizon, numQ });
         }
 
         // Align target to [horizon]. A flat [horizon]-length target is
         // the common case; anything else gets trimmed to the first
-        // `horizon` elements and reshaped so the broadcast subtract
-        // below remains tape-aware.
+        // `horizon` elements (flatten → slice → reshape) so the
+        // broadcast subtract below remains tape-aware.
         Tensor<T> targetVec;
         if (target.Rank == 1 && target.Length == horizon)
+        {
             targetVec = target;
-        else
+        }
+        else if (target.Length == horizon)
+        {
             targetVec = Engine.Reshape(target, new[] { horizon });
+        }
+        else
+        {
+            var flatTarget = target.Rank == 1
+                ? target
+                : Engine.Reshape(target, new[] { target.Length });
+            int take = Math.Min(horizon, flatTarget.Length);
+            targetVec = Engine.TensorSlice(flatTarget, new[] { 0 }, new[] { take });
+            if (take < horizon)
+                throw new InvalidOperationException(
+                    $"MQCNN target length {target.Length} is smaller than horizon {horizon}.");
+        }
 
         // Accumulate per-quantile pinball losses.
         Tensor<T>? totalLoss = null;

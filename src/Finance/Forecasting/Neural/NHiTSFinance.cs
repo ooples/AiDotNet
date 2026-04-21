@@ -479,15 +479,28 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
                 if (backcastCoeffs is not null)
                 {
                     var backcast = InterpolateToLengthTape(backcastCoeffs, _lookbackWindow);
+                    // Align rank when element counts match but shapes differ
+                    // (e.g. residual [1, 8] vs backcast [1, 8, 1] when the
+                    // interpolator adds a trailing singleton). Engine.Reshape
+                    // is tape-recorded so backward flows through.
+                    if (!residual._shape.SequenceEqual(backcast._shape) && residual.Length == backcast.Length)
+                        backcast = Engine.Reshape(backcast, residual._shape);
                     residual = Engine.TensorSubtract(residual, backcast);
                 }
 
                 if (forecastCoeffs is not null)
                 {
                     var forecast = InterpolateToLengthTape(forecastCoeffs, _forecastHorizon);
-                    totalForecast = totalForecast is null
-                        ? forecast
-                        : Engine.TensorAdd(totalForecast, forecast);
+                    if (totalForecast is null)
+                    {
+                        totalForecast = forecast;
+                    }
+                    else
+                    {
+                        if (!totalForecast._shape.SequenceEqual(forecast._shape) && totalForecast.Length == forecast.Length)
+                            forecast = Engine.Reshape(forecast, totalForecast._shape);
+                        totalForecast = Engine.TensorAdd(totalForecast, forecast);
+                    }
                 }
             }
         }

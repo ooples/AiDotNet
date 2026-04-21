@@ -294,6 +294,14 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         // accumulates gradients from both terms into each shared
         // parameter (the projection head is shared, so its gradient is
         // the sum of contributions from both branches).
+        // Shape-align on rank drift (e.g. supervisedLoss rank-0 [] vs
+        // contrastiveLoss rank-1 [1]) so the engine's strict-shape add
+        // accepts the pair. Both are scalar-valued so reshape is safe.
+        if (!supervisedLoss._shape.SequenceEqual(contrastiveLoss._shape)
+            && supervisedLoss.Length == contrastiveLoss.Length)
+        {
+            contrastiveLoss = Engine.Reshape(contrastiveLoss, supervisedLoss._shape);
+        }
         var totalLoss = Engine.TensorAdd(supervisedLoss, contrastiveLoss);
 
         var allGrads = tape.ComputeGradients(totalLoss, sources: null);
