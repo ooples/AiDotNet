@@ -51,9 +51,19 @@ test.describe('Admin — overview', () => {
     const totalInt = parseInt(totalText.replace(/,/g, ''), 10);
     expect(totalInt).toBeGreaterThanOrEqual(2);
 
-    // Recent signups table: either the "no signups" empty state or the
-    // real table must be visible — the loader state should be done.
-    await expect(page.locator('#signups-empty')).toBeAttached();
+    // Recent signups section: the loader must have resolved to exactly
+    // one of (A) the empty state visible, or (B) the real table
+    // visible. Asserting `toBeAttached()` only proves the DOM nodes
+    // exist — it would silently accept a smoke run where both the
+    // loader and the real table are mounted but hidden, which is the
+    // exact partial-render state we want this test to catch.
+    await expect
+      .poll(async () => {
+        const emptyVisible = await page.locator('#signups-empty:not(.hidden)').count();
+        const tableVisible = await page.locator('#signups-table:not(.hidden)').count();
+        return emptyVisible + tableVisible;
+      }, { timeout: 10_000 })
+      .toBe(1);
 
     expect(consoleErrors, 'admin overview should emit zero console errors').toEqual([]);
   });

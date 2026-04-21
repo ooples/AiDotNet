@@ -4,7 +4,7 @@ const base = import.meta.env.BASE_URL;
 ---
 
 <AccountLayout title="Billing - AiDotNet" description="Manage your AiDotNet subscription, view invoices, and update payment methods." activeTab="billing">
-  <div class="space-y-6">
+  <div id="billing-root" class="space-y-6" data-billing-loaded="false">
     <div>
       <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Billing</h1>
       <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage your subscription and payment method</p>
@@ -154,9 +154,17 @@ const base = import.meta.env.BASE_URL;
   <script>
     import { supabase } from '../../../lib/supabase';
 
+    // Load-complete marker. Set on #billing-root once the async load
+    // finishes (success OR the auth/profile fetch bailing out) so tests
+    // have a deterministic signal to wait on rather than racing against
+    // the pre-hydration "Free" default that's baked into the HTML.
+    function markBillingLoaded() {
+      document.getElementById('billing-root')?.setAttribute('data-billing-loaded', 'true');
+    }
+
     async function loadBilling() {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) { markBillingLoaded(); return; }
 
       const { data: profile } = await supabase
         .from('profiles')
@@ -164,7 +172,7 @@ const base = import.meta.env.BASE_URL;
         .eq('id', user.id)
         .single();
 
-      if (!profile) return;
+      if (!profile) { markBillingLoaded(); return; }
 
       const planEl = document.getElementById('billing-plan');
       const priceEl = document.getElementById('billing-price');
@@ -202,6 +210,8 @@ const base = import.meta.env.BASE_URL;
           if (invoicesBtn) invoicesBtn.setAttribute('href', portalUrl);
         }
       }
+
+      markBillingLoaded();
     }
 
     loadBilling();

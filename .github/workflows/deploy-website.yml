@@ -151,7 +151,13 @@ jobs:
   e2e-smoke:
     name: Post-Deploy E2E Smoke Tests
     runs-on: ubuntu-latest
-    needs: build-and-deploy
+    # Gate on both the schema push and the site deploy so a partially-
+    # failed release (e.g., build succeeds but migrate-database fails
+    # because a migration collided) doesn't produce a green smoke
+    # signal. Both must succeed before we say "the deploy is healthy."
+    needs:
+      - migrate-database
+      - build-and-deploy
     defaults:
       run:
         working-directory: website

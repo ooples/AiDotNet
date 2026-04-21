@@ -10,12 +10,20 @@ test.describe('Logged-in user — billing', () => {
     await page.goto('/account/billing/');
     await expect(page.getByRole('heading', { name: 'Billing', level: 1 })).toBeVisible();
 
+    // Gate on the explicit load-complete marker set by loadBilling().
+    // Without it, the plan regex below could pass on the pre-hydration
+    // default ("Free" is baked into the HTML) and we'd silently accept
+    // a broken profile fetch for a Pro/Enterprise account.
+    await expect(page.locator('#billing-root')).toHaveAttribute(
+      'data-billing-loaded',
+      'true',
+      { timeout: 10_000 },
+    );
+
     // The plan name is populated from profiles.subscription_tier, and it
     // must be one of the three supported tiers — any other value means
     // the tier mapping in billing/index.astro has regressed.
-    await expect(page.locator('#billing-plan')).toHaveText(/^(Free|Pro|Enterprise)$/, {
-      timeout: 10_000,
-    });
+    await expect(page.locator('#billing-plan')).toHaveText(/^(Free|Pro|Enterprise)$/);
 
     // The upgrade CTA sits on every tier (its label changes), so assert
     // the button exists rather than the text. For Free users the link
@@ -38,11 +46,17 @@ test.describe('Logged-in user — billing', () => {
   test('Stripe portal section is shown only for paying customers', async ({ page }) => {
     await page.goto('/account/billing/');
 
-    // Wait for loadBilling() to finish — the plan text going from the
-    // initial "Free" default to the real value is the signal.
-    await expect(page.locator('#billing-plan')).toHaveText(/^(Free|Pro|Enterprise)$/, {
-      timeout: 10_000,
-    });
+    // Wait on the explicit load-complete marker rather than text content,
+    // because "Free" is the pre-hydration default — a naive text-match
+    // on #billing-plan would pass before loadBilling() has actually read
+    // the profile. The data-billing-loaded flag is set last in
+    // loadBilling(), so once it flips we know the portal-section toggle
+    // has also run.
+    await expect(page.locator('#billing-root')).toHaveAttribute(
+      'data-billing-loaded',
+      'true',
+      { timeout: 10_000 },
+    );
 
     const plan = await page.locator('#billing-plan').textContent();
     const portalSectionHidden = await page.locator('#portal-section').evaluate((el) =>

@@ -7,15 +7,42 @@ import { defineConfig, devices } from '@playwright/test';
 const USER_STORAGE_STATE = 'tests/e2e/.auth/user.json';
 const ADMIN_STORAGE_STATE = 'tests/e2e/.auth/admin.json';
 
+// Production-mutating safety: the auth-backed specs perform real writes
+// (API key create/revoke, profile update, license issuance). Rather than
+// defaulting to https://www.aidotnet.dev and turning a bare
+// `npx playwright test` into a production-data-mutating command, we
+// require PLAYWRIGHT_BASE_URL to be set explicitly. CI sets it in the
+// post-deploy smoke job; local devs set it to their preview URL or a
+// dev server. No default == no accidental prod writes.
+const baseURL = process.env.PLAYWRIGHT_BASE_URL;
+if (!baseURL) {
+  throw new Error(
+    'PLAYWRIGHT_BASE_URL is required. Set it to the environment you want ' +
+    'to test against — e.g. http://localhost:4321 for a local dev server, ' +
+    'a Vercel preview URL for a PR, or https://www.aidotnet.dev for ' +
+    'production smoke (only do this deliberately — the auth-backed specs ' +
+    'mutate real accounts).',
+  );
+}
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  // CI: 1 worker to keep DB-touching tests (admin license issue, API-key
-  // create) deterministic — they read-modify-write the same rows and
-  // parallel workers would race on the at-most-one-active-license index.
-  workers: process.env.CI ? 1 : undefined,
+  // One worker always. DB-touching tests (admin license issue, API-key
+  // create/revoke, profile save-and-restore in settings.spec.ts)
+  // read-modify-write the same seeded accounts, and parallel workers
+  // would race on the at-most-one-active-license index + interleave
+  // the restore step of settings.spec.ts with another run's write.
+  //
+  // The parallelism risk is the same locally and in CI — the single
+  // user.setup / admin.setup projects emit one storageState each and
+  // every auth-backed spec attaches that same session. A second worker
+  // would submit a revoke on the same key the first worker just
+  // created. Cap globally so the default `npx playwright test`
+  // invocation can't hit that race by accident.
+  workers: 1,
   // dot = one-line-per-test on CI; GitHub annotations are layered on top
   // for failure output. The stock 'github' reporter produces confusing
   // empty-body annotations when every test passes.
@@ -23,7 +50,7 @@ export default defineConfig({
     ? [['dot'], ['github'], ['html', { open: 'never' }]]
     : 'html',
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'https://www.aidotnet.dev',
+    baseURL,
     headless: true,
     screenshot: 'only-on-failure',
     trace: 'on-first-retry',
@@ -43,7 +70,12 @@ export default defineConfig({
     {
       name: 'anon-mobile',
       testIgnore: ['**/user/**', '**/admin/**', '**/auth/**'],
-      use: { viewport: { width: 390, height: 844 } },
+      // Base on Pixel 5's real device config (correct isMobile +
+      // hasTouch + user agent) rather than spreading Desktop Chrome +
+      // overriding only the viewport. Code paths that gate on
+      // `window.matchMedia('(hover: none)')`, touch events, or the
+      // mobile UA regex won't fire on a desktop-UA fake-narrow window.
+      use: { ...devices['Pixel 5'] },
     },
 
     // ---------- Auth setup projects ----------

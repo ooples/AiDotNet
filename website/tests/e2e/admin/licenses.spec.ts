@@ -33,10 +33,16 @@ test.describe('Admin — licenses', () => {
     await page.getByRole('button', { name: 'Issue License' }).click();
     await expect(page.locator('#issue-modal')).toBeVisible();
 
-    const placeholderValue = await page.locator('#issue-product option').first().getAttribute('value');
+    const placeholderOption = page.locator('#issue-product option').first();
+    const placeholderValue = await placeholderOption.getAttribute('value');
     expect(placeholderValue).toBe('');
-    const placeholderDisabled = await page.locator('#issue-product option').first().getAttribute('disabled');
+    const placeholderDisabled = await placeholderOption.getAttribute('disabled');
     expect(placeholderDisabled).not.toBeNull();
+    // Also assert the <select> resolves to the empty-value placeholder
+    // on open. If only `disabled` stayed on the option but `selected`
+    // disappeared, browsers would auto-pick PRODUCTS[0] (AiDotNet) and
+    // the guard this test protects evaporates silently.
+    await expect(page.locator('#issue-product')).toHaveValue('');
 
     // Cancel closes the modal — we never submit a real issuance from
     // this test (that would create an unowned license in the DB). The
