@@ -365,6 +365,33 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             input = Engine.Reshape(input, [1, input.Length]);
         }
 
+        // Features-last flatten: when the layer was constructed with a per-feature
+        // gamma/beta contract (sized [featureSize]) and the input arrives rank-3+
+        // with features in the LAST axis (the [batch, seq, features] transformer /
+        // sequence-model layout), flatten all leading axes into one batch axis
+        // before calling Engine.BatchNorm. Otherwise the engine dispatches 3D
+        // input to its channels-first BatchNorm3D path ([channels, H, W] image
+        // convention) and returns gradients sized [_shape[0]] that don't match
+        // our [featureSize] gamma/beta — exactly the smoke-suite regression that
+        // surfaced once AiDotNet.Tensors 0.53.1 shipped the correct 3D BN
+        // backward.
+        //
+        // Triggers only when the last axis actually equals featureSize; if a
+        // caller is genuinely using channels-first 3D/4D layout with per-channel
+        // gamma, we leave input untouched and let the engine's channel-aware
+        // paths handle it.
+        bool flattenedFeaturesLast = false;
+        int[]? preFlattenShape = null;
+        int featureSize = _gamma.Length;
+        if (input.Rank >= 3 && featureSize > 0 && input.Shape[^1] == featureSize)
+        {
+            preFlattenShape = input._shape;
+            int leadingBatch = 1;
+            for (int i = 0; i < input.Rank - 1; i++) leadingBatch *= input.Shape[i];
+            input = Engine.Reshape(input, [leadingBatch, featureSize]);
+            flattenedFeaturesLast = true;
+        }
+
         _lastInput = input;
 
         if (IsTrainingMode)
@@ -415,6 +442,14 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             // Invalidate cached inference scale/shift since running stats changed
             _inferenceScaleDirty = true;
 
+            // Restore pre-flatten rank if we collapsed leading axes for the
+            // features-last transformer path above. Tape-recorded reshape so
+            // backward flows through unchanged.
+            if (flattenedFeaturesLast && preFlattenShape is not null)
+            {
+                output = Engine.Reshape(output, preFlattenShape);
+            }
+
             // Preserve original rank
             if (_inputWas1D)
             {
@@ -450,6 +485,12 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             // Dimension 0 is batch, dimension 1 is features/channels
             // Dimensions 2+ are spatial dimensions
             var result = ApplyInferenceAnyRank(input, _cachedInferenceScale, _cachedInferenceShift);
+
+            // Restore pre-flatten rank for the features-last path.
+            if (flattenedFeaturesLast && preFlattenShape is not null)
+            {
+                result = Engine.Reshape(result, preFlattenShape);
+            }
 
             // Preserve original rank
             if (_inputWas1D)
