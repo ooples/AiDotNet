@@ -618,6 +618,35 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
         if (!UseNativeMode)
             throw new InvalidOperationException(
                 "Training is only supported in native mode.");
+        return ForwardNativeForTraining(input);
+    }
+
+    /// <summary>
+    /// Training-mode forward pass through the native (non-ONNX) model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The default implementation delegates to <see cref="Forecast"/> — which
+    /// works for models whose forecast path is a plain forward pass that
+    /// honors the current training-mode state.
+    /// </para>
+    /// <para>
+    /// Subclasses whose <c>Forecast</c> calls <c>SetTrainingMode(false)</c>
+    /// (e.g. because inference does greedy decoding / no-dropout / no-noise
+    /// sampling), or whose <c>Forecast</c> runs a reverse-diffusion sampler
+    /// instead of the denoiser training target, MUST override this method
+    /// and route through the model's genuine forward-in-training pass
+    /// (typically <c>ForwardNative</c> / <c>Forward</c>). The bug this seam
+    /// exists to prevent: <see cref="ForwardForTraining"/> silently flips
+    /// the model back to inference mode mid-training-step, so parameters
+    /// like dropout masks and training-time noise sampling stop firing and
+    /// the model's generalization quietly regresses.
+    /// </para>
+    /// </remarks>
+    /// <param name="input">The training-batch input tensor.</param>
+    /// <returns>The model's output under training mode.</returns>
+    protected virtual Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
         return Forecast(input, quantiles: null);
     }
 

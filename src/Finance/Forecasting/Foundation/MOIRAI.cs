@@ -514,10 +514,14 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         // pass, so every layer's UpdateParameters threw "Backward pass
         // must be called before updating parameters." Delegate to
         // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
+        // NeuralNetworkBase.TrainWithTape flow. For v1 (encoder) MOIRAI
+        // we need to preserve the masked-encoder training objective
+        // that the class description promises, so mask the input first
+        // and hand the masked tensor to base.Train. The decoder-only
+        // path is causal-autoregressive and doesn't use masking, so it
+        // gets the raw input.
+        var trainingInput = _useDecoderOnly ? input : ApplyRandomMasking(input);
+        base.Train(trainingInput, target);
     }
 
     /// <inheritdoc/>

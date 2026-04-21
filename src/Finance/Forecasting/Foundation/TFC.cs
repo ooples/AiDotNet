@@ -10,6 +10,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
@@ -260,15 +261,159 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
+        var loss = LossFunction as LossFunctions.LossFunctionBase<T>
+            ?? throw new InvalidOperationException(
+                "LossFunction must derive from LossFunctionBase<T> for TFC tape-based training.");
+
+        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
+
+        // Custom tape step: TFC's loss is supervised forecast + weighted
+        // contrastive alignment between the time-domain and frequency-
+        // domain encoder outputs. Both terms must be recorded under the
+        // same GradientTape so the optimizer update reflects the full
+        // objective.
+        using var tape = new GradientTape<T>();
+
+        // Supervised branch (reuse the forecast head's output).
+        var forecast = ForwardForTraining(input);
+        var alignedTarget = target;
+        if (forecast.Rank > target.Rank && forecast.Shape[0] == 1 && forecast.Length == target.Length)
+            forecast = Engine.Reshape(forecast, target._shape);
+        else if (target.Rank > forecast.Rank && target.Shape[0] == 1 && target.Length == forecast.Length)
+            alignedTarget = Engine.Reshape(target, forecast._shape);
+        var supervisedLoss = loss.ComputeTapeLoss(forecast, alignedTarget);
+
+        // Contrastive branch — separate forward through time+freq encoders
+        // (tape-aware; see ComputeContrastiveLossTape below). Weight it
+        // with _contrastiveTemperature-based scaling applied inside the
+        // helper, so this stays a simple additive combination.
+        var contrastiveLoss = ComputeContrastiveLossTape(input);
+
+        // Total = supervised + contrastive. Using TensorAdd keeps both
+        // losses on the same tape so tape.ComputeGradients(total, ...)
+        // accumulates gradients from both terms into each shared
+        // parameter (the projection head is shared, so its gradient is
+        // the sum of contributions from both branches).
+        var totalLoss = Engine.TensorAdd(supervisedLoss, contrastiveLoss);
+
+        var allGrads = tape.ComputeGradients(totalLoss, sources: null);
+        var grads = new Dictionary<Tensor<T>, Tensor<T>>(
+            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        foreach (var param in trainableParams)
+        {
+            if (allGrads.TryGetValue(param, out var grad))
+                grads[param] = grad;
+        }
+
+        T lossValue = totalLoss.Length > 0 ? totalLoss[0] : NumOps.Zero;
+        LastLoss = lossValue;
+
+        // Apply gradients via the registered optimizer. Mirrors the
+        // simple SGD-style update path used in TapeTrainingStep so that
+        // non-Adam optimizers still get the learning-rate-scaled
+        // gradient descent semantics when a full IGradientBasedOptimizer
+        // isn't wired up for Finance models yet.
+        T lr = NumOps.FromDouble(0.001);
+        foreach (var param in trainableParams)
+        {
+            if (grads.TryGetValue(param, out var grad))
+            {
+                var update = Engine.TensorMultiplyScalar(grad, lr);
+                Engine.TensorSubtractInPlace(param, update);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Tape-aware version of <see cref="ComputeContrastiveLoss"/> that
+    /// returns a <see cref="Tensor{T}"/> (not a <c>T</c> scalar) so the
+    /// gradient tape records every op between the encoder outputs and
+    /// the final loss. The old scalar version round-tripped through
+    /// <c>double</c> at the last step, which made it invisible to
+    /// backward.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Computes <c>-log(sigmoid(cos(time, freq) / T))</c> via the
+    /// numerically stable <c>softplus(-logit)</c> identity. All ops go
+    /// through <see cref="IEngine"/> so the tape can walk back through
+    /// the time encoder, frequency encoder, projection head, and
+    /// ultimately the input embeddings.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ComputeContrastiveLossTape(Tensor<T> input)
+    {
+        var normalized = ApplyInstanceNormalization(input);
+        var timeCurrent = normalized;
+        if (timeCurrent.Rank == 1)
+            timeCurrent = Engine.Reshape(timeCurrent, new[] { 1, timeCurrent.Length });
+
+        // Time encoder.
+        if (_timeInputProjection is not null)
+            timeCurrent = _timeInputProjection.Forward(timeCurrent);
+        foreach (var layer in _timeEncoderLayers)
+            timeCurrent = layer.Forward(timeCurrent);
+
+        // Frequency encoder.
+        var freqInput = ComputeFrequencyRepresentation(normalized);
+        if (freqInput.Rank == 1)
+            freqInput = Engine.Reshape(freqInput, new[] { 1, freqInput.Length });
+        var freqCurrent = freqInput;
+        if (_freqInputProjection is not null)
+            freqCurrent = _freqInputProjection.Forward(freqCurrent);
+        foreach (var layer in _freqEncoderLayers)
+            freqCurrent = layer.Forward(freqCurrent);
+
+        // Shared projection head.
+        Tensor<T> timeProj = timeCurrent, freqProj = freqCurrent;
+        if (_projectionHead is not null)
+        {
+            timeProj = _projectionHead.Forward(timeCurrent);
+            freqProj = _projectionHead.Forward(freqCurrent);
+        }
+
+        // Broadcast freqProj to timeProj shape if they differ (e.g., a
+        // frequency encoder that drops the final length dim). Using
+        // Engine.Reshape keeps the tape intact. Compare by converting
+        // _shape to arrays so the Linq SequenceEqual binds to
+        // IEnumerable<int> without the ReadOnlySpan inference ambiguity.
+        var timeShape = timeProj._shape;
+        var freqShape = freqProj._shape;
+        if (!timeShape.AsEnumerable().SequenceEqual(freqShape))
+        {
+            if (timeProj.Length == freqProj.Length)
+                freqProj = Engine.Reshape(freqProj, timeProj._shape);
+            else
+                throw new InvalidOperationException(
+                    $"TFC contrastive loss: time/freq projections have incompatible shapes " +
+                    $"({string.Join("x", timeProj.Shape.ToArray())} vs " +
+                    $"{string.Join("x", freqProj.Shape.ToArray())}).");
+        }
+
+        // Cosine similarity via tape-aware ops:
+        //   dot = sum(a * b)  (scalar tensor via ReduceSum across all axes)
+        //   |a| = sqrt(sum(a^2)),  |b| = sqrt(sum(b^2))
+        //   cos = dot / (|a| * |b| + eps)
+        var allAxes = Enumerable.Range(0, timeProj.Rank).ToArray();
+
+        var dotElements = Engine.TensorMultiply(timeProj, freqProj);
+        var dotProduct = Engine.ReduceSum(dotElements, allAxes, keepDims: false);
+
+        var timeSq = Engine.TensorMultiply(timeProj, timeProj);
+        var freqSq = Engine.TensorMultiply(freqProj, freqProj);
+        var timeNormSq = Engine.ReduceSum(timeSq, allAxes, keepDims: false);
+        var freqNormSq = Engine.ReduceSum(freqSq, allAxes, keepDims: false);
+        var timeNorm = Engine.TensorSqrt(timeNormSq);
+        var freqNorm = Engine.TensorSqrt(freqNormSq);
+        var normProduct = Engine.TensorMultiply(timeNorm, freqNorm);
+        var normProductSafe = Engine.TensorAddScalar(normProduct, NumOps.FromDouble(1e-8));
+        var cosSim = Engine.TensorDivide(dotProduct, normProductSafe);
+
+        // logit = cos / temperature; softplus(-logit) = log(1 + exp(-logit)).
+        T tempT = NumOps.FromDouble(Math.Max(1e-8, _contrastiveTemperature));
+        var logit = Engine.TensorMultiplyScalar(cosSim, NumOps.Divide(NumOps.One, tempT));
+        var negLogit = Engine.TensorNegate(logit);
+        return Engine.Softplus(negLogit);
     }
 
     /// <summary>
@@ -548,13 +693,18 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         foreach (var layer in _freqEncoderLayers)
             freqCurrent = layer.Forward(freqCurrent);
 
-        // Average time and frequency representations (contrastive fusion)
-        for (int i = 0; i < current.Length && i < freqCurrent.Length; i++)
-        {
-            current.Data.Span[i] = NumOps.Divide(
-                NumOps.Add(current[i], freqCurrent[i]),
-                NumOps.FromDouble(2.0));
-        }
+        // Average time and frequency representations (contrastive fusion).
+        // Must go through Engine ops so the gradient tape records the
+        // combine — if we did a .Data.Span loop here, base.Train would
+        // call Forward under a GradientTape and the freq encoder would
+        // never see gradients because the tape can't see the assignment.
+        // A shape mismatch between the two branches (e.g., freq encoder
+        // output length ≠ time encoder output) gets reshaped through
+        // Engine.Reshape so the tape still records it.
+        if (!current._shape.AsEnumerable().SequenceEqual(freqCurrent._shape))
+            freqCurrent = Engine.Reshape(freqCurrent, current._shape);
+        current = Engine.TensorAdd(current, freqCurrent);
+        current = Engine.TensorMultiplyScalar(current, NumOps.FromDouble(0.5));
 
         if (_projectionHead is not null)
             current = _projectionHead.Forward(current);

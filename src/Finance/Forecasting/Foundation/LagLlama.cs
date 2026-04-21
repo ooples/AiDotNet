@@ -521,8 +521,41 @@ public class LagLlama<T> : ForecastingModelBase<T>
         // FinancialModelBase.Train — it routes through the tape-based
         // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
         // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
+        // NeuralNetworkBase subclass uses. The override of
+        // ForwardNativeForTraining below keeps training mode on and
+        // slices out mu with a tape-aware op so gradients reach the
+        // distribution head.
         base.Train(input, target);
+    }
+
+    /// <summary>
+    /// Training-mode forward pass. Calls <c>Forward</c> directly (keeping
+    /// training mode on for dropout / attention-mask randomness) and
+    /// extracts the mu parameter using the tape-aware
+    /// <c>Engine.TensorSliceAxis</c> instead of the
+    /// <c>.Data.Span</c>-based <c>ExtractPointPredictions</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The default <see cref="FinancialModelBase{T}.ForwardNativeForTraining"/>
+    /// would call <see cref="Forecast"/>, which on this model hits
+    /// <c>ForecastNative</c> ( <c>SetTrainingMode(false)</c> ) and then
+    /// extracts mu via <c>distributionParams.Data.Span[…]</c> — a raw
+    /// memory copy that's invisible to the gradient tape. With that path,
+    /// gradients never reach <c>_distributionHead</c> or the transformer
+    /// stack. Overriding here keeps training mode on and slices mu with
+    /// a tape-tracked op so the head actually learns.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        var distributionParams = Forward(input);
+        // mu is the first parameter per forecast step. The params axis is
+        // always the last one — rank-2 for a single forecast window,
+        // rank-3 once a batch dim is present. Slicing at that axis with
+        // index 0 yields the [..., horizon] tensor the loss expects.
+        int paramsAxis = distributionParams.Rank - 1;
+        return Engine.TensorSliceAxis(distributionParams, axis: paramsAxis, index: 0);
     }
 
     /// <inheritdoc/>
