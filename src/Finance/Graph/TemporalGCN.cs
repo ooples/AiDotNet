@@ -539,6 +539,68 @@ public class TemporalGCN<T> : ForecastingModelBase<T>
     /// The graph structure guides how information flows spatially during training.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Training-mode forward: replicates <see cref="Forward"/> but
+    /// routes through a tape-aware Chebyshev convolution so gradients
+    /// can propagate back through the dense layers. The default
+    /// <see cref="ApplyChebyshevConvolution"/> serializes features via
+    /// <c>ToVector()</c> and rebuilds a new tensor from a
+    /// <c>Vector&lt;T&gt;</c>, which severs the gradient tape.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        var current = FlattenInput(input);
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
+        if (_normalizedLaplacian is not null && _useNativeMode)
+            current = ApplyChebyshevConvolutionTape(current);
+        return current;
+    }
+
+    /// <summary>
+    /// Tape-aware Chebyshev (K=2) graph filter:
+    /// <c>y = 0.5 * x + 0.5 * L x</c>. Uses
+    /// <see cref="IEngine.TensorMatMul"/> instead of the manual
+    /// double-accumulator loop in
+    /// <see cref="ApplyChebyshevConvolution"/>, so the gradient tape
+    /// sees every operation and can flow gradients back through the
+    /// preceding dense layers.
+    /// </summary>
+    private Tensor<T> ApplyChebyshevConvolutionTape(Tensor<T> nodeFeatures)
+    {
+        if (_normalizedLaplacian is null)
+            return nodeFeatures;
+
+        int totalSize = nodeFeatures.Length;
+        int featuresPerNode = totalSize / _numNodes;
+        if (featuresPerNode * _numNodes != totalSize)
+            return nodeFeatures; // graceful no-op on shape mismatch
+
+        // Build the Laplacian as a Tensor<T> on demand. This is a
+        // constant (non-trainable) tensor; we reconstruct it every
+        // training step because _normalizedLaplacian is double[,] and
+        // caching a Tensor<T> copy would need threading a mutable
+        // field. The cost is O(numNodes^2) per step, which is small
+        // relative to a transformer-block forward.
+        var lapData = new T[_numNodes * _numNodes];
+        for (int i = 0; i < _numNodes; i++)
+            for (int j = 0; j < _numNodes; j++)
+                lapData[i * _numNodes + j] = NumOps.FromDouble(_normalizedLaplacian[i, j]);
+        var laplacian = new Tensor<T>(new[] { _numNodes, _numNodes }, new Vector<T>(lapData));
+
+        // Reshape features to [numNodes, featuresPerNode] via the
+        // tape-aware Engine.Reshape so the eventual output is still
+        // connected to the layer stack on backward.
+        var xMat = Engine.Reshape(nodeFeatures, new[] { _numNodes, featuresPerNode });
+        var t1 = Engine.TensorMatMul(laplacian, xMat);
+        var combined = Engine.TensorAdd(xMat, t1);
+        combined = Engine.TensorMultiplyScalar(combined, NumOps.FromDouble(0.5));
+        // Reshape back to the input's original shape so downstream
+        // layout expectations (e.g. rank-1 per-step output) are
+        // preserved.
+        return Engine.Reshape(combined, nodeFeatures._shape);
+    }
+
     public override void Train(Tensor<T> input, Tensor<T> target)
     {
         if (!_useNativeMode)

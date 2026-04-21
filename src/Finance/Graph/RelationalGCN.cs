@@ -582,15 +582,23 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
         base.Train(input, target);
+
+        // Basis decomposition state (_basisMatrices + _relationCoefficients)
+        // is not surfaced to the shared tape/optimizer — those fields are
+        // double[,][] / double[,], not Tensor<T>, so they aren't in Layers
+        // and TrainWithTape never computes their gradients. Keep the
+        // model-specific update path alive by invoking the
+        // gradient-scaled random-perturbation update with the most recent
+        // loss as the gradient magnitude. This preserves the original
+        // pre-refactor training semantics for the basis-decomposition
+        // branch; a proper R-GCN tape-aware basis gradient is tracked in
+        // the follow-up to surface these as Tensor<T> parameters.
+        if (_useBasisDecomposition)
+        {
+            var lossVec = new Vector<T>(new[] { LastLoss is not null ? LastLoss : NumOps.FromDouble(1e-3) });
+            UpdateBasisDecompositionFromGradient(lossVec);
+        }
     }
 
     /// <summary>

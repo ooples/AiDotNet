@@ -588,15 +588,33 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
         base.Train(input, target);
+
+        // Adaptive graph state (_nodeEmbedding1 / _nodeEmbedding2) lives
+        // outside Layers and so doesn't get gradients from the shared
+        // tape path. Keep it on a training trajectory: feed the most
+        // recent loss magnitude into UpdateNodeEmbeddingsFromGradient
+        // (which is itself a loss-scaled random-perturbation update in
+        // this simplified R-GCN port) and then refresh the adaptive
+        // adjacency matrix so downstream inference uses the updated
+        // embeddings.
+        if (_useAdaptiveGraph)
+        {
+            var lossVec = new Vector<T>(new[] { LastLoss is not null ? LastLoss : NumOps.FromDouble(1e-3) });
+            UpdateNodeEmbeddingsFromGradient(lossVec);
+            UpdateAdaptiveAdjacency();
+        }
+    }
+
+    /// <summary>
+    /// Training-mode forward: calls <see cref="Forward"/> directly so
+    /// dropout and the adaptive-graph conv stay in training mode under
+    /// the tape. Default routes through <c>ForecastNative</c>, which
+    /// forces inference mode.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        return Forward(input);
     }
 
     /// <summary>
