@@ -10,6 +10,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
@@ -504,15 +505,108 @@ public class MQCNN<T> : ForecastingModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
+        // MQCNN-specific training: the constructors default to MSE for
+        // compatibility with FinancialModelBase, but MQCNN's real loss
+        // is multi-quantile pinball — running the default base.Train
+        // would supervise ALL quantile outputs against the same target
+        // with symmetric squared error, collapsing the quantile spread.
+        // Keep the tape-based flow but compute pinball loss directly so
+        // each quantile sees its asymmetric gradient.
+
+        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
+
+        using var tape = new GradientTape<T>();
+        var predictions = ForwardForTraining(input);
+        var lossTensor = ComputeMultiQuantilePinballLossTape(predictions, target);
+
+        var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+        var grads = new Dictionary<Tensor<T>, Tensor<T>>(
+            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        foreach (var param in trainableParams)
+        {
+            if (allGrads.TryGetValue(param, out var grad))
+                grads[param] = grad;
+        }
+
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+        LastLoss = lossValue;
+
+        T lr = NumOps.FromDouble(0.001);
+        foreach (var param in trainableParams)
+        {
+            if (grads.TryGetValue(param, out var grad))
+            {
+                var update = Engine.TensorMultiplyScalar(grad, lr);
+                Engine.TensorSubtractInPlace(param, update);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Tape-aware multi-quantile pinball loss. The model's flat output
+    /// layout [t1_q1, t1_q2, …, t2_q1, t2_q2, …] gets reshaped so each
+    /// quantile can be sliced out with a tape-tracked op; each slice
+    /// then feeds the standard pinball formula
+    /// <c>max(q*(target-pred), (q-1)*(target-pred))</c>. The per-
+    /// quantile losses are summed (equal-weight across the quantile
+    /// grid) and then mean-reduced over the horizon dimension.
+    /// </summary>
+    private Tensor<T> ComputeMultiQuantilePinballLossTape(Tensor<T> predictions, Tensor<T> target)
+    {
+        int horizon = _forecastHorizon;
+        int numQ = _quantiles.Length;
+
+        // Reshape predictions to [horizon, numQ] so we can slice per
+        // quantile. The flat-vs-batched shapes are normalized to the
+        // simple rank-2 form the loss computation expects.
+        var predFlat = predictions;
+        if (predFlat.Rank != 2 || predFlat.Shape[0] != horizon || predFlat.Shape[1] != numQ)
+        {
+            int total = horizon * numQ;
+            if (predFlat.Length < total)
+                throw new InvalidOperationException(
+                    $"MQCNN output length {predFlat.Length} is smaller than horizon*quantiles " +
+                    $"({horizon}*{numQ}={total}); check _forecastHorizon / _quantiles.");
+            predFlat = Engine.Reshape(predFlat, new[] { horizon, numQ });
+        }
+
+        // Align target to [horizon]. A flat [horizon]-length target is
+        // the common case; anything else gets trimmed to the first
+        // `horizon` elements and reshaped so the broadcast subtract
+        // below remains tape-aware.
+        Tensor<T> targetVec;
+        if (target.Rank == 1 && target.Length == horizon)
+            targetVec = target;
+        else
+            targetVec = Engine.Reshape(target, new[] { horizon });
+
+        // Accumulate per-quantile pinball losses.
+        Tensor<T>? totalLoss = null;
+        for (int q = 0; q < numQ; q++)
+        {
+            // predQ shape: [horizon]. Slice the q-th column.
+            var predQ = Engine.TensorSliceAxis(predFlat, axis: 1, index: q);
+            if (predQ.Rank != 1)
+                predQ = Engine.Reshape(predQ, new[] { horizon });
+
+            var diff = Engine.TensorSubtract(targetVec, predQ);
+            T qVal = NumOps.FromDouble(_quantiles[q]);
+            T qMinusOne = NumOps.Subtract(qVal, NumOps.One);
+
+            var qDiff = Engine.TensorMultiplyScalar(diff, qVal);
+            var qm1Diff = Engine.TensorMultiplyScalar(diff, qMinusOne);
+            var pinballPerStep = Engine.TensorMax(qDiff, qm1Diff);
+
+            var quantileLoss = Engine.ReduceMean(pinballPerStep, new[] { 0 }, keepDims: false);
+            totalLoss = totalLoss is null ? quantileLoss : Engine.TensorAdd(totalLoss, quantileLoss);
+        }
+
+        if (totalLoss is null)
+            throw new InvalidOperationException("MQCNN pinball loss: no quantiles were configured.");
+
+        // Average across the quantile grid so the scalar magnitude is
+        // comparable to single-quantile baselines.
+        return Engine.TensorMultiplyScalar(totalLoss, NumOps.FromDouble(1.0 / numQ));
     }
 
     /// <inheritdoc/>
