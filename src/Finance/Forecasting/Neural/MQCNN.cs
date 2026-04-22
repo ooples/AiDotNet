@@ -567,23 +567,30 @@ public class MQCNN<T> : ForecastingModelBase<T>
                 throw new InvalidOperationException(
                     $"MQCNN output length {predFlat.Length} is smaller than horizon*quantiles " +
                     $"({horizon}*{numQ}={total}); check _forecastHorizon / _quantiles.");
-            // Trim to exactly horizon*numQ elements before reshape. A
-            // rank-3 network output [batch, seq, numQ] or an oversized
-            // flat buffer would otherwise fail Engine.Reshape (which
-            // requires strict element-count parity). Flatten, slice
-            // to the expected window, then reshape — all tape-recorded.
+            // The network's head is expected to emit exactly horizon*numQ
+            // elements (either rank-2 [horizon, numQ] or a rank-1 flat buffer
+            // of that length). A longer output means the head is returning a
+            // rank-3 [batch, seq, numQ] or similar and we have no
+            // deterministic rule for which window to train against — slicing
+            // the first elements would silently discard the forecast window
+            // and train against the past. Fail loudly so the head shape gets
+            // fixed upstream.
             if (predFlat.Length > total)
             {
-                predFlat = Engine.Reshape(predFlat, new[] { predFlat.Length });
-                predFlat = Engine.TensorSlice(predFlat, new[] { 0 }, new[] { total });
+                throw new InvalidOperationException(
+                    $"MQCNN output length {predFlat.Length} exceeds horizon*quantiles "
+                    + $"({horizon}*{numQ}={total}); shape=[{string.Join(",", predFlat.Shape.ToArray())}]. "
+                    + "The output head must project to exactly horizon*numQuantiles elements — "
+                    + "a larger tensor is ambiguous (which window is the forecast?) and would "
+                    + "silently train against the wrong slice.");
             }
             predFlat = Engine.Reshape(predFlat, new[] { horizon, numQ });
         }
 
-        // Align target to [horizon]. A flat [horizon]-length target is
-        // the common case; anything else gets trimmed to the first
-        // `horizon` elements (flatten → slice → reshape) so the
-        // broadcast subtract below remains tape-aware.
+        // Align target to [horizon]. Target MUST carry exactly `horizon`
+        // elements — mismatched lengths mean the caller is passing a
+        // different horizon or a batched target, and silently truncating
+        // would optimize against the wrong window.
         Tensor<T> targetVec;
         if (target.Rank == 1 && target.Length == horizon)
         {
@@ -595,14 +602,10 @@ public class MQCNN<T> : ForecastingModelBase<T>
         }
         else
         {
-            var flatTarget = target.Rank == 1
-                ? target
-                : Engine.Reshape(target, new[] { target.Length });
-            int take = Math.Min(horizon, flatTarget.Length);
-            targetVec = Engine.TensorSlice(flatTarget, new[] { 0 }, new[] { take });
-            if (take < horizon)
-                throw new InvalidOperationException(
-                    $"MQCNN target length {target.Length} is smaller than horizon {horizon}.");
+            throw new InvalidOperationException(
+                $"MQCNN target length {target.Length} (shape=[{string.Join(",", target.Shape.ToArray())}]) "
+                + $"does not match horizon {horizon}. The caller must pass exactly horizon elements — "
+                + "silently slicing would train against the wrong window.");
         }
 
         // Accumulate per-quantile pinball losses.

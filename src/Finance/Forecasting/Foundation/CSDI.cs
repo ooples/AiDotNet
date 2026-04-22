@@ -314,17 +314,27 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
             {
                 // Reshape gradient to match parameter shape when element
                 // counts agree but ranks differ (matches AdamOptimizer.Step's
-                // safety path). When counts disagree — which happens on the
-                // DDPM denoiser when a 3D BN gradient drops the seq axis
-                // from a 2D-sized gamma/beta — skip the update rather than
-                // throwing in TensorSubtractInPlace. Training still
-                // progresses on the aligned parameters.
+                // safety path). When element counts truly disagree that
+                // indicates a layer-contract bug (e.g. a 3D BN gradient
+                // dropping the seq axis from a 2D-sized gamma/beta), so fail
+                // loudly rather than silently no-oping — a silent skip would
+                // mean this parameter never trains while the optimizer step
+                // still reports success.
                 if (!param._shape.SequenceEqual(grad._shape))
                 {
                     if (param.Length == grad.Length)
+                    {
                         grad = Engine.Reshape(grad, param._shape);
+                    }
                     else
-                        continue;
+                    {
+                        throw new InvalidOperationException(
+                            $"CSDI optimizer: gradient/parameter element counts disagree ("
+                            + $"param shape=[{string.Join(",", param._shape)}], length={param.Length}; "
+                            + $"grad shape=[{string.Join(",", grad._shape)}], length={grad.Length}). "
+                            + "This is a layer-contract bug — the producing layer's backward returned a "
+                            + "gradient with the wrong element count for this parameter.");
+                    }
                 }
                 var update = Engine.TensorMultiplyScalar(grad, lr);
                 Engine.TensorSubtractInPlace(param, update);
@@ -407,34 +417,24 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         if (_outputProjection is not null)
             eps = _outputProjection.Forward(eps);
 
-        // Align predicted-noise shape with true-noise shape so the
-        // loss operates element-wise without a broadcast fallback.
-        // Strategy:
-        //   1. If lengths differ, trim the larger side along its last
-        //      axis until element counts match or no axis remains.
-        //   2. With lengths equal but shapes differing in rank, reshape
-        //      one side to the other (Engine.Reshape is tape-recorded).
-        //   3. If trimming can't make lengths match (rank/size
-        //      incompatible), flatten both to rank-1 of the common
-        //      minimum length.
-        if (eps.Length > epsilonTrue.Length && eps.Rank > 1)
-            eps = Engine.TensorSliceAxis(eps, axis: eps.Rank - 1, index: 0);
-        if (epsilonTrue.Length > eps.Length && epsilonTrue.Rank > 1)
-            epsilonTrue = Engine.TensorSliceAxis(epsilonTrue, axis: epsilonTrue.Rank - 1, index: 0);
+        // Align predicted-noise shape with true-noise shape so the loss
+        // operates element-wise without a broadcast fallback. By construction
+        // the denoiser head emits one value per target element, so lengths
+        // MUST match — if they don't, that's a head-contract bug and the loss
+        // would silently train against the wrong slice. Fail loudly; then
+        // reshape once so ranks agree (Engine.Reshape is tape-recorded).
+        if (eps.Length != epsilonTrue.Length)
+        {
+            throw new InvalidOperationException(
+                $"CSDI denoising pair: predicted-noise length ({eps.Length}, shape=["
+                + $"{string.Join(",", eps._shape)}]) does not match true-noise length ("
+                + $"{epsilonTrue.Length}, shape=[{string.Join(",", epsilonTrue._shape)}]). "
+                + "This is a denoiser head bug — the residual stack should emit exactly "
+                + "one prediction per target element.");
+        }
 
-        if (eps.Length == epsilonTrue.Length)
-        {
-            if (!eps._shape.AsEnumerable().SequenceEqual(epsilonTrue._shape))
-                eps = Engine.Reshape(eps, epsilonTrue._shape);
-        }
-        else
-        {
-            int common = Math.Min(eps.Length, epsilonTrue.Length);
-            if (eps.Length != common) eps = Engine.TensorSlice(Engine.Reshape(eps, new[] { eps.Length }), new[] { 0 }, new[] { common });
-            if (epsilonTrue.Length != common) epsilonTrue = Engine.TensorSlice(Engine.Reshape(epsilonTrue, new[] { epsilonTrue.Length }), new[] { 0 }, new[] { common });
-            if (!eps._shape.AsEnumerable().SequenceEqual(epsilonTrue._shape))
-                eps = Engine.Reshape(eps, epsilonTrue._shape);
-        }
+        if (!eps._shape.AsEnumerable().SequenceEqual(epsilonTrue._shape))
+            eps = Engine.Reshape(eps, epsilonTrue._shape);
 
         return (eps, epsilonTrue);
     }
