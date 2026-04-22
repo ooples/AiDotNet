@@ -32942,27 +32942,15 @@ public static class LayerHelper<T>
         int numPatches = contextLength / patchLength;
 
         // MOMENT (Goswami et al., 2024 "MOMENT: A Family of Open Time-series
-        // Foundation Models") is a T5-style encoder-only transformer for time
-        // series. Patches are SEQUENCE POSITIONS, not features — attention
-        // runs across the numPatches axis. The old helper sized every
-        // projection at [numPatches · hiddenDim, numPatches · hiddenDim] and
-        // the FFN at numPatches · intermediateSize over that same flattened
-        // dim, producing ~2.3 TiB of weight tensors at paper defaults
-        // (ContextLength=512, HiddenDim=1024, Intermediate=4096, NumLayers=24,
-        // PatchLength=64). Real MOMENT-large is ~385M params.
-        //
-        // Rewritten to the paper architecture: per-patch ReshapeLayer +
-        // patch DenseLayer + N × TransformerEncoderLayer + Flatten + Dense
-        // forecast head. Params per block ≈ 4·H² + 2·H·I = 4·1024² + 2·1024·
-        // 4096 ≈ 12.6M at paper defaults. Full model ≈ 24·12.6M + embeds +
-        // head ≈ 305M params, matching real MOMENT-large.
-        //
-        // MOMENT's reconstruction and classification heads (masked-encoder
-        // pre-training tasks) are follow-up — the helper emits only the
-        // forecast head. The old reconstruction/classification Dense layers
-        // were shape-broken anyway (reconstruction Dense went hidden →
-        // contextLength, classification Dense went hiddenDim → numClasses
-        // without a pooling step).
+        // Foundation Models") is a T5-style encoder-only transformer for
+        // time series. Patches are SEQUENCE POSITIONS, not features. Per
+        // paper, MOMENT has THREE task-specific heads: forecast,
+        // reconstruction (for imputation / anomaly detection), and
+        // classification. The helper emits the SHARED encoder; the three
+        // heads are constructed as fields on the model (MOMENT.cs) so only
+        // the head appropriate to the current task is invoked per forward
+        // pass. The final layers emitted here are the forecast head (so
+        // Forward() works out-of-the-box for the default task).
 
         // === Patch Embedding: [B, contextLength] → [B, numPatches, hiddenDim] ===
         yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
@@ -32978,16 +32966,61 @@ public static class LayerHelper<T>
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // === Forecast Head ===
+        // === Forecast Head (default task) ===
         yield return new FlattenLayer<T>(new[] { numPatches, hiddenDim });
         yield return new DenseLayer<T>(
             inputSize: numPatches * hiddenDim,
             outputSize: forecastHorizon,
             activationFunction: null);
 
-        // Silence unused-param warning — numClasses reserved for classification
-        // head in a follow-up.
+        // numClasses is consumed by MOMENT.cs when building the classification
+        // head separately; silence unused-param warning here.
         _ = numClasses;
+    }
+
+    /// <summary>
+    /// Builds MOMENT's per-patch reconstruction head per Goswami et al. 2024.
+    /// Input: [B, numPatches, hiddenDim] (encoder output before Flatten).
+    /// Output: [B, contextLength] via Dense(hiddenDim → patchLength) applied
+    /// per-patch (weight-shared across patches) followed by Flatten.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMOMENTReconstructionHead(
+        int numPatches, int hiddenDim, int patchLength)
+    {
+        if (numPatches < 1) throw new ArgumentOutOfRangeException(nameof(numPatches));
+        if (hiddenDim < 1) throw new ArgumentOutOfRangeException(nameof(hiddenDim));
+        if (patchLength < 1) throw new ArgumentOutOfRangeException(nameof(patchLength));
+
+        // DenseLayer operates on the last axis, so for [B, numPatches, hiddenDim]
+        // input it produces [B, numPatches, patchLength] with shared weights.
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim,
+            outputSize: patchLength,
+            activationFunction: null);
+        yield return new FlattenLayer<T>(new[] { numPatches, patchLength });
+    }
+
+    /// <summary>
+    /// Builds MOMENT's classification head per Goswami et al. 2024: mean-pool
+    /// over the patch axis then Dense(hiddenDim → numClasses). Input shape
+    /// [B, numPatches, hiddenDim] → Output [B, numClasses].
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMOMENTClassificationHead(
+        int numPatches, int hiddenDim, int numClasses)
+    {
+        if (numPatches < 1) throw new ArgumentOutOfRangeException(nameof(numPatches));
+        if (hiddenDim < 1) throw new ArgumentOutOfRangeException(nameof(hiddenDim));
+        if (numClasses < 1) throw new ArgumentOutOfRangeException(nameof(numClasses));
+
+        // GlobalPoolingLayer with PoolingType.Average on rank-3 [B, numPatches,
+        // hiddenDim] input reduces over axis 1 to produce [B, hiddenDim].
+        yield return new GlobalPoolingLayer<T>(
+            inputShape: new[] { numPatches, hiddenDim },
+            poolingType: AiDotNet.Enums.PoolingType.Average);
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim,
+            outputSize: numClasses,
+            activationFunction: null);
     }
 
     /// <summary>
