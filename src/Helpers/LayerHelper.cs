@@ -33103,23 +33103,26 @@ public static class LayerHelper<T>
 
         int numPatches = contextLength / patchLength;
 
-        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDim, activationFunction: null);
+        // Sundial (Liu et al., 2024) is a decoder-only transformer foundation
+        // model for time series. Patches are SEQUENCE POSITIONS, not features.
+        // The old helper sized every projection at [numPatches · hiddenDim,
+        // numPatches · hiddenDim] and the FFN at numPatches · intermediate
+        // over that flattened dim. Rewritten to the paper architecture:
+        // per-patch Reshape + Dense patch embed + N × TransformerEncoderLayer
+        // (self-attention + FFN + norms + residuals; the model's forward
+        // path applies a causal mask for the decoder-only semantics) +
+        // Flatten + Dense forecast head.
+
+        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDim, activationFunction: null);
 
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
-            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDim, activationFunction: null);
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDim });
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: forecastHorizon, activationFunction: null);
     }
 

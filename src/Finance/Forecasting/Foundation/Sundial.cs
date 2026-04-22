@@ -68,10 +68,6 @@ public class Sundial<T> : TimeSeriesFoundationModelBase<T>
     #region Fields
 
     private readonly bool _useNativeMode;
-    private ILayer<T>? _patchEmbedding;
-    private readonly List<ILayer<T>> _transformerLayers = [];
-    private ILayer<T>? _finalLayerNorm;
-    private ILayer<T>? _forecastHead;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
@@ -208,41 +204,13 @@ public class Sundial<T> : TimeSeriesFoundationModelBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultSundialLayers(
                 Architecture, _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _numLayers, _numHeads, _intermediateSize, _dropout));
-            ExtractLayerReferences();
         }
-    }
-
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-
-        if (idx < Layers.Count)
-            _patchEmbedding = Layers[idx++];
-
-        _transformerLayers.Clear();
-        int layersPerBlock = _dropout > 0 ? 9 : 7;
-        int totalTransformerLayers = _numLayers * layersPerBlock;
-
-        for (int i = 0; i < totalTransformerLayers && idx < Layers.Count; i++)
-            _transformerLayers.Add(Layers[idx++]);
-
-        if (idx < Layers.Count)
-            _finalLayerNorm = Layers[idx++];
-
-        if (idx < Layers.Count)
-            _forecastHead = Layers[idx++];
-
-        if (_patchEmbedding is null || _forecastHead is null)
-            throw new InvalidOperationException(
-                $"Sundial layer extraction incomplete: expected at least {1 + totalTransformerLayers + 2} layers " +
-                $"but found {Layers.Count}. Ensure LayerHelper creates the correct layer structure.");
     }
 
     #endregion
@@ -481,9 +449,14 @@ public class Sundial<T> : TimeSeriesFoundationModelBase<T>
 
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
-        var normalized = ApplyInstanceNormalization(input);
-        var current = normalized;
-
+        // Sundial (Liu et al., 2024) is a decoder-only transformer. The
+        // helper emits a flat, sequentially-composable Layers list
+        // (ReshapeLayer → DenseLayer (patch embed) → N ×
+        // TransformerEncoderLayer (+ optional DropoutLayer) → FlattenLayer
+        // → DenseLayer (forecast head)), so ForwardNative is a straight
+        // sequential dispatch. Causal masking for the decoder-only
+        // semantics is applied by the attention block's own mask config.
+        var current = ApplyInstanceNormalization(input);
         bool addedBatchDim = false;
         if (current.Rank == 1)
         {
@@ -491,17 +464,8 @@ public class Sundial<T> : TimeSeriesFoundationModelBase<T>
             addedBatchDim = true;
         }
 
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Forward(current);
-
-        foreach (var layer in _transformerLayers)
+        foreach (var layer in Layers)
             current = layer.Forward(current);
-
-        if (_finalLayerNorm is not null)
-            current = _finalLayerNorm.Forward(current);
-
-        if (_forecastHead is not null)
-            current = _forecastHead.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });
