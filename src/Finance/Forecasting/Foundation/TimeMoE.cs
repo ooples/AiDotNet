@@ -203,7 +203,7 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultTimeMoELayers(
                 Architecture, _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _numLayers, _numHeads, _intermediateSize,
-                _numExperts, _dropout));
+                _numExperts, _numActiveExperts, _dropout));
         }
     }
 
@@ -506,19 +506,20 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
 
     private new int GetParameterCount()
     {
-        // Matches the paper-architecture helper: patch embed + N transformer
-        // blocks (attention + dense FFN) + flatten + forecast head. MoE
-        // expert stacking and router weights are NOT included — proper
-        // top-k dispatch is a pending MoELayer follow-up and the current
-        // helper emits a single dense FFN per block (see LayerHelper
-        // CreateDefaultTimeMoELayers). When the MoE layer lands, the count
-        // should be extended by numExperts × expert-FFN + router.
+        // Matches the paper-architecture helper: patch embed + N TimeMoE
+        // blocks (attention + MoE-FFN with numExperts experts + router +
+        // layer norms) + flatten + forecast head. Per-block:
+        //   attention Q/K/V/O      = 4 · H² + 4 · H
+        //   MoE experts (dense FFN) = numExperts · (2·H·I + H + I)
+        //   MoE router              = H · numExperts
+        //   layer norms (2 pre-norm) = 4 · H
         int numPatches = _contextLength / _patchLength;
         long total = (long)_patchLength * _hiddenDimension + _hiddenDimension;
 
         long perLayer = 4L * _hiddenDimension * _hiddenDimension + 4 * _hiddenDimension; // QKV + out
-        perLayer += 2L * _hiddenDimension * _intermediateSize + _hiddenDimension + _intermediateSize; // FFN
-        perLayer += 4L * _hiddenDimension; // layer norms
+        perLayer += (long)_numExperts * (2L * _hiddenDimension * _intermediateSize + _hiddenDimension + _intermediateSize); // MoE experts
+        perLayer += (long)_hiddenDimension * _numExperts; // router
+        perLayer += 4L * _hiddenDimension; // 2 pre-norm layers
         total += perLayer * _numLayers;
 
         total += (long)numPatches * _hiddenDimension * _forecastHorizon + _forecastHorizon;

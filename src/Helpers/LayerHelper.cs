@@ -33133,11 +33133,14 @@ public static class LayerHelper<T>
         NeuralNetworkArchitecture<T> architecture,
         int contextLength = 2048, int forecastHorizon = 96, int patchLength = 32,
         int hiddenDim = 1024, int numLayers = 24, int numHeads = 12,
-        int intermediateSize = 4096, int numExperts = 8, double dropout = 0.1)
+        int intermediateSize = 4096, int numExperts = 8, int numActiveExperts = 2, double dropout = 0.1)
     {
         if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
         if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
         if (numExperts < 1) throw new ArgumentOutOfRangeException(nameof(numExperts));
+        if (numActiveExperts < 1 || numActiveExperts > numExperts)
+            throw new ArgumentOutOfRangeException(nameof(numActiveExperts),
+                $"numActiveExperts must be in [1, numExperts]; got {numActiveExperts} / {numExperts}.");
 
         int numPatches = contextLength / patchLength;
 
@@ -33153,31 +33156,28 @@ public static class LayerHelper<T>
         // even OOMing. Real TimeMoE-base is 113M params.
         //
         // Rewritten to the paper architecture: per-token ReshapeLayer +
-        // patch DenseLayer + N × TransformerEncoderLayer (self-attention
-        // across tokens + FFN; TimeMoE.ForwardNative applies a causal mask
-        // for the decoder-only semantics) + final output head.
-        //
-        // Note on MoE: proper top-k expert dispatch with per-token routing
-        // is a structural feature not yet surfaced as a dedicated layer in
-        // this codebase. Until a first-class MoELayer lands, each block
-        // uses a single dense FFN of size [hiddenDim, intermediateSize,
-        // hiddenDim] — equivalent to expert-0-only / dense-FFN compute,
-        // matching the shape of TimeMoE-base's per-expert FFN. MoE routing
-        // is tracked as follow-up.
+        // patch DenseLayer + N × TimeMoEBlockLayer (self-attention across
+        // tokens + MoE-FFN with top-k expert dispatch + pre-norm residuals)
+        // + final output head.
 
         // === Patch Embedding: [B, contextLength] → [B, numPatches, hiddenDim] ===
         yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
         yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDim, activationFunction: null);
 
-        // === Decoder-only transformer stack ===
-        // Each TransformerEncoderLayer internally does
-        // MultiHeadAttention + FFN + layer norms + residuals. Params per block
-        // ≈ 4H² (Q/K/V/O) + 2H·intermediate = 4·1024² + 2·1024·4096 = ~12M at
-        // paper defaults. TimeMoE's causal-attention mask is a semantic extension
-        // applied by the model's own forward path, not the layer helper.
+        // === Decoder-only MoE transformer stack ===
+        // Each TimeMoEBlockLayer wraps:
+        //   LayerNorm → MultiHeadAttention → residual
+        //   LayerNorm → MixtureOfExperts (top-k=numActiveExperts of numExperts) → residual
+        // The MoE routes each token through top-k experts via its internal
+        // load-balanced router (per Shi et al. 2024 §3.2).
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, intermediateSize);
+            yield return new TimeMoEBlockLayer<T>(
+                hiddenDim: hiddenDim,
+                numHeads: numHeads,
+                intermediateSize: intermediateSize,
+                numExperts: numExperts,
+                topK: numActiveExperts);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 

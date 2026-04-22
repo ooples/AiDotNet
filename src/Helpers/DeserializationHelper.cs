@@ -195,6 +195,44 @@ public static class DeserializationHelper
 
             instance = ctor.Invoke(new object[] { inputShape });
         }
+        else if (genericDef == typeof(TransposeLayer<>))
+        {
+            // TransposeLayer(int[] inputShape, int[] permutation)
+            // The permutation must be derivable from input/output shapes: find the
+            // index `p` in inputShape such that inputShape[p] == outputShape[i].
+            if (inputShape.Length != outputShape.Length)
+                throw new InvalidOperationException(
+                    $"TransposeLayer requires inputShape and outputShape to have the same rank. Got input rank {inputShape.Length}, output rank {outputShape.Length}.");
+
+            int n = inputShape.Length;
+            var permutation = new int[n];
+            var used = new bool[n];
+            for (int i = 0; i < n; i++)
+            {
+                int found = -1;
+                for (int j = 0; j < n; j++)
+                {
+                    if (!used[j] && inputShape[j] == outputShape[i])
+                    {
+                        found = j;
+                        break;
+                    }
+                }
+                if (found < 0)
+                    throw new InvalidOperationException(
+                        $"TransposeLayer deserialization: cannot recover permutation from shapes ({string.Join(",", inputShape)}) -> ({string.Join(",", outputShape)}).");
+                permutation[i] = found;
+                used[found] = true;
+            }
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int[]), typeof(int[]) });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find TransposeLayer constructor with (int[], int[]).");
+            }
+
+            instance = ctor.Invoke(new object[] { inputShape, permutation });
+        }
         else if (genericDef == typeof(EmbeddingLayer<>))
         {
             // EmbeddingLayer(int vocabularySize, int embeddingDimension)
