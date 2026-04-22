@@ -33415,29 +33415,33 @@ public static class LayerHelper<T>
         if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
 
         int numPatches = contextLength / patchLength;
+        int patchInputSize = patchLength * numCandlestickFeatures;
 
-        // Patch embedding (multi-feature: OHLCV)
-        yield return new DenseLayer<T>(inputSize: contextLength * numCandlestickFeatures, outputSize: numPatches * hiddenDimension, activationFunction: null);
+        // Kronos (financial market decoder-only foundation model) tokenizes
+        // multi-feature (OHLCV) candlestick patches. Patches are SEQUENCE
+        // POSITIONS, not features — attention runs across the numPatches
+        // axis. The old helper sized every DenseLayer at
+        // [numPatches · hiddenDim, numPatches · hiddenDim] (attention) and
+        // numPatches · intermediate (FFN), producing weights quadratic in
+        // numPatches · hiddenDim at paper defaults.
+        //
+        // Rewritten to the paper shape: Reshape + Dense patch embed + N ×
+        // TransformerEncoderLayer + Flatten + Dense forecast head. Causal
+        // masking for the decoder-only semantics is applied by the
+        // attention block's own mask config.
 
-        // Decoder-only transformer layers
+        yield return new ReshapeLayer<T>(
+            new[] { contextLength * numCandlestickFeatures },
+            new[] { numPatches, patchInputSize });
+        yield return new DenseLayer<T>(inputSize: patchInputSize, outputSize: hiddenDimension, activationFunction: null);
+
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // Final layer norm
-        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-
-        // Multi-feature forecast head
+        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDimension });
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: forecastHorizon * numCandlestickFeatures, activationFunction: null);
     }
 
@@ -33455,28 +33459,19 @@ public static class LayerHelper<T>
 
         int numPatches = contextLength / patchLength;
 
-        // Patch embedding
-        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDimension, activationFunction: null);
+        // TOTO (observability time-series foundation model): patches are
+        // sequence positions, same numPatches^2 * hiddenDim^2 bloat as the
+        // other Foundation helpers. Rewrite to paper shape.
+        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDimension, activationFunction: null);
 
-        // Transformer encoder layers
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // Final layer norm
-        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-
-        // Forecast head
+        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDimension });
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
     }
 
@@ -33494,28 +33489,19 @@ public static class LayerHelper<T>
 
         int numPatches = contextLength / patchLength;
 
-        // Patch embedding
-        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDimension, activationFunction: null);
+        // YingLong (enterprise foundation model): same numPatches^2 *
+        // hiddenDim^2 bloat as the other Foundation helpers. Rewrite to
+        // paper shape.
+        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDimension, activationFunction: null);
 
-        // Transformer layers
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // Final layer norm
-        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-
-        // Forecast head
+        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDimension });
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
     }
 

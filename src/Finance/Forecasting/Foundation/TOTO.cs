@@ -68,10 +68,6 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
     #region Fields
 
     private readonly bool _useNativeMode;
-    private ILayer<T>? _patchEmbedding;
-    private readonly List<ILayer<T>> _transformerLayers = [];
-    private ILayer<T>? _finalLayerNorm;
-    private ILayer<T>? _forecastHead;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
@@ -204,43 +200,13 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTOTOLayers(
                 Architecture, _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _numLayers, _numHeads, _intermediateSize, _dropout));
-            ExtractLayerReferences();
         }
-    }
-
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-
-        if (idx < Layers.Count)
-            _patchEmbedding = Layers[idx++];
-
-        _transformerLayers.Clear();
-        // TOTO block layout: norm(1) + attn_QKV+out(4) + norm(1) + FFN(2) = 8; +dropout=9
-        int layersPerBlock = _dropout > 0 ? 9 : 7;
-        int totalTransformerLayers = _numLayers * layersPerBlock;
-
-        for (int i = 0; i < totalTransformerLayers && idx < Layers.Count; i++)
-            _transformerLayers.Add(Layers[idx++]);
-
-        if (idx < Layers.Count)
-            _finalLayerNorm = Layers[idx++];
-
-        if (idx < Layers.Count)
-            _forecastHead = Layers[idx++];
-
-        // Fail fast if critical layers are missing
-        if (_patchEmbedding is null || _forecastHead is null)
-            throw new InvalidOperationException(
-                $"TOTO layer extraction incomplete: expected at least {1 + totalTransformerLayers + 2} layers " +
-                $"but found {Layers.Count}. Ensure LayerHelper creates the correct layer structure.");
     }
 
     #endregion
@@ -490,17 +456,11 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
             addedBatchDim = true;
         }
 
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Forward(current);
-
-        foreach (var layer in _transformerLayers)
+        // Helper emits a flat, sequentially-composable Layers list
+        // (Reshape → Dense(patch) → N × TransformerEncoderLayer
+        // (+ optional Dropout) → Flatten → Dense(head)).
+        foreach (var layer in Layers)
             current = layer.Forward(current);
-
-        if (_finalLayerNorm is not null)
-            current = _finalLayerNorm.Forward(current);
-
-        if (_forecastHead is not null)
-            current = _forecastHead.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });
