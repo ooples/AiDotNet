@@ -1548,6 +1548,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     bool isLanguage = model.Domains.Contains(2); // Language=2
                     bool isMultimodal = model.Domains.Contains(5); // Multimodal=5
                     int inputSize1D = (isLanguage || isMultimodal) ? 128 : 16;
+
+                    // Forecasting Foundation models hard-wire contextLength to the
+                    // paper default in their Options; the architecture's inputSize
+                    // must match the paper default too or the model's internal
+                    // ReshapeLayer fails (e.g. TimeMoE contextLength=2048, paper
+                    // Shi et al. 2024). Look up the paper default by class name.
+                    if (family == TestFamily.Forecasting)
+                    {
+                        inputSize1D = GetForecastingPaperContextLength(model.ClassName);
+                    }
+
                     inputTypeExpr = "AiDotNet.Enums.InputType.OneDimensional";
                     sizeExpr = $"inputSize: {inputSize1D}, outputSize: 4";
                 }
@@ -1684,6 +1695,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             // LSTM-CRF family defaults to EmbeddingDimension=100.
             sb.AppendLine("    protected override int[] InputShape => new[] { 8, 100 };");
+        }
+        else if (family == TestFamily.Forecasting)
+        {
+            // Forecasting Foundation models (ChronosBolt, TimeMoE, TimesFM,
+            // MOMENT, Sundial, etc.) use paper-default ContextLength in their
+            // Options. The test's InputShape must match the architecture's
+            // inputSize, which was set to the paper ContextLength above.
+            int paperCtx = GetForecastingPaperContextLength(model.ClassName);
+            sb.AppendLine($"    protected override int[] InputShape => new[] {{ {paperCtx} }};");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
 
         sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
@@ -3399,6 +3420,44 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// <summary>
     /// Returns the base class name for the given test family.
     /// </summary>
+    /// <summary>
+    /// Returns the paper-default ContextLength for each Forecasting Foundation model.
+    /// The test generator uses this to size both the architecture's inputSize and the
+    /// test's InputShape so the model's internal patch ReshapeLayer succeeds. If a model
+    /// is not in the table (new Foundation model), we fall back to 512 — the modal paper
+    /// default across the family.
+    /// </summary>
+    /// <remarks>
+    /// Values sourced from each model's Options class default for ContextLength:
+    /// <list type="bullet">
+    /// <item><description>TimeMoE, Sundial: 2048</description></item>
+    /// <item><description>Kairos, LagLlama, Kronos, YingLong: 1024</description></item>
+    /// <item><description>Chronos, ChronosBolt, TimesFM, MOMENT, VisionTS, GPT4TS, LLMTime, TimeBridge, TEST, TimeMAE, SimMTM, MOIRAI, TimeLLM, UniTS, Timer, TimeGPT, TOTO, FlowState, TinyTimeMixers: 512</description></item>
+    /// <item><description>TimeGrad: 168 (hourly-electricity default)</description></item>
+    /// <item><description>TFC: 200</description></item>
+    /// </list>
+    /// </remarks>
+    private static int GetForecastingPaperContextLength(string className)
+    {
+        // Strip generic suffix if present (e.g. "TimeMoE`1" → "TimeMoE").
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+
+        return className switch
+        {
+            "TimeMoE" => 2048,
+            "Sundial" => 2048,
+            "Kairos" => 1024,
+            "LagLlama" => 96,   // LagLlama paper default
+            "Kronos" => 1024,
+            "YingLong" => 1024,
+            "TimeGrad" => 168,
+            "TFC" => 200,
+            // 512 is the modal paper default across the family.
+            _ => 512,
+        };
+    }
+
     private static string GetBaseClassName(TestFamily family)
     {
         switch (family)
