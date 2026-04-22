@@ -33234,28 +33234,19 @@ public static class LayerHelper<T>
         if (validPatchSizes.Length == 0)
             validPatchSizes = new[] { Math.Max(1, contextLength) };
 
-        int minPatch = validPatchSizes[0];
-        int numPatches = Math.Max(1, contextLength / minPatch);
-
         // Kairos (Mixture-of-Size Encoder for time series forecasting) uses
-        // multiple patch sizes and a learned router to select among them.
-        // Patches are SEQUENCE POSITIONS, not features — attention runs across
-        // the numPatches axis. The old helper sized every transformer Dense at
-        // [numPatches · hiddenDim, numPatches · hiddenDim] and the FFN at
-        // numPatches · intermediate over that flattened dim, producing
-        // weights quadratic in numPatches · hiddenDim at paper defaults.
-        //
-        // Rewritten to the paper shape: finest-patch Reshape + Dense patch
-        // embed + N × TransformerEncoderLayer + Flatten + Dense forecast
-        // head. Multi-size patch embeddings and the router are a follow-up
-        // — they need a dedicated router-dispatch layer (like MoE top-k)
-        // that this codebase doesn't surface as a first-class layer. For
-        // now, we emit the finest-patch path (ps = validPatchSizes[0])
-        // as the smoke-test-tractable equivalent; the coarser patch-size
-        // paths and router head are not yet wired through.
+        // multiple patch sizes and a learned router to weight them per-input.
+        // KairosMultiSizePatchLayer parallelizes the per-patch-size Dense
+        // embeddings + pools each path into a [B, hiddenDim] summary and
+        // combines via a softmax router. The output is a single token per
+        // input; the downstream transformer stack operates on this single-
+        // token sequence (attention becomes position-identity but the FFN
+        // still applies).
 
-        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, minPatch });
-        yield return new DenseLayer<T>(inputSize: minPatch, outputSize: hiddenDim, activationFunction: null);
+        yield return new KairosMultiSizePatchLayer<T>(contextLength, hiddenDim, validPatchSizes);
+        // Reshape [B, hiddenDim] → [B, 1, hiddenDim] so the transformer sees
+        // a sequence of length 1.
+        yield return new ReshapeLayer<T>(new[] { hiddenDim }, new[] { 1, hiddenDim });
 
         for (int layer = 0; layer < numLayers; layer++)
         {
@@ -33263,8 +33254,8 @@ public static class LayerHelper<T>
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDim });
-        yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: forecastHorizon, activationFunction: null);
+        yield return new FlattenLayer<T>(new[] { 1, hiddenDim });
+        yield return new DenseLayer<T>(inputSize: hiddenDim, outputSize: forecastHorizon, activationFunction: null);
     }
 
     /// <summary>
