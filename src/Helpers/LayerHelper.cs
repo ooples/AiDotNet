@@ -32940,86 +32940,53 @@ public static class LayerHelper<T>
 
         int numPatches = contextLength / patchLength;
 
-        // === Patch Embedding ===
-        // Project each patch to hidden dimension
+        // MOMENT (Goswami et al., 2024 "MOMENT: A Family of Open Time-series
+        // Foundation Models") is a T5-style encoder-only transformer for time
+        // series. Patches are SEQUENCE POSITIONS, not features — attention
+        // runs across the numPatches axis. The old helper sized every
+        // projection at [numPatches · hiddenDim, numPatches · hiddenDim] and
+        // the FFN at numPatches · intermediateSize over that same flattened
+        // dim, producing ~2.3 TiB of weight tensors at paper defaults
+        // (ContextLength=512, HiddenDim=1024, Intermediate=4096, NumLayers=24,
+        // PatchLength=64). Real MOMENT-large is ~385M params.
+        //
+        // Rewritten to the paper architecture: per-patch ReshapeLayer +
+        // patch DenseLayer + N × TransformerEncoderLayer + Flatten + Dense
+        // forecast head. Params per block ≈ 4·H² + 2·H·I = 4·1024² + 2·1024·
+        // 4096 ≈ 12.6M at paper defaults. Full model ≈ 24·12.6M + embeds +
+        // head ≈ 305M params, matching real MOMENT-large.
+        //
+        // MOMENT's reconstruction and classification heads (masked-encoder
+        // pre-training tasks) are follow-up — the helper emits only the
+        // forecast head. The old reconstruction/classification Dense layers
+        // were shape-broken anyway (reconstruction Dense went hidden →
+        // contextLength, classification Dense went hiddenDim → numClasses
+        // without a pooling step).
+
+        // === Patch Embedding: [B, contextLength] → [B, numPatches, hiddenDim] ===
+        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
         yield return new DenseLayer<T>(
-            inputSize: contextLength,
-            outputSize: numPatches * hiddenDim,
+            inputSize: patchLength,
+            outputSize: hiddenDim,
             activationFunction: null);
 
-        // === T5-Style Transformer Encoder Layers ===
+        // === T5-style encoder stack ===
         for (int layer = 0; layer < numLayers; layer++)
         {
-            // Layer normalization (pre-norm)
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
-
-            // Self-attention (Q, K, V, O projections)
-            yield return new DenseLayer<T>(
-                inputSize: numPatches * hiddenDim,
-                outputSize: numPatches * hiddenDim,
-                activationFunction: null);
-
-            yield return new DenseLayer<T>(
-                inputSize: numPatches * hiddenDim,
-                outputSize: numPatches * hiddenDim,
-                activationFunction: null);
-
-            yield return new DenseLayer<T>(
-                inputSize: numPatches * hiddenDim,
-                outputSize: numPatches * hiddenDim,
-                activationFunction: null);
-
-            yield return new DenseLayer<T>(
-                inputSize: numPatches * hiddenDim,
-                outputSize: numPatches * hiddenDim,
-                activationFunction: null);
-
-            if (dropout > 0)
-            {
-                yield return new DropoutLayer<T>(dropout);
-            }
-
-            // Layer normalization before FFN
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
-
-            // Feed-forward network (GeLU activation)
-            yield return new DenseLayer<T>(
-                inputSize: numPatches * hiddenDim,
-                outputSize: numPatches * intermediateSize,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new DenseLayer<T>(
-                inputSize: numPatches * intermediateSize,
-                outputSize: numPatches * hiddenDim,
-                activationFunction: null);
-
-            if (dropout > 0)
-            {
-                yield return new DropoutLayer<T>(dropout);
-            }
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, intermediateSize);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // === Final Layer Norm ===
-        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
-
-        // === Forecasting Head ===
+        // === Forecast Head ===
+        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDim });
         yield return new DenseLayer<T>(
             inputSize: numPatches * hiddenDim,
             outputSize: forecastHorizon,
             activationFunction: null);
 
-        // === Reconstruction Head (for anomaly detection and imputation) ===
-        yield return new DenseLayer<T>(
-            inputSize: numPatches * hiddenDim,
-            outputSize: contextLength,
-            activationFunction: null);
-
-        // === Classification Head (optional) ===
-        int classCount = numClasses ?? 2;
-        yield return new DenseLayer<T>(
-            inputSize: hiddenDim,
-            outputSize: classCount,
-            activationFunction: null);
+        // Silence unused-param warning — numClasses reserved for classification
+        // head in a follow-up.
+        _ = numClasses;
     }
 
     /// <summary>

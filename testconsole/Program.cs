@@ -26,6 +26,11 @@ class Program
             TimesFMProfile.Run();
             return;
         }
+        if (args.Length > 0 && args[0] == "moment-profile")
+        {
+            MOMENTProfile.Run();
+            return;
+        }
 
         int choice = -1;
 

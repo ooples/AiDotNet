@@ -310,7 +310,6 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         {
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
-            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
@@ -318,8 +317,6 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
                 Architecture, _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _numLayers, _numHeads, _intermediateSize,
                 _dropout, _numClasses));
-
-            ExtractLayerReferences();
         }
     }
 
@@ -815,24 +812,14 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     /// </summary>
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
-        var normalized = ApplyInstanceNormalization(input);
-        var encoded = ForwardEncoder(normalized);
-
-        // Apply task-specific head
-        if (_forecastHead is not null)
-            return _forecastHead.Forward(encoded);
-
-        return encoded;
-    }
-
-    /// <summary>
-    /// Runs the encoder portion only (patch embed + transformer layers + norm).
-    /// </summary>
-    private Tensor<T> ForwardEncoder(Tensor<T> input)
-    {
-        var current = input;
-
-        // Add batch dimension if needed
+        // MOMENT (Goswami et al., 2024) is an encoder-only transformer whose
+        // per-patch tokens feed a stack of self-attention + FFN blocks and a
+        // flatten + linear forecast head. The helper emits a flat,
+        // sequentially-composable Layers list (ReshapeLayer → DenseLayer
+        // (patch embed) → N × TransformerEncoderLayer (+ optional
+        // DropoutLayer) → FlattenLayer → DenseLayer (forecast head)), so
+        // ForwardNative is a straight sequential dispatch.
+        var current = ApplyInstanceNormalization(input);
         bool addedBatchDim = false;
         if (current.Rank == 1)
         {
@@ -840,24 +827,40 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
             addedBatchDim = true;
         }
 
-        // Patch embedding
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Forward(current);
-
-        // Transformer encoder layers
-        foreach (var layer in _transformerLayers)
-        {
+        foreach (var layer in Layers)
             current = layer.Forward(current);
-        }
-
-        // Final layer norm
-        if (_finalLayerNorm is not null)
-            current = _finalLayerNorm.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-        {
             current = current.Reshape(new[] { current.Shape[1] });
+
+        return current;
+    }
+
+    /// <summary>
+    /// Runs the encoder portion only (patches + transformer stack), stopping
+    /// before the forecast / reconstruction / classification head.
+    /// </summary>
+    private Tensor<T> ForwardEncoder(Tensor<T> input)
+    {
+        // The helper's last two layers are the flatten + forecast-head Dense.
+        // Walk Layers up to (but not including) the final Dense so the
+        // encoder output is [B, numPatches, hiddenDim]. Downstream heads
+        // (reconstruction / classification) are follow-up — they are not
+        // currently emitted by the helper, and the fields are null.
+        var current = input;
+        bool addedBatchDim = false;
+        if (current.Rank == 1)
+        {
+            current = current.Reshape(new[] { 1, current.Length });
+            addedBatchDim = true;
         }
+
+        int encoderEnd = Math.Max(0, Layers.Count - 2);
+        for (int i = 0; i < encoderEnd; i++)
+            current = Layers[i].Forward(current);
+
+        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
+            current = current.Reshape(new[] { current.Shape[1] });
 
         return current;
     }
