@@ -21,6 +21,11 @@ class Program
             TimeMoEProfile.Run();
             return;
         }
+        if (args.Length > 0 && args[0] == "timesfm-profile")
+        {
+            TimesFMProfile.Run();
+            return;
+        }
 
         int choice = -1;
 

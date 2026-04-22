@@ -13781,65 +13781,47 @@ public static class LayerHelper<T>
         int numPatches = contextLength / patchLength;
         int patchInputSize = patchLength * numFeatures;
 
-        // === Patch Embedding ===
-        // Project each patch to hidden dimension
+        // TimesFM (Das et al., 2024 "A decoder-only foundation model for
+        // time-series forecasting") is a decoder-only transformer whose tokens
+        // are time-series PATCHES. Patches are SEQUENCE POSITIONS, not features
+        // — attention runs across the numPatches axis. The old helper sized
+        // every projection at [numPatches · hiddenDim, numPatches · hiddenDim]
+        // (and the FFN at ×4 expansion over that same flattened dim), producing
+        // ~1.6B params at paper defaults (ContextLength=512, HiddenDim=256,
+        // NumLayers=8). Real TimesFM-200M is ~200M params.
+        //
+        // Rewritten to the paper architecture: per-patch Reshape + Dense patch
+        // embedding + N × TransformerEncoderLayer (self-attention across tokens
+        // + FFN + norms + residuals; the model's forward path applies a causal
+        // mask for the decoder-only semantics) + Flatten + Dense forecast head.
+        // Params per block ≈ 4·H² + 2·H·(H·4) = 4·256² + 2·256·1024 ≈ 785k at
+        // paper defaults. Full model ≈ 8·785k + embeds + head ≈ 6.5M params.
+
+        // === Patch Embedding: [B, contextLength * numFeatures] → [B, numPatches, hiddenDim] ===
+        yield return new ReshapeLayer<T>(
+            new[] { contextLength * numFeatures },
+            new[] { numPatches, patchInputSize });
         yield return new DenseLayer<T>(
-            inputSize: contextLength * numFeatures,
-            outputSize: numPatches * hiddenDim,
+            inputSize: patchInputSize,
+            outputSize: hiddenDim,
             activationFunction: null);
 
-        // === Transformer Layers ===
+        // === Decoder-only transformer stack ===
         for (int layer = 0; layer < numLayers; layer++)
         {
-            // Self-attention (approximated with dense layers)
-            // Query projection
-            yield return new DenseLayer<T>(
-                inputSize: numPatches * hiddenDim,
-                outputSize: numPatches * hiddenDim,
-                activationFunction: null);
-
-            // Key projection
-            yield return new DenseLayer<T>(
-                inputSize: numPatches * hiddenDim,
-                outputSize: numPatches * hiddenDim,
-                activationFunction: null);
-
-            // Value projection
-            yield return new DenseLayer<T>(
-                inputSize: numPatches * hiddenDim,
-                outputSize: numPatches * hiddenDim,
-                activationFunction: null);
-
-            // Output projection
-            yield return new DenseLayer<T>(
-                inputSize: numPatches * hiddenDim,
-                outputSize: numPatches * hiddenDim,
-                activationFunction: null);
-
-            if (dropout > 0)
-            {
-                yield return new DropoutLayer<T>(dropout);
-            }
-
-            // Feed-forward network
-            yield return new DenseLayer<T>(
-                inputSize: numPatches * hiddenDim,
-                outputSize: numPatches * hiddenDim * 4,
-                activationFunction: new ReLUActivation<T>());
-
-            yield return new DenseLayer<T>(
-                inputSize: numPatches * hiddenDim * 4,
-                outputSize: numPatches * hiddenDim,
-                activationFunction: null);
-
-            if (dropout > 0)
-            {
-                yield return new DropoutLayer<T>(dropout);
-            }
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, hiddenDim * 4);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // === Output Head ===
-        // Project to forecast horizon
+        // === Forecast head ===
+        // TimesFM outputs per-patch forecasts in the paper (output_patch_length
+        // > input_patch_length so a single patch's hidden state predicts
+        // forecastHorizon-many future points). For the non-autoregressive
+        // smoke-test forecast we flatten the full sequence and project to
+        // forecastHorizon via a single linear. Weight is
+        // [numPatches · hiddenDim, forecastHorizon] = 16·256 × 96 ≈ 400k at
+        // paper defaults, tractable.
+        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDim });
         yield return new DenseLayer<T>(
             inputSize: numPatches * hiddenDim,
             outputSize: forecastHorizon,

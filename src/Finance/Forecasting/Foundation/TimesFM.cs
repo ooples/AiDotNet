@@ -398,8 +398,6 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultTimesFMLayers(
                 Architecture, _contextLength, _forecastHorizon, 1,
                 _patchLength, _hiddenDimension, _numLayers, _numHeads, _dropout));
-
-            ExtractLayerReferences();
         }
     }
 
@@ -734,32 +732,19 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
 
         SetTrainingMode(false);
 
-        // Get hidden states from the transformer (before the point forecast output projection)
+        // Run everything up to the forecast-head DenseLayer to obtain hidden
+        // states. The helper emits layers in order ending with Flatten →
+        // Dense(forecast head). We walk Layers up to (but not including) the
+        // last layer so the returned `hiddenStates` is pre-projection.
         var current = historicalData;
 
         if (current.Rank == 1)
             current = current.Reshape(new[] { 1, current.Length });
 
-        // Patch embedding
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Forward(current);
+        int headIdx = Layers.Count - 1;
+        for (int i = 0; i < headIdx; i++)
+            current = Layers[i].Forward(current);
 
-        // Position embedding
-        if (_positionEmbedding is not null)
-        {
-            var posEmbed = _positionEmbedding.Forward(current);
-            current = AddTensors(current, posEmbed);
-        }
-
-        // Transformer layers
-        foreach (var layer in _transformerLayers)
-            current = layer.Forward(current);
-
-        // Final layer norm
-        if (_finalLayerNorm is not null)
-            current = _finalLayerNorm.Forward(current);
-
-        // Now use quantile head to produce quantile-specific forecasts
         var hiddenStates = current;
         var result = new Tensor<T>(new[] { _forecastHorizon, quantiles.Length });
 
@@ -946,33 +931,18 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         if (!_useNativeMode)
             return ForecastOnnx(input);
 
-        // Reshape input into patches conceptually (handled by patch embedding layer)
+        // TimesFM (Das et al., 2024) is a decoder-only transformer whose
+        // per-patch tokens feed a stack of self-attention + FFN blocks, then
+        // a flatten + linear forecast head. The helper emits a flat,
+        // sequentially-composable Layers list (ReshapeLayer → DenseLayer
+        // (patch embed) → N × TransformerEncoderLayer (+ optional
+        // DropoutLayer) → FlattenLayer → DenseLayer (forecast head)), so
+        // Forward is a straight sequential dispatch. Causal masking for the
+        // decoder-only semantics is applied by the attention block's own mask
+        // config, not at this orchestration layer.
         var current = input;
-
-        // Patch embedding: [batch, context] -> [batch, num_patches, hidden]
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Forward(current);
-
-        // Add positional embeddings
-        if (_positionEmbedding is not null)
-        {
-            var posEmbed = _positionEmbedding.Forward(current);
-            current = AddTensors(current, posEmbed);
-        }
-
-        // Process through transformer layers
-        foreach (var layer in _transformerLayers)
-        {
+        foreach (var layer in Layers)
             current = layer.Forward(current);
-        }
-
-        // Final layer normalization
-        if (_finalLayerNorm is not null)
-            current = _finalLayerNorm.Forward(current);
-
-        // Output projection to forecast horizon
-        if (_outputProjection is not null)
-            current = _outputProjection.Forward(current);
 
         return current;
     }
