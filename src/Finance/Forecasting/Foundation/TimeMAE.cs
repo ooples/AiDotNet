@@ -69,11 +69,6 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
     #region Fields
 
     private readonly bool _useNativeMode;
-    private ILayer<T>? _patchEmbedding;
-    private readonly List<ILayer<T>> _encoderLayers = [];
-    private readonly List<ILayer<T>> _decoderLayers = [];
-    private ILayer<T>? _reconstructionHead;
-    private ILayer<T>? _forecastHead;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
@@ -210,40 +205,13 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTimeMAELayers(
                 Architecture, _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _numEncoderLayers, _numDecoderLayers, _numHeads, _dropout));
-            ExtractLayerReferences();
         }
-    }
-
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-        int layersPerBlock = _dropout > 0 ? 9 : 7;
-
-        if (idx < Layers.Count)
-            _patchEmbedding = Layers[idx++];
-
-        _encoderLayers.Clear();
-        int totalEncoderLayers = _numEncoderLayers * layersPerBlock;
-        for (int i = 0; i < totalEncoderLayers && idx < Layers.Count; i++)
-            _encoderLayers.Add(Layers[idx++]);
-
-        _decoderLayers.Clear();
-        int totalDecoderLayers = _numDecoderLayers * layersPerBlock;
-        for (int i = 0; i < totalDecoderLayers && idx < Layers.Count; i++)
-            _decoderLayers.Add(Layers[idx++]);
-
-        if (idx < Layers.Count)
-            _reconstructionHead = Layers[idx++];
-
-        if (idx < Layers.Count)
-            _forecastHead = Layers[idx++];
     }
 
     #endregion
@@ -494,20 +462,12 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
             addedBatchDim = true;
         }
 
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Forward(current);
-
-        foreach (var layer in _encoderLayers)
+        // Helper emits a flat Layers list: Reshape → Dense(patch) →
+        // numEncoder × TransformerEncoderLayer (+ optional Dropout) →
+        // numDecoder × TransformerEncoderLayer (+ optional Dropout) →
+        // Flatten → Dense(reconstruction head) → Dense(forecast head).
+        foreach (var layer in Layers)
             current = layer.Forward(current);
-
-        foreach (var layer in _decoderLayers)
-            current = layer.Forward(current);
-
-        if (_reconstructionHead is not null)
-            current = _reconstructionHead.Forward(current);
-
-        if (_forecastHead is not null)
-            current = _forecastHead.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });

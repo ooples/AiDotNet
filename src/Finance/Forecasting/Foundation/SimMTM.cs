@@ -66,10 +66,6 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
     #region Fields
 
     private readonly bool _useNativeMode;
-    private ILayer<T>? _patchEmbedding;
-    private readonly List<ILayer<T>> _transformerLayers = [];
-    private ILayer<T>? _reconstructionHead;
-    private ILayer<T>? _forecastHead;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
@@ -195,42 +191,13 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultSimMTMLayers(
                 Architecture, _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _numLayers, _numHeads, _dropout));
-            ExtractLayerReferences();
         }
-    }
-
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-        // SimMTM block layout: norm(1) + attn(2) + norm(1) + FFN(2) = 6; with dropout: +2 = 8
-        int layersPerBlock = _dropout > 0 ? 8 : 6;
-
-        if (idx < Layers.Count)
-            _patchEmbedding = Layers[idx++];
-
-        _transformerLayers.Clear();
-        int totalTransformerLayers = _numLayers * layersPerBlock;
-        for (int i = 0; i < totalTransformerLayers && idx < Layers.Count; i++)
-            _transformerLayers.Add(Layers[idx++]);
-
-        if (idx < Layers.Count)
-            _reconstructionHead = Layers[idx++];
-
-        if (idx < Layers.Count)
-            _forecastHead = Layers[idx++];
-
-        // Validate critical references were extracted
-        int expectedLayers = 1 + totalTransformerLayers + 2; // patch + transformer + reconstruction + forecast
-        if (Layers.Count < expectedLayers)
-            System.Diagnostics.Debug.WriteLine(
-                $"SimMTM: Expected {expectedLayers} layers but found {Layers.Count}. Some layer references may be null.");
     }
 
     #endregion
@@ -475,17 +442,11 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
             addedBatchDim = true;
         }
 
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Forward(current);
-
-        foreach (var layer in _transformerLayers)
+        // Helper emits a flat Layers list: Reshape → Dense(patch) → N ×
+        // TransformerEncoderLayer (+ optional Dropout) → Flatten →
+        // Dense(reconstruction head) → Dense(forecast head).
+        foreach (var layer in Layers)
             current = layer.Forward(current);
-
-        if (_reconstructionHead is not null)
-            current = _reconstructionHead.Forward(current);
-
-        if (_forecastHead is not null)
-            current = _forecastHead.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });

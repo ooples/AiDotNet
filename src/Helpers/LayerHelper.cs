@@ -33938,39 +33938,35 @@ public static class LayerHelper<T>
         int numPatches = contextLength / patchLength;
         int intermediateDim = hiddenDimension * 4;
 
-        // Patch embedding
-        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDimension, activationFunction: null);
+        // TimeMAE (Cheng et al. 2023 "TimeMAE: Self-Supervised Representations
+        // of Time Series with Decoupled Masked Autoencoders") — per-patch
+        // masked-autoencoder transformer. Encoder + lightweight decoder. The
+        // old helper sized every projection at [numPatches · hiddenDim,
+        // numPatches · hiddenDim] — same numPatches^2 * hiddenDim^2 bloat.
+        // Rewrite to paper shape. Pre-training uses both the reconstruction
+        // head (smoke-test-usable via Flatten + Dense to contextLength) and
+        // the forecast head (chained from the reconstruction).
 
-        // Encoder transformer layers
+        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDimension, activationFunction: null);
+
         for (int layer = 0; layer < numEncoderLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateDim, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>(inputSize: numPatches * intermediateDim, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateDim);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // Decoder transformer layers (lightweight)
         for (int layer = 0; layer < numDecoderLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateDim, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>(inputSize: numPatches * intermediateDim, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateDim);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
         // Reconstruction head
+        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDimension });
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: contextLength, activationFunction: null);
 
-        // Forecast head
+        // Forecast head (chained from reconstruction)
         yield return new DenseLayer<T>(inputSize: contextLength, outputSize: forecastHorizon, activationFunction: null);
     }
 
@@ -33989,26 +33985,26 @@ public static class LayerHelper<T>
         int numPatches = contextLength / patchLength;
         int intermediateDim = hiddenDimension * 4;
 
-        // Patch embedding
-        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDimension, activationFunction: null);
+        // SimMTM (Dong et al. 2023 "SimMTM: A Simple Pre-Training Framework
+        // for Masked Time-Series Modeling") — per-patch transformer with
+        // similarity-weighted masked reconstruction pre-training. Same
+        // numPatches^2 * hiddenDim^2 bloat; rewrite to paper shape.
 
-        // Transformer layers
+        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDimension, activationFunction: null);
+
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateDim, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>(inputSize: numPatches * intermediateDim, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateDim);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // Reconstruction head (similarity-weighted)
+        // Reconstruction head (similarity-weighted; the per-patch
+        // similarity aggregation is a SimMTM-specific follow-up step)
+        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDimension });
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: contextLength, activationFunction: null);
 
-        // Forecast head
+        // Forecast head (chained from reconstruction)
         yield return new DenseLayer<T>(inputSize: contextLength, outputSize: forecastHorizon, activationFunction: null);
     }
 
