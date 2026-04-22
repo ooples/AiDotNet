@@ -277,7 +277,6 @@ public class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
         {
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
-            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
@@ -285,8 +284,6 @@ public class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
                 Architecture, _contextLength, _forecastHorizon, _numFeatures,
                 _patchLength, _hiddenDimension, _numMixerLayers, _expansionFactor,
                 _dropout));
-
-            ExtractLayerReferences();
         }
     }
 
@@ -602,9 +599,14 @@ public class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
     /// </summary>
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
+        // TTM (Ekambaram et al., 2024) is an MLP-Mixer over patches. The
+        // helper emits a flat, sequentially-composable Layers list
+        // (ReshapeLayer → DenseLayer (patch embed) → N × mixer-equivalent
+        // block (+ optional DropoutLayer) → FlattenLayer → DenseLayer
+        // (forecast head)). Causal mask / per-mixer transpose handling is a
+        // follow-up when a dedicated MixerLayer lands.
         var current = ApplyInstanceNormalization(input);
 
-        // Add batch dimension if needed
         bool addedBatchDim = false;
         if (current.Rank == 1)
         {
@@ -612,28 +614,11 @@ public class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
             addedBatchDim = true;
         }
 
-        // Patch embedding
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Forward(current);
-
-        // Mixer layers (temporal-mixing + channel-mixing blocks)
-        foreach (var layer in _mixerLayers)
-        {
+        foreach (var layer in Layers)
             current = layer.Forward(current);
-        }
-
-        // Final layer norm
-        if (_finalLayerNorm is not null)
-            current = _finalLayerNorm.Forward(current);
-
-        // Output head
-        if (_outputHead is not null)
-            current = _outputHead.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-        {
             current = current.Reshape(new[] { current.Shape[1] });
-        }
 
         return current;
     }

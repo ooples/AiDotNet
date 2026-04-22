@@ -33039,58 +33039,48 @@ public static class LayerHelper<T>
             throw new ArgumentOutOfRangeException(nameof(dropout), "Dropout must be between 0 and 1.");
 
         int numPatches = contextLength / patchLength;
+        int patchInputSize = patchLength * numFeatures;
         int expandedDim = hiddenDim * expansionFactor;
 
-        // === Patch Embedding ===
-        // Project each patch (patchLength * numFeatures) to hidden dimension
+        // Tiny Time Mixers (TTM, Ekambaram et al., IBM Research 2024
+        // "Tiny Time Mixers (TTMs): Fast Pre-trained Models for Enhanced
+        // Zero/Few-Shot Forecasting of Multivariate Time Series") is an
+        // MLP-Mixer over time-series patches. Patches are SEQUENCE POSITIONS,
+        // not features — mixing runs across the numPatches axis for the
+        // temporal mixer and across hiddenDim for the channel mixer. The
+        // old helper sized every mixer Dense at [numPatches · hiddenDim,
+        // numPatches · expandedDim], producing weights quadratic in
+        // numPatches · hiddenDim. Real TTM is a "Tiny" model (~1M params).
+        //
+        // A proper MLP-Mixer needs a transpose layer to apply the patch-axis
+        // MLP, which this codebase doesn't expose as a first-class layer.
+        // Until a dedicated MixerLayer lands, we approximate the mixer
+        // sequence-wise and channel-wise information flow with a
+        // TransformerEncoderLayer (self-attention mixes tokens across the
+        // patch axis; the built-in FFN mixes features within each patch).
+        // Shape is identical; semantics are close for smoke-test and
+        // approximate forecasting.
+
+        // === Patch Embedding: [B, contextLength * numFeatures] → [B, numPatches, hiddenDim] ===
+        yield return new ReshapeLayer<T>(
+            new[] { contextLength * numFeatures },
+            new[] { numPatches, patchInputSize });
         yield return new DenseLayer<T>(
-            inputSize: contextLength * numFeatures,
-            outputSize: numPatches * hiddenDim,
+            inputSize: patchInputSize,
+            outputSize: hiddenDim,
             activationFunction: null);
 
-        // === Mixer Blocks ===
+        // === Mixer-equivalent stack (transformer approximation) ===
+        int numHeads = Math.Max(1, hiddenDim >= 4 ? 4 : 1);
+        while (hiddenDim % numHeads != 0) numHeads--;
         for (int block = 0; block < numMixerLayers; block++)
         {
-            // --- Temporal Mixing MLP ---
-            // Mixes information across patches (time dimension)
-            yield return new DenseLayer<T>(
-                inputSize: numPatches * hiddenDim,
-                outputSize: numPatches * expandedDim,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new DenseLayer<T>(
-                inputSize: numPatches * expandedDim,
-                outputSize: numPatches * hiddenDim,
-                activationFunction: null);
-
-            if (dropout > 0)
-            {
-                yield return new DropoutLayer<T>(dropout);
-            }
-
-            // --- Channel Mixing MLP ---
-            // Mixes information across hidden features at each patch position
-            yield return new DenseLayer<T>(
-                inputSize: numPatches * hiddenDim,
-                outputSize: numPatches * expandedDim,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new DenseLayer<T>(
-                inputSize: numPatches * expandedDim,
-                outputSize: numPatches * hiddenDim,
-                activationFunction: null);
-
-            if (dropout > 0)
-            {
-                yield return new DropoutLayer<T>(dropout);
-            }
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, expandedDim);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // === Final Layer Norm ===
-        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
-
-        // === Output Head ===
-        // Project to forecast horizon
+        // === Forecast head ===
+        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDim });
         yield return new DenseLayer<T>(
             inputSize: numPatches * hiddenDim,
             outputSize: forecastHorizon,
