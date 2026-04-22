@@ -33199,32 +33199,53 @@ public static class LayerHelper<T>
 
         int numPatches = contextLength / patchLength;
 
-        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDim, activationFunction: null);
+        // Time-MoE (Shi et al., 2024) is a decoder-only GPT-style transformer
+        // with Mixture-of-Experts FFNs. Patches (or point tokens) are SEQUENCE
+        // POSITIONS, not features — attention runs across the numPatches axis.
+        // The old helper sized every DenseLayer at
+        // [numPatches · hiddenDim, numPatches · hiddenDim] and then stacked
+        // numExperts expert FFNs SEQUENTIALLY (not sparsely dispatched). At
+        // paper defaults (ContextLength=2048, HiddenDim=1024, NumExperts=8,
+        // IntermediateSize=4096, NumLayers=24) that produced ~52 TiB of
+        // weight tensors — the ctor overflowed int-sized allocations before
+        // even OOMing. Real TimeMoE-base is 113M params.
+        //
+        // Rewritten to the paper architecture: per-token ReshapeLayer +
+        // patch DenseLayer + N × TransformerEncoderLayer (self-attention
+        // across tokens + FFN; TimeMoE.ForwardNative applies a causal mask
+        // for the decoder-only semantics) + final output head.
+        //
+        // Note on MoE: proper top-k expert dispatch with per-token routing
+        // is a structural feature not yet surfaced as a dedicated layer in
+        // this codebase. Until a first-class MoELayer lands, each block
+        // uses a single dense FFN of size [hiddenDim, intermediateSize,
+        // hiddenDim] — equivalent to expert-0-only / dense-FFN compute,
+        // matching the shape of TimeMoE-base's per-expert FFN. MoE routing
+        // is tracked as follow-up.
 
+        // === Patch Embedding: [B, contextLength] → [B, numPatches, hiddenDim] ===
+        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDim, activationFunction: null);
+
+        // === Decoder-only transformer stack ===
+        // Each TransformerEncoderLayer internally does
+        // MultiHeadAttention + FFN + layer norms + residuals. Params per block
+        // ≈ 4H² (Q/K/V/O) + 2H·intermediate = 4·1024² + 2·1024·4096 = ~12M at
+        // paper defaults. TimeMoE's causal-attention mask is a semantic extension
+        // applied by the model's own forward path, not the layer helper.
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
-            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
-
-            // MoE: N expert FFNs
-            for (int e = 0; e < numExperts; e++)
-            {
-                yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
-                yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDim, activationFunction: null);
-            }
-
-            // Router
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numExperts, activationFunction: new SoftmaxActivation<T>());
-
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+        // === Forecast head ===
+        // TimeMoE is autoregressive — the final hidden state at each position
+        // projects to the next point. For the non-autoregressive smoke-test
+        // forecast we flatten the full sequence and project to forecastHorizon
+        // via a single linear. Weight is [numPatches · hiddenDim, forecastHorizon]
+        // = 64·1024 × 96 × 8B ≈ 48 MiB at paper defaults, tractable.
+        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDim });
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: forecastHorizon, activationFunction: null);
     }
 

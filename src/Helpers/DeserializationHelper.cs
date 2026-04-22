@@ -184,6 +184,17 @@ public static class DeserializationHelper
 
             instance = ctor.Invoke(new object[] { inputShape, outputShape });
         }
+        else if (genericDef == typeof(FlattenLayer<>))
+        {
+            // FlattenLayer(int[] inputShape)
+            var ctor = type.GetConstructor(new Type[] { typeof(int[]) });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find FlattenLayer constructor with (int[]).");
+            }
+
+            instance = ctor.Invoke(new object[] { inputShape });
+        }
         else if (genericDef == typeof(EmbeddingLayer<>))
         {
             // EmbeddingLayer(int vocabularySize, int embeddingDimension)

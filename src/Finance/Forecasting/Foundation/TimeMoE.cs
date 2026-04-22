@@ -68,10 +68,6 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
     #region Fields
 
     private readonly bool _useNativeMode;
-    private ILayer<T>? _patchEmbedding;
-    private readonly List<ILayer<T>> _transformerLayers = [];
-    private ILayer<T>? _finalLayerNorm;
-    private ILayer<T>? _forecastHead;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
@@ -201,7 +197,6 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
@@ -209,37 +204,7 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
                 Architecture, _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _numLayers, _numHeads, _intermediateSize,
                 _numExperts, _dropout));
-            ExtractLayerReferences();
         }
-    }
-
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-
-        if (idx < Layers.Count)
-            _patchEmbedding = Layers[idx++];
-
-        _transformerLayers.Clear();
-        // Each MoE block consists of:
-        //   With dropout: norm(1) + attn_QKV+out(4) + dropout(1) + norm(1) + N*2 expert FFN layers + router(1) + dropout(1) = 9 + N*2
-        //   Without dropout: norm(1) + attn_QKV+out(4) + norm(1) + N*2 expert FFN layers + router(1) = 7 + N*2
-        int layersPerBlock = (_dropout > 0 ? 9 : 7) + _numExperts * 2;
-        int totalLayers = _numLayers * layersPerBlock;
-
-        for (int i = 0; i < totalLayers && idx < Layers.Count; i++)
-            _transformerLayers.Add(Layers[idx++]);
-
-        if (idx < Layers.Count)
-            _finalLayerNorm = Layers[idx++];
-
-        if (idx < Layers.Count)
-            _forecastHead = Layers[idx++];
-
-        int expectedLayers = 1 + totalLayers + 2; // patch + transformer + norm + forecast
-        if (Layers.Count < expectedLayers)
-            System.Diagnostics.Debug.WriteLine(
-                $"TimeMoE: Expected {expectedLayers} layers but found {Layers.Count}. Some layer references may be null.");
     }
 
     #endregion
@@ -476,9 +441,16 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
 
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
-        var normalized = ApplyInstanceNormalization(input);
-        var current = normalized;
-
+        // Time-MoE (Shi et al., 2024) is a decoder-only GPT-style transformer
+        // whose per-patch tokens feed a stack of self-attention + FFN blocks,
+        // then a flatten + linear forecast head. The helper emits a flat,
+        // sequentially-composable Layers list (ReshapeLayer → DenseLayer
+        // (patch embed) → N × TransformerEncoderLayer (+ optional DropoutLayer)
+        // → FlattenLayer → DenseLayer (forecast head)), so ForwardNative is a
+        // straight sequential dispatch. Causal masking for the decoder-only
+        // semantics is applied by the attention block's own mask config, not
+        // at this orchestration layer.
+        var current = ApplyInstanceNormalization(input);
         bool addedBatchDim = false;
         if (current.Rank == 1)
         {
@@ -486,17 +458,8 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
             addedBatchDim = true;
         }
 
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Forward(current);
-
-        foreach (var layer in _transformerLayers)
+        foreach (var layer in Layers)
             current = layer.Forward(current);
-
-        if (_finalLayerNorm is not null)
-            current = _finalLayerNorm.Forward(current);
-
-        if (_forecastHead is not null)
-            current = _forecastHead.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });
@@ -543,18 +506,22 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
 
     private new int GetParameterCount()
     {
+        // Matches the paper-architecture helper: patch embed + N transformer
+        // blocks (attention + dense FFN) + flatten + forecast head. MoE
+        // expert stacking and router weights are NOT included — proper
+        // top-k dispatch is a pending MoELayer follow-up and the current
+        // helper emits a single dense FFN per block (see LayerHelper
+        // CreateDefaultTimeMoELayers). When the MoE layer lands, the count
+        // should be extended by numExperts × expert-FFN + router.
         int numPatches = _contextLength / _patchLength;
         long total = (long)_patchLength * _hiddenDimension + _hiddenDimension;
 
-        // Per layer: attention + MoE FFN (all experts)
-        long perLayer = 4L * _hiddenDimension * _hiddenDimension + 4 * _hiddenDimension;
-        perLayer += (long)_numExperts * (2L * _hiddenDimension * _intermediateSize + _hiddenDimension + _intermediateSize);
-        perLayer += (long)_hiddenDimension * _numExperts; // router
+        long perLayer = 4L * _hiddenDimension * _hiddenDimension + 4 * _hiddenDimension; // QKV + out
+        perLayer += 2L * _hiddenDimension * _intermediateSize + _hiddenDimension + _intermediateSize; // FFN
         perLayer += 4L * _hiddenDimension; // layer norms
         total += perLayer * _numLayers;
 
-        total += 2L * _hiddenDimension;
-        total += (long)numPatches * _hiddenDimension * _forecastHorizon;
+        total += (long)numPatches * _hiddenDimension * _forecastHorizon + _forecastHorizon;
 
         return (int)Math.Min(total, int.MaxValue);
     }

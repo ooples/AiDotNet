@@ -16,6 +16,11 @@ class Program
             ChronosBoltProfile.Run();
             return;
         }
+        if (args.Length > 0 && args[0] == "timemoe-profile")
+        {
+            TimeMoEProfile.Run();
+            return;
+        }
 
         int choice = -1;
 
