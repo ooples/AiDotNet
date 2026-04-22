@@ -70,8 +70,6 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
     #region Fields
 
     private readonly bool _useNativeMode;
-    private readonly List<ILayer<T>> _encoderLayers = [];
-    private readonly List<ILayer<T>> _decoderLayers = [];
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
@@ -213,24 +211,6 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultVisionTSLayers(
                 Architecture, _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _numLayers, _numHeads, _intermediateSize, _dropout));
-        }
-
-        ExtractLayerReferences();
-    }
-
-    private void ExtractLayerReferences()
-    {
-        _encoderLayers.Clear();
-        _decoderLayers.Clear();
-
-        // VisionTS uses a simple split: first half encoder, second half decoder
-        int midpoint = Layers.Count / 2;
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            if (i < midpoint)
-                _encoderLayers.Add(Layers[i]);
-            else
-                _decoderLayers.Add(Layers[i]);
         }
     }
 
