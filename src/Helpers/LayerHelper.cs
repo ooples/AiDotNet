@@ -13758,7 +13758,8 @@ public static class LayerHelper<T>
         int hiddenDim = 256,
         int numLayers = 8,
         int numHeads = 4,
-        double dropout = 0.1)
+        double dropout = 0.1,
+        int outputPatchLength = 128)
     {
         // Validate parameters
         if (contextLength < 1)
@@ -13813,19 +13814,19 @@ public static class LayerHelper<T>
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // === Forecast head ===
-        // TimesFM outputs per-patch forecasts in the paper (output_patch_length
-        // > input_patch_length so a single patch's hidden state predicts
-        // forecastHorizon-many future points). For the non-autoregressive
-        // smoke-test forecast we flatten the full sequence and project to
-        // forecastHorizon via a single linear. Weight is
-        // [numPatches · hiddenDim, forecastHorizon] = 16·256 × 96 ≈ 400k at
-        // paper defaults, tractable.
-        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDim });
+        // === Forecast head (per-patch, per Das et al. 2024) ===
+        // TimesFM applies a SHARED per-patch output projection:
+        //   Dense(hiddenDim → output_patch_length)
+        // DenseLayer operates on the last axis, so feeding [B, numPatches,
+        // hiddenDim] produces [B, numPatches, output_patch_length] with a
+        // single weight shared across patches (paper Eq. 2). Flatten →
+        // [B, numPatches · output_patch_length]. The model's Forward path
+        // then slices to forecastHorizon.
         yield return new DenseLayer<T>(
-            inputSize: numPatches * hiddenDim,
-            outputSize: forecastHorizon,
+            inputSize: hiddenDim,
+            outputSize: outputPatchLength,
             activationFunction: null);
+        yield return new FlattenLayer<T>(new[] { numPatches, outputPatchLength });
     }
 
     /// <summary>

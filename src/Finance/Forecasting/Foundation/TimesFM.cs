@@ -199,6 +199,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     private int _numHeads;
     private double _dropout;
     private bool _usePretrainedWeights;
+    private int _outputPatchLength;
     // TimesFM 2.5 fields
     private int _numQuantiles;
     private int _quantileHeadDimension;
@@ -313,6 +314,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         _numHeads = options.NumHeads;
         _dropout = options.DropoutRate;
         _usePretrainedWeights = options.UsePretrainedWeights;
+        _outputPatchLength = options.OutputPatchLength;
         _numQuantiles = options.NumQuantiles;
         _quantileHeadDimension = options.QuantileHeadDimension;
     }
@@ -397,7 +399,8 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTimesFMLayers(
                 Architecture, _contextLength, _forecastHorizon, 1,
-                _patchLength, _hiddenDimension, _numLayers, _numHeads, _dropout));
+                _patchLength, _hiddenDimension, _numLayers, _numHeads, _dropout,
+                _outputPatchLength));
         }
     }
 
@@ -627,6 +630,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
             NumHeads = _numHeads,
             DropoutRate = _dropout,
             UsePretrainedWeights = _usePretrainedWeights,
+            OutputPatchLength = _outputPatchLength,
             NumQuantiles = _numQuantiles,
             QuantileHeadDimension = _quantileHeadDimension
         };
@@ -652,6 +656,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         writer.Write(_numHeads);
         writer.Write(_dropout);
         writer.Write(_usePretrainedWeights);
+        writer.Write(_outputPatchLength);
         // TimesFM 2.5 fields
         writer.Write(_numQuantiles);
         writer.Write(_quantileHeadDimension);
@@ -675,6 +680,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         _numHeads = reader.ReadInt32();
         _dropout = reader.ReadDouble();
         _usePretrainedWeights = reader.ReadBoolean();
+        _outputPatchLength = reader.ReadInt32();
         // TimesFM 2.5 fields
         _numQuantiles = reader.ReadInt32();
         _quantileHeadDimension = reader.ReadInt32();
@@ -931,18 +937,40 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         if (!_useNativeMode)
             return ForecastOnnx(input);
 
-        // TimesFM (Das et al., 2024) is a decoder-only transformer whose
-        // per-patch tokens feed a stack of self-attention + FFN blocks, then
-        // a flatten + linear forecast head. The helper emits a flat,
-        // sequentially-composable Layers list (ReshapeLayer → DenseLayer
-        // (patch embed) → N × TransformerEncoderLayer (+ optional
-        // DropoutLayer) → FlattenLayer → DenseLayer (forecast head)), so
-        // Forward is a straight sequential dispatch. Causal masking for the
-        // decoder-only semantics is applied by the attention block's own mask
-        // config, not at this orchestration layer.
+        // TimesFM (Das et al., 2024) decoder-only transformer. The helper
+        // emits ReshapeLayer → DenseLayer(patch embed) → N ×
+        // TransformerEncoderLayer (+ optional Dropout) → Dense(hiddenDim →
+        // output_patch_length) applied per-patch → FlattenLayer. The final
+        // output shape is [B, numPatches · output_patch_length]. Slice to
+        // [B, forecastHorizon] to honor the user's horizon (paper §4:
+        // "the last window of output_patch_length forecast values is used
+        // when the horizon is shorter; longer horizons are produced by
+        // autoregressively feeding back predictions").
         var current = input;
         foreach (var layer in Layers)
             current = layer.Forward(current);
+
+        // Slice current [B, numPatches * outputPatchLength] to [B, forecastHorizon].
+        // The last forecastHorizon elements of the flattened per-patch head output
+        // represent the most-recent-patch's forecasts (paper: patches roll forward,
+        // last patch predicts the furthest future). For forecastHorizon ≤
+        // outputPatchLength the last patch suffices; for longer horizons we take
+        // the tail of the full concatenated sequence.
+        int total = current.Shape.Length >= 2 ? current.Shape[current.Shape.Length - 1] : current.Length;
+        if (total > _forecastHorizon)
+        {
+            int batchSize = current.Shape.Length >= 2 ? current.Shape[0] : 1;
+            var sliced = new Tensor<T>(new[] { batchSize, _forecastHorizon });
+            int offset = total - _forecastHorizon;
+            for (int b = 0; b < batchSize; b++)
+            {
+                int srcBase = b * total;
+                int dstBase = b * _forecastHorizon;
+                for (int i = 0; i < _forecastHorizon; i++)
+                    sliced.Data.Span[dstBase + i] = current.Data.Span[srcBase + offset + i];
+            }
+            current = sliced;
+        }
 
         return current;
     }

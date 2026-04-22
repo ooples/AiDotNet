@@ -129,6 +129,22 @@ public class TimesFMOptions<T> : TimeSeriesRegressionOptions<T>
     public int PatchLength { get; set; } = 32;
 
     /// <summary>
+    /// Gets or sets the output patch length for the per-patch forecast head.
+    /// </summary>
+    /// <value>The output patch length, defaulting to 128 per Das et al. 2024.</value>
+    /// <remarks>
+    /// <para>
+    /// Per Das et al. 2024 "A decoder-only foundation model for time-series
+    /// forecasting": the output head applies a shared Dense(hiddenDim
+    /// → output_patch_length) per patch. Each patch's hidden state predicts
+    /// <c>output_patch_length</c> future points. With the paper default of
+    /// output_patch_length=128, a single last-patch's head is enough to cover
+    /// a 96-step horizon; longer horizons concatenate more patches.
+    /// </para>
+    /// </remarks>
+    public int OutputPatchLength { get; set; } = 128;
+
+    /// <summary>
     /// Gets or sets the hidden dimension of the transformer.
     /// </summary>
     /// <value>The hidden dimension, defaulting to 256.</value>
