@@ -83,7 +83,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     // gradient computation or parameter update is broken.
     // =====================================================
 
-    [Fact(Timeout = 600000)]
+    [Fact(Timeout = 120000)]
     public async Task Training_ShouldReduceLoss()
     {
         await Task.Yield();
@@ -119,7 +119,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     // the learning rate is zero — both are bugs.
     // =====================================================
 
-    [Fact(Timeout = 600000)]
+    [Fact(Timeout = 120000)]
     public async Task Training_ShouldChangeParameters()
     {
         await Task.Yield();
@@ -217,7 +217,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     // Training should not destabilize the forward pass.
     // =====================================================
 
-    [Fact(Timeout = 600000)]
+    [Fact(Timeout = 120000)]
     public async Task ForwardPass_ShouldBeFinite_AfterTraining()
     {
         await Task.Yield();
@@ -372,7 +372,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     // If it doesn't, the optimizer is diverging or oscillating.
     // =====================================================
 
-    [Fact(Timeout = 600000)]
+    [Fact(Timeout = 120000)]
     public async Task MoreData_ShouldNotDegrade()
     {
         await Task.Yield();
@@ -413,7 +413,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     // the error on a different random input (overfit check).
     // =====================================================
 
-    [Fact(Timeout = 600000)]
+    [Fact(Timeout = 120000)]
     public async Task TrainingError_ShouldNotExceedTestError()
     {
         await Task.Yield();
@@ -446,7 +446,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     // gradient computation.
     // =====================================================
 
-    [Fact(Timeout = 600000)]
+    [Fact(Timeout = 120000)]
     public async Task GradientFlow_ShouldBeNonZeroAndFinite()
     {
         await Task.Yield();

@@ -70,18 +70,33 @@ internal static class ChronosBoltProfile
         for (int i = 0; i < inputData.Length; i++) inputData[i] = rng.NextDouble() * 2 - 1;
         var input = new Tensor<double>(new[] { 1, opts.ContextLength, 1 }, new Vector<double>(inputData));
 
-        // Predict
-        var predictSw = Stopwatch.StartNew();
+        // Predict (2 passes — first includes cold start / lazy init)
+        var predictWarmSw = Stopwatch.StartNew();
         var output = model!.Predict(input);
-        predictSw.Stop();
-        Console.WriteLine($"Predict       : {predictSw.Elapsed.TotalSeconds,8:F3} s  (output shape=[{string.Join(",", output.Shape.ToArray())}])");
+        predictWarmSw.Stop();
+        Console.WriteLine($"Predict #1    : {predictWarmSw.Elapsed.TotalSeconds,8:F3} s  (cold)  (output shape=[{string.Join(",", output.Shape.ToArray())}])");
 
-        // Train
+        var predictHotSw = Stopwatch.StartNew();
+        var output2 = model.Predict(input);
+        predictHotSw.Stop();
+        Console.WriteLine($"Predict #2    : {predictHotSw.Elapsed.TotalSeconds,8:F3} s  (hot)");
+
+        // Train — 1 iteration, 3 iterations (for warmup/steady-state timing).
         var trainSw = Stopwatch.StartNew();
         model.Train(input, output);
         trainSw.Stop();
-        Console.WriteLine($"Train         : {trainSw.Elapsed.TotalSeconds,8:F3} s");
+        Console.WriteLine($"Train #1      : {trainSw.Elapsed.TotalSeconds,8:F3} s  (cold)");
 
-        Console.WriteLine($"TOTAL forward+backward: {(predictSw.Elapsed + trainSw.Elapsed).TotalSeconds:F3} s");
+        var trainSw2 = Stopwatch.StartNew();
+        model.Train(input, output);
+        trainSw2.Stop();
+        Console.WriteLine($"Train #2      : {trainSw2.Elapsed.TotalSeconds,8:F3} s  (hot)");
+
+        var trainSw3 = Stopwatch.StartNew();
+        model.Train(input, output);
+        trainSw3.Stop();
+        Console.WriteLine($"Train #3      : {trainSw3.Elapsed.TotalSeconds,8:F3} s  (hot)");
+
+        Console.WriteLine($"TOTAL: {(predictWarmSw.Elapsed + predictHotSw.Elapsed + trainSw.Elapsed + trainSw2.Elapsed + trainSw3.Elapsed).TotalSeconds:F3} s");
     }
 }
