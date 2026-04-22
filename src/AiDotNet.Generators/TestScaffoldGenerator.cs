@@ -1699,12 +1699,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         else if (family == TestFamily.Forecasting)
         {
             // Forecasting Foundation models (ChronosBolt, TimeMoE, TimesFM,
-            // MOMENT, Sundial, etc.) use paper-default ContextLength in their
-            // Options. The test's InputShape must match the architecture's
-            // inputSize, which was set to the paper ContextLength above.
+            // MOMENT, Sundial, etc.) use paper-default ContextLength /
+            // ForecastHorizon in their Options. The test's InputShape and
+            // OutputShape must match the architecture so forward- and
+            // training-path shapes align (e.g. ChronosBolt outputs
+            // [B, ForecastHorizon, NumQuantiles], not the default [1, 1]).
             int paperCtx = GetForecastingPaperContextLength(model.ClassName);
+            string paperOutputShape = GetForecastingPaperOutputShape(model.ClassName);
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ {paperCtx} }};");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+            sb.AppendLine($"    protected override int[] OutputShape => new[] {{ {paperOutputShape} }};");
         }
 
         sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
@@ -3455,6 +3458,45 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "TFC" => 200,
             // 512 is the modal paper default across the family.
             _ => 512,
+        };
+    }
+
+    /// <summary>
+    /// Returns the paper-default output shape string for each Forecasting Foundation
+    /// model. Shape matches the model's actual Train/Predict output so the test's target
+    /// tensor and loss computation line up.
+    /// </summary>
+    private static string GetForecastingPaperOutputShape(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+
+        return className switch
+        {
+            // ChronosBolt emits raw [B, forecastHorizon, numQuantiles] during
+            // training. Default forecastHorizon=64, numQuantiles=9.
+            "ChronosBolt" => "64, 9",
+
+            // LagLlama distribution head outputs 3 params per forecast step
+            // (student-t mu, sigma, nu). ForecastHorizon=24.
+            "LagLlama" => "24, 3",
+
+            // Kronos emits forecastHorizon * numCandlestickFeatures (OHLCV=5).
+            // ForecastHorizon=96, numFeatures=5 → flat 480.
+            "Kronos" => "480",
+
+            // Reconstruction-chained heads (TimeMAE, SimMTM) output contextLength
+            // through the reconstruction path before the forecast Dense, then
+            // forecastHorizon via the chained head. Default forecastHorizon.
+            "TimeMAE" => "96",
+            "SimMTM" => "96",
+            "TFC" => "96",
+
+            // TimeGrad: forecast horizon (diffusion output is denoised target).
+            "TimeGrad" => "24",
+
+            // All others: [B, forecastHorizon]. Common paper defaults 96.
+            _ => "96",
         };
     }
 
