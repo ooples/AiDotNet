@@ -33214,32 +33214,33 @@ public static class LayerHelper<T>
         int minPatch = validPatchSizes[0];
         int numPatches = Math.Max(1, contextLength / minPatch);
 
-        // Multi-size patch embeddings
-        foreach (var ps in validPatchSizes)
-        {
-            int patches = Math.Max(1, contextLength / ps);
-            yield return new DenseLayer<T>(inputSize: contextLength, outputSize: patches * hiddenDim, activationFunction: null);
-        }
+        // Kairos (Mixture-of-Size Encoder for time series forecasting) uses
+        // multiple patch sizes and a learned router to select among them.
+        // Patches are SEQUENCE POSITIONS, not features — attention runs across
+        // the numPatches axis. The old helper sized every transformer Dense at
+        // [numPatches · hiddenDim, numPatches · hiddenDim] and the FFN at
+        // numPatches · intermediate over that flattened dim, producing
+        // weights quadratic in numPatches · hiddenDim at paper defaults.
+        //
+        // Rewritten to the paper shape: finest-patch Reshape + Dense patch
+        // embed + N × TransformerEncoderLayer + Flatten + Dense forecast
+        // head. Multi-size patch embeddings and the router are a follow-up
+        // — they need a dedicated router-dispatch layer (like MoE top-k)
+        // that this codebase doesn't surface as a first-class layer. For
+        // now, we emit the finest-patch path (ps = validPatchSizes[0])
+        // as the smoke-test-tractable equivalent; the coarser patch-size
+        // paths and router head are not yet wired through.
 
-        // Router that selects among patch sizes
-        yield return new DenseLayer<T>(inputSize: hiddenDim, outputSize: patchSizes.Length, activationFunction: new SoftmaxActivation<T>());
+        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, minPatch });
+        yield return new DenseLayer<T>(inputSize: minPatch, outputSize: hiddenDim, activationFunction: null);
 
-        // Shared transformer encoder
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
-            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDim, activationFunction: null);
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDim });
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: forecastHorizon, activationFunction: null);
     }
 

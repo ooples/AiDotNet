@@ -68,10 +68,6 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
     #region Fields
 
     private readonly bool _useNativeMode;
-    private ILayer<T>? _patchEmbedding;
-    private readonly List<ILayer<T>> _transformerLayers = [];
-    private ILayer<T>? _finalLayerNorm;
-    private ILayer<T>? _forecastHead;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
@@ -212,44 +208,13 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultKairosLayers(
                 Architecture, _contextLength, _forecastHorizon, _patchSizes,
                 _hiddenDimension, _numLayers, _numHeads, _intermediateSize, _dropout));
-            ExtractLayerReferences();
         }
-    }
-
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-
-        // Multi-size patch embeddings (one per patch size)
-        if (idx < Layers.Count)
-            _patchEmbedding = Layers[idx++];
-
-        // Skip additional patch embeddings for other sizes
-        for (int p = 1; p < _patchSizes.Length && idx < Layers.Count; p++)
-            idx++;
-
-        // Router layer
-        if (idx < Layers.Count) idx++;
-
-        _transformerLayers.Clear();
-        int layersPerBlock = _dropout > 0 ? 9 : 7;
-        int totalTransformerLayers = _numLayers * layersPerBlock;
-
-        for (int i = 0; i < totalTransformerLayers && idx < Layers.Count; i++)
-            _transformerLayers.Add(Layers[idx++]);
-
-        if (idx < Layers.Count)
-            _finalLayerNorm = Layers[idx++];
-
-        if (idx < Layers.Count)
-            _forecastHead = Layers[idx++];
     }
 
     #endregion
@@ -480,8 +445,13 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
 
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
-        var normalized = ApplyInstanceNormalization(input);
-        var current = normalized;
+        // Kairos (Mixture-of-Size Encoder). The helper currently emits the
+        // finest-patch-size path only: Reshape → Dense(patch) → N ×
+        // TransformerEncoderLayer (+ optional Dropout) → Flatten → Dense
+        // forecast head. Multi-size patch embeddings and the router head are
+        // a follow-up (needs a router-dispatch layer not yet in this
+        // codebase). ForwardNative is a straight sequential dispatch.
+        var current = ApplyInstanceNormalization(input);
         bool addedBatchDim = false;
         if (current.Rank == 1)
         {
@@ -489,22 +459,8 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
             addedBatchDim = true;
         }
 
-        // Forward through extracted layer references for proper Kairos architecture:
-        // 1. Patch embedding (with adaptive multi-size tokenization)
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Forward(current);
-
-        // 2. Transformer layers (with Mixture-of-Size routing)
-        foreach (var layer in _transformerLayers)
+        foreach (var layer in Layers)
             current = layer.Forward(current);
-
-        // 3. Final layer norm
-        if (_finalLayerNorm is not null)
-            current = _finalLayerNorm.Forward(current);
-
-        // 4. Forecast head
-        if (_forecastHead is not null)
-            current = _forecastHead.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });
