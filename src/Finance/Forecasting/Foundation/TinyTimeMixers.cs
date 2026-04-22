@@ -93,30 +93,6 @@ public class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
 
     #endregion
 
-    #region Native Mode Fields
-
-    /// <summary>
-    /// Patch embedding layer that projects raw patches to hidden dimension.
-    /// </summary>
-    private ILayer<T>? _patchEmbedding;
-
-    /// <summary>
-    /// Mixer layers (alternating temporal-mixing and channel-mixing blocks).
-    /// </summary>
-    private readonly List<ILayer<T>> _mixerLayers = [];
-
-    /// <summary>
-    /// Final layer normalization before the output head.
-    /// </summary>
-    private ILayer<T>? _finalLayerNorm;
-
-    /// <summary>
-    /// Output projection head that maps mixer output to forecast horizon.
-    /// </summary>
-    private ILayer<T>? _outputHead;
-
-    #endregion
-
     #region Shared Fields
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -285,33 +261,6 @@ public class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
                 _patchLength, _hiddenDimension, _numMixerLayers, _expansionFactor,
                 _dropout));
         }
-    }
-
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-
-        // Patch embedding
-        if (idx < Layers.Count)
-            _patchEmbedding = Layers[idx++];
-
-        // Mixer layers (each block: temporal-mix MLP [expand+contract+dropout] + channel-mix MLP [expand+contract+dropout])
-        _mixerLayers.Clear();
-        int layersPerBlock = _dropout > 0 ? 6 : 4; // temporal(2) + channel(2) + optional dropouts
-        int totalMixerLayers = _numMixerLayers * layersPerBlock;
-
-        for (int i = 0; i < totalMixerLayers && idx < Layers.Count - 2; i++)
-        {
-            _mixerLayers.Add(Layers[idx++]);
-        }
-
-        // Final layer norm
-        if (idx < Layers.Count)
-            _finalLayerNorm = Layers[idx++];
-
-        // Output head
-        if (idx < Layers.Count)
-            _outputHead = Layers[idx];
     }
 
     /// <inheritdoc/>

@@ -474,6 +474,27 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException(
                 "Masked pretraining requires native mode. ONNX inference does not support pretraining.");
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        // Validate input geometry before we index with b * _contextLength +
+        // p * _patchLength + t. A bad shape would otherwise walk past
+        // input.Data.Span / masked.Data.Span.
+        if (_patchLength <= 0)
+            throw new InvalidOperationException("PatchLength must be positive.");
+        if (_contextLength <= 0 || _contextLength % _patchLength != 0)
+            throw new InvalidOperationException(
+                $"ContextLength ({_contextLength}) must be positive and divisible by PatchLength ({_patchLength}).");
+        if (input.Rank != 1 && input.Rank != 2)
+            throw new ArgumentException(
+                $"TimeMAE pretraining expects rank-1 or rank-2 input; got rank {input.Rank}, shape "
+                + $"[{string.Join(", ", input.Shape.ToArray())}].",
+                nameof(input));
+        int trailingDim = input.Shape[input.Rank - 1];
+        if (trailingDim != _contextLength)
+            throw new ArgumentException(
+                $"TimeMAE pretraining expects each sample to have length {_contextLength}; got shape "
+                + $"[{string.Join(", ", input.Shape.ToArray())}].",
+                nameof(input));
 
         bool addedBatch = false;
         if (input.Rank == 1)

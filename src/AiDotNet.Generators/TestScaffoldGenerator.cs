@@ -3436,9 +3436,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Returns the base class name for the given test family.
-    /// </summary>
-    /// <summary>
     /// Returns the paper-default ContextLength for each Forecasting Foundation model.
     /// The test generator uses this to size both the architecture's inputSize and the
     /// test's InputShape so the model's internal patch ReshapeLayer succeeds. If a model
@@ -3449,7 +3446,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// Values sourced from each model's Options class default for ContextLength:
     /// <list type="bullet">
     /// <item><description>TimeMoE, Sundial: 2048</description></item>
-    /// <item><description>Kairos, LagLlama, Kronos, YingLong: 1024</description></item>
+    /// <item><description>Kairos, Kronos, YingLong: 1024</description></item>
+    /// <item><description>LagLlama: 96 (paper default)</description></item>
     /// <item><description>Chronos, ChronosBolt, TimesFM, MOMENT, VisionTS, GPT4TS, LLMTime, TimeBridge, TEST, TimeMAE, SimMTM, MOIRAI, TimeLLM, UniTS, Timer, TimeGPT, TOTO, FlowState, TinyTimeMixers: 512</description></item>
     /// <item><description>TimeGrad: 168 (hourly-electricity default)</description></item>
     /// <item><description>TFC: 200</description></item>

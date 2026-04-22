@@ -515,6 +515,17 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
             errors.Add("HiddenDimension must be divisible by NumHeads.");
         if (options.DropoutRate < 0 || options.DropoutRate >= 1)
             errors.Add("DropoutRate must be between 0 and 1 (exclusive).");
+        if (options.OutputPatchLength < 1)
+            errors.Add("OutputPatchLength must be at least 1.");
+        if (options.PatchLength >= 1 && options.ContextLength >= 1 && options.OutputPatchLength >= 1)
+        {
+            int numPatches = options.ContextLength / options.PatchLength;
+            if ((long)numPatches * options.OutputPatchLength < options.ForecastHorizon)
+                errors.Add(
+                    $"OutputPatchLength ({options.OutputPatchLength}) is too small to cover ForecastHorizon ("
+                    + $"{options.ForecastHorizon}) with {numPatches} patches — numPatches * OutputPatchLength "
+                    + $"= {(long)numPatches * options.OutputPatchLength} must be >= ForecastHorizon.");
+        }
 
         if (errors.Count > 0)
             throw new ArgumentException($"Invalid options: {string.Join(", ", errors)}");
@@ -740,16 +751,24 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         SetTrainingMode(false);
 
         // Run everything up to the forecast-head DenseLayer to obtain hidden
-        // states. The helper emits layers in order ending with Flatten →
-        // Dense(forecast head). We walk Layers up to (but not including) the
-        // last layer so the returned `hiddenStates` is pre-projection.
+        // states. The helper emits the tail as:
+        //   ... transformer blocks → Dense(hiddenDim → outputPatchLength) → Flatten
+        // so we must stop BEFORE the Dense projection (Layers.Count - 2), not
+        // just before Flatten — otherwise `hiddenStates` is already projected
+        // to [B, numPatches, outputPatchLength] and the quantile head
+        // conditions the wrong representation.
+        if (Layers.Count < 2)
+            throw new InvalidOperationException(
+                "TimesFM quantile forecasting requires the forecast-projection Dense + Flatten "
+                + "tail built by CreateDefaultTimesFMLayers.");
+
         var current = historicalData;
 
         if (current.Rank == 1)
             current = current.Reshape(new[] { 1, current.Length });
 
-        int headIdx = Layers.Count - 1;
-        for (int i = 0; i < headIdx; i++)
+        int forecastProjectionIdx = Layers.Count - 2;
+        for (int i = 0; i < forecastProjectionIdx; i++)
             current = Layers[i].Forward(current);
 
         var hiddenStates = current;

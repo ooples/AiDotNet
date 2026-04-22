@@ -86,6 +86,7 @@ public class TimesFMOptions<T> : TimeSeriesRegressionOptions<T>
         DropoutRate = other.DropoutRate;
         UsePretrainedWeights = other.UsePretrainedWeights;
         MaxContextLength = other.MaxContextLength;
+        OutputPatchLength = other.OutputPatchLength;
         NumQuantiles = other.NumQuantiles;
         QuantileHeadDimension = other.QuantileHeadDimension;
     }

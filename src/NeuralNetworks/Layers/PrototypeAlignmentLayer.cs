@@ -85,6 +85,24 @@ public class PrototypeAlignmentLayer<T> : LayerBase<T>
         // contributed gradient. Per-op build below keeps the whole chain
         // differentiable.
 
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+        if (input.Rank < 1)
+            throw new ArgumentException(
+                "PrototypeAlignmentLayer expects at least rank-1 input.", nameof(input));
+
+        // Boundary-check the trailing dimension against the expected embedding
+        // width so a bad caller shape surfaces as a clear argument error
+        // instead of an opaque reshape/matmul failure deeper in the stack.
+        int trailingDim = input.Shape[input.Rank - 1];
+        if (trailingDim != _embedDim)
+        {
+            throw new ArgumentException(
+                $"PrototypeAlignmentLayer expected trailing dimension {_embedDim}, "
+                + $"but got shape [{string.Join(", ", input.Shape.ToArray())}].",
+                nameof(input));
+        }
+
         // Flatten leading dimensions → [N, embedDim].
         int rank = input.Rank;
         Tensor<T> input2D;

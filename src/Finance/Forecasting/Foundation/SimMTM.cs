@@ -450,6 +450,26 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException(
                 "Similarity pretraining requires native mode.");
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        // Validate input geometry before we index with b * _contextLength + ...
+        // A bad shape would otherwise walk past input.Data.Span.
+        if (_patchLength <= 0)
+            throw new InvalidOperationException("PatchLength must be positive.");
+        if (_contextLength <= 0 || _contextLength % _patchLength != 0)
+            throw new InvalidOperationException(
+                $"ContextLength ({_contextLength}) must be positive and divisible by PatchLength ({_patchLength}).");
+        if (input.Rank != 1 && input.Rank != 2)
+            throw new ArgumentException(
+                $"SimMTM pretraining expects rank-1 or rank-2 input; got rank {input.Rank}, shape "
+                + $"[{string.Join(", ", input.Shape.ToArray())}].",
+                nameof(input));
+        int trailingDim = input.Shape[input.Rank - 1];
+        if (trailingDim != _contextLength)
+            throw new ArgumentException(
+                $"SimMTM pretraining expects each sample to have length {_contextLength}; got shape "
+                + $"[{string.Join(", ", input.Shape.ToArray())}].",
+                nameof(input));
 
         bool addedBatch = false;
         if (input.Rank == 1)
@@ -517,6 +537,20 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
         {
             for (int pi = 0; pi < numPatches; pi++)
             {
+                // Only MASKED patches get reconstructed from visible peers per
+                // Dong et al. 2023. Visible patches pass through unchanged so
+                // the reconstruction loss doesn't drive the model to overwrite
+                // uncorrupted evidence with a similarity-weighted blur.
+                int queryIdx = b * numPatches + pi;
+                bool isMasked = !NumOps.Equals(patchMask.Data.Span[queryIdx], NumOps.Zero);
+                if (!isMasked)
+                {
+                    for (int h = 0; h < _hiddenDimension; h++)
+                        aggregated.Data.Span[queryIdx * _hiddenDimension + h] =
+                            hidden.Data.Span[queryIdx * _hiddenDimension + h];
+                    continue;
+                }
+
                 double normI = 0;
                 for (int h = 0; h < _hiddenDimension; h++)
                 {

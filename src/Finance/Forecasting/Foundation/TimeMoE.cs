@@ -203,6 +203,8 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
         {
             Guard.Positive(_numExperts, nameof(_numExperts));
             Guard.Positive(_numActiveExperts, nameof(_numActiveExperts));
+            Guard.Positive(_numHeads, nameof(_numHeads));
+            Guard.Positive(_hiddenDimension, nameof(_hiddenDimension));
             if (_numActiveExperts > _numExperts)
                 throw new ArgumentOutOfRangeException(
                     nameof(_numActiveExperts),
@@ -522,14 +524,14 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
         // layer norms) + flatten + forecast head. Per-block:
         //   attention Q/K/V/O      = 4 · H² + 4 · H
         //   MoE experts (dense FFN) = numExperts · (2·H·I + H + I)
-        //   MoE router              = H · numExperts
+        //   MoE router              = H · numExperts + numExperts (weight + bias)
         //   layer norms (2 pre-norm) = 4 · H
         int numPatches = _contextLength / _patchLength;
         long total = (long)_patchLength * _hiddenDimension + _hiddenDimension;
 
         long perLayer = 4L * _hiddenDimension * _hiddenDimension + 4 * _hiddenDimension; // QKV + out
         perLayer += (long)_numExperts * (2L * _hiddenDimension * _intermediateSize + _hiddenDimension + _intermediateSize); // MoE experts
-        perLayer += (long)_hiddenDimension * _numExperts; // router
+        perLayer += (long)_hiddenDimension * _numExperts + _numExperts; // router weight + bias
         perLayer += 4L * _hiddenDimension; // 2 pre-norm layers
         total += perLayer * _numLayers;
 

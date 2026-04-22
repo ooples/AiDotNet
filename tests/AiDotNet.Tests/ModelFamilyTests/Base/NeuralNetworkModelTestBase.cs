@@ -390,6 +390,19 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // Train network1 for the "short" iteration count (default 50)
         int shortIters = MoreDataShortIterations;
         int longIters = MoreDataLongIterations;
+
+        // Enforce the virtual contract: overrides must keep shortIters > 0
+        // (a zero-iteration "short" training is meaningless as a baseline)
+        // and longIters >= shortIters (the invariant is "more data → no
+        // worse loss"; it is only meaningful when the long-run is at least
+        // as long as the short-run).
+        Assert.True(shortIters > 0,
+            $"{nameof(MoreDataShortIterations)} must be > 0; got {shortIters}.");
+        Assert.True(longIters >= shortIters,
+            $"{nameof(MoreDataLongIterations)} ({longIters}) must be >= "
+            + $"{nameof(MoreDataShortIterations)} ({shortIters}) for the "
+            + "more-data-should-not-degrade invariant to make sense.");
+
         for (int i = 0; i < shortIters; i++)
             network1.Train(input, target);
         double lossShort = ComputeMSE(network1.Predict(input), target);

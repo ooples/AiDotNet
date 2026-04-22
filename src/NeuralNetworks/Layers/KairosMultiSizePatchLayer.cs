@@ -68,8 +68,13 @@ public class KairosMultiSizePatchLayer<T> : LayerBase<T>
         if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
         if (hiddenDim < 1) throw new ArgumentOutOfRangeException(nameof(hiddenDim));
         if (patchSizes is null) throw new ArgumentNullException(nameof(patchSizes));
-        if (patchSizes.Length < 2)
-            throw new ArgumentException("At least two patch sizes are required for Mixture-of-Size routing.", nameof(patchSizes));
+        // Accept the one-path fallback: LayerHelper.CreateDefaultKairosLayers filters
+        // patch sizes larger than contextLength, so small contexts can legitimately
+        // reduce the default [8, 16, 32, 64] down to a single surviving size. The
+        // forward path already degenerates correctly when patchSizes.Length == 1
+        // (router collapses to a single active expert).
+        if (patchSizes.Length < 1)
+            throw new ArgumentException("At least one patch size is required.", nameof(patchSizes));
 
         _contextLength = contextLength;
         _hiddenDim = hiddenDim;
