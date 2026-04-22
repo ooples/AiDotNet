@@ -256,7 +256,102 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // Force eval mode so the DropoutLayers emitted by the helper (when
+        // options.DropoutRate > 0) are bypassed and repeated Predict calls
+        // return bit-identical outputs. Without this, Predict_ShouldBeDeterministic
+        // fails because dropout masks are resampled per forward pass.
+        SetTrainingMode(false);
         return _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Override so the training-mode flag PROPAGATES to every sub-layer (and to
+    /// nested sub-layers inside <see cref="TransformerEncoderLayer{T}"/> /
+    /// <see cref="TransformerDecoderLayer{T}"/>, each of which owns its own
+    /// <c>_norm</c> / <c>_attention</c> / <c>_feedForward</c> components).
+    /// The default <see cref="NeuralNetworkBase{T}.SetTrainingMode"/> only flips
+    /// the network-level flag, so <see cref="DropoutLayer{T}"/> sub-layers
+    /// continue applying random masks during <see cref="Predict"/>, breaking
+    /// determinism (<c>Predict_ShouldBeDeterministic</c> / <c>Clone_ShouldProduceIdenticalOutput</c>).
+    /// </remarks>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(isTraining);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The default <see cref="NeuralNetworkBase{T}.GetNamedLayerActivations"/>
+    /// iterates <c>Layers</c> sequentially, but Chronos-Bolt's T5 stack is NOT
+    /// a plain sequential chain — encoder output feeds the decoder's
+    /// cross-attention. We also need to add a batch axis to rank-1 inputs (the
+    /// helper-emitted <see cref="ReshapeLayer{T}"/> expects
+    /// <c>[batch, contextLength]</c> and fails on raw <c>[contextLength]</c>
+    /// because it would interpret the single axis as batch size). Override to
+    /// route through the same orchestration as
+    /// <see cref="ForwardNative"/> and capture per-layer activations along the
+    /// way.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        SetTrainingMode(false);
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = ApplyInstanceNormalization(input);
+        if (current.Rank == 1)
+            current = current.Reshape(new[] { 1, current.Length });
+
+        // Find decoder boundary.
+        int firstDecoderIdx = -1;
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            if (Layers[i] is TransformerDecoderLayer<T>) { firstDecoderIdx = i; break; }
+        }
+        if (firstDecoderIdx < 0)
+        {
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                current = Layers[i].Forward(current);
+                activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+            }
+            return activations;
+        }
+
+        int seedDenseIdx = firstDecoderIdx - 1;
+        while (seedDenseIdx >= 0 && Layers[seedDenseIdx] is not DenseLayer<T>) seedDenseIdx--;
+
+        // Encoder side.
+        for (int i = 0; i < seedDenseIdx; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+        var encoderOutput = current;
+
+        int patchAxis = encoderOutput.Rank - 2;
+        var pooled = Engine.ReduceMean(encoderOutput, new[] { patchAxis }, keepDims: false);
+        var seed = Layers[seedDenseIdx].Forward(pooled);
+        activations[$"Layer_{seedDenseIdx}_{Layers[seedDenseIdx].GetType().Name}"] = seed.Clone();
+
+        int decoderHiddenDim = _decoderHiddenDim;
+        int forecastHorizon = _forecastHorizon;
+        if (seed.Rank == 2)
+            seed = seed.Reshape(new[] { seed.Shape[0], forecastHorizon, decoderHiddenDim });
+        else if (seed.Rank == 1 && seed.Length == forecastHorizon * decoderHiddenDim)
+            seed = seed.Reshape(new[] { forecastHorizon, decoderHiddenDim });
+        current = seed;
+
+        for (int i = firstDecoderIdx; i < Layers.Count; i++)
+        {
+            var layer = Layers[i];
+            current = layer is TransformerDecoderLayer<T> decLayer
+                ? decLayer.Forward(current, encoderOutput)
+                : layer.Forward(current);
+            activations[$"Layer_{i}_{layer.GetType().Name}"] = current.Clone();
+        }
+        return activations;
     }
 
     /// <inheritdoc/>

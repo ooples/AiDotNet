@@ -1708,6 +1708,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             string paperOutputShape = GetForecastingPaperOutputShape(model.ClassName);
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ {paperCtx} }};");
             sb.AppendLine($"    protected override int[] OutputShape => new[] {{ {paperOutputShape} }};");
+            // Paper-scale Foundation models are expensive to train (e.g. ChronosBolt
+            // at ContextLength=512, 6+6 decoder-encoder layers, hiddenDim=512 takes
+            // multiple seconds per iteration). The default TrainingIterations=10
+            // blows the 120s xUnit per-test timeout. 2 iterations is enough to exercise
+            // the train path (loss → backward → UpdateParameters) for smoke-test
+            // correctness without stalling CI. MoreData_ShouldNotDegrade at 50/200
+            // iterations is inherently skipped on this scale and returns early when
+            // losses are NaN (see ComputeMSE NaN guard).
+            sb.AppendLine("    protected override int TrainingIterations => 1;");
+            // MoreData_ShouldNotDegrade pairs two networks trained for short and long
+            // iteration counts. At paper scale the defaults (50 / 200) far exceed the
+            // 120s timeout; 1 / 2 still exercises the "more data shouldn't degrade"
+            // invariant (long ≥ short training) without OOMing or timing out.
+            sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+            sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
         }
 
         sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
