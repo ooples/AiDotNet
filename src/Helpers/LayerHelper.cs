@@ -33040,26 +33040,17 @@ public static class LayerHelper<T>
 
         int numPatches = contextLength / patchLength;
         int patchInputSize = patchLength * numFeatures;
-        int expandedDim = hiddenDim * expansionFactor;
 
         // Tiny Time Mixers (TTM, Ekambaram et al., IBM Research 2024
         // "Tiny Time Mixers (TTMs): Fast Pre-trained Models for Enhanced
         // Zero/Few-Shot Forecasting of Multivariate Time Series") is an
-        // MLP-Mixer over time-series patches. Patches are SEQUENCE POSITIONS,
-        // not features — mixing runs across the numPatches axis for the
-        // temporal mixer and across hiddenDim for the channel mixer. The
-        // old helper sized every mixer Dense at [numPatches · hiddenDim,
-        // numPatches · expandedDim], producing weights quadratic in
-        // numPatches · hiddenDim. Real TTM is a "Tiny" model (~1M params).
-        //
-        // A proper MLP-Mixer needs a transpose layer to apply the patch-axis
-        // MLP, which this codebase doesn't expose as a first-class layer.
-        // Until a dedicated MixerLayer lands, we approximate the mixer
-        // sequence-wise and channel-wise information flow with a
-        // TransformerEncoderLayer (self-attention mixes tokens across the
-        // patch axis; the built-in FFN mixes features within each patch).
-        // Shape is identical; semantics are close for smoke-test and
-        // approximate forecasting.
+        // MLP-Mixer over time-series patches. Patches are SEQUENCE
+        // POSITIONS, not features — mixing runs across the numPatches axis
+        // for the temporal mixer and across hiddenDim for the channel
+        // mixer. Implementation uses MLPMixerBlockLayer which internally
+        // transposes the patch axis so a Dense operates across patches,
+        // then transposes back for per-patch channel mixing. Pre-norm +
+        // residual on each mixer per paper.
 
         // === Patch Embedding: [B, contextLength * numFeatures] → [B, numPatches, hiddenDim] ===
         yield return new ReshapeLayer<T>(
@@ -33070,12 +33061,10 @@ public static class LayerHelper<T>
             outputSize: hiddenDim,
             activationFunction: null);
 
-        // === Mixer-equivalent stack (transformer approximation) ===
-        int numHeads = Math.Max(1, hiddenDim >= 4 ? 4 : 1);
-        while (hiddenDim % numHeads != 0) numHeads--;
+        // === True MLP-Mixer stack ===
         for (int block = 0; block < numMixerLayers; block++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, expandedDim);
+            yield return new MLPMixerBlockLayer<T>(numPatches, hiddenDim, expansionFactor);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
