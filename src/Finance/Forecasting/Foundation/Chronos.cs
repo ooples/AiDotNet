@@ -671,7 +671,22 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
-        var output = _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
+        Tensor<T> output;
+        if (_useNativeMode)
+        {
+            output = ForecastNative(historicalData);
+        }
+        else
+        {
+            // ONNX path never runs our Tokenize() so _lastTokenMin/_lastTokenRange
+            // would stay at whatever the last native call left behind (or zero),
+            // and Detokenize would then emit the hard-coded [0, 1] fallback range
+            // instead of the input's scale. Capture the scale from the raw input
+            // before Detokenize runs so ONNX forecasts come back on the same
+            // numeric scale as the historical data.
+            CaptureTokenScale(historicalData);
+            output = ForecastOnnx(historicalData);
+        }
 
         // Detokenize to get continuous values
         var pointPredictions = Detokenize(output);
@@ -916,19 +931,13 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     #region Tokenization
 
     /// <summary>
-    /// Tokenizes continuous time series values into discrete tokens.
+    /// Captures the per-input min/range used by <see cref="Detokenize"/> to
+    /// rebuild continuous values. Shared between <see cref="Tokenize"/> (native
+    /// path) and the ONNX forecast path (which skips Tokenize but still has to
+    /// Detokenize the pretrained model's output on the input's numeric scale).
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Converts continuous values to discrete "words":
-    /// 1. Scale to [-1, 1] range
-    /// 2. Map to bin indices (0 to NumTokens-1)
-    /// 3. Create one-hot representation for embedding
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Tokenize(Tensor<T> values)
+    private void CaptureTokenScale(Tensor<T> values)
     {
-        // Find min and max for scaling
         T min = NumOps.MaxValue;
         T max = NumOps.MinValue;
         for (int i = 0; i < values.Length; i++)
@@ -944,6 +953,24 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         _lastTokenMin = min;
         _lastTokenRange = range;
         _hasTokenScale = true;
+    }
+
+    /// <summary>
+    /// Tokenizes continuous time series values into discrete tokens.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Converts continuous values to discrete "words":
+    /// 1. Scale to [-1, 1] range
+    /// 2. Map to bin indices (0 to NumTokens-1)
+    /// 3. Create one-hot representation for embedding
+    /// </para>
+    /// </remarks>
+    private Tensor<T> Tokenize(Tensor<T> values)
+    {
+        CaptureTokenScale(values);
+        var min = _lastTokenMin;
+        var range = _lastTokenRange;
 
         // Create one-hot encoded tokens
         var tokenized = new Tensor<T>(new[] { values.Length * _numTokens });
