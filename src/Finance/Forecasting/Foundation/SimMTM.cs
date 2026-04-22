@@ -502,19 +502,21 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
             current = Layers[i].Forward(current);
         var hidden = current; // [B, numPatches, hiddenDim]
 
-        // Similarity-weighted aggregation: for each masked patch i, reconstruct its
-        // hidden state as sum_j softmax(similarity(h_i, h_j) / tau) · h_j over VISIBLE
-        // patches j. This approximates Dong et al. 2023's cross-series similarity
-        // (here we use intra-series similarity, which still captures the paper's
-        // "similarity-weighted aggregation" spirit for single-sample batches).
+        // Similarity-weighted aggregation per Dong et al. 2023 §3.2: for each
+        // masked patch i in series b, reconstruct its hidden state as a
+        // softmax-weighted sum over VISIBLE peers drawn from the full batch
+        // (cross-series when batchSize > 1, degenerating to intra-series when
+        // batchSize == 1). Each candidate (bj, pj) contributes its hidden
+        // vector weighted by cosine(h_{b,pi}, h_{bj,pj}) / tau.
         double tau = _similarityTemperature > 0 ? _similarityTemperature : 0.1;
         var aggregated = new Tensor<T>(hidden._shape);
+        int totalPositions = batchSize * numPatches;
+        var scores = new double[totalPositions];
+        var weights = new double[totalPositions];
         for (int b = 0; b < batchSize; b++)
         {
             for (int pi = 0; pi < numPatches; pi++)
             {
-                // Compute cosine similarity between patch pi and every other patch.
-                var scores = new double[numPatches];
                 double normI = 0;
                 for (int h = 0; h < _hiddenDimension; h++)
                 {
@@ -524,36 +526,40 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
                 normI = Math.Sqrt(normI) + 1e-8;
 
                 double maxScore = double.NegativeInfinity;
-                for (int pj = 0; pj < numPatches; pj++)
+                for (int bj = 0; bj < batchSize; bj++)
                 {
-                    if (pj == pi) { scores[pj] = double.NegativeInfinity; continue; }
-                    // Only aggregate over VISIBLE patches (mask == 0).
-                    if (!NumOps.Equals(patchMask.Data.Span[b * numPatches + pj], NumOps.Zero))
+                    for (int pj = 0; pj < numPatches; pj++)
                     {
-                        scores[pj] = double.NegativeInfinity;
-                        continue;
+                        int idx = bj * numPatches + pj;
+                        // Skip self-position so a masked query does not attend to itself.
+                        if (bj == b && pj == pi) { scores[idx] = double.NegativeInfinity; continue; }
+                        // Only aggregate over VISIBLE patches (mask == 0) across the full batch.
+                        if (!NumOps.Equals(patchMask.Data.Span[idx], NumOps.Zero))
+                        {
+                            scores[idx] = double.NegativeInfinity;
+                            continue;
+                        }
+                        double dot = 0, normJ = 0;
+                        for (int h = 0; h < _hiddenDimension; h++)
+                        {
+                            double vi = NumOps.ToDouble(hidden.Data.Span[(b * numPatches + pi) * _hiddenDimension + h]);
+                            double vj = NumOps.ToDouble(hidden.Data.Span[idx * _hiddenDimension + h]);
+                            dot += vi * vj;
+                            normJ += vj * vj;
+                        }
+                        normJ = Math.Sqrt(normJ) + 1e-8;
+                        scores[idx] = dot / (normI * normJ) / tau;
+                        if (scores[idx] > maxScore) maxScore = scores[idx];
                     }
-                    double dot = 0, normJ = 0;
-                    for (int h = 0; h < _hiddenDimension; h++)
-                    {
-                        double vi = NumOps.ToDouble(hidden.Data.Span[(b * numPatches + pi) * _hiddenDimension + h]);
-                        double vj = NumOps.ToDouble(hidden.Data.Span[(b * numPatches + pj) * _hiddenDimension + h]);
-                        dot += vi * vj;
-                        normJ += vj * vj;
-                    }
-                    normJ = Math.Sqrt(normJ) + 1e-8;
-                    scores[pj] = dot / (normI * normJ) / tau;
-                    if (scores[pj] > maxScore) maxScore = scores[pj];
                 }
 
                 // Softmax over visible peers.
                 double denom = 0;
-                var weights = new double[numPatches];
-                for (int pj = 0; pj < numPatches; pj++)
+                for (int k = 0; k < totalPositions; k++)
                 {
-                    if (double.IsNegativeInfinity(scores[pj])) continue;
-                    weights[pj] = Math.Exp(scores[pj] - maxScore);
-                    denom += weights[pj];
+                    if (double.IsNegativeInfinity(scores[k])) { weights[k] = 0; continue; }
+                    weights[k] = Math.Exp(scores[k] - maxScore);
+                    denom += weights[k];
                 }
                 if (denom < 1e-12)
                 {
@@ -563,17 +569,17 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
                             hidden.Data.Span[(b * numPatches + pi) * _hiddenDimension + h];
                     continue;
                 }
-                for (int pj = 0; pj < numPatches; pj++)
-                    weights[pj] /= denom;
+                for (int k = 0; k < totalPositions; k++)
+                    weights[k] /= denom;
 
-                // Weighted sum of visible peers' hidden states.
+                // Weighted sum of visible peers' hidden states (cross-batch + cross-patch).
                 for (int h = 0; h < _hiddenDimension; h++)
                 {
                     double agg = 0;
-                    for (int pj = 0; pj < numPatches; pj++)
+                    for (int k = 0; k < totalPositions; k++)
                     {
-                        if (weights[pj] == 0) continue;
-                        agg += weights[pj] * NumOps.ToDouble(hidden.Data.Span[(b * numPatches + pj) * _hiddenDimension + h]);
+                        if (weights[k] == 0) continue;
+                        agg += weights[k] * NumOps.ToDouble(hidden.Data.Span[k * _hiddenDimension + h]);
                     }
                     aggregated.Data.Span[(b * numPatches + pi) * _hiddenDimension + h] = NumOps.FromDouble(agg);
                 }

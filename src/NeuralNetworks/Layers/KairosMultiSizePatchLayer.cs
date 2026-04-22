@@ -134,22 +134,27 @@ public class KairosMultiSizePatchLayer<T> : LayerBase<T>
             pathOutputs.Add(pooled);
         }
 
-        // Weighted combine: output[b, h] = Σ_k routerWeights[b, k] · pathOutputs[k][b, h].
-        var output = new Tensor<T>(new[] { batchSize, _hiddenDim });
-        for (int b = 0; b < batchSize; b++)
+        // Weighted combine: output = Σ_k routerWeights[:, k] · pathOutputs[k].
+        // Built entirely out of Engine ops so the gradient tape records the mixture
+        // and gradients flow back into both the router and every patch-embedding
+        // Dense. Previously the loop used .Data.Span reads/writes which produced
+        // a fresh Tensor disconnected from the tape — _router and
+        // _patchEmbeddings would stop learning through this layer.
+        Tensor<T>? output = null;
+        for (int k = 0; k < _patchSizes.Length; k++)
         {
-            for (int h = 0; h < _hiddenDim; h++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < _patchSizes.Length; k++)
-                {
-                    T w = routerWeights.Data.Span[b * _patchSizes.Length + k];
-                    T v = pathOutputs[k].Data.Span[b * _hiddenDim + h];
-                    sum = NumOps.Add(sum, NumOps.Multiply(w, v));
-                }
-                output.Data.Span[b * _hiddenDim + h] = sum;
-            }
+            // Select per-path router weight slice [B, 1] and multiply-broadcast
+            // with pathOutputs[k] ([B, hiddenDim]). Engine.TensorNarrow keeps
+            // rank so the result is [B, 1] which broadcasts correctly across
+            // hiddenDim.
+            var routerSlice = Engine.TensorNarrow(routerWeights, dim: 1, start: k, length: 1); // [B, 1]
+            var weighted = Engine.TensorMultiply(routerSlice, pathOutputs[k]); // [B, hiddenDim]
+            output = output is null ? weighted : Engine.TensorAdd(output, weighted);
         }
+
+        if (output is null)
+            throw new InvalidOperationException(
+                "KairosMultiSizePatchLayer forward produced no weighted paths — patchSizes was empty (this should have been rejected in the constructor).");
 
         if (addedBatch)
             return Engine.Reshape(output, new[] { _hiddenDim });

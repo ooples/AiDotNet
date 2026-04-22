@@ -11,6 +11,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -200,6 +201,16 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
         }
         else if (_useNativeMode)
         {
+            Guard.Positive(_numExperts, nameof(_numExperts));
+            Guard.Positive(_numActiveExperts, nameof(_numActiveExperts));
+            if (_numActiveExperts > _numExperts)
+                throw new ArgumentOutOfRangeException(
+                    nameof(_numActiveExperts),
+                    $"NumActiveExperts ({_numActiveExperts}) must be <= NumExperts ({_numExperts}).");
+            if (_hiddenDimension % _numHeads != 0)
+                throw new ArgumentException(
+                    $"HiddenDimension ({_hiddenDimension}) must be divisible by NumHeads ({_numHeads}).");
+
             Layers.AddRange(LayerHelper<T>.CreateDefaultTimeMoELayers(
                 Architecture, _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _numLayers, _numHeads, _intermediateSize,

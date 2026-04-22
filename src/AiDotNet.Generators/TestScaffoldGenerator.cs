@@ -3492,6 +3492,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // training. Default forecastHorizon=64, numQuantiles=9.
             "ChronosBolt" => "64, 9",
 
+            // Chronos.Forecast → Detokenize returns [forecastHorizon].
+            // ChronosFinanceOptions default ForecastHorizon=64.
+            "Chronos" => "64",
+
+            // MOIRAI.Forecast → ExtractMedianFromQuantiles / ExtractPointPredictions
+            // both return [1, forecastHorizon, 1]. MOIRAIOptions default
+            // ForecastHorizon=96.
+            "MOIRAI" => "1, 96, 1",
+
             // LagLlama distribution head outputs 3 params per forecast step
             // (student-t mu, sigma, nu). ForecastHorizon=24.
             "LagLlama" => "24, 3",

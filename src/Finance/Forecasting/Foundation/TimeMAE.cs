@@ -524,8 +524,31 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
         // The reconstruction head's output is [B, contextLength] before the forecast-head
         // Dense. Because the helper emits reconstruction then forecast, we stop one
         // layer early for pure-reconstruction output.
+        //
+        // Validate that the final layer is the expected forecast-head Dense
+        // (contextLength → forecastHorizon). If the layer stack has been
+        // customized upstream the "skip the last layer" heuristic would
+        // silently slice off the reconstruction head instead and the caller
+        // would train on garbage. Fail fast so the bug surfaces at pretrain
+        // time rather than as a silent accuracy regression.
+        if (Layers.Count == 0)
+            throw new InvalidOperationException(
+                "TimeMAE pretraining requires a built layer stack, but Layers is empty.");
+        if (Layers[Layers.Count - 1] is not DenseLayer<T> forecastHead
+            || forecastHead.GetInputShape().Length == 0
+            || forecastHead.GetInputShape()[^1] != _contextLength
+            || forecastHead.GetOutputShape().Length == 0
+            || forecastHead.GetOutputShape()[^1] != _forecastHorizon)
+        {
+            throw new InvalidOperationException(
+                $"TimeMAE pretraining expected the final layer to be a forecast-head DenseLayer<T> "
+                + $"of shape ({_contextLength} → {_forecastHorizon}), but found "
+                + $"{Layers[Layers.Count - 1].GetType().Name}. The 'Layers.Count - 1' reconstruction "
+                + "boundary only holds for the LayerHelper.CreateDefaultTimeMAELayers stack.");
+        }
+
         var current = ApplyInstanceNormalization(masked);
-        int reconEnd = Layers.Count - 1; // skip final Dense(contextLength → forecastHorizon)
+        int reconEnd = Layers.Count - 1; // skip validated final Dense(contextLength → forecastHorizon)
         for (int i = 0; i < reconEnd; i++)
             current = Layers[i].Forward(current);
 

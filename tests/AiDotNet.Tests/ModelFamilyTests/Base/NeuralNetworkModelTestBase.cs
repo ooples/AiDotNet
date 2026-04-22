@@ -399,12 +399,14 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
             network2.Train(input2, target2);
         double lossLong = ComputeMSE(network2.Predict(input2), target2);
 
-        if (!double.IsNaN(lossShort) && !double.IsNaN(lossLong))
-        {
-            Assert.True(lossLong <= lossShort + MoreDataTolerance,
-                $"{longIters} iterations loss ({lossLong:F6}) > {shortIters} iterations loss ({lossShort:F6}). " +
-                "Optimizer may be diverging with more training.");
-        }
+        // Training divergence → NaN loss is the exact failure mode this invariant
+        // should catch. Fail fast instead of skipping the assertion.
+        Assert.False(double.IsNaN(lossShort) || double.IsNaN(lossLong),
+            $"Loss became NaN during training: short={lossShort}, long={lossLong}. " +
+            "This indicates gradient explosion or numerical instability in the optimizer path.");
+        Assert.True(lossLong <= lossShort + MoreDataTolerance,
+            $"{longIters} iterations loss ({lossLong:F6}) > {shortIters} iterations loss ({lossShort:F6}). " +
+            "Optimizer may be diverging with more training.");
     }
 
     // =====================================================

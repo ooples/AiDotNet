@@ -366,6 +366,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         _numHeads = options.NumHeads;
         _dropout = options.DropoutRate;
         _usePretrainedWeights = options.UsePretrainedWeights;
+        _outputPatchLength = options.OutputPatchLength;
         _numQuantiles = options.NumQuantiles;
         _quantileHeadDimension = options.QuantileHeadDimension;
 
@@ -959,17 +960,14 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         int total = current.Shape.Length >= 2 ? current.Shape[current.Shape.Length - 1] : current.Length;
         if (total > _forecastHorizon)
         {
-            int batchSize = current.Shape.Length >= 2 ? current.Shape[0] : 1;
-            var sliced = new Tensor<T>(new[] { batchSize, _forecastHorizon });
+            // Tape-aware narrow over the last axis. The manual copy-out path
+            // detached gradients from the flattened forecast head whenever
+            // total > forecastHorizon — which is the DEFAULT TimesFM case
+            // (outputPatchLength=128, forecastHorizon=96). TensorNarrow records
+            // a SliceNarrow backward that propagates the gradient slice back
+            // into the full pre-slice buffer.
             int offset = total - _forecastHorizon;
-            for (int b = 0; b < batchSize; b++)
-            {
-                int srcBase = b * total;
-                int dstBase = b * _forecastHorizon;
-                for (int i = 0; i < _forecastHorizon; i++)
-                    sliced.Data.Span[dstBase + i] = current.Data.Span[srcBase + offset + i];
-            }
-            current = sliced;
+            current = Engine.TensorNarrow(current, current.Rank - 1, offset, _forecastHorizon);
         }
 
         return current;

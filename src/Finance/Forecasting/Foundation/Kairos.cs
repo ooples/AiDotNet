@@ -445,12 +445,15 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
 
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
-        // Kairos (Mixture-of-Size Encoder). The helper currently emits the
-        // finest-patch-size path only: Reshape → Dense(patch) → N ×
-        // TransformerEncoderLayer (+ optional Dropout) → Flatten → Dense
-        // forecast head. Multi-size patch embeddings and the router head are
-        // a follow-up (needs a router-dispatch layer not yet in this
-        // codebase). ForwardNative is a straight sequential dispatch.
+        // Kairos (Mixture-of-Size Encoder). The helper emits a
+        // KairosMultiSizePatchLayer that runs every patch-size path in
+        // parallel, mean-pools each to [B, hiddenDim], and combines them via
+        // a softmax router — producing a single [B, hiddenDim] summary. That
+        // feeds a Reshape → N × TransformerEncoderLayer → Flatten → Dense
+        // forecast-head stack. ForwardNative is a straight sequential dispatch;
+        // the router and per-path Dense embeddings are all trainable and
+        // gradient-connected via Engine-ops in
+        // KairosMultiSizePatchLayer.Forward.
         var current = ApplyInstanceNormalization(input);
         bool addedBatchDim = false;
         if (current.Rank == 1)

@@ -34,12 +34,23 @@ internal static class ChronosBoltProfile
             inputSize: opts.ContextLength,
             outputSize: opts.ForecastHorizon);
 
+        // Validate patch geometry before any size math (avoids div-by-zero and
+        // silently mis-sized buffers when ContextLength is not an exact
+        // multiple of PatchLength).
+        if (opts.PatchLength <= 0)
+            throw new InvalidOperationException(
+                $"PatchLength must be positive; got {opts.PatchLength}.");
+        if (opts.ContextLength % opts.PatchLength != 0)
+            throw new InvalidOperationException(
+                $"ContextLength ({opts.ContextLength}) must be an exact multiple of PatchLength ({opts.PatchLength}).");
+
         // Pre-compute the sizes the layer helper will emit so the OOM has context.
         int numPatches = opts.ContextLength / opts.PatchLength;
         long encInterHidden = (long)numPatches * opts.EncoderHiddenDim;  // input dim to encoder hidden blocks
         long encIntermediate = (long)numPatches * opts.EncoderHiddenDim * 4;
         long encWeightBytes = encInterHidden * encInterHidden * sizeof(double);
         long encFfnWeightBytes = encInterHidden * encIntermediate * sizeof(double);
+        int encLayers = opts.NumEncoderLayers;
         Console.WriteLine(
             $"Derived layer dims:\n" +
             $"  numPatches                          = {numPatches}\n" +
@@ -47,7 +58,7 @@ internal static class ChronosBoltProfile
             $"  numPatches * encoderHiddenDim * 4   = {encIntermediate}  (encoder FFN intermediate)\n" +
             $"  one [hidden, hidden] weight tensor  = {encWeightBytes / (1024.0 * 1024.0 * 1024.0),6:F2} GiB (double)\n" +
             $"  one [hidden, intermediate] weight   = {encFfnWeightBytes / (1024.0 * 1024.0 * 1024.0),6:F2} GiB (double)\n" +
-            $"  6 encoder layers × ~5 weight tensors ≈ {(6L * 5L * encWeightBytes + 6L * encFfnWeightBytes * 2L) / (1024.0 * 1024.0 * 1024.0),6:F1} GiB just in encoder weights");
+            $"  {encLayers} encoder layers × ~5 weight tensors ≈ {((long)encLayers * 5L * encWeightBytes + (long)encLayers * encFfnWeightBytes * 2L) / (1024.0 * 1024.0 * 1024.0),6:F1} GiB just in encoder weights");
 
         var ctorSw = Stopwatch.StartNew();
         ChronosBolt<double>? model = null;

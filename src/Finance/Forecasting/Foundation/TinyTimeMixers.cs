@@ -601,10 +601,12 @@ public class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
     {
         // TTM (Ekambaram et al., 2024) is an MLP-Mixer over patches. The
         // helper emits a flat, sequentially-composable Layers list
-        // (ReshapeLayer → DenseLayer (patch embed) → N × mixer-equivalent
-        // block (+ optional DropoutLayer) → FlattenLayer → DenseLayer
-        // (forecast head)). Causal mask / per-mixer transpose handling is a
-        // follow-up when a dedicated MixerLayer lands.
+        // (ReshapeLayer → DenseLayer (patch embed) → N × MLPMixerBlockLayer
+        // (+ optional DropoutLayer) → FlattenLayer → DenseLayer (forecast
+        // head)). MLP-Mixer is non-causal by design — each block applies a
+        // temporal MLP across the patch axis followed by a channel MLP, so
+        // there is no causal mask to apply. The per-mixer transpose handling
+        // is now internal to MLPMixerBlockLayer.
         var current = ApplyInstanceNormalization(input);
 
         bool addedBatchDim = false;

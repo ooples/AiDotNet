@@ -44,10 +44,14 @@ public class TimeMoEBlockLayer<T> : LayerBase<T>
     private readonly MixtureOfExpertsLayer<T> _moe;
 
     /// <summary>
-    /// Exposes the inner MoE sublayer so the enclosing network can surface its
-    /// auxiliary (load-balancing) loss into the training objective.
+    /// Surfaces the MoE router's load-balancing auxiliary loss for the current
+    /// (most recent) forward pass. The enclosing training loop can add this to
+    /// the main task loss per Shi et al. 2024 §3.2 to prevent expert collapse.
+    /// Returns zero before any forward has been executed. Exposes a scalar —
+    /// keeps the router/expert implementation an internal detail of this layer.
     /// </summary>
-    public MixtureOfExpertsLayer<T> MoE => _moe;
+    public T GetAuxiliaryLoss() =>
+        _moe.UseAuxiliaryLoss ? _moe.ComputeAuxiliaryLoss() : NumOps.Zero;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;

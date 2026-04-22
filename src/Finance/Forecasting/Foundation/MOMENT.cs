@@ -103,16 +103,20 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     /// <summary>
     /// Reconstruction head for anomaly detection and imputation per Goswami et al. 2024:
     /// Dense(hiddenDim → patchLength) applied per-patch followed by Flatten to
-    /// [B, contextLength]. Built lazily on first call to Reconstruct or when
-    /// deserialized from a pre-built layer list.
+    /// [B, contextLength]. Built eagerly in <see cref="InitializeLayers"/> so its
+    /// parameters are part of the model's serialized state (Clone / DeepCopy /
+    /// Serialize/Deserialize round-trip through the Layers list) rather than
+    /// lazy state that would be silently lost on clone.
     /// </summary>
     private List<ILayer<T>>? _reconstructionHead;
 
     /// <summary>
-    /// Classification head per Goswami et al. 2024: mean-pool over the patch axis then
-    /// Dense(hiddenDim → numClasses). Built lazily on first call to Classify.
+    /// Classification heads per Goswami et al. 2024: mean-pool over the patch axis
+    /// then Dense(hiddenDim → numClasses). Keyed by <c>numClasses</c> so a single
+    /// MOMENT instance can serve multiple class-count requests without silently
+    /// reusing the weights of the first-seen numClasses for a different shape.
     /// </summary>
-    private List<ILayer<T>>? _classificationHead;
+    private readonly Dictionary<int, List<ILayer<T>>> _classificationHeads = new();
 
     #endregion
 
@@ -301,6 +305,14 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
                 Architecture, _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _numLayers, _numHeads, _intermediateSize,
                 _dropout, _numClasses));
+
+            // Build reconstruction head eagerly so its weights are part of the
+            // model's serialized state right from construction (previously it was
+            // lazy-built on first Reconstruct() call, which meant Clone/DeepCopy
+            // of an un-exercised reconstruction path produced a model with a
+            // DIFFERENT random head on the clone side). Classification heads are
+            // still lazy since they're keyed by numClasses at call time.
+            EnsureReconstructionHead();
         }
     }
 
@@ -312,12 +324,22 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
             numPatches, _hiddenDimension, _patchLength).ToList();
     }
 
-    private void EnsureClassificationHead(int numClasses)
+    /// <summary>
+    /// Returns the classification head for the given class count, building it on
+    /// demand. Cache keyed on <c>numClasses</c> so each label-space gets its own
+    /// head instead of silently reusing the first one.
+    /// </summary>
+    private List<ILayer<T>> GetOrBuildClassificationHead(int numClasses)
     {
-        if (_classificationHead is not null) return;
-        int numPatches = _contextLength / _patchLength;
-        _classificationHead = LayerHelper<T>.CreateMOMENTClassificationHead(
-            numPatches, _hiddenDimension, numClasses).ToList();
+        if (numClasses < 1) throw new ArgumentOutOfRangeException(nameof(numClasses));
+        if (!_classificationHeads.TryGetValue(numClasses, out var head))
+        {
+            int numPatches = _contextLength / _patchLength;
+            head = LayerHelper<T>.CreateMOMENTClassificationHead(
+                numPatches, _hiddenDimension, numClasses).ToList();
+            _classificationHeads[numClasses] = head;
+        }
+        return head;
     }
 
     /// <inheritdoc/>
@@ -663,9 +685,9 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
 
         // Lazily build the classification head (GlobalPooling + Dense(hiddenDim →
         // numClasses)) per Goswami et al. 2024.
-        EnsureClassificationHead(numClasses);
+        var head = GetOrBuildClassificationHead(numClasses);
         var current = encoded;
-        foreach (var layer in _classificationHead!)
+        foreach (var layer in head)
             current = layer.Forward(current);
         return current;
     }

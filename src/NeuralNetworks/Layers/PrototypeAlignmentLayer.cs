@@ -12,6 +12,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// the same prototype subspace as a frozen LLM's text-token embeddings.
 /// </summary>
 /// <remarks>
+/// <para><b>For Beginners:</b> Think of this as a "translator" that maps each input
+/// patch to the closest matches in a small library of learned reference embeddings
+/// (prototypes). The output is a weighted blend of those reference embeddings, so
+/// downstream layers (often a frozen language model) see inputs in a vocabulary they
+/// already understand.</para>
 /// <para>
 /// Forward: input <c>[B, N, D]</c> → cosine similarity with prototypes
 /// <c>[K, D]</c> → softmax over K → weights <c>[B, N, K]</c> → aggregate
@@ -22,6 +27,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// training, the prototypes learn to represent the "grammar" of time-series patches in a
 /// way that is compatible with a downstream frozen LLM.
 /// </para>
+/// <para><b>Reference:</b> Sun, C. et al., "TEST: Text Prototype Aligned Embedding to
+/// Activate LLM's Ability for Time Series", ICLR 2024.
+/// <see href="https://openreview.net/forum?id=Tuh4nZVb0g"/>.</para>
 /// </remarks>
 /// <typeparam name="T">Numeric element type.</typeparam>
 [LayerCategory(LayerCategory.Attention)]
@@ -68,6 +76,15 @@ public class PrototypeAlignmentLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Built entirely out of Engine ops so the gradient tape records the
+        // cosine-similarity → softmax → aggregate chain. The old per-element
+        // loop read input / _prototypes through .Data.Span and wrote results
+        // into fresh Tensors, which detached gradients from the prototype
+        // bank (registered as a trainable parameter) — so the parameter was
+        // trained via tape-driven autodiff but the layer itself never
+        // contributed gradient. Per-op build below keeps the whole chain
+        // differentiable.
+
         // Flatten leading dimensions → [N, embedDim].
         int rank = input.Rank;
         Tensor<T> input2D;
@@ -82,82 +99,39 @@ public class PrototypeAlignmentLayer<T> : LayerBase<T>
         }
         else
         {
-            origShape = (int[])input._shape.Clone();
+            origShape = input.Shape.ToArray();
             int leading = 1;
             for (int d = 0; d < rank - 1; d++) leading *= input.Shape[d];
             input2D = Engine.Reshape(input, new[] { leading, _embedDim });
         }
 
-        int n = input2D.Shape[0];
+        var eps = NumOps.FromDouble(1e-8);
 
-        // Compute cosine similarities: [N, K].
-        var sims = new Tensor<T>(new[] { n, _numPrototypes });
-        for (int i = 0; i < n; i++)
-        {
-            double normI = 0;
-            for (int d = 0; d < _embedDim; d++)
-            {
-                double v = NumOps.ToDouble(input2D.Data.Span[i * _embedDim + d]);
-                normI += v * v;
-            }
-            normI = Math.Sqrt(normI) + 1e-8;
+        // dotProducts = input @ prototypes^T  → [N, K]
+        var protoT = Engine.TensorTranspose(_prototypes);                              // [D, K]
+        var dotProducts = Engine.TensorMatMul(input2D, protoT);                        // [N, K]
 
-            for (int k = 0; k < _numPrototypes; k++)
-            {
-                double dot = 0, normK = 0;
-                for (int d = 0; d < _embedDim; d++)
-                {
-                    double vi = NumOps.ToDouble(input2D.Data.Span[i * _embedDim + d]);
-                    double vk = NumOps.ToDouble(_prototypes.Data.Span[k * _embedDim + d]);
-                    dot += vi * vk;
-                    normK += vk * vk;
-                }
-                normK = Math.Sqrt(normK) + 1e-8;
-                sims.Data.Span[i * _numPrototypes + k] = NumOps.FromDouble(dot / (normI * normK));
-            }
-        }
+        // Input norms: sqrt(sum(input^2, axis=1, keepDims=true)) → [N, 1]
+        var inputSq = Engine.TensorSquare(input2D);                                    // [N, D]
+        var inputNorm = Engine.TensorSqrt(
+            Engine.TensorAddScalar(Engine.ReduceSum(inputSq, new[] { 1 }, keepDims: true), eps)); // [N, 1]
 
-        // Softmax over K per row of sims.
-        var weights = new Tensor<T>(new[] { n, _numPrototypes });
-        for (int i = 0; i < n; i++)
-        {
-            double max = double.NegativeInfinity;
-            for (int k = 0; k < _numPrototypes; k++)
-            {
-                double s = NumOps.ToDouble(sims.Data.Span[i * _numPrototypes + k]);
-                if (s > max) max = s;
-            }
-            double sum = 0;
-            for (int k = 0; k < _numPrototypes; k++)
-            {
-                double e = Math.Exp(NumOps.ToDouble(sims.Data.Span[i * _numPrototypes + k]) - max);
-                weights.Data.Span[i * _numPrototypes + k] = NumOps.FromDouble(e);
-                sum += e;
-            }
-            if (sum > 1e-12)
-            {
-                for (int k = 0; k < _numPrototypes; k++)
-                    weights.Data.Span[i * _numPrototypes + k] =
-                        NumOps.FromDouble(NumOps.ToDouble(weights.Data.Span[i * _numPrototypes + k]) / sum);
-            }
-        }
+        // Prototype norms: sqrt(sum(prototypes^2, axis=1, keepDims=true)) → [K, 1],
+        // then transpose to [1, K] so we can broadcast-divide against [N, K].
+        var protoSq = Engine.TensorSquare(_prototypes);                                // [K, D]
+        var protoNormCol = Engine.TensorSqrt(
+            Engine.TensorAddScalar(Engine.ReduceSum(protoSq, new[] { 1 }, keepDims: true), eps)); // [K, 1]
+        var protoNormRow = Engine.TensorTranspose(protoNormCol);                       // [1, K]
 
-        // Aggregate: output[i] = sum_k weights[i, k] * prototypes[k].
-        var output2D = new Tensor<T>(new[] { n, _embedDim });
-        for (int i = 0; i < n; i++)
-        {
-            for (int d = 0; d < _embedDim; d++)
-            {
-                double sum = 0;
-                for (int k = 0; k < _numPrototypes; k++)
-                {
-                    double w = NumOps.ToDouble(weights.Data.Span[i * _numPrototypes + k]);
-                    double p = NumOps.ToDouble(_prototypes.Data.Span[k * _embedDim + d]);
-                    sum += w * p;
-                }
-                output2D.Data.Span[i * _embedDim + d] = NumOps.FromDouble(sum);
-            }
-        }
+        // Cosine sims = dotProducts / (inputNorm * protoNormRow), with both broadcasts.
+        var denom = Engine.TensorBroadcastMultiply(inputNorm, protoNormRow);           // [N, K]
+        var sims = Engine.TensorBroadcastDivide(dotProducts, denom);                   // [N, K]
+
+        // Softmax over the prototype axis so each row is a distribution over K.
+        var weights = Engine.TensorSoftmax(sims, axis: 1);                             // [N, K]
+
+        // Aggregate: output = weights @ prototypes  → [N, D]
+        var output2D = Engine.TensorMatMul(weights, _prototypes);                      // [N, D]
 
         if (origShape is not null)
             return Engine.Reshape(output2D, origShape);
@@ -167,11 +141,18 @@ public class PrototypeAlignmentLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// No-op by design. Prototypes were registered with
+    /// <see cref="LayerBase{T}.RegisterTrainableParameter"/>, so the tape-based
+    /// <c>NeuralNetworkBase.TrainWithTape</c> path updates them through the optimizer's
+    /// <c>Step(TapeStepContext)</c>. For non-tape training paths (legacy per-layer
+    /// <c>UpdateParameters(learningRate)</c> flow), the parameter is still addressable
+    /// via <see cref="GetParameters"/> / <see cref="SetParameters"/> so external
+    /// drivers can apply updates explicitly — there is no internal gradient buffer to
+    /// consume here.
+    /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        // Prototypes are updated via the tape-based optimizer since they were registered
-        // as a trainable parameter. This explicit per-layer UpdateParameters is a no-op
-        // for tape-driven training; ParameterCount still reflects _prototypes.
     }
 
     /// <inheritdoc/>

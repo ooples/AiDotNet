@@ -133,6 +133,14 @@ public class TimesFMOptions<T> : TimeSeriesRegressionOptions<T>
     /// </summary>
     /// <value>The output patch length, defaulting to 128 per Das et al. 2024.</value>
     /// <remarks>
+    /// <para><b>For Beginners:</b> This controls how many future time steps each
+    /// patch of the model predicts at once. One patch's hidden state is
+    /// projected through a small shared head into a block of <c>OutputPatchLength</c>
+    /// future points. Larger values let a single patch cover a longer forecast
+    /// window (so the model can emit its full horizon in one step) at the cost
+    /// of a wider, more expensive output head. Shorter values make the head
+    /// cheaper but require concatenating predictions from more patches to
+    /// reach the same horizon.</para>
     /// <para>
     /// Per Das et al. 2024 "A decoder-only foundation model for time-series
     /// forecasting": the output head applies a shared Dense(hiddenDim

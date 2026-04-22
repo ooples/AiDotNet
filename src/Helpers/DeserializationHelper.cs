@@ -198,31 +198,47 @@ public static class DeserializationHelper
         else if (genericDef == typeof(TransposeLayer<>))
         {
             // TransposeLayer(int[] inputShape, int[] permutation)
-            // The permutation must be derivable from input/output shapes: find the
-            // index `p` in inputShape such that inputShape[p] == outputShape[i].
-            if (inputShape.Length != outputShape.Length)
-                throw new InvalidOperationException(
-                    $"TransposeLayer requires inputShape and outputShape to have the same rank. Got input rank {inputShape.Length}, output rank {outputShape.Length}.");
-
+            //
+            // Prefer the permutation persisted in additionalParams (emitted by
+            // TransposeLayer.GetMetadata). Fall back to shape inference only
+            // when absent — inference is ambiguous whenever multiple input
+            // axes share the same extent, and degenerate whenever the
+            // permutation leaves the output shape equal to the input shape
+            // (e.g. swapping two equal-size axes).
             int n = inputShape.Length;
-            var permutation = new int[n];
-            var used = new bool[n];
-            for (int i = 0; i < n; i++)
+            int[]? permutation = TryGetIntArray(additionalParams, "Permutation");
+
+            if (permutation is not null)
             {
-                int found = -1;
-                for (int j = 0; j < n; j++)
-                {
-                    if (!used[j] && inputShape[j] == outputShape[i])
-                    {
-                        found = j;
-                        break;
-                    }
-                }
-                if (found < 0)
+                if (permutation.Length != n)
                     throw new InvalidOperationException(
-                        $"TransposeLayer deserialization: cannot recover permutation from shapes ({string.Join(",", inputShape)}) -> ({string.Join(",", outputShape)}).");
-                permutation[i] = found;
-                used[found] = true;
+                        $"TransposeLayer deserialization: persisted Permutation length {permutation.Length} does not match inputShape rank {n}.");
+            }
+            else
+            {
+                if (inputShape.Length != outputShape.Length)
+                    throw new InvalidOperationException(
+                        $"TransposeLayer requires inputShape and outputShape to have the same rank. Got input rank {inputShape.Length}, output rank {outputShape.Length}.");
+
+                permutation = new int[n];
+                var used = new bool[n];
+                for (int i = 0; i < n; i++)
+                {
+                    int found = -1;
+                    for (int j = 0; j < n; j++)
+                    {
+                        if (!used[j] && inputShape[j] == outputShape[i])
+                        {
+                            found = j;
+                            break;
+                        }
+                    }
+                    if (found < 0)
+                        throw new InvalidOperationException(
+                            $"TransposeLayer deserialization: cannot recover permutation from shapes ({string.Join(",", inputShape)}) -> ({string.Join(",", outputShape)}). Re-serialize the network so the Permutation metadata is persisted.");
+                    permutation[i] = found;
+                    used[found] = true;
+                }
             }
 
             var ctor = type.GetConstructor(new Type[] { typeof(int[]), typeof(int[]) });
@@ -1553,6 +1569,28 @@ public static class DeserializationHelper
                 return parsed;
         }
         return null;
+    }
+
+    private static int[]? TryGetIntArray(Dictionary<string, object>? parameters, string key)
+    {
+        if (parameters is null || !parameters.TryGetValue(key, out var value) || value is null)
+            return null;
+
+        if (value is int[] arr)
+            return arr;
+
+        string str = value.ToString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(str))
+            return null;
+
+        var parts = str.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        var result = new int[parts.Length];
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (!int.TryParse(parts[i], out result[i]))
+                return null;
+        }
+        return result;
     }
 
     private static double? TryGetDouble(Dictionary<string, object>? parameters, string key)

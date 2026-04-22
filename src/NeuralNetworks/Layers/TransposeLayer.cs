@@ -119,4 +119,18 @@ public class TransposeLayer<T> : LayerBase<T>
     {
         // Stateless apart from construction-time fields.
     }
+
+    /// <summary>
+    /// Emits the permutation alongside the base metadata so deserialization can
+    /// reconstruct the layer exactly. Shape-only inference would fail on
+    /// permutations that leave the output shape equal to the input shape (e.g.
+    /// axis swaps of two equal-size dims) or on ambiguous cases where multiple
+    /// source axes share the same extent.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["Permutation"] = string.Join(",", _permutation);
+        return metadata;
+    }
 }
