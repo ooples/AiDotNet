@@ -428,6 +428,174 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
 
     #endregion
 
+    #region Similarity-Weighted Masked Pretraining (Dong et al. 2023)
+
+    /// <summary>
+    /// Performs one SimMTM similarity-weighted masked-reconstruction pretraining forward
+    /// pass per Dong et al. 2023. Randomly masks a fraction of input patches, runs the
+    /// transformer encoder, then reconstructs each masked patch as a similarity-weighted
+    /// aggregation over UNMASKED patches' hidden states (rather than a plain dense
+    /// projection). Similarity is cosine-similarity with softmax-temperature scaling.
+    /// </summary>
+    /// <param name="input">Input time series of shape [B, contextLength] or [contextLength].</param>
+    /// <param name="seed">Optional seed for reproducible masking.</param>
+    /// <returns>
+    /// A tuple <c>(reconstructed, patchMask)</c> where <c>reconstructed</c> is the full
+    /// signal predicted by similarity-weighted aggregation and <c>patchMask</c> is a
+    /// binary [B, numPatches] tensor with 1 at masked positions.
+    /// </returns>
+    public (Tensor<T> reconstructed, Tensor<T> patchMask) PretrainSimilarityWeightedReconstruction(
+        Tensor<T> input, int? seed = null)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException(
+                "Similarity pretraining requires native mode.");
+
+        bool addedBatch = false;
+        if (input.Rank == 1)
+        {
+            input = input.Reshape(new[] { 1, input.Length });
+            addedBatch = true;
+        }
+        int batchSize = input.Shape[0];
+        int numPatches = _contextLength / _patchLength;
+
+        // Build patch-level mask [B, numPatches]: 1 = masked, 0 = visible.
+        var rng = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
+        var patchMask = new Tensor<T>(new[] { batchSize, numPatches });
+        int maskedCount = Math.Max(1, Math.Min(numPatches - 1, (int)Math.Round(numPatches * _maskRatio)));
+        for (int b = 0; b < batchSize; b++)
+        {
+            var indices = Enumerable.Range(0, numPatches).ToList();
+            for (int i = indices.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (indices[i], indices[j]) = (indices[j], indices[i]);
+            }
+            for (int m = 0; m < maskedCount; m++)
+                patchMask.Data.Span[b * numPatches + indices[m]] = NumOps.One;
+        }
+
+        // Apply mask: zero out masked patches.
+        var masked = new Tensor<T>(input._shape);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int p = 0; p < numPatches; p++)
+            {
+                bool isMasked = !NumOps.Equals(patchMask.Data.Span[b * numPatches + p], NumOps.Zero);
+                for (int t = 0; t < _patchLength; t++)
+                {
+                    int idx = b * _contextLength + p * _patchLength + t;
+                    masked.Data.Span[idx] = isMasked ? NumOps.Zero : input.Data.Span[idx];
+                }
+            }
+        }
+
+        // Walk encoder up to (but not including) the final two heads (Flatten + Dense
+        // reconstruction + Dense forecast). The layer just before Flatten is the last
+        // TransformerEncoderLayer output — our [B, numPatches, hiddenDim] hidden states.
+        var current = ApplyInstanceNormalization(masked);
+        int encoderEnd = Layers.Count - 3; // skip Flatten, Dense(recon), Dense(forecast)
+        for (int i = 0; i < encoderEnd; i++)
+            current = Layers[i].Forward(current);
+        var hidden = current; // [B, numPatches, hiddenDim]
+
+        // Similarity-weighted aggregation: for each masked patch i, reconstruct its
+        // hidden state as sum_j softmax(similarity(h_i, h_j) / tau) · h_j over VISIBLE
+        // patches j. This approximates Dong et al. 2023's cross-series similarity
+        // (here we use intra-series similarity, which still captures the paper's
+        // "similarity-weighted aggregation" spirit for single-sample batches).
+        double tau = _similarityTemperature > 0 ? _similarityTemperature : 0.1;
+        var aggregated = new Tensor<T>(hidden._shape);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int pi = 0; pi < numPatches; pi++)
+            {
+                // Compute cosine similarity between patch pi and every other patch.
+                var scores = new double[numPatches];
+                double normI = 0;
+                for (int h = 0; h < _hiddenDimension; h++)
+                {
+                    double v = NumOps.ToDouble(hidden.Data.Span[(b * numPatches + pi) * _hiddenDimension + h]);
+                    normI += v * v;
+                }
+                normI = Math.Sqrt(normI) + 1e-8;
+
+                double maxScore = double.NegativeInfinity;
+                for (int pj = 0; pj < numPatches; pj++)
+                {
+                    if (pj == pi) { scores[pj] = double.NegativeInfinity; continue; }
+                    // Only aggregate over VISIBLE patches (mask == 0).
+                    if (!NumOps.Equals(patchMask.Data.Span[b * numPatches + pj], NumOps.Zero))
+                    {
+                        scores[pj] = double.NegativeInfinity;
+                        continue;
+                    }
+                    double dot = 0, normJ = 0;
+                    for (int h = 0; h < _hiddenDimension; h++)
+                    {
+                        double vi = NumOps.ToDouble(hidden.Data.Span[(b * numPatches + pi) * _hiddenDimension + h]);
+                        double vj = NumOps.ToDouble(hidden.Data.Span[(b * numPatches + pj) * _hiddenDimension + h]);
+                        dot += vi * vj;
+                        normJ += vj * vj;
+                    }
+                    normJ = Math.Sqrt(normJ) + 1e-8;
+                    scores[pj] = dot / (normI * normJ) / tau;
+                    if (scores[pj] > maxScore) maxScore = scores[pj];
+                }
+
+                // Softmax over visible peers.
+                double denom = 0;
+                var weights = new double[numPatches];
+                for (int pj = 0; pj < numPatches; pj++)
+                {
+                    if (double.IsNegativeInfinity(scores[pj])) continue;
+                    weights[pj] = Math.Exp(scores[pj] - maxScore);
+                    denom += weights[pj];
+                }
+                if (denom < 1e-12)
+                {
+                    // All peers masked (pathological). Fall back to self-hidden.
+                    for (int h = 0; h < _hiddenDimension; h++)
+                        aggregated.Data.Span[(b * numPatches + pi) * _hiddenDimension + h] =
+                            hidden.Data.Span[(b * numPatches + pi) * _hiddenDimension + h];
+                    continue;
+                }
+                for (int pj = 0; pj < numPatches; pj++)
+                    weights[pj] /= denom;
+
+                // Weighted sum of visible peers' hidden states.
+                for (int h = 0; h < _hiddenDimension; h++)
+                {
+                    double agg = 0;
+                    for (int pj = 0; pj < numPatches; pj++)
+                    {
+                        if (weights[pj] == 0) continue;
+                        agg += weights[pj] * NumOps.ToDouble(hidden.Data.Span[(b * numPatches + pj) * _hiddenDimension + h]);
+                    }
+                    aggregated.Data.Span[(b * numPatches + pi) * _hiddenDimension + h] = NumOps.FromDouble(agg);
+                }
+            }
+        }
+
+        // Feed the aggregated hidden states through the reconstruction head (the
+        // three remaining layers: Flatten + Dense + Dense). We want just the
+        // reconstruction (skip the last forecast Dense).
+        var reconIn = Layers[encoderEnd].Forward(aggregated);       // Flatten
+        var reconOut = Layers[encoderEnd + 1].Forward(reconIn);     // Dense(reconstruction)
+
+        if (addedBatch && reconOut.Rank == 2 && reconOut.Shape[0] == 1)
+            reconOut = reconOut.Reshape(new[] { reconOut.Shape[1] });
+        if (addedBatch)
+            patchMask = patchMask.Reshape(new[] { numPatches });
+
+        return (reconOut, patchMask);
+    }
+
+    #endregion
+
     #region Forward/Backward Pass
 
     private Tensor<T> ForwardNative(Tensor<T> input)

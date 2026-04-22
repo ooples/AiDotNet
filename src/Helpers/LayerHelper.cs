@@ -33607,8 +33607,8 @@ public static class LayerHelper<T>
 
         // TEST (Sun et al. 2024 "TEST: Text Prototype Aligned Embedding to
         // Activate LLM's Ability for Time Series") aligns time-series
-        // patches to a frozen LLM's text-prototype embedding space. Rewrite
-        // to paper shape with per-patch text-alignment projection.
+        // patches to a frozen LLM's text-prototype embedding space via a
+        // learned prototype bank and cosine-similarity alignment.
 
         yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
         yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDimension, activationFunction: null);
@@ -33622,13 +33622,15 @@ public static class LayerHelper<T>
         // Per-patch alignment projection (hidden → text embedding space)
         yield return new DenseLayer<T>(inputSize: hiddenDimension, outputSize: textEmbeddingDimension, activationFunction: null);
 
-        // Forecast head from text-aligned space
+        // PROTOTYPE ALIGNMENT: project each patch's text-dim embedding into
+        // the learned prototype subspace. Trainable [numPrototypes,
+        // textEmbeddingDimension] bank; per-patch cosine similarity + softmax
+        // aggregate. Output stays in the text embedding space.
+        yield return new PrototypeAlignmentLayer<T>(textEmbeddingDimension, numPrototypes);
+
+        // Forecast head from prototype-aligned space
         yield return new FlattenLayer<T>(new[] { numPatches, textEmbeddingDimension });
         yield return new DenseLayer<T>(inputSize: numPatches * textEmbeddingDimension, outputSize: forecastHorizon, activationFunction: null);
-
-        // Silence unused-param warning — numPrototypes reserved for a
-        // prototype-alignment head in a follow-up.
-        _ = numPrototypes;
     }
 
     /// <summary>

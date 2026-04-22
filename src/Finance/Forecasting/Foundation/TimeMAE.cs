@@ -448,6 +448,97 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
 
     #endregion
 
+    #region Masked Pretraining (Cheng et al. 2023)
+
+    /// <summary>
+    /// Performs one TimeMAE masked-reconstruction pretraining forward pass per Cheng
+    /// et al. 2023. Randomly masks a fraction of input patches (MaskRatio, paper default
+    /// 0.6), runs the encoder over the partially-masked input, and returns the
+    /// reconstructed full signal alongside the patch-level mask. The caller can compute
+    /// reconstruction loss ONLY over masked patches (the paper's self-supervised signal).
+    /// </summary>
+    /// <param name="input">Input time series of shape [B, contextLength] or [contextLength].</param>
+    /// <param name="seed">
+    /// Optional seed for reproducible masking. When null, uses the cryptographically-secure
+    /// <see cref="RandomHelper.CreateSecureRandom"/>.
+    /// </param>
+    /// <returns>
+    /// A tuple <c>(reconstructed, patchMask)</c> where <c>reconstructed</c> is the full
+    /// signal predicted by the model and <c>patchMask</c> is a binary [B, numPatches]
+    /// tensor with 1 at masked positions and 0 at visible positions. For loss computation:
+    /// <c>loss = mean( patchMask · (reconstructed - input_raw)² )</c>.
+    /// </returns>
+    public (Tensor<T> reconstructed, Tensor<T> patchMask) PretrainMaskedReconstruction(
+        Tensor<T> input, int? seed = null)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException(
+                "Masked pretraining requires native mode. ONNX inference does not support pretraining.");
+
+        bool addedBatch = false;
+        if (input.Rank == 1)
+        {
+            input = input.Reshape(new[] { 1, input.Length });
+            addedBatch = true;
+        }
+        int batchSize = input.Shape[0];
+        int numPatches = _contextLength / _patchLength;
+
+        // Build patch-level mask [B, numPatches]: 1 = masked, 0 = visible.
+        var rng = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
+        var patchMask = new Tensor<T>(new[] { batchSize, numPatches });
+        int maskedCount = (int)Math.Round(numPatches * _maskRatio);
+        if (maskedCount < 1) maskedCount = 1;
+        if (maskedCount > numPatches - 1) maskedCount = numPatches - 1;
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Random subset of patches to mask.
+            var indices = Enumerable.Range(0, numPatches).ToList();
+            for (int i = indices.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (indices[i], indices[j]) = (indices[j], indices[i]);
+            }
+            for (int m = 0; m < maskedCount; m++)
+                patchMask.Data.Span[b * numPatches + indices[m]] = NumOps.One;
+        }
+
+        // Apply mask: zero out masked patches in input.
+        var masked = new Tensor<T>(input._shape);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int p = 0; p < numPatches; p++)
+            {
+                bool isMasked = !NumOps.Equals(patchMask.Data.Span[b * numPatches + p], NumOps.Zero);
+                for (int t = 0; t < _patchLength; t++)
+                {
+                    int idx = b * _contextLength + p * _patchLength + t;
+                    masked.Data.Span[idx] = isMasked ? NumOps.Zero : input.Data.Span[idx];
+                }
+            }
+        }
+
+        // Forward through the full Layers stack (encoder + decoder + reconstruction head).
+        // The reconstruction head's output is [B, contextLength] before the forecast-head
+        // Dense. Because the helper emits reconstruction then forecast, we stop one
+        // layer early for pure-reconstruction output.
+        var current = ApplyInstanceNormalization(masked);
+        int reconEnd = Layers.Count - 1; // skip final Dense(contextLength → forecastHorizon)
+        for (int i = 0; i < reconEnd; i++)
+            current = Layers[i].Forward(current);
+
+        if (addedBatch && current.Rank == 2 && current.Shape[0] == 1)
+            current = current.Reshape(new[] { current.Shape[1] });
+        if (addedBatch)
+            patchMask = patchMask.Reshape(new[] { numPatches });
+
+        return (current, patchMask);
+    }
+
+    #endregion
+
     #region Forward/Backward Pass
 
     private Tensor<T> ForwardNative(Tensor<T> input)
