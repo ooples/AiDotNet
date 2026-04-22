@@ -66,10 +66,6 @@ public class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
     #region Fields
 
     private readonly bool _useNativeMode;
-    private ILayer<T>? _patchEmbedding;
-    private readonly List<ILayer<T>> _backboneLayers = [];
-    private ILayer<T>? _finalLayerNorm;
-    private ILayer<T>? _taskHead;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
@@ -197,41 +193,13 @@ public class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultGPT4TSLayers(
                 Architecture, _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _numLayers, _numHeads, _dropout));
-            ExtractLayerReferences();
         }
-    }
-
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-
-        // Patch embedding
-        if (idx < Layers.Count)
-            _patchEmbedding = Layers[idx++];
-
-        // GPT-2 backbone layers (frozen)
-        _backboneLayers.Clear();
-        // GPT-2 block layout: norm(1) + attn_QKV+out(4) + norm(1) + FFN(2) = 8; with dropout: +1 = 9
-        int layersPerBlock = _dropout > 0 ? 9 : 7;
-        int totalBackboneLayers = _numLayers * layersPerBlock;
-
-        for (int i = 0; i < totalBackboneLayers && idx < Layers.Count; i++)
-            _backboneLayers.Add(Layers[idx++]);
-
-        // Final layer norm
-        if (idx < Layers.Count)
-            _finalLayerNorm = Layers[idx++];
-
-        // Task-specific head
-        if (idx < Layers.Count)
-            _taskHead = Layers[idx++];
     }
 
     #endregion
@@ -478,20 +446,11 @@ public class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
             addedBatchDim = true;
         }
 
-        // Patch embedding (trainable)
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Forward(current);
-
-        // Frozen GPT-2 backbone
-        foreach (var layer in _backboneLayers)
+        // Helper emits a flat, sequentially-composable Layers list
+        // (Reshape → Dense(patch) → N × TransformerEncoderLayer (+ optional
+        // Dropout) → Flatten → Dense(task head)).
+        foreach (var layer in Layers)
             current = layer.Forward(current);
-
-        if (_finalLayerNorm is not null)
-            current = _finalLayerNorm.Forward(current);
-
-        // Task-specific head (trainable)
-        if (_taskHead is not null)
-            current = _taskHead.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });

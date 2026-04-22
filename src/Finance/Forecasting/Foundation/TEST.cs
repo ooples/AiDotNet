@@ -67,10 +67,6 @@ public class TEST<T> : TimeSeriesFoundationModelBase<T>
     #region Fields
 
     private readonly bool _useNativeMode;
-    private ILayer<T>? _patchEmbedding;
-    private readonly List<ILayer<T>> _encoderLayers = [];
-    private ILayer<T>? _alignmentProjection;
-    private ILayer<T>? _forecastHead;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
@@ -209,7 +205,6 @@ public class TEST<T> : TimeSeriesFoundationModelBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
@@ -217,30 +212,7 @@ public class TEST<T> : TimeSeriesFoundationModelBase<T>
                 Architecture, _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _textEmbeddingDimension, _numLayers, _numHeads,
                 _numPrototypes, _dropout));
-            ExtractLayerReferences();
         }
-    }
-
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-
-        if (idx < Layers.Count)
-            _patchEmbedding = Layers[idx++];
-
-        _encoderLayers.Clear();
-        int layersPerBlock = _dropout > 0 ? 9 : 7;
-        int totalEncoderLayers = _numLayers * layersPerBlock;
-
-        for (int i = 0; i < totalEncoderLayers && idx < Layers.Count; i++)
-            _encoderLayers.Add(Layers[idx++]);
-
-        // Alignment projection (hidden -> text embedding space)
-        if (idx < Layers.Count)
-            _alignmentProjection = Layers[idx++];
-
-        if (idx < Layers.Count)
-            _forecastHead = Layers[idx++];
     }
 
     #endregion
@@ -494,18 +466,12 @@ public class TEST<T> : TimeSeriesFoundationModelBase<T>
             addedBatchDim = true;
         }
 
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Forward(current);
-
-        foreach (var layer in _encoderLayers)
+        // Helper emits a flat, sequentially-composable Layers list
+        // (Reshape → Dense(patch) → N × TransformerEncoderLayer
+        // (+ optional Dropout) → per-patch Dense(alignment to text embed
+        // space) → Flatten → Dense(head)).
+        foreach (var layer in Layers)
             current = layer.Forward(current);
-
-        // Alignment projection maps to text embedding space
-        if (_alignmentProjection is not null)
-            current = _alignmentProjection.Forward(current);
-
-        if (_forecastHead is not null)
-            current = _forecastHead.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });

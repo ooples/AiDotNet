@@ -33520,28 +33520,22 @@ public static class LayerHelper<T>
         int numPatches = contextLength / patchLength;
         int intermediateSize = hiddenDimension * 4;
 
-        // Patch embedding (trainable)
-        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDimension, activationFunction: null);
+        // GPT4TS (Zhou et al. 2023 "One Fits All: Power General Time Series
+        // Analysis by Pretrained LM") reuses a frozen GPT-2 backbone over
+        // time-series patches. Patches are sequence positions. Rewrite to
+        // paper shape: Reshape → Dense(patch) → N × TransformerEncoderLayer
+        // → Flatten → Dense(head).
 
-        // GPT-2 backbone layers (frozen during training)
+        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDimension, activationFunction: null);
+
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // Final layer norm
-        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-
-        // Task-specific head (trainable)
+        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDimension });
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
     }
 
@@ -33559,28 +33553,25 @@ public static class LayerHelper<T>
 
         int intermediateSize = hiddenDimension * 4;
 
-        // Input projection (numeric values to hidden dim)
-        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: contextLength * hiddenDimension, activationFunction: null);
+        // LLM-Time (Gruver et al. 2023 "Large Language Models Are Zero-Shot
+        // Time Series Forecasters") treats each input *point* as a token in
+        // an LLM-style transformer. Every point is a sequence position.
+        // The old helper sized every projection at [contextLength *
+        // hiddenDim, contextLength * hiddenDim] — quadratic over the full
+        // context length (even worse than the patch-based models). Rewrite
+        // to per-token architecture: point input → per-point Dense embed to
+        // hiddenDim → N × TransformerEncoderLayer → Flatten → Dense(head).
 
-        // LLM backbone layers
+        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { contextLength, 1 });
+        yield return new DenseLayer<T>(inputSize: 1, outputSize: hiddenDimension, activationFunction: null);
+
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: null);
-            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * intermediateSize, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>(inputSize: contextLength * intermediateSize, outputSize: contextLength * hiddenDimension, activationFunction: null);
+            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // Final layer norm
-        yield return new BatchNormalizationLayer<T>(contextLength * hiddenDimension);
-
-        // Output projection (hidden dim to forecast)
+        yield return new FlattenLayer<T>(new[] { contextLength, hiddenDimension });
         yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
     }
 
@@ -33600,29 +33591,30 @@ public static class LayerHelper<T>
         int numPatches = contextLength / patchLength;
         int intermediateSize = hiddenDimension * 4;
 
-        // Patch embedding
-        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDimension, activationFunction: null);
+        // TEST (Sun et al. 2024 "TEST: Text Prototype Aligned Embedding to
+        // Activate LLM's Ability for Time Series") aligns time-series
+        // patches to a frozen LLM's text-prototype embedding space. Rewrite
+        // to paper shape with per-patch text-alignment projection.
 
-        // Encoder layers
+        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDimension, activationFunction: null);
+
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // Alignment projection (hidden -> text embedding space)
-        yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * textEmbeddingDimension, activationFunction: null);
+        // Per-patch alignment projection (hidden → text embedding space)
+        yield return new DenseLayer<T>(inputSize: hiddenDimension, outputSize: textEmbeddingDimension, activationFunction: null);
 
         // Forecast head from text-aligned space
+        yield return new FlattenLayer<T>(new[] { numPatches, textEmbeddingDimension });
         yield return new DenseLayer<T>(inputSize: numPatches * textEmbeddingDimension, outputSize: forecastHorizon, activationFunction: null);
+
+        // Silence unused-param warning — numPrototypes reserved for a
+        // prototype-alignment head in a follow-up.
+        _ = numPrototypes;
     }
 
     /// <summary>
@@ -33639,31 +33631,30 @@ public static class LayerHelper<T>
 
         int numPatches = contextLength / patchLength;
 
-        // Patch embedding
-        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDimension, activationFunction: null);
+        // TimeBridge (Liu et al., 2024 "TimeBridge: Non-Stationarity Matters
+        // for Long-term Time Series Forecasting") — per-patch transformer
+        // encoder with a bridge module that encodes non-stationarity
+        // statistics and gates them back into the main hidden stream. The
+        // old helper had numPatches * hiddenDim bloat; rewrite to per-patch
+        // paper shape. The bridge step is retained but now operates on the
+        // flattened hidden state as a bottleneck (numPatches * hiddenDim →
+        // bridgeDimension → numPatches * hiddenDim), producing a tractable
+        // [flat_hidden, bridge_dim] weight rather than stacking the full
+        // bottleneck per block.
 
-        // Encoder layers
+        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDimension, activationFunction: null);
+
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
-            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // Bridge module: encode non-stationarity stats
+        // Flatten then bridge the non-stationarity bottleneck
+        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDimension });
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: bridgeDimension, activationFunction: new GELUActivation<T>());
-        // Bridge module: decode/gate non-stationarity back
         yield return new DenseLayer<T>(inputSize: bridgeDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
-
-        // Final layer norm
-        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
 
         // Forecast head
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);

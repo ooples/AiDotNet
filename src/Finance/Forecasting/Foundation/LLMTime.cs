@@ -66,10 +66,6 @@ public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
     #region Fields
 
     private readonly bool _useNativeMode;
-    private ILayer<T>? _inputProjection;
-    private readonly List<ILayer<T>> _backboneLayers = [];
-    private ILayer<T>? _finalLayerNorm;
-    private ILayer<T>? _outputProjection;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
@@ -201,37 +197,13 @@ public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultLLMTimeLayers(
                 Architecture, _contextLength, _forecastHorizon,
                 _hiddenDimension, _numLayers, _numHeads, _dropout));
-            ExtractLayerReferences();
         }
-    }
-
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-
-        if (idx < Layers.Count)
-            _inputProjection = Layers[idx++];
-
-        _backboneLayers.Clear();
-        // Block layout: norm(1) + attn_QKV+out(4) + norm(1) + FFN(2) = 8; with dropout: +2 = 10
-        int layersPerBlock = _dropout > 0 ? 10 : 8;
-        int totalBackboneLayers = _numLayers * layersPerBlock;
-
-        for (int i = 0; i < totalBackboneLayers && idx < Layers.Count; i++)
-            _backboneLayers.Add(Layers[idx++]);
-
-        if (idx < Layers.Count)
-            _finalLayerNorm = Layers[idx++];
-
-        if (idx < Layers.Count)
-            _outputProjection = Layers[idx++];
     }
 
     #endregion
@@ -474,17 +446,11 @@ public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
             addedBatchDim = true;
         }
 
-        if (_inputProjection is not null)
-            current = _inputProjection.Forward(current);
-
-        foreach (var layer in _backboneLayers)
+        // Helper emits a flat, sequentially-composable Layers list
+        // (Reshape → Dense(token embed) → N × TransformerEncoderLayer
+        // (+ optional Dropout) → Flatten → Dense(output projection)).
+        foreach (var layer in Layers)
             current = layer.Forward(current);
-
-        if (_finalLayerNorm is not null)
-            current = _finalLayerNorm.Forward(current);
-
-        if (_outputProjection is not null)
-            current = _outputProjection.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });

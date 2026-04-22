@@ -67,11 +67,6 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
     #region Fields
 
     private readonly bool _useNativeMode;
-    private ILayer<T>? _patchEmbedding;
-    private readonly List<ILayer<T>> _encoderLayers = [];
-    private ILayer<T>? _bridgeModule;
-    private ILayer<T>? _finalLayerNorm;
-    private ILayer<T>? _forecastHead;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
@@ -201,7 +196,6 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
@@ -209,35 +203,7 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
                 Architecture, _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _numLayers, _numHeads, _intermediateSize,
                 _bridgeDimension, _dropout));
-            ExtractLayerReferences();
         }
-    }
-
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-
-        if (idx < Layers.Count)
-            _patchEmbedding = Layers[idx++];
-
-        _encoderLayers.Clear();
-        int layersPerBlock = _dropout > 0 ? 9 : 7;
-        int totalEncoderLayers = _numLayers * layersPerBlock;
-
-        for (int i = 0; i < totalEncoderLayers && idx < Layers.Count; i++)
-            _encoderLayers.Add(Layers[idx++]);
-
-        // Bridge module (2 layers: bridge encode + bridge decode)
-        if (idx < Layers.Count)
-            _bridgeModule = Layers[idx++];
-        if (idx < Layers.Count)
-            idx++; // second bridge layer (decode half)
-
-        if (idx < Layers.Count)
-            _finalLayerNorm = Layers[idx++];
-
-        if (idx < Layers.Count)
-            _forecastHead = Layers[idx++];
     }
 
     #endregion
@@ -483,21 +449,12 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
             addedBatchDim = true;
         }
 
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Forward(current);
-
-        foreach (var layer in _encoderLayers)
+        // Helper emits a flat, sequentially-composable Layers list
+        // (Reshape → Dense(patch) → N × TransformerEncoderLayer (+ optional
+        // Dropout) → Flatten → Dense(bridge encode) → Dense(bridge decode)
+        // → Dense(forecast head)).
+        foreach (var layer in Layers)
             current = layer.Forward(current);
-
-        // Bridge module preserves non-stationary information
-        if (_bridgeModule is not null)
-            current = _bridgeModule.Forward(current);
-
-        if (_finalLayerNorm is not null)
-            current = _finalLayerNorm.Forward(current);
-
-        if (_forecastHead is not null)
-            current = _forecastHead.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });
