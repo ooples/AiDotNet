@@ -494,21 +494,102 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
 
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
+        // Chronos-Bolt T5-style forward (Ansari et al., 2024):
+        //
+        //   1. Normalize + reshape input into patches
+        //   2. Patch-embed each patch to encoderHiddenDim
+        //   3. Encoder stack (self-attention across patches + FFN)
+        //   4. Mean-pool encoder output over the patch axis → summary vector
+        //   5. Decoder seed: project summary to a forecastHorizon-long sequence
+        //   6. Decoder stack with CROSS-ATTENTION to encoder output
+        //   7. Per-position quantile head
+        //
+        // The Layers list is emitted by CreateDefaultChronosBoltLayers in
+        // order: Reshape, Dense(patch), N × TransformerEncoderLayer (+ dropout),
+        // Dense(seed), N × TransformerDecoderLayer (+ dropout), Dense(head).
+        // We dispatch them explicitly so the decoder can receive the encoder
+        // output as its cross-attention key/value.
+
         var current = ApplyInstanceNormalization(input);
         bool addedBatchDim = false;
         if (current.Rank == 1) { current = current.Reshape(new[] { 1, current.Length }); addedBatchDim = true; }
 
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Forward(current);
+        // Find the decoder boundary by scanning for the first
+        // TransformerDecoderLayer — everything before it is the encoder side
+        // (including patch embedding and the bridge DenseLayer), everything
+        // from it onward is decoder + head.
+        int firstDecoderIdx = -1;
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            if (Layers[i] is TransformerDecoderLayer<T>)
+            {
+                firstDecoderIdx = i;
+                break;
+            }
+        }
 
-        foreach (var layer in _encoderLayers)
-            current = layer.Forward(current);
+        if (firstDecoderIdx < 0)
+        {
+            // Helper didn't emit a decoder (degenerate architecture) — fall
+            // back to sequential.
+            foreach (var layer in Layers) current = layer.Forward(current);
+            if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
+                current = current.Reshape(new[] { current.Shape[1] });
+            return current;
+        }
 
-        foreach (var layer in _decoderLayers)
-            current = layer.Forward(current);
+        // Encoder side: Reshape → Dense (patch) → encoder blocks → terminates
+        // at the TransformerEncoderLayer + optional Dropout. The bridge Dense
+        // (encoderHiddenDim → forecastHorizon·decoderHiddenDim) is the last
+        // encoder-side layer before the decoder block starts.
+        // Walk everything up to (but not including) the last Dense before the
+        // first decoder layer — that Dense is the seed projection and needs a
+        // pooled input. Identify it as `Layers[firstDecoderIdx - k]` where k
+        // skips over intervening Dropouts.
+        int seedDenseIdx = firstDecoderIdx - 1;
+        while (seedDenseIdx >= 0 && Layers[seedDenseIdx] is not DenseLayer<T>)
+            seedDenseIdx--;
+        if (seedDenseIdx < 0)
+            throw new InvalidOperationException("ChronosBolt layer stack missing encoder→decoder seed DenseLayer.");
 
-        if (_quantileHead is not null)
-            current = _quantileHead.Forward(current);
+        // 1–3: run patch embed + encoder stack (everything up to seed Dense).
+        for (int i = 0; i < seedDenseIdx; i++)
+            current = Layers[i].Forward(current);
+
+        // At this point `current` is [B, numPatches, encoderHiddenDim] (or
+        // [numPatches, encoderHiddenDim] when batch is 1 without a leading
+        // batch axis).
+        var encoderOutput = current;
+
+        // 4: mean-pool encoder output over the patch axis (axis = Rank-2).
+        int patchAxis = encoderOutput.Rank - 2;
+        var pooled = Engine.ReduceMean(encoderOutput, new[] { patchAxis }, keepDims: false);
+
+        // 5: decoder seed from pooled summary.
+        var seed = Layers[seedDenseIdx].Forward(pooled);
+        // Reshape seed from [B, forecastHorizon·decoderHiddenDim] to
+        // [B, forecastHorizon, decoderHiddenDim]. Fall back to a rank-2 shape
+        // when the leading batch dim isn't present.
+        int decoderHiddenDim = _decoderHiddenDim;
+        int forecastHorizon = _forecastHorizon;
+        if (seed.Rank == 2)
+            seed = seed.Reshape(new[] { seed.Shape[0], forecastHorizon, decoderHiddenDim });
+        else if (seed.Rank == 1 && seed.Length == forecastHorizon * decoderHiddenDim)
+            seed = seed.Reshape(new[] { forecastHorizon, decoderHiddenDim });
+
+        current = seed;
+
+        // 6: decoder layers with explicit cross-attention call —
+        // Forward(decoder_input, encoder_output). Dropouts interleave; run
+        // them single-input via Forward(x).
+        for (int i = firstDecoderIdx; i < Layers.Count; i++)
+        {
+            var layer = Layers[i];
+            if (layer is TransformerDecoderLayer<T> decLayer)
+                current = decLayer.Forward(current, encoderOutput);
+            else
+                current = layer.Forward(current);
+        }
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });

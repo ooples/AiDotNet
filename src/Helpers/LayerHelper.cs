@@ -33369,45 +33369,69 @@ public static class LayerHelper<T>
         if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
 
         int numPatches = contextLength / patchLength;
+
+        // Chronos-Bolt paper (Ansari et al., 2024): T5-style encoder-decoder
+        // with direct quantile output. Patches are SEQUENCE POSITIONS, not
+        // features — attention runs across the numPatches axis. Weight
+        // matrices are sized to [encoderHiddenDim, encoderHiddenDim] or
+        // [encoderHiddenDim, 4·encoderHiddenDim] per T5-base convention,
+        // not [numPatches·encoderHiddenDim, …]². The previous flat-feature
+        // layering inflated paper-scale weights by numPatches² — a single
+        // dense weight tensor went from ~2 MiB (T5-base) to ~2 GiB, and
+        // 6 encoder + 6 decoder layers OOMed at ctor.
+
+        // === Patch Embedding: [B, contextLength] → [B, numPatches, encoderHiddenDim] ===
+        // Reshape into patches, then per-patch linear projection.
+        // DenseLayer with weights [patchLength, encoderHiddenDim] applied along
+        // the last axis gives exactly the per-patch projection.
+        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new DenseLayer<T>(inputSize: patchLength, outputSize: encoderHiddenDim, activationFunction: null);
+
+        // === Encoder stack: numEncoderLayers × TransformerEncoderLayer ===
+        // Each block internally does MultiHeadAttention (across patches) + FFN +
+        // layer norms + residuals. Parameters per block ≈
+        // 4·H² (Q/K/V/O) + 2·H·4H (FFN) = 12H² ≈ 3M at H=512, matching T5-base.
         int encIntermediateSize = encoderHiddenDim * 4;
-        int decIntermediateSize = decoderHiddenDim * 4;
-
-        // Patch embedding
-        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * encoderHiddenDim, activationFunction: null);
-
-        // Encoder layers
         for (int layer = 0; layer < numEncoderLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(numPatches * encoderHiddenDim);
-            yield return new DenseLayer<T>(inputSize: numPatches * encoderHiddenDim, outputSize: numPatches * encoderHiddenDim, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * encoderHiddenDim, outputSize: numPatches * encoderHiddenDim, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * encoderHiddenDim, outputSize: numPatches * encoderHiddenDim, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: numPatches * encoderHiddenDim, outputSize: numPatches * encoderHiddenDim, activationFunction: null);
-            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(numPatches * encoderHiddenDim);
-            yield return new DenseLayer<T>(inputSize: numPatches * encoderHiddenDim, outputSize: numPatches * encIntermediateSize, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>(inputSize: numPatches * encIntermediateSize, outputSize: numPatches * encoderHiddenDim, activationFunction: null);
+            yield return new TransformerEncoderLayer<T>(encoderHiddenDim, numHeads, encIntermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // Encoder-to-decoder projection
-        yield return new DenseLayer<T>(inputSize: numPatches * encoderHiddenDim, outputSize: forecastHorizon * decoderHiddenDim, activationFunction: null);
+        // === Decoder seed: single DenseLayer that produces a forecastHorizon-sized
+        // sequence of decoderHiddenDim vectors from the pooled encoder summary.
+        // ChronosBolt.ForwardNative mean-pools the encoder output across the
+        // numPatches axis before invoking this DenseLayer, so this weight is
+        // [encoderHiddenDim, forecastHorizon·decoderHiddenDim] — linear in H not
+        // H·numPatches², a ~64 MiB weight at paper defaults (vs. ≥4 GiB on the
+        // old flat-feature layout). ForwardNative then reshapes the seed to
+        // [B, forecastHorizon, decoderHiddenDim] to match the decoder's
+        // per-position sequence expectation.
+        yield return new DenseLayer<T>(inputSize: encoderHiddenDim, outputSize: forecastHorizon * decoderHiddenDim, activationFunction: null);
 
-        // Decoder layers
+        // === Decoder stack: numDecoderLayers × TransformerDecoderLayer ===
+        // TransformerDecoderLayer has BOTH masked self-attention AND
+        // cross-attention to encoder output — matching the T5/Chronos-Bolt
+        // paper architecture. ChronosBolt.ForwardNative routes the encoder
+        // output explicitly via Forward(decoder_input, encoder_output) since
+        // the standard single-input Forward walk cannot thread the two-input
+        // cross-attention call.
+        int decIntermediateSize = decoderHiddenDim * 4;
         for (int layer = 0; layer < numDecoderLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(forecastHorizon * decoderHiddenDim);
-            yield return new DenseLayer<T>(inputSize: forecastHorizon * decoderHiddenDim, outputSize: forecastHorizon * decoderHiddenDim, activationFunction: null);
-            yield return new DenseLayer<T>(inputSize: forecastHorizon * decoderHiddenDim, outputSize: forecastHorizon * decoderHiddenDim, activationFunction: null);
-            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(forecastHorizon * decoderHiddenDim);
-            yield return new DenseLayer<T>(inputSize: forecastHorizon * decoderHiddenDim, outputSize: forecastHorizon * decIntermediateSize, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>(inputSize: forecastHorizon * decIntermediateSize, outputSize: forecastHorizon * decoderHiddenDim, activationFunction: null);
+            yield return new TransformerDecoderLayer<T>(
+                embeddingSize: decoderHiddenDim,
+                numHeads: numHeads,
+                feedForwardDim: decIntermediateSize,
+                sequenceLength: forecastHorizon,
+                ffnActivation: (IActivationFunction<T>?)null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // Direct quantile output head (non-autoregressive)
-        yield return new DenseLayer<T>(inputSize: forecastHorizon * decoderHiddenDim, outputSize: forecastHorizon * numQuantiles, activationFunction: null);
+        // === Quantile output head: per-position DenseLayer(decoderHiddenDim → numQuantiles) ===
+        // Applied along the last axis, turns [B, forecastHorizon, decoderHiddenDim]
+        // into [B, forecastHorizon, numQuantiles].
+        yield return new DenseLayer<T>(inputSize: decoderHiddenDim, outputSize: numQuantiles, activationFunction: null);
     }
 
     /// <summary>

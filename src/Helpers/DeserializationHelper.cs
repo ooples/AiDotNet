@@ -329,6 +329,30 @@ public static class DeserializationHelper
             }
             instance = ctor.Invoke(new object[] { embeddingSize, numHeads, feedForwardDim });
         }
+        else if (genericDef == typeof(TransformerDecoderLayer<>))
+        {
+            // TransformerDecoderLayer(int embeddingSize, int numHeads, int feedForwardDim,
+            //                          int sequenceLength, IActivationFunction<T>?, IEngine?)
+            // Both scalar- and vector-activation overloads take the same shape; pick the
+            // scalar overload explicitly to disambiguate the call (it drives
+            // self-attn + cross-attn + FFN internally, all sized by embeddingSize).
+            int embeddingSize = inputShape[^1];
+            int numHeads = TryGetInt(additionalParams, "NumHeads") ?? ResolveDefaultHeadCount(embeddingSize);
+            int feedForwardDim = TryGetInt(additionalParams, "FeedForwardDim")
+                ?? TryGetInt(additionalParams, "FeedForwardDimension")
+                ?? embeddingSize * 4;
+            int sequenceLength = inputShape.Length >= 2 ? inputShape[0] : 1;
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var engineType = typeof(AiDotNet.Tensors.Engines.IEngine);
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, engineType });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException(
+                    "Cannot find TransformerDecoderLayer constructor with (int, int, int, int, IActivationFunction<T>, IEngine).");
+            }
+            instance = ctor.Invoke(new object?[] { embeddingSize, numHeads, feedForwardDim, sequenceLength, null, null });
+        }
         else if (genericDef == typeof(SelfAttentionLayer<>))
         {
             // SelfAttentionLayer(int sequenceLength, int embeddingDimension, int headCount = 8, IActivationFunction<T>? = null)
