@@ -148,7 +148,7 @@ const productsJson = JSON.stringify(PRODUCTS);
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">User Email</label>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Customer Email</label>
             <input
               id="issue-email"
               type="email"
@@ -156,6 +156,21 @@ const productsJson = JSON.stringify(PRODUCTS);
               placeholder="user@example.com"
               class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
             />
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              OK if the customer hasn't signed up yet — the license will appear in the admin UI now and can be reassigned to their real account once the signup-reconciliation step ships.
+            </p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Customer Full Name (optional)</label>
+            <input
+              id="issue-customer-name"
+              type="text"
+              placeholder="Jane Doe"
+              class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+            />
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Leave blank to fall back to the signed-up user's profile name.
+            </p>
           </div>
           <div>
             <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tier</label>
@@ -258,7 +273,14 @@ const productsJson = JSON.stringify(PRODUCTS);
       issued_at: string;
       expires_at: string | null;
       created_at: string;
+      // Admin-populated attribution fields. Used when a license was
+      // issued directly by an admin (e.g., training cohort bulk-issue)
+      // before the real customer has signed up, so the UI can show the
+      // real person instead of the synthetic bootstrap user_id.
+      customer_email: string | null;
+      customer_full_name: string | null;
       ownerName?: string;
+      ownerEmail?: string;
       activationCount?: number;
     }
 
@@ -322,21 +344,22 @@ const productsJson = JSON.stringify(PRODUCTS);
 
     async function loadLicenses() {
       // Load profiles for name lookup. Fall back through full_name -> email
-      // -> 'Unknown' so licenses issued to bot accounts (e.g. CI) that never
-      // set a display name still show a meaningful owner label instead of
-      // collapsing to 'Unknown'.
+      // -> undefined so profiles with neither signal don't store a literal
+      // 'Unknown' string — that would be truthy and outrank a perfectly
+      // good customer_email on the license row in the precedence chain
+      // below.
       const profiles = await fetchAllPaginated<{ id: string; full_name: string | null; email: string | null }>('profiles', 'id, full_name, email', 'id');
 
-      const nameMap = new Map<string, string>();
+      const nameMap = new Map<string, string | undefined>();
       for (const p of profiles) {
-        const label = (p.full_name && p.full_name.trim()) || p.email || 'Unknown';
+        const label = (p.full_name && p.full_name.trim()) || (p.email && p.email.trim()) || undefined;
         nameMap.set(p.id, label);
       }
 
       // Load all license keys
       let licenses: LicenseKey[];
       try {
-        licenses = await fetchAllPaginated<LicenseKey>('license_keys', 'id, user_id, license_key, product, tier, status, max_activations, organization_name, notes, stripe_subscription_id, issued_at, expires_at, created_at', 'created_at');
+        licenses = await fetchAllPaginated<LicenseKey>('license_keys', 'id, user_id, license_key, product, tier, status, max_activations, organization_name, notes, stripe_subscription_id, issued_at, expires_at, created_at, customer_email, customer_full_name', 'created_at');
       } catch (err) {
         const loading = document.getElementById('licenses-loading');
         if (loading) loading.innerHTML = '<p class="text-sm text-red-500">Failed to load licenses.</p>';
@@ -358,11 +381,32 @@ const productsJson = JSON.stringify(PRODUCTS);
         }
       }
 
-      allLicenses = licenses.map(l => ({
-        ...l,
-        ownerName: nameMap.get(l.user_id) || 'Unknown',
-        activationCount: activationCounts.get(l.id) || 0,
-      }));
+      // Owner-attribution precedence:
+      //   1. customer_full_name (admin-set, e.g. bulk training issuance)
+      //   2. profile.full_name
+      //   3. profile.email
+      //   4. customer_email (when no profile exists yet)
+      //   5. 'Unknown'
+      //
+      // customer_full_name wins over profile.full_name deliberately: when
+      // an admin issued a license to someone whose profile is a synthetic
+      // bootstrap account (ci@aidotnet.dev, etc.), the admin-entered name
+      // is the authoritative label — it represents the real human this
+      // license was granted to, not the bot that inserted the row.
+      allLicenses = licenses.map(l => {
+        const profileLabel = nameMap.get(l.user_id);
+        const ownerName =
+          (l.customer_full_name && l.customer_full_name.trim()) ||
+          profileLabel ||
+          (l.customer_email && l.customer_email.trim()) ||
+          'Unknown';
+        return {
+          ...l,
+          ownerName,
+          ownerEmail: l.customer_email || undefined,
+          activationCount: activationCounts.get(l.id) || 0,
+        };
+      });
 
       // Stats
       const activeCount = allLicenses.filter(l => l.status === 'active').length;
@@ -387,7 +431,11 @@ const productsJson = JSON.stringify(PRODUCTS);
 
       filteredLicenses = allLicenses.filter(l => {
         if (search) {
-          const haystack = `${l.license_key} ${l.ownerName || ''} ${l.organization_name || ''}`.toLowerCase();
+          // Include customer_email + customer_full_name in the search
+          // haystack so admins can find a bulk-issued training license
+          // by typing the student's name or email even when the row's
+          // user_id still points at the synthetic bootstrap account.
+          const haystack = `${l.license_key} ${l.ownerName || ''} ${l.ownerEmail || ''} ${l.customer_full_name || ''} ${l.organization_name || ''}`.toLowerCase();
           if (!haystack.includes(search)) return false;
         }
         if (productFilter && l.product !== productFilter) return false;
@@ -488,7 +536,7 @@ const productsJson = JSON.stringify(PRODUCTS);
             <button class="activations-btn font-mono text-xs text-brand-blue hover:underline" data-id="${l.id}" title="View activations">${escapeHtml(keyPreview)}</button>
           </td>
           <td class="py-3 px-4">${productBadge(l.product)}</td>
-          <td class="py-3 px-4 text-slate-700 dark:text-slate-300">${escapeHtml(l.ownerName || 'Unknown')}${l.organization_name ? `<br><span class="text-xs text-slate-400">${escapeHtml(l.organization_name)}</span>` : ''}</td>
+          <td class="py-3 px-4 text-slate-700 dark:text-slate-300">${escapeHtml(l.ownerName || 'Unknown')}${l.ownerEmail && l.ownerEmail !== l.ownerName ? `<br><span class="text-xs text-slate-400">${escapeHtml(l.ownerEmail)}</span>` : ''}${l.organization_name ? `<br><span class="text-xs text-slate-400">${escapeHtml(l.organization_name)}</span>` : ''}</td>
           <td class="py-3 px-4">${tierBadge(l.tier)}</td>
           <td class="py-3 px-4">${statusBadge(l.status)}</td>
           <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-sm">${activations}</td>
@@ -663,6 +711,7 @@ const productsJson = JSON.stringify(PRODUCTS);
       const errorEl = document.getElementById('issue-error');
 
       const email = (document.getElementById('issue-email') as HTMLInputElement).value.trim();
+      const customerName = (document.getElementById('issue-customer-name') as HTMLInputElement).value.trim();
       const product = (document.getElementById('issue-product') as HTMLSelectElement).value;
       const tier = (document.getElementById('issue-tier') as HTMLSelectElement).value;
       const maxActivations = parseInt((document.getElementById('issue-max-activations') as HTMLInputElement).value);
@@ -678,22 +727,56 @@ const productsJson = JSON.stringify(PRODUCTS);
         return;
       }
 
-      // Look up user by email
+      // Look up the customer's profile by email. Two outcomes:
+      //   - profile exists  → use their user_id so their /account/licenses/
+      //                        page shows this license on first load.
+      //   - no profile yet  → fall back to the synthetic bootstrap user
+      //                        (ci@aidotnet.dev) and rely on the
+      //                        customer_email column to attribute the row.
+      //                        A later reconciliation pass flips user_id
+      //                        over when the real customer signs up.
       const { data: profiles, error: profileError } = await supabase
         .from('profiles')
-        .select('id')
+        .select('id, full_name')
         .eq('email', email)
         .limit(1);
 
-      if (profileError || !profiles || profiles.length === 0) {
+      if (profileError) {
         if (errorEl) {
-          errorEl.textContent = 'User not found. They must sign up first.';
+          errorEl.textContent = `Profile lookup failed: ${profileError.message}`;
           errorEl.classList.remove('hidden');
         }
+        console.error('Profile lookup error:', profileError);
         return;
       }
 
-      const userId = profiles[0].id;
+      let userId: string | null = null;
+      let profileFullName: string | null = null;
+      if (profiles && profiles.length > 0) {
+        userId = profiles[0].id;
+        profileFullName = profiles[0].full_name ?? null;
+      } else {
+        // Resolve the bootstrap placeholder on demand. Looking it up by
+        // email instead of hardcoding the UUID keeps the migration/fresh-
+        // install path sane — anyone seeding a new environment can rename
+        // the placeholder as long as the email stays stable.
+        const { data: bootstrap, error: bootstrapError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('email', 'ci@aidotnet.dev')
+          .limit(1);
+        if (bootstrapError || !bootstrap || bootstrap.length === 0) {
+          if (errorEl) {
+            errorEl.textContent =
+              'No profile for this email, and the ci@aidotnet.dev bootstrap account is missing. ' +
+              'Create the bootstrap profile before issuing pre-signup licenses.';
+            errorEl.classList.remove('hidden');
+          }
+          console.error('Bootstrap profile missing:', bootstrapError);
+          return;
+        }
+        userId = bootstrap[0].id;
+      }
 
       // Generate a license key: {productPrefix}.{random12}.{random16}.
       // Product prefix (aidn / harm / ...) comes from PRODUCT_META so the
@@ -701,6 +784,13 @@ const productsJson = JSON.stringify(PRODUCTS);
       const keyPart1 = crypto.randomUUID().replace(/-/g, '').substring(0, 12);
       const keyPart2 = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
       const licenseKey = `${productMeta.prefix}.${keyPart1}.${keyPart2}`;
+
+      // customer_full_name precedence: admin-typed name > profile name
+      // (when one exists) > null. We deliberately store the form-supplied
+      // name even when a profile exists so the admin can correct stale
+      // profile data (e.g., a customer signed up with just an email and
+      // the profile has no display name yet).
+      const customerFullName = customerName || profileFullName || null;
 
       const { error: insertError } = await supabase
         .from('license_keys')
@@ -713,6 +803,10 @@ const productsJson = JSON.stringify(PRODUCTS);
           max_activations: maxActivations,
           organization_name: org || null,
           notes: notes || null,
+          // Always persist customer_email so the admin table + search
+          // work even when user_id points at the bootstrap placeholder.
+          customer_email: email,
+          customer_full_name: customerFullName,
         });
 
       if (insertError) {
