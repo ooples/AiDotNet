@@ -31,6 +31,11 @@ class Program
             MOMENTProfile.Run();
             return;
         }
+        if (args.Length > 0 && args[0] == "lstmvae-profile")
+        {
+            LSTMVAEProfile.Run();
+            return;
+        }
 
         int choice = -1;
 
