@@ -722,7 +722,17 @@ public class TimesNet<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> Forward(Tensor<T> input)
     {
+        // Per Wu et al. 2023 ("TimesNet: Temporal 2D-Variation Modeling for
+        // General Time Series Analysis"), TimesNet operates on
+        // [batch, sequence_length, features]. Univariate inputs from the
+        // forecasting test harness arrive as rank-1 [contextLength] or
+        // rank-2 [batch, contextLength]; promote them so the downstream
+        // shape math (current.Shape[1] / [2]) does not OOR.
         var current = input;
+        if (current.Rank == 1)
+            current = current.Reshape(1, current.Shape[0], 1);
+        else if (current.Rank == 2)
+            current = current.Reshape(current.Shape[0], current.Shape[1], 1);
 
         // Embedding
         if (_embeddingLayer is not null)
