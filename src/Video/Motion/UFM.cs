@@ -43,6 +43,7 @@ namespace AiDotNet.Video.Motion;
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.OpticalFlow)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Unifying Flow, Stereo and Depth Estimation",

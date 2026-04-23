@@ -1523,11 +1523,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 bool isVision = model.Domains.Contains(1) || model.Domains.Contains(11); // Vision=1, ThreeD=11
                 bool isAudio = model.Domains.Contains(3); // Audio=3 (enum ordinal, not Video=4)
                 bool isFrameInterp = model.Tasks.Contains(35); // FrameInterpolation → 3D input
+                bool isOpticalFlow = model.Tasks.Contains(20); // OpticalFlow → also 2-frame
+                bool isTwoFrame = isFrameInterp || isOpticalFlow;
 
                 string inputTypeExpr;
                 string sizeExpr;
 
-                if (isFrameInterp)
+                if (isTwoFrame)
                 {
                     // Frame interpolation models (STMFNet, IFRNet, RIFE, etc.) take
                     // a pair of RGB frames concatenated channel-wise. The model's
@@ -1655,7 +1657,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Enum ordinals: General=0, Vision=1, Language=2, Audio=3, Video=4.
         bool isVideoModel = model.Domains.Contains(4); // Video=4 (was incorrectly 3)
         bool isFrameInterpModel = model.Tasks.Contains(35); // FrameInterpolation
-        bool isTemporalVideoModel = isVideoModel && !isFrameInterpModel;
+        bool isOpticalFlowModel = model.Tasks.Contains(20); // OpticalFlow
+        // Both frame-interpolation and optical-flow models take a pair of
+        // RGB frames stacked channel-wise; share the 2-frame concat path.
+        bool isTwoFrameModel = isFrameInterpModel || isOpticalFlowModel;
+        bool isTemporalVideoModel = isVideoModel && !isTwoFrameModel;
         bool isVisionModel = model.Domains.Contains(1) || model.Domains.Contains(11);
         bool isAudioModel = model.Domains.Contains(3); // Audio=3 (was incorrectly 4)
         if (isTemporalVideoModel)
@@ -1667,11 +1673,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
-        else if (isFrameInterpModel)
+        else if (isTwoFrameModel)
         {
-            // Frame interpolation: 2 concatenated RGB frames = 6 channels
+            // Two-frame models (frame-interpolation + optical-flow) take a
+            // pair of RGB frames concatenated channel-wise. Architecture
+            // factory above emits inputDepth=3 (single-frame channels — the
+            // helper / opticalflowbase doubles internally); the test's
+            // InputShape stays at 6 channels (2 frames × 3) so the Predict
+            // input matches what the model's first conv expects.
             sb.AppendLine("    protected override int[] InputShape => new[] { 6, 64, 64 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 64, 64 };");
+            // Frame interpolation outputs an interpolated RGB frame
+            // [3, H, W]; optical flow outputs (u, v) flow components
+            // [2, H, W] per the standard convention.
+            string outShape = isOpticalFlowModel ? "2, 64, 64" : "3, 64, 64";
+            sb.AppendLine($"    protected override int[] OutputShape => new[] {{ {outShape} }};");
         }
         else if (isVisionModel)
         {
