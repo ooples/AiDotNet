@@ -107,11 +107,23 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
 
         if (!double.IsNaN(initialLoss) && !double.IsNaN(finalLoss))
         {
-            Assert.True(finalLoss <= initialLoss + 1e-6,
+            Assert.True(finalLoss <= initialLoss + TrainingLossReductionTolerance,
                 $"Training did not reduce loss: initial={initialLoss:F6}, final={finalLoss:F6}. " +
                 "Gradient computation or parameter update may be broken.");
         }
     }
+
+    /// <summary>
+    /// Absolute tolerance on the (finalLoss − initialLoss) comparison inside
+    /// <see cref="Training_ShouldReduceLoss"/>. Default 1e-6 suits smooth
+    /// gradient-descent trainers; models whose training is inherently
+    /// stochastic — e.g. RBM contrastive divergence (Hinton 2006),
+    /// GAN minimax objectives — can override to a looser bound so the
+    /// legitimate paper-prescribed noise in reconstruction/generator loss
+    /// doesn't trip the "loss should not go up" invariant over a handful of
+    /// iterations.
+    /// </summary>
+    protected virtual double TrainingLossReductionTolerance => 1e-6;
 
     // =====================================================
     // MATHEMATICAL INVARIANT: Parameters Should Change After Training
