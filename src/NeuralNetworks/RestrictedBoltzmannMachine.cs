@@ -324,7 +324,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         Options = _options;
         VisibleSize = visibleSize;
         HiddenSize = hiddenSize;
-        _weights = Matrix<T>.CreateRandom(hiddenSize, visibleSize);
+        _weights = InitializeHintonWeights(hiddenSize, visibleSize);
         _visibleBiases = Vector<T>.CreateDefault(visibleSize, NumOps.Zero);
         _hiddenBiases = Vector<T>.CreateDefault(hiddenSize, NumOps.Zero);
         _scalarActivation = scalarActivation ?? new SigmoidActivation<T>();
@@ -371,12 +371,45 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         Options = _options;
         VisibleSize = visibleSize;
         HiddenSize = hiddenSize;
-        _weights = Matrix<T>.CreateRandom(hiddenSize, visibleSize);
+        _weights = InitializeHintonWeights(hiddenSize, visibleSize);
         _visibleBiases = Vector<T>.CreateDefault(visibleSize, NumOps.Zero);
         _hiddenBiases = Vector<T>.CreateDefault(hiddenSize, NumOps.Zero);
         _vectorActivation = vectorActivation ?? new SigmoidActivation<T>();
         _learningRate = NumOps.FromDouble(learningRate);
         _cdSteps = cdSteps;
+    }
+
+    /// <summary>
+    /// Initializes weights per Hinton 2006 ("A Practical Guide to Training
+    /// Restricted Boltzmann Machines"): <c>w ~ N(0, 0.01²)</c>. The default
+    /// <c>Matrix.CreateRandom</c> samples from U(0, 1) (uniform, large magnitude),
+    /// which for a 128-visible-unit RBM pushes every sigmoid pre-activation
+    /// into ~+64 on the first forward pass, saturating every hidden unit at
+    /// 1.0 regardless of the input. That caused
+    /// <c>ScaledInput_ShouldChangeOutput</c> to fail: Predict(input) and
+    /// Predict(input * 10) both returned all-ones because the pre-activation
+    /// was already past sigmoid's saturation point.
+    /// </summary>
+    private static Matrix<T> InitializeHintonWeights(int hiddenSize, int visibleSize)
+    {
+        var rng = RandomHelper.CreateSeededRandom(1);
+        var w = new Matrix<T>(hiddenSize, visibleSize);
+        for (int i = 0; i < hiddenSize; i++)
+        {
+            for (int j = 0; j < visibleSize; j++)
+            {
+                // Box-Muller for N(0, 0.01). Two uniforms -> standard normal,
+                // then scale by stddev. Keeps RBM weights tiny so Σ w_ij v_j
+                // stays inside sigmoid's responsive band per Hinton 2010
+                // guide §8 ("start with small random weights, on the order of
+                // 0.01").
+                double u1 = 1.0 - rng.NextDouble();
+                double u2 = rng.NextDouble();
+                double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                w[i, j] = MathHelper.GetNumericOperations<T>().FromDouble(z * 0.01);
+            }
+        }
+        return w;
     }
 
     /// <summary>
