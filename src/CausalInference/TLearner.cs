@@ -259,8 +259,25 @@ public class TLearner<T> : CausalModelBase<T>
     /// <summary>
     /// Standard prediction - returns treatment effect.
     /// </summary>
+    /// <remarks>
+    /// Mirrors <see cref="CausalModelBase{T}.Train(Matrix{T}, Vector{T})"/>'s
+    /// "first column is treatment" convention: if <paramref name="input"/> has
+    /// one more column than the trained feature count, the first column is
+    /// treated as the treatment indicator and stripped before estimating
+    /// treatment effects on the covariates. Callers that already have a
+    /// feature-only matrix can pass it directly.
+    /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        if (NumFeatures > 0 && input.Columns == NumFeatures + 1)
+        {
+            int n = input.Rows;
+            var features = new Matrix<T>(n, NumFeatures);
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < NumFeatures; j++)
+                    features[i, j] = input[i, j + 1];
+            return EstimateTreatmentEffect(features);
+        }
         return EstimateTreatmentEffect(input);
     }
 
