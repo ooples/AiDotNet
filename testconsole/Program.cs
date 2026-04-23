@@ -41,6 +41,16 @@ class Program
             DeepANTProfile.Run();
             return;
         }
+        if (args.Length > 0 && args[0] == "nbeats-profile")
+        {
+            NBEATSProfile.Run();
+            return;
+        }
+        if (args.Length > 0 && args[0] == "autoformer-profile")
+        {
+            AutoformerProfile.Run();
+            return;
+        }
 
         int choice = -1;
 
