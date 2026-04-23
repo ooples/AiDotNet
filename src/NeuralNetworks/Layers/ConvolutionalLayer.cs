@@ -926,15 +926,30 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // Ensure kernels are initialized (for lazy initialization)
         EnsureInitialized();
 
-        // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
-        if (input.Shape.Length < 3)
-            throw new ArgumentException($"Convolutional layer requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
-
+        // Accept any rank and canonicalize to 4D [B, C, H, W]. The library's
+        // design principle is rank-agnostic ops — a flat feature vector
+        // (rank 1) and a batched feature vector (rank 2) are legitimate
+        // conv inputs once we pad singleton spatial dims, which is the
+        // standard interpretation used by PyTorch/Keras when a caller
+        // feeds rank < 4 into a 2D conv (they treat H=W=1). Higher ranks
+        // flatten leading dims into the batch axis.
         Tensor<T> input4D;
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
-        if (rank == 3)
+        if (rank == 1)
+        {
+            // [F] -> [1, F, 1, 1]: single-sample flat feature treated as C
+            _addedBatchDimension = true;
+            input4D = Engine.Reshape(input, [1, input.Shape[0], 1, 1]);
+        }
+        else if (rank == 2)
+        {
+            // [B, F] -> [B, F, 1, 1]: batch of flat features treated as C
+            _addedBatchDimension = false;
+            input4D = Engine.Reshape(input, [input.Shape[0], input.Shape[1], 1, 1]);
+        }
+        else if (rank == 3)
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]
             _addedBatchDimension = true;

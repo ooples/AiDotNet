@@ -216,11 +216,21 @@ public abstract class GaussianProcessModelTestBase
             }
             targetRange = maxY - minY;
 
-            Assert.True(avgError < targetRange * 0.3,
+            Assert.True(avgError < targetRange * InterpolationTolerance,
                 $"Average interpolation error = {avgError:F4} (target range = {targetRange:F4}). " +
                 "GP mean should approximately pass through training points.");
         }
     }
+
+    /// <summary>
+    /// Fraction of the target range within which the posterior mean must pass
+    /// through training points. Default 0.3 matches a single-layer GP with
+    /// low noise; Deep Gaussian Processes (Damianou &amp; Lawrence 2013) have
+    /// strictly higher posterior variance than their single-layer counterparts
+    /// because each layer adds a Gaussian noise term, so a looser tolerance is
+    /// paper-consistent for DGPs.
+    /// </summary>
+    protected virtual double InterpolationTolerance => 0.3;
 
     // =====================================================
     // MATHEMATICAL INVARIANT: Mean Should Be Reasonable
