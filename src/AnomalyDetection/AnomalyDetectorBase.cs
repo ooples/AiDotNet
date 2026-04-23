@@ -212,10 +212,32 @@ public abstract class AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, Vector<T>
         new MeanSquaredErrorLoss<T>();
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters() => new Vector<T>(0);
+    /// <remarks>
+    /// Once fitted, every anomaly detector in this hierarchy has at least the
+    /// learned anomaly-score threshold (<see cref="_threshold"/>) as a
+    /// parameter. Subclasses that learn additional state (covariance matrices,
+    /// isolation tree splits, etc.) should override this to append their own
+    /// learned tensors after the threshold. Without this scalar default the
+    /// generic `Parameters_ShouldBeNonEmpty` invariant misfired against every
+    /// detector even after Fit, because the base implementation unconditionally
+    /// returned an empty vector.
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        if (!_isFitted) return new Vector<T>(0);
+        var result = new Vector<T>(1);
+        result[0] = _threshold;
+        return result;
+    }
 
     /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters) { }
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is not null && parameters.Length >= 1)
+        {
+            _threshold = parameters[0];
+        }
+    }
 
     /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
