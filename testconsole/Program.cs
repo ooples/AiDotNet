@@ -36,6 +36,11 @@ class Program
             LSTMVAEProfile.Run();
             return;
         }
+        if (args.Length > 0 && args[0] == "deepant-profile")
+        {
+            DeepANTProfile.Run();
+            return;
+        }
 
         int choice = -1;
 

@@ -192,28 +192,32 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
     /// </summary>
     private (T prediction, Tensor<T> features) ForwardWithCache(Vector<T> input)
     {
-        // Forward pass through convolutional layers (fixed random features)
+        // Build the conv-input tensor via .Data.Span instead of features[i] = input[i]
+        // (the deferred-materializer monitor was acquired per element).
         Tensor<T> features = new Tensor<T>(new[] { input.Length });
-        for (int i = 0; i < input.Length; i++)
-            features[i] = input[i];
+        {
+            var span = features.Data.Span;
+            for (int i = 0; i < input.Length; i++) span[i] = input[i];
+        }
 
         foreach (var conv in _convLayers)
         {
             features = conv.Forward(features);
         }
 
-        // Engine-accelerated FC: output = dot(weights, features) + bias
+        // FC: output = dot(_fcWeights, features) + _fcBias[0]. Read both
+        // through .Data.Span so the inner loop is plain array access. The
+        // earlier code allocated two new Vector<T> buffers and copied
+        // element-by-element through tensor[i] before calling
+        // Engine.DotProduct — every step hit the materializer monitor.
         int numFeatures = Math.Min(_fcWeights.Length, features.Length);
-        var weightsVec = new Vector<T>(numFeatures);
-        var featuresVec = new Vector<T>(numFeatures);
+        var fcSpan = _fcWeights.Data.Span;
+        var featSpan = features.Data.Span;
+        T sum = _fcBias[0];
         for (int j = 0; j < numFeatures; j++)
-        {
-            weightsVec[j] = _fcWeights[j];
-            featuresVec[j] = features[j];
-        }
-        T output = _numOps.Add(_fcBias[0], Engine.DotProduct(weightsVec, featuresVec));
+            sum = _numOps.Add(sum, _numOps.Multiply(fcSpan[j], featSpan[j]));
 
-        return (output, features);
+        return (sum, features);
     }
 
     /// <summary>
@@ -650,25 +654,44 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         // Cache pre-activations for backward
         _lastPreActivations = new Tensor<T>(new[] { _outputChannels, numPositions });
 
+        // Hot loop bypasses the deferred-materializer monitor by reading
+        // _kernels / _biases / input through .Data.Span and writing
+        // _lastPreActivations / output through .Data.Span. Profiling on
+        // PR #1184 showed every per-element tensor[i] access acquired the
+        // materializer's monitor — for DeepANT (50 epochs * 4 batches *
+        // 32 samples * outChannels * numPositions * kernelSize), this
+        // dominated wall-clock at ~27 s vs ~0.7 s after this change.
+        var kernelsSpan = _kernels.Data.Span;
+        var biasesSpan = _biases.Data.Span;
+        var inputSpan = input.Data.Span;
+        var preActSpan = _lastPreActivations.Data.Span;
+        var outputSpan = output.Data.Span;
+        int inputLen = input.Length;
+        double invPositions = 1.0 / numPositions;
+        T invPositionsT = NumOps.FromDouble(invPositions);
+
         for (int outChannel = 0; outChannel < _outputChannels; outChannel++)
         {
             T channelSum = NumOps.Zero;
+            T bias = biasesSpan[outChannel];
+            int kernelBase = outChannel * _kernelSize;
+            int preActBase = outChannel * numPositions;
 
             for (int pos = 0; pos < numPositions; pos++)
             {
-                T positionSum = _biases[outChannel];
-                for (int k = 0; k < _kernelSize && (pos + k) < input.Length; k++)
+                T positionSum = bias;
+                int kMax = Math.Min(_kernelSize, inputLen - pos);
+                for (int k = 0; k < kMax; k++)
                 {
-                    int kernelIdx = outChannel * _kernelSize + k;
-                    positionSum = NumOps.Add(positionSum, NumOps.Multiply(_kernels[kernelIdx], input[pos + k]));
+                    positionSum = NumOps.Add(positionSum, NumOps.Multiply(kernelsSpan[kernelBase + k], inputSpan[pos + k]));
                 }
 
-                _lastPreActivations[outChannel, pos] = positionSum;
-                T activated = NumOps.GreaterThan(positionSum, NumOps.Zero) ? positionSum : NumOps.Zero;
-                channelSum = NumOps.Add(channelSum, activated);
+                preActSpan[preActBase + pos] = positionSum;
+                if (NumOps.GreaterThan(positionSum, NumOps.Zero))
+                    channelSum = NumOps.Add(channelSum, positionSum);
             }
 
-            output[outChannel] = NumOps.Divide(channelSum, NumOps.FromDouble(numPositions));
+            outputSpan[outChannel] = NumOps.Multiply(channelSum, invPositionsT);
         }
 
         return output;
