@@ -51,6 +51,11 @@ class Program
             AutoformerProfile.Run();
             return;
         }
+        if (args.Length > 0 && args[0] == "clone-diag")
+        {
+            CloneDiag.Run();
+            return;
+        }
 
         int choice = -1;
 
