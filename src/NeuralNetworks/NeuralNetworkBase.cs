@@ -1713,7 +1713,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             if (_cachedParameterCount == null)
             {
-                _cachedParameterCount = Layers.Sum(layer => layer.ParameterCount);
+                // Accumulate as long and saturate at int.MaxValue so large
+                // architectures (paper-default MGTSD / TimeMoE / DiT-XL etc.
+                // routinely exceed 2^31 parameters) don't overflow under the
+                // checked Linq Sum overload introduced in .NET 7+. Capping
+                // matches the IFullModel<T> contract — callers that need the
+                // exact count should walk Layers themselves.
+                long total = 0L;
+                for (int i = 0; i < Layers.Count; i++)
+                {
+                    total += Layers[i].ParameterCount;
+                    if (total >= int.MaxValue)
+                    {
+                        total = int.MaxValue;
+                        break;
+                    }
+                }
+                _cachedParameterCount = (int)total;
             }
             return _cachedParameterCount.Value;
         }
