@@ -222,9 +222,21 @@ public static class StatisticsHelper<T>
     {
         // Use population variance (n denominator) for variance reduction decomposition.
         // Sample variance (n-1 denominator) breaks the decomposition identity and can produce negative results.
-        T totalVariance = CalculatePopulationVariance(y.Select(x => x));
-        T leftVariance = CalculatePopulationVariance(leftIndices.Select(i => y[i]));
-        T rightVariance = CalculatePopulationVariance(rightIndices.Select(i => y[i]));
+        //
+        // Hot path inside decision-tree-based regressors (NGBoost, etc.):
+        // called once per candidate split. The earlier implementation passed
+        // Vector<T>.Select(x => x) / leftIndices.Select(i => y[i]) — every
+        // indexer hit acquired the AiDotNet.Tensors deferred-materializer
+        // monitor. At NGBoost defaults (500 iterations × ~features × trees)
+        // that dominated train wall-clock (~98% per the PR #1184 trace).
+        //
+        // Vector<T>.AsTensor().Data.Span gives us the backing memory in one
+        // materialise call, then we index a plain Span<T> for the rest.
+        var ySpan = y.AsTensor().Data.Span;
+
+        T totalVariance = CalculatePopulationVarianceSpan(ySpan);
+        T leftVariance = CalculatePopulationVarianceFromIndicesSpan(ySpan, leftIndices);
+        T rightVariance = CalculatePopulationVarianceFromIndicesSpan(ySpan, rightIndices);
 
         T leftWeight = _numOps.Divide(_numOps.FromDouble(leftIndices.Count), _numOps.FromDouble(y.Length));
         T rightWeight = _numOps.Divide(_numOps.FromDouble(rightIndices.Count), _numOps.FromDouble(y.Length));
@@ -244,6 +256,44 @@ public static class StatisticsHelper<T>
         T sumOfSquaredDifferences = list
             .Select(x => _numOps.Square(_numOps.Subtract(x, mean)))
             .Aggregate(_numOps.Zero, (acc, val) => _numOps.Add(acc, val));
+
+        return _numOps.Divide(sumOfSquaredDifferences, _numOps.FromDouble(count));
+    }
+
+    private static T CalculatePopulationVarianceSpan(System.ReadOnlySpan<T> values)
+    {
+        int count = values.Length;
+        if (count < 1) return _numOps.Zero;
+
+        T sum = _numOps.Zero;
+        for (int i = 0; i < count; i++) sum = _numOps.Add(sum, values[i]);
+        T mean = _numOps.Divide(sum, _numOps.FromDouble(count));
+
+        T sumOfSquaredDifferences = _numOps.Zero;
+        for (int i = 0; i < count; i++)
+        {
+            T diff = _numOps.Subtract(values[i], mean);
+            sumOfSquaredDifferences = _numOps.Add(sumOfSquaredDifferences, _numOps.Multiply(diff, diff));
+        }
+
+        return _numOps.Divide(sumOfSquaredDifferences, _numOps.FromDouble(count));
+    }
+
+    private static T CalculatePopulationVarianceFromIndicesSpan(System.ReadOnlySpan<T> values, List<int> indices)
+    {
+        int count = indices.Count;
+        if (count < 1) return _numOps.Zero;
+
+        T sum = _numOps.Zero;
+        for (int i = 0; i < count; i++) sum = _numOps.Add(sum, values[indices[i]]);
+        T mean = _numOps.Divide(sum, _numOps.FromDouble(count));
+
+        T sumOfSquaredDifferences = _numOps.Zero;
+        for (int i = 0; i < count; i++)
+        {
+            T diff = _numOps.Subtract(values[indices[i]], mean);
+            sumOfSquaredDifferences = _numOps.Add(sumOfSquaredDifferences, _numOps.Multiply(diff, diff));
+        }
 
         return _numOps.Divide(sumOfSquaredDifferences, _numOps.FromDouble(count));
     }

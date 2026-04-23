@@ -116,7 +116,27 @@ public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunc
     /// </summary>
     protected T ComputeRBFKernel(Vector<T> x, Vector<T> y)
     {
-        // Compute ||x - y||^2 without allocating a diff vector
+        // Hot path inside SMO training: each sample's ComputeError calls
+        // ComputeDecision, which loops the full training set evaluating this
+        // kernel — at default opts that's tens of millions of element-level
+        // hits per Train(). Profiling on PR #1184 showed every Vector<T>[i]
+        // here acquired the deferred-materializer monitor, putting 99% of
+        // SVC train wall-clock in Monitor.Enter_Slowpath. Materialising the
+        // backing arrays once via .ToArray() and then indexing them keeps
+        // the inner loop on plain memory access.
+        var xArr = x.ToArray();
+        var yArr = y.ToArray();
+        return ComputeRBFKernelArrays(xArr, yArr);
+    }
+
+    /// <summary>
+    /// Array-typed RBF kernel for callers that already have backing arrays
+    /// (e.g. <see cref="SupportVectorClassifier{T}"/>'s SMO loop, which
+    /// pre-extracts <c>_xTrain</c> rows once and reuses them across every
+    /// inner iteration).
+    /// </summary>
+    protected T ComputeRBFKernelArrays(T[] x, T[] y)
+    {
         T squaredNorm = NumOps.Zero;
         for (int i = 0; i < x.Length; i++)
         {
@@ -186,6 +206,22 @@ public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunc
             vector[j] = matrix[row, j];
         }
         return vector;
+    }
+
+    /// <summary>
+    /// Same as <see cref="GetRow"/> but returns a raw array — avoids the
+    /// <see cref="Vector{T}"/> indexer's deferred-materializer monitor on hot
+    /// paths. Callers that loop over the full training matrix should pre-cache
+    /// these arrays ONCE rather than re-extracting per iteration.
+    /// </summary>
+    protected T[] GetRowArray(Matrix<T> matrix, int row)
+    {
+        var arr = new T[matrix.Columns];
+        for (int j = 0; j < matrix.Columns; j++)
+        {
+            arr[j] = matrix[row, j];
+        }
+        return arr;
     }
 
     /// <inheritdoc/>

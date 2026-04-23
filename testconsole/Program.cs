@@ -56,6 +56,21 @@ class Program
             CloneDiag.Run();
             return;
         }
+        if (args.Length > 0 && args[0] == "ngboost-profile")
+        {
+            NGBoostProfile.Run();
+            return;
+        }
+        if (args.Length > 0 && args[0] == "svc-profile")
+        {
+            SVCProfile.Run();
+            return;
+        }
+        if (args.Length > 0 && args[0] == "vec-inspect")
+        {
+            VecInspect.Run();
+            return;
+        }
 
         int choice = -1;
 

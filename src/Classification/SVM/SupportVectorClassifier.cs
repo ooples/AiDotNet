@@ -70,6 +70,27 @@ public class SupportVectorClassifier<T> : SVMBase<T>
     private Vector<T>? _alphas;
 
     /// <summary>
+    /// Cached training rows as raw arrays. Populated once at the start of
+    /// <see cref="TrainSMO"/> and reused across the SMO inner loop so the
+    /// kernel/decision evaluation does not have to re-extract a Vector{T}
+    /// per inner iteration. The Vector{T} indexer's deferred-materializer
+    /// monitor was the dominant cost per the PR #1184 trace.
+    /// </summary>
+    private T[][]? _xTrainRows;
+
+    /// <summary>
+    /// Cached training labels as a raw array (same rationale as
+    /// <see cref="_xTrainRows"/>).
+    /// </summary>
+    private T[]? _yTrainArr;
+
+    /// <summary>
+    /// Cached alpha coefficients as a raw array, refreshed alongside
+    /// <see cref="_alphas"/> after each SMO inner-loop update.
+    /// </summary>
+    private T[]? _alphasArr;
+
+    /// <summary>
     /// Random number generator for SMO.
     /// </summary>
     private Random? _random;
@@ -167,6 +188,16 @@ public class SupportVectorClassifier<T> : SVMBase<T>
         _alphas = new Vector<T>(n);
         _intercept = new Vector<T>(1);
 
+        // Materialise the training matrix and labels into raw arrays once.
+        // The SMO inner loop runs O(n^2) kernel evaluations, each previously
+        // hammering the Vector{T} indexer through the deferred-materializer
+        // monitor (~99% of train wall-clock per the PR #1184 trace).
+        _xTrainRows = new T[n][];
+        for (int i = 0; i < n; i++)
+            _xTrainRows[i] = GetRowArray(_xTrain, i);
+        _yTrainArr = _yTrain.ToArray();
+        _alphasArr = new T[n];
+
         T C = NumOps.FromDouble(Options.C);
         T tolerance = NumOps.FromDouble(Options.Tolerance);
         int maxPasses = Options.MaxIterations < 0 ? 10000 : Options.MaxIterations;
@@ -240,6 +271,8 @@ public class SupportVectorClassifier<T> : SVMBase<T>
 
                     _alphas[i] = alphaINew;
                     _alphas[j] = alphaJNew;
+                    _alphasArr![i] = alphaINew;
+                    _alphasArr![j] = alphaJNew;
 
                     numChangedAlphas++;
                 }
@@ -264,16 +297,20 @@ public class SupportVectorClassifier<T> : SVMBase<T>
     /// </summary>
     private T ComputeError(int i)
     {
-        if (_xTrain is null || _yTrain is null)
+        if (_xTrainRows is null || _yTrainArr is null)
         {
             throw new InvalidOperationException("Model has not been trained.");
         }
-        T prediction = ComputeDecision(GetRow(_xTrain, i));
-        return NumOps.Subtract(prediction, _yTrain[i]);
+        // Reuse the cached row array for sample i and route through the
+        // array-based decision path so the inner kernel loop stays on plain
+        // memory access — see TrainSMO for why.
+        T prediction = ComputeDecisionFromArray(_xTrainRows[i]);
+        return NumOps.Subtract(prediction, _yTrainArr[i]);
     }
 
     /// <summary>
-    /// Computes the decision value for a sample.
+    /// Computes the decision value for a sample (Vector overload — used by
+    /// Predict on user-supplied inputs).
     /// </summary>
     private T ComputeDecision(Vector<T> x)
     {
@@ -281,6 +318,15 @@ public class SupportVectorClassifier<T> : SVMBase<T>
         {
             throw new InvalidOperationException("Model has not been trained.");
         }
+        // Materialise the query vector once; cached rows already exist when
+        // _xTrainRows is populated (post-Train), otherwise fall back to the
+        // direct Vector<T> path. The fast path matters because Predict on
+        // a test set runs ComputeDecision per sample.
+        if (_xTrainRows is not null && _yTrainArr is not null && _alphasArr is not null)
+        {
+            return ComputeDecisionFromArray(x.ToArray());
+        }
+
         T sum = _intercept[0];
         for (int i = 0; i < _xTrain.Rows; i++)
         {
@@ -291,6 +337,49 @@ public class SupportVectorClassifier<T> : SVMBase<T>
             }
         }
         return sum;
+    }
+
+    /// <summary>
+    /// Array-typed decision evaluation. Walks the cached training rows and
+    /// the cached alpha/label arrays so no per-iteration Vector{T} indexer
+    /// hits the deferred-materializer monitor.
+    /// </summary>
+    private T ComputeDecisionFromArray(T[] x)
+    {
+        if (_xTrainRows is null || _yTrainArr is null || _alphasArr is null || _intercept is null)
+        {
+            throw new InvalidOperationException("Model has not been trained.");
+        }
+        T sum = _intercept[0];
+        var alphas = _alphasArr;
+        var ys = _yTrainArr;
+        var rows = _xTrainRows;
+        var zero = NumOps.Zero;
+        for (int i = 0; i < rows.Length; i++)
+        {
+            T alpha = alphas[i];
+            if (NumOps.Compare(alpha, zero) > 0)
+            {
+                T kernel = ComputeKernelFromArrays(rows[i], x);
+                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(alpha, ys[i]), kernel));
+            }
+        }
+        return sum;
+    }
+
+    /// <summary>
+    /// Dispatches the configured kernel to its array overload. Currently the
+    /// hot SVC training path only exercises RBF; other kernels fall back via
+    /// allocating Vector{T} wrappers (one alloc per call instead of one per
+    /// element).
+    /// </summary>
+    private T ComputeKernelFromArrays(T[] x, T[] y)
+    {
+        return Options.Kernel switch
+        {
+            KernelType.RBF => ComputeRBFKernelArrays(x, y),
+            _ => ComputeKernel(new Vector<T>(x), new Vector<T>(y))
+        };
     }
 
     /// <summary>
