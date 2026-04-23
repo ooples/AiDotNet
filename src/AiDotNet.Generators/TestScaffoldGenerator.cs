@@ -1529,9 +1529,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
                 if (isFrameInterp)
                 {
-                    // Frame interpolation: 2 concatenated RGB frames = 6 channels
+                    // Frame interpolation models (STMFNet, IFRNet, RIFE, etc.) take
+                    // a pair of RGB frames concatenated channel-wise. The model's
+                    // Architecture.InputDepth must report the SINGLE-FRAME channel
+                    // count (3) — not the concatenated count — because the
+                    // model's helper (CreateDefaultFrameInterpolationLayers) builds
+                    // the first conv as inputChannels * 2 internally. The test's
+                    // InputShape still uses 6 (2 frames × 3 channels) so the
+                    // Predict input matches what the conv expects.
                     inputTypeExpr = "AiDotNet.Enums.InputType.ThreeDimensional";
-                    sizeExpr = "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 4";
+                    sizeExpr = "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4";
                 }
                 else if (isVision)
                 {
