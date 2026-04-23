@@ -130,6 +130,34 @@ public class BSVD<T> : VideoDenoisingBase<T>
         }
     }
 
+    /// <summary>
+    /// Route the generic inspection path (used by
+    /// <see cref="AiDotNet.NeuralNetworks.NeuralNetworkBase{T}.GetNamedLayerActivations"/>
+    /// and test harnesses) through the same preprocessing that
+    /// <see cref="Denoise"/> applies. Without this override the base walks
+    /// each <see cref="Layers"/> entry directly and the first conv — built
+    /// for `inputChannels * temporalFrames` folded channels — rejects a raw
+    /// [frames, channels, h, w] input.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var preprocessed = PreprocessFrames(input);
+        return base.GetNamedLayerActivations(preprocessed);
+    }
+
+    /// <summary>
+    /// Same rationale as <see cref="GetNamedLayerActivations"/>: the
+    /// tape-based <see cref="AiDotNet.NeuralNetworks.NeuralNetworkBase{T}.TrainWithTape"/>
+    /// path runs <c>ForwardForTraining</c> on the raw input. Without this
+    /// override the first conv sees [frames, channels, h, w] directly and
+    /// rejects the unfolded channel depth.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var preprocessed = PreprocessFrames(input);
+        return base.ForwardForTraining(preprocessed);
+    }
+
     /// <inheritdoc/>
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
     {

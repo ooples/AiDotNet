@@ -1653,8 +1653,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool isAudioModel = model.Domains.Contains(3); // Audio=3 (was incorrectly 4)
         if (isTemporalVideoModel)
         {
-            // Temporal video: [frames, channels, height, width]
-            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 64, 64 };");
+            // Temporal video: [frames, channels, height, width]. Dims must
+            // match the temporal-video factory emitted above (inputframes=4,
+            // inputdepth=3, inputheight=32, inputwidth=32) so the test's
+            // inputshape and the model's architecture are consistent.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
         else if (isFrameInterpModel)
