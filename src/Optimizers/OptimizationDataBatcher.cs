@@ -248,8 +248,14 @@ public class OptimizationDataBatcher<T, TInput, TOutput>
 
         if (data is Tensor<T> tensor)
         {
-            // Clone shape but change first dimension
-            var newShape = (int[])tensor._shape;
+            // Issue #1185: the original code did `(int[])tensor._shape`, which
+            // is a reference cast — not a copy. Mutating newShape[0] then
+            // mutated the source tensor's batch dimension in place. The next
+            // CopySample call would see source.Shape[0] == indices.Length
+            // (often 64) and reject any sampled index >= that value, e.g. on
+            // a 629-row dataset it would throw on index 120 / 300 / 628.
+            // Clone the shape array so the source tensor is left intact.
+            var newShape = (int[])tensor._shape.Clone();
             newShape[0] = indices.Length;
             var result = new Tensor<T>(newShape);
 
