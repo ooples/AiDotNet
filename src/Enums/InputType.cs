@@ -67,5 +67,27 @@ public enum InputType
     /// or as three parallel arrays: [1,4], [2,5], and [3,6]
     /// </para>
     /// </remarks>
-    ThreeDimensional
+    ThreeDimensional,
+
+    /// <summary>
+    /// Represents four-dimensional input data: [frames, channels, height, width]. Used by
+    /// temporal-video models that process a sequence of frames as a single input (video
+    /// super-resolution, video denoising, frame interpolation, video-VAE, etc.).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Four-dimensional data adds a time/frame axis on top of the 3D
+    /// vision layout. Each data point is a short clip of video:
+    /// </para>
+    /// <para>
+    /// Examples:
+    /// - A 16-frame RGB video at 64×64 resolution: [16, 3, 64, 64]
+    /// - A 4-frame interpolation window from a 360p source: [4, 3, 180, 320]
+    /// </para>
+    /// <para>
+    /// In code this is commonly represented as a <c>Tensor&lt;T&gt;</c> with shape
+    /// <c>{ InputFrames, InputDepth, InputHeight, InputWidth }</c>.
+    /// </para>
+    /// </remarks>
+    FourDimensional
 }

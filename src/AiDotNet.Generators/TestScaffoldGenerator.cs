@@ -1495,20 +1495,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.Domains.Contains(4) && !model.Tasks.Contains(35))
             {
                 // Temporal video models (ActionRecognition=22, VideoGeneration=41, etc.)
-                // need a 4D [frames, channels, height, width] input shape, but
-                // NeuralNetworkArchitecture only expresses 3D (height/width/depth).
-                // Rather than silently emit a mismatched 3D architecture alongside a
-                // 4D InputShape, route these to a runtime placeholder until the
-                // architecture type can represent a temporal dimension.
+                // want a 4D [frames, channels, height, width] input shape.
+                // NeuralNetworkArchitecture<T> now exposes InputType.FourDimensional
+                // and an inputFrames parameter, so the factory can emit a real
+                // architecture instead of a throwing placeholder.
                 //
-                // The enum ordinal for ModelDomain.Video is 4
-                // (General=0, Vision=1, Language=2, Audio=3, Video=4, ...).
-                // This check previously used 3, which incorrectly flagged every
-                // *audio* model (PlayHT, Bark, etc.) as "temporal video" and
-                // emitted a NotImplementedException factory — ten PlayHTTests
-                // failures on PR #1156 traced to this off-by-one.
-                constructorExpr = "throw new System.NotImplementedException(" +
-                    $"\"'{GeneratorHelpers.StripGenericSuffix(model.ClassName)}' is a temporal video model; NeuralNetworkArchitecture<T> cannot express its 4D [frames, channels, height, width] input. Implement this factory manually.\")";
+                // ModelDomain enum: General=0, Vision=1, Language=2, Audio=3,
+                // Video=4. The previous check used 3 which mis-flagged every
+                // audio model (PlayHT, Bark) as "temporal video" — ten
+                // PlayHTTests failures on PR #1156 traced to that off-by-one.
+                needsArchitectureUsing = true;
+                // Clip shape chosen to be small enough to build on a 60 s
+                // smoke-test budget while still exercising the 4D code path:
+                // 4 frames × 3 channels × 32 × 32 = 12,288 input elements.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, " +
+                    "outputSize: 4))";
             }
             else
             {
