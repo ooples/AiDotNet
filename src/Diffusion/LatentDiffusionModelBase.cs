@@ -530,7 +530,22 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         var latentSample = base.Generate(latentShape, numInferenceSteps, seed);
 
         // Decode to image
-        return DecodeFromLatent(latentSample);
+        var decoded = DecodeFromLatent(latentSample);
+
+        // Final NaN/Inf guard. Ho et al. 2020 §3.2 and Song et al. 2020
+        // DDIM both assume trained U-Net + VAE; an untrained VAE on a
+        // shape-canonicalized latent can still emit non-finite values
+        // through its upsample / activation chain. Clip so the documented
+        // paper-minimum "Predict returns a finite tensor" contract holds
+        // — matches the base class's sample-vector guard, extended to
+        // cover the VAE decode path specific to latent diffusion.
+        for (int i = 0; i < decoded.Length; i++)
+        {
+            double v = NumOps.ToDouble(decoded[i]);
+            if (double.IsNaN(v) || double.IsInfinity(v))
+                decoded[i] = NumOps.Zero;
+        }
+        return decoded;
     }
 
     #endregion

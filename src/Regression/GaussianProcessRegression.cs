@@ -233,12 +233,62 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
             }
         }
 
-        // Solve (K + s²I)a = y
-        _alpha = MatrixSolutionHelper.SolveLinearSystem(_kernelMatrix, y, Options.DecompositionType);
+        // Solve (K + σ²I) α = y. Rasmussen & Williams 2006 §2.2 requires
+        // K + σ²I to be strictly positive definite for Cholesky to succeed.
+        // In practice the RBF kernel on collinear features, near-duplicate
+        // data points, or poorly-scaled inputs yields a near-singular
+        // matrix that the default Options.NoiseLevel = 1e-5 cannot lift to
+        // strict PD. Paper standard practice (§2.2 and GPy, GPflow, scikit-
+        // learn implementations): retry with increasing jitter σ²_k = σ²
+        // · 10^k until Cholesky succeeds, up to a small k_max. If all
+        // retries fail, fall back to a rank-revealing QR that does NOT
+        // require PD — slower, but guaranteed to produce a least-squares
+        // solution on any full-rank kernel matrix.
+        _alpha = SolveWithJitterRetry(_kernelMatrix, y, Options.DecompositionType);
 
         // Store x as support vectors for prediction
         SupportVectors = x;
         Alphas = _alpha;
+    }
+
+    /// <summary>
+    /// Solves (K + σ²I) α = y with progressive jitter doubling on Cholesky
+    /// failure per Rasmussen &amp; Williams 2006 §2.2 numerical-stability note.
+    /// Each retry adds extra jitter to the diagonal and re-attempts. After
+    /// 6 retries (up to 10^6-fold jitter boost) falls back to a rank-
+    /// revealing QR that works on any full-rank matrix without a PD
+    /// precondition.
+    /// </summary>
+    private Vector<T> SolveWithJitterRetry(Matrix<T> K, Vector<T> y, MatrixDecompositionType preferredType)
+    {
+        const int maxRetries = 6;
+        int n = K.Rows;
+        double baseNoise = Options.NoiseLevel;
+        for (int attempt = 0; attempt <= maxRetries; attempt++)
+        {
+            try
+            {
+                return MatrixSolutionHelper.SolveLinearSystem(K, y, preferredType);
+            }
+            catch (ArgumentException ex) when (ex.Message.Contains("positive definite") || ex.Message.Contains("singular"))
+            {
+                if (attempt == maxRetries)
+                {
+                    // Last-resort QR fallback — handles near-singular K
+                    // without PD requirement. Slower but robust.
+                    return MatrixSolutionHelper.SolveLinearSystem(K, y, MatrixDecompositionType.Qr);
+                }
+                // Bump diagonal jitter by 10x for the next attempt (increment
+                // is the delta between current cumulative jitter and next).
+                double nextJitter = baseNoise * Math.Pow(10, attempt + 1);
+                double currentJitter = attempt == 0 ? 0 : baseNoise * Math.Pow(10, attempt);
+                T delta = NumOps.FromDouble(nextJitter - currentJitter);
+                for (int i = 0; i < n; i++)
+                    K[i, i] = NumOps.Add(K[i, i], delta);
+            }
+        }
+        // Unreachable — loop either returns or falls back to QR above.
+        throw new InvalidOperationException("SolveWithJitterRetry exhausted all retries.");
     }
 
     /// <summary>
