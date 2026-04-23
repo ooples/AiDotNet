@@ -353,18 +353,20 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     /// <returns>Sampled latent representation.</returns>
     public Tensor<T> Reparameterize(Tensor<T> mean, Tensor<T> logVar)
     {
-        // z = mean + std * epsilon, where epsilon ~ N(0, 1)
-        // Clamp logVar to prevent exp() overflow (exp(20) ≈ 5e8, exp(40) ≈ 2e17)
-        var clampedLogVar = new Tensor<T>(logVar._shape);
-        for (int i = 0; i < logVar.Length; i++)
-        {
-            double v = NumOps.ToDouble(logVar.GetFlat(i));
-            v = Math.Max(-20.0, Math.Min(20.0, v));
-            clampedLogVar.SetFlat(i, NumOps.FromDouble(v));
-        }
-        var std = Engine.TensorSqrt(Engine.TensorExp(clampedLogVar));
+        // Per Kingma & Welling 2014 ("Auto-Encoding Variational Bayes"),
+        // Kipf & Welling 2016 ("Variational Graph Auto-Encoders") §3:
+        //   z = mean + exp(0.5 * logVar) * epsilon,   epsilon ~ N(0, I)
+        // The std = exp(0.5 * logVar) form (not sqrt(exp(logVar))) is the
+        // paper's canonical expression and is equivalent but more numerically
+        // stable — a single exp call instead of exp then sqrt. Both mean and
+        // logVar flow from the encoder matmul chain, so as long as we stay
+        // inside the engine's tape-tracked ops the gradient propagates
+        // through reparameterization into the encoder weights (epsilon is
+        // detached noise, no gradient needed for it).
+        var halfLogVar = Engine.TensorMultiplyScalar(logVar, NumOps.FromDouble(0.5));
+        var std = Engine.TensorExp(halfLogVar);
 
-        // Generate standard normal samples
+        // Sample epsilon (detached): no tape needed for the noise term.
         var epsilon = new Tensor<T>(mean._shape);
         for (int i = 0; i < epsilon.Length; i++)
         {
@@ -885,8 +887,24 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Trains the model on a single batch of data using VAE training (encode → sample → decode).
+    /// Trains the model on a single batch using tape-based backprop through
+    /// the VGAE objective (Kipf &amp; Welling 2016 §3): L = L_recon + L_KL with
+    /// L_recon = BCE(sigmoid(Z Z^T), A) and
+    /// L_KL = -0.5 Σ (1 + log σ² - μ² - exp(log σ²)).
     /// </summary>
+    /// <remarks>
+    /// Previous implementation had a hand-rolled <c>ComputeReconstructionGradient</c>
+    /// that returned the dL/dÂ element-wise but NEVER wired it back into the
+    /// encoder / variational weight gradients — <c>GetParameterGradients</c>
+    /// read <c>_meanWeightsGradient</c> / <c>_logVarWeightsGradient</c> which
+    /// stayed at their default <c>null</c>, so Adam got an all-zero gradient
+    /// vector and no parameter ever moved (the
+    /// Training_ShouldChangeParameters failure). We now record the forward
+    /// pass under a <see cref="GradientTape{T}"/>, compute a tape-tracked
+    /// ELBO using <c>Engine</c> ops end-to-end (engine BCE, engine KL), and
+    /// let <c>tape.ComputeGradients</c> populate the real gradient dict
+    /// for every trainable tensor referenced by the forward graph.
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Ensure 2D input [numNodes, features]
@@ -896,34 +914,103 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         int numNodes = input.Shape[0];
         var adjacencyMatrix = EnsureAdjacencyMatrix(numNodes);
 
-        // Set all layers to training mode
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
 
-        // Forward pass: encode → sample → decode
-        var reconstructed = Forward(input, adjacencyMatrix);
+        // Collect encoder layer parameter tensors via the tape training
+        // helper (walks ITrainableLayer.GetTrainableParameters on every
+        // layer). Variational weights are tracked separately below.
+        var encoderParams = Training.TapeTrainingStep<T>.CollectParameters(
+            Layers.Cast<ILayer<T>>().ToList(), structureVersion: -1);
 
-        // Compute ELBO loss
-        LastLoss = ComputeLoss(reconstructed, adjacencyMatrix);
+        using var tape = new Tensors.Engines.Autodiff.GradientTape<T>();
 
-        // Compute reconstruction gradient
-        var reconGrad = ComputeReconstructionGradient(reconstructed, adjacencyMatrix);
+        // Tape-tracked forward: Encode → Reparameterize → Decode.
+        // All three helpers go through Engine ops (matmul, exp, multiply,
+        // sigmoid, etc.) so every intermediate flows into the tape.
+        var (mean, logVar) = Encode(input, adjacencyMatrix);
+        var latent = Reparameterize(mean, logVar);
+        var reconstructed = Decode(latent);
 
-        // Backward pass
+        // Reconstruction loss via a standard BCE loss function that we
+        // know backpropagates correctly on the tape. BinaryCrossEntropy
+        // handles the ε-clamp and log internally.
+        var bceLoss = new LossFunctions.BinaryCrossEntropyLoss<T>();
+        var reconLoss = bceLoss.ComputeTapeLoss(reconstructed, adjacencyMatrix);
 
-        // Collect all parameter gradients (encoder layers + variational weights)
-        Vector<T> parameterGradients = GetParameterGradients();
+        // KL divergence to N(0, I) per Kipf & Welling 2016 §3.2:
+        //   KL = 0.5 * Σ (exp(logVar) + μ² - 1 - logVar)
+        var expLogVar = Engine.TensorExp(logVar);
+        var meanSq = Engine.TensorMultiply<T>(mean, mean);
+        var expPlusMeanSq = Engine.TensorAdd<T>(expLogVar, meanSq);
+        // Subtract 1 + logVar via (expLogVar + meanSq) - 1 - logVar using
+        // scalar shift (TensorSubtractScalar + TensorSubtract against logVar).
+        var minusOne = Engine.TensorAddScalar<T>(expPlusMeanSq, NumOps.FromDouble(-1.0));
+        var klTerms = Engine.TensorSubtract<T>(minusOne, logVar);
+        var klAxes = Enumerable.Range(0, klTerms.Shape.Length).ToArray();
+        var klSum = Engine.ReduceSum<T>(klTerms, klAxes, keepDims: false);
+        var klLoss = Engine.TensorMultiplyScalar<T>(klSum, NumOps.FromDouble(0.5));
 
-        // Fresh optimizer per step for stable convergence (no momentum oscillation).
+        // L = L_recon + β · L_KL. β = KLWeight matches the warmup /
+        // annealing constant the paper suggests for VGAE training.
+        // Normalize shapes to [1] so BCE (which may return [1]) and the
+        // reduce-all KL (which returns []) add without a shape mismatch.
+        var kWeighted = Engine.TensorMultiplyScalar<T>(klLoss, NumOps.FromDouble(KLWeight));
+        var reconLoss1D = reconLoss.Shape.Length == 0
+            ? Engine.Reshape(reconLoss, new[] { 1 })
+            : reconLoss;
+        var kWeighted1D = kWeighted.Shape.Length == 0
+            ? Engine.Reshape(kWeighted, new[] { 1 })
+            : kWeighted;
+        var lossTensor = Engine.TensorAdd<T>(reconLoss1D, kWeighted1D);
+
+        LastLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+
+        // Backward: differentiate the ELBO w.r.t. every registered param.
+        var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+
+        // Build the flat gradient vector in the SAME order as GetParameters():
+        // encoder-layer params (per-layer GetParameters flat) followed by
+        // _meanWeights then _logVarWeights. For each encoder param tensor
+        // (collected above), look up its gradient; for any tensor the tape
+        // didn't visit (e.g. a bias buffer that's registered but not used
+        // on this forward path), fall back to zero.
+        var gradList = new List<T>();
+        foreach (var p in encoderParams)
+        {
+            if (allGrads.TryGetValue(p, out var g))
+            {
+                for (int i = 0; i < g.Length; i++)
+                    gradList.Add(g.GetFlat(i));
+            }
+            else
+            {
+                for (int i = 0; i < p.Length; i++)
+                    gradList.Add(NumOps.Zero);
+            }
+        }
+        if (allGrads.TryGetValue(_meanWeights, out var mg))
+        {
+            for (int i = 0; i < mg.Length; i++) gradList.Add(mg.GetFlat(i));
+        }
+        else
+        {
+            for (int i = 0; i < _meanWeights.Length; i++) gradList.Add(NumOps.Zero);
+        }
+        if (allGrads.TryGetValue(_logVarWeights, out var lvg))
+        {
+            for (int i = 0; i < lvg.Length; i++) gradList.Add(lvg.GetFlat(i));
+        }
+        else
+        {
+            for (int i = 0; i < _logVarWeights.Length; i++) gradList.Add(NumOps.Zero);
+        }
+
+        var parameterGradients = new Vector<T>(gradList.ToArray());
+
         var stepOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
-        // Get current parameters
-        Vector<T> currentParameters = GetParameters();
-
-        // Update all parameters using the optimizer
-        Vector<T> updatedParameters = stepOptimizer.UpdateParameters(currentParameters, parameterGradients);
-
-        // Apply updated parameters (includes encoder layers + variational weights)
+        var currentParameters = GetParameters();
+        var updatedParameters = stepOptimizer.UpdateParameters(currentParameters, parameterGradients);
         UpdateParameters(updatedParameters);
     }
 
