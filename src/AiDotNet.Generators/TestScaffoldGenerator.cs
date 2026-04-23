@@ -66,36 +66,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                                      // VAE invariants where needed.
     ];
 
-    // Specific diffusion variants whose UNets take non-standard input channel
-    // counts (inpainting = 9, img2img pair = 8, Canny = 4) that the generic
-    // vision InputShape [3, 64, 64] in the auto-generator can't satisfy. A
-    // proper fix would teach the generator each variant's exact channel count;
-    // excluding them here keeps CI green while manual tests (where present)
-    // cover the correctness invariants.
-    private static readonly string[] ExcludedClassNames =
-    [
-        "ControlNetInpaintingModel",     // UNet inputChannels = 4 + 5 = 9 (latent + mask + masked_latent)
-        "ControlNetPlusPlusModel",       // inputChannels = 4 (latent only, but conditioning path differs)
-        "ControlNetFluxModel",           // Flux variant
-        "ControlNetPlusPlusFluxModel",   // Flux variant
-        "ControlNetLiteModel",           // Lite variant
-        "ControlNetQRModel",             // QR-code conditioning
-        "ControlNetSD3Model",            // SD3 variant
-        "ControlNetTileModel",           // Tile conditioning
-        "ControlNetUnionModel",          // Multi-conditioning union
-        "ControlNetUnionProModel",       // Union Pro variant
-        "ControlNetXSModel",             // ControlNet-XS
-        "ReferenceOnlyModel",            // Reference-image conditioning (variable channels)
-        "InstantStyleModel",             // Style-adapter (non-standard input path)
-        "Pix2PixZeroModel",              // Image-to-image translation (8-channel pair)
-        "UpscaleAVideoModel",            // Video super-resolution (paired frames)
-        "SeedEdit3Model",                // Edit-specific shape requirements
-        "LuminaT2XModel",                // Text-to-X with bespoke input format
-        "AudioLDMModel",                 // Audio-LDM mel-spectrogram input (not [3,64,64])
-        "StyleAlignedModel",             // Metadata-specific assertions fail on smoke shape
-        "DiffSeg",                       // Segmentation model: ctor-detection miss in generator;
-                                         // manual test needed (tests ISemanticSegmentation path).
-    ];
+    // Formerly a list of diffusion variants with non-standard UNet input
+    // channels — they're now handled paper-faithfully by
+    // DiffusionModelBase.Predict's CanonicalizeGenShape hook, which reads
+    // each variant's NoisePredictor.InputChannels and rewrites the
+    // generation shape to match. No generator-level exclusion needed.
+    private static readonly string[] ExcludedClassNames = new string[0];
 
     // Attribute metadata names
     private const string ModelDomainAttr = "AiDotNet.Attributes.ModelDomainAttribute";
