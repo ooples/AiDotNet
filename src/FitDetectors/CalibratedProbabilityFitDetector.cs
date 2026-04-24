@@ -226,6 +226,53 @@ public class CalibratedProbabilityFitDetector<T, TInput, TOutput> : FitDetectorB
         var predicted = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Predicted);
         var actual = ConversionsHelper.ConvertToVector<T, TOutput>(evaluationData.ModelStats.Actual);
 
+        // Issue #1186: when the predictions are a multiclass probability tensor
+        // flattened to length N*C (e.g. [100, 3] → 300 entries) and the labels
+        // are class-index vectors of length N (e.g. [100]), the legacy path
+        // bins over N*C predicted values then indexes actual[idx] with idx ∈
+        // [0, N*C) — any idx ≥ N throws ArgumentOutOfRangeException. Detect
+        // that shape ratio up front and reduce the predictions to
+        // "probability of the true class" so the binary-calibration path below
+        // still applies.
+        if (predicted.Length != actual.Length && actual.Length > 0
+            && predicted.Length % actual.Length == 0
+            && predicted.Length / actual.Length > 1)
+        {
+            int numClasses = predicted.Length / actual.Length;
+            var reducedPredicted = new Vector<T>(actual.Length);
+            var reducedActual = new Vector<T>(actual.Length);
+            for (int i = 0; i < actual.Length; i++)
+            {
+                int classIdx = NumOps.ToInt32(actual[i]);
+                if (classIdx < 0 || classIdx >= numClasses)
+                {
+                    // Not class indices — labels were probabilities or some
+                    // other shape we don't understand. Fall back to binary
+                    // treatment of the "predicted probability of class 0"
+                    // slice so we don't crash; callers passing genuine
+                    // multiclass probability tensors for BOTH predicted AND
+                    // actual should have them flattened to equal length.
+                    reducedPredicted[i] = predicted[i * numClasses];
+                    reducedActual[i] = actual[i];
+                    continue;
+                }
+                reducedPredicted[i] = predicted[i * numClasses + classIdx];
+                reducedActual[i] = NumOps.One;
+            }
+            predicted = reducedPredicted;
+            actual = reducedActual;
+        }
+        else if (predicted.Length != actual.Length)
+        {
+            // Non-multiclass mismatch (e.g. rank-discordant tensors). Guard
+            // with a clear error rather than an opaque OOR from the bin loop.
+            throw new InvalidOperationException(
+                $"CalibratedProbabilityFitDetector: predicted length ({predicted.Length}) and actual "
+                + $"length ({actual.Length}) are incompatible. Either predicted-probability length must "
+                + "equal actual length (binary calibration), or predicted.Length must be an integer "
+                + "multiple of actual.Length (multiclass probabilities + class-index labels).");
+        }
+
         var numBins = _options.NumCalibrationBins;
         var binSize = NumOps.Divide(NumOps.One, NumOps.FromDouble(numBins));
 

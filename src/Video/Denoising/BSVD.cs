@@ -116,14 +116,71 @@ public class BSVD<T> : VideoDenoisingBase<T>
             int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
             int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 128;
             int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 128;
+            // Honour the architecture's temporal frame count when the caller
+            // built it via InputType.FourDimensional. The default helper
+            // multiplies inputChannels × temporalFrames (frames stacked as
+            // additional channels in the first conv); without this the
+            // generated test feeds a [frames, channels, h, w] input whose
+            // depth dimension is just `channels`, but the conv was built for
+            // `channels * 5` (the helper's default temporalFrames=5).
+            int temporalFrames = Architecture.InputFrames > 0 ? Architecture.InputFrames : 5;
             Layers.AddRange(LayerHelper<T>.CreateDefaultVideoDenoisingLayers(
                 inputChannels: ch, inputHeight: h, inputWidth: w,
-                numFeatures: _options.NumFeatures));
+                numFeatures: _options.NumFeatures, temporalFrames: temporalFrames));
         }
     }
 
+    /// <summary>
+    /// Route the generic inspection path (used by
+    /// <see cref="AiDotNet.NeuralNetworks.NeuralNetworkBase{T}.GetNamedLayerActivations"/>
+    /// and test harnesses) through the same preprocessing that
+    /// <see cref="Denoise"/> applies. Without this override the base walks
+    /// each <see cref="Layers"/> entry directly and the first conv — built
+    /// for `inputChannels * temporalFrames` folded channels — rejects a raw
+    /// [frames, channels, h, w] input.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var preprocessed = PreprocessFrames(input);
+        return base.GetNamedLayerActivations(preprocessed);
+    }
+
+    /// <summary>
+    /// Same rationale as <see cref="GetNamedLayerActivations"/>: the
+    /// tape-based <see cref="AiDotNet.NeuralNetworks.NeuralNetworkBase{T}.TrainWithTape"/>
+    /// path runs <c>ForwardForTraining</c> on the raw input. Without this
+    /// override the first conv sees [frames, channels, h, w] directly and
+    /// rejects the unfolded channel depth.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var preprocessed = PreprocessFrames(input);
+        return base.ForwardForTraining(preprocessed);
+    }
+
     /// <inheritdoc/>
-    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        // CreateDefaultVideoDenoisingLayers builds the first conv with
+        // (inputChannels * temporalFrames) input channels — i.e. the temporal
+        // axis is folded into the channel axis before the conv. A raw video
+        // input of shape [frames, channels, h, w] therefore needs reshaping
+        // to [1, frames * channels, h, w] before normalisation. Anything
+        // already in the [1, C, h, w] layout (or higher rank with batch=1)
+        // passes straight through.
+        var shape = rawFrames.Shape;
+        if (shape.Length == 4
+            && Architecture.InputType == AiDotNet.Enums.InputType.FourDimensional
+            && shape[0] == Architecture.InputFrames
+            && shape[1] == Architecture.InputDepth
+            && shape[2] == Architecture.InputHeight
+            && shape[3] == Architecture.InputWidth)
+        {
+            int folded = shape[0] * shape[1];
+            rawFrames = rawFrames.Reshape(new[] { 1, folded, shape[2], shape[3] });
+        }
+        return NormalizeFrames(rawFrames);
+    }
 
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);

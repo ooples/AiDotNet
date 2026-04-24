@@ -86,6 +86,13 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
         T learningRate = _numOps.FromDouble(_options.LearningRate);
         List<T> reconstructionErrors = new List<T>();
 
+        // Hoist the RNG out of the per-sample loop. The original code called
+        // RandomHelper.CreateSeededRandom(42 + epoch * 10000 + i) on EVERY
+        // sample, allocating a fresh Mersenne-style generator each time.
+        // A single deterministic RNG keyed off a fixed seed gives reproducible
+        // training while saving Epochs × x.Rows allocations.
+        var random = RandomHelper.CreateSeededRandom(42);
+
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             reconstructionErrors.Clear();
@@ -108,14 +115,22 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
                     // Forward pass with caching
                     var (mean, logVar, hidden) = _encoder.EncodeWithCache(input);
 
-                    // Reparameterization trick: z = mean + std * epsilon
+                    // Reparameterization trick: z = mean + std * epsilon, where
+                    // std = exp(0.5 * logVar). Done with span-level access so
+                    // the per-element ops bypass the deferred-materializer
+                    // monitor (the same lock contention that profiling on
+                    // PR #1184 showed dominated this method's wall-clock).
                     var z = new Tensor<T>(mean._shape);
-                    var random = RandomHelper.CreateSeededRandom(42 + epoch * 10000 + i);
-                    for (int j = 0; j < mean.Length; j++)
                     {
-                        // z = mean + exp(0.5 * logVar) * epsilon
-                        T std = _numOps.Exp(_numOps.Multiply(_numOps.FromDouble(0.5), logVar[j]));
-                        z[j] = _numOps.Add(mean[j], _numOps.Multiply(std, _numOps.FromDouble(random.NextGaussian())));
+                        var meanSpan = mean.Data.Span;
+                        var lvSpan = logVar.Data.Span;
+                        var zSpan = z.Data.Span;
+                        T half = _numOps.FromDouble(0.5);
+                        for (int j = 0; j < mean.Length; j++)
+                        {
+                            T std = _numOps.Exp(_numOps.Multiply(half, lvSpan[j]));
+                            zSpan[j] = _numOps.Add(meanSpan[j], _numOps.Multiply(std, _numOps.FromDouble(random.NextGaussian())));
+                        }
                     }
 
                     // Decode with caching
@@ -155,15 +170,16 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
 
     private T ComputeReconstructionError(Vector<T> input, Tensor<T> reconstruction)
     {
-        T error = _numOps.Zero;
+        // Span access bypasses the deferred-materializer monitor; previously
+        // the loop's reconstruction[i] hit it once per element.
         int len = Math.Min(input.Length, reconstruction.Length);
-
+        T error = _numOps.Zero;
+        var rSpan = reconstruction.Data.Span;
         for (int i = 0; i < len; i++)
         {
-            T diff = _numOps.Subtract(input[i], reconstruction[i]);
+            T diff = _numOps.Subtract(input[i], rSpan[i]);
             error = _numOps.Add(error, _numOps.Multiply(diff, diff));
         }
-
         return _numOps.Divide(error, _numOps.FromDouble(len > 0 ? len : 1));
     }
 
@@ -481,39 +497,35 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public (Tensor<T> mean, Tensor<T> logVar, Tensor<T> hidden) EncodeWithCache(Vector<T> input)
     {
-        // Simple LSTM-like encoding: hidden = tanh(W * input + bias) using Engine
+        // Bulk-op rewrite of the original per-element loop. The previous
+        // implementation drove 99% of LSTMVAE.Train wall-clock into
+        // DeferredArrayMaterializer.TryMaterialize lock contention because
+        // every tensor[i] read/write went through the deferred materializer's
+        // monitor. Computing W·x + b as a single TensorMatMul + TensorAdd
+        // amortises that cost across one bulk op per matrix instead of
+        // one lock per element.
+        //
+        // Hidden:  tanh(_weights [H, I] @ input [I, 1] + _bias [H])
+        // Mean:    _meanWeights   [L, H] @ hidden [H, 1] + _meanBias   [L]
+        // LogVar:  _logVarWeights [L, H] @ hidden [H, 1] + _logVarBias [L]
+
         int effectiveInput = Math.Min(input.Length, _inputSize);
-        var inputVec = new Vector<T>(effectiveInput);
-        for (int j = 0; j < effectiveInput; j++) inputVec[j] = input[j];
-
-        var hidden = new Tensor<T>(new[] { _hiddenSize });
-        for (int i = 0; i < _hiddenSize; i++)
+        var inputCol = new Tensor<T>(new[] { _inputSize, 1 });
         {
-            var wSlice = new Vector<T>(effectiveInput);
-            for (int j = 0; j < effectiveInput; j++) wSlice[j] = _weights[i * _inputSize + j];
-            hidden[i] = MathHelper.Tanh(NumOps.Add(_bias[i], Engine.DotProduct(wSlice, inputVec)));
+            var span = inputCol.Data.Span;
+            for (int j = 0; j < effectiveInput; j++) span[j] = input[j];
         }
 
-        // Compute mean: mean = meanWeights * hidden + meanBias using Engine
-        var hiddenVec = new Vector<T>(_hiddenSize);
-        for (int j = 0; j < _hiddenSize; j++) hiddenVec[j] = hidden[j];
+        var hiddenCol = Engine.TensorMatMul(_weights, inputCol);                   // [H, 1]
+        var hiddenPreAct = Engine.TensorAdd(hiddenCol.Reshape(new[] { _hiddenSize }), _bias);
+        var hidden = Engine.TensorTanh(hiddenPreAct);                              // [H]
+        var hiddenColForProj = hidden.Reshape(new[] { _hiddenSize, 1 });
 
-        var mean = new Tensor<T>(new[] { _latentDim });
-        for (int i = 0; i < _latentDim; i++)
-        {
-            var mwSlice = new Vector<T>(_hiddenSize);
-            for (int j = 0; j < _hiddenSize; j++) mwSlice[j] = _meanWeights[i * _hiddenSize + j];
-            mean[i] = NumOps.Add(_meanBias[i], Engine.DotProduct(mwSlice, hiddenVec));
-        }
+        var meanRaw = Engine.TensorMatMul(_meanWeights, hiddenColForProj);         // [L, 1]
+        var mean = Engine.TensorAdd(meanRaw.Reshape(new[] { _latentDim }), _meanBias);
 
-        // Compute log variance: logVar = logVarWeights * hidden + logVarBias
-        var logVar = new Tensor<T>(new[] { _latentDim });
-        for (int i = 0; i < _latentDim; i++)
-        {
-            var lvSlice = new Vector<T>(_hiddenSize);
-            for (int j = 0; j < _hiddenSize; j++) lvSlice[j] = _logVarWeights[i * _hiddenSize + j];
-            logVar[i] = NumOps.Add(_logVarBias[i], Engine.DotProduct(lvSlice, hiddenVec));
-        }
+        var logVarRaw = Engine.TensorMatMul(_logVarWeights, hiddenColForProj);     // [L, 1]
+        var logVar = Engine.TensorAdd(logVarRaw.Reshape(new[] { _latentDim }), _logVarBias);
 
         return (mean, logVar, hidden);
     }
@@ -542,12 +554,15 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     private void ApplyGradientToTensor(Tensor<T> tensor, Tensor<T> grad, T learningRate, T batchSize)
     {
-        // Vectorized SGD: tensor -= (lr / batchSize) * grad
+        // Vectorized SGD: tensor -= (lr / batchSize) * grad. The previous
+        // copy-back used `tensor[i] = updated[i]` per element, which routed
+        // every assignment through the deferred-materializer monitor —
+        // ~96 KB of traffic per call multiplied by Epochs × batches × 6
+        // tensors. Span-level CopyTo is one materialize + one memcpy.
         T scaledLR = NumOps.Divide(learningRate, batchSize);
         var scaledGrad = Engine.TensorMultiplyScalar<T>(grad, scaledLR);
         var updated = Engine.TensorSubtract(tensor, scaledGrad);
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = updated[i];
+        updated.Data.Span.CopyTo(tensor.Data.Span);
     }
 
     public override void Serialize(BinaryWriter writer)
@@ -719,31 +734,30 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public (Tensor<T> output, Tensor<T> hidden) DecodeWithCache(Tensor<T> latent)
     {
-        // Expand to hidden: hidden = tanh(W * latent + bias)
-        var hidden = new Tensor<T>(new[] { _hiddenSize });
-        for (int i = 0; i < _hiddenSize; i++)
+        // Bulk-op rewrite — same rationale as LSTMEncoderTensor.EncodeWithCache:
+        // the per-element loops walked tensor[i] / NumOps.Multiply through the
+        // deferred-materializer monitor for every element, dominating training
+        // wall-clock with lock contention. One TensorMatMul + TensorAdd per
+        // matrix replaces 1300+ per-element ops here.
+        //
+        // Hidden: tanh(_weights [H, L] @ latent [L, 1] + _bias [H])
+        // Output: _outputWeights [O, H] @ hidden [H, 1] + _outputBias [O]
+
+        int effectiveLatent = Math.Min(latent.Length, _latentDim);
+        var latentCol = new Tensor<T>(new[] { _latentDim, 1 });
         {
-            T sum = _bias[i];
-            for (int j = 0; j < Math.Min(latent.Length, _latentDim); j++)
-            {
-                int idx = i * _latentDim + j;
-                sum = NumOps.Add(sum, NumOps.Multiply(_weights[idx], latent[j]));
-            }
-            hidden[i] = MathHelper.Tanh(sum);
+            var span = latentCol.Data.Span;
+            var srcSpan = latent.Data.Span;
+            for (int j = 0; j < effectiveLatent; j++) span[j] = srcSpan[j];
         }
 
-        // Decode to output: output = outputWeights * hidden + outputBias
-        var output = new Tensor<T>(new[] { _outputSize });
-        for (int i = 0; i < _outputSize; i++)
-        {
-            T sum = _outputBias[i];
-            for (int j = 0; j < _hiddenSize; j++)
-            {
-                int idx = i * _hiddenSize + j;
-                sum = NumOps.Add(sum, NumOps.Multiply(_outputWeights[idx], hidden[j]));
-            }
-            output[i] = sum;
-        }
+        var hiddenCol = Engine.TensorMatMul(_weights, latentCol);                  // [H, 1]
+        var hiddenPreAct = Engine.TensorAdd(hiddenCol.Reshape(new[] { _hiddenSize }), _bias);
+        var hidden = Engine.TensorTanh(hiddenPreAct);                              // [H]
+
+        var outputRaw = Engine.TensorMatMul(
+            _outputWeights, hidden.Reshape(new[] { _hiddenSize, 1 }));             // [O, 1]
+        var output = Engine.TensorAdd(outputRaw.Reshape(new[] { _outputSize }), _outputBias);
 
         return (output, hidden);
     }
@@ -768,12 +782,15 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     private void ApplyGradientToTensor(Tensor<T> tensor, Tensor<T> grad, T learningRate, T batchSize)
     {
-        // Vectorized SGD: tensor -= (lr / batchSize) * grad
+        // Vectorized SGD: tensor -= (lr / batchSize) * grad. The previous
+        // copy-back used `tensor[i] = updated[i]` per element, which routed
+        // every assignment through the deferred-materializer monitor —
+        // ~96 KB of traffic per call multiplied by Epochs × batches × 6
+        // tensors. Span-level CopyTo is one materialize + one memcpy.
         T scaledLR = NumOps.Divide(learningRate, batchSize);
         var scaledGrad = Engine.TensorMultiplyScalar<T>(grad, scaledLR);
         var updated = Engine.TensorSubtract(tensor, scaledGrad);
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = updated[i];
+        updated.Data.Span.CopyTo(tensor.Data.Span);
     }
 
     public override void Serialize(BinaryWriter writer)

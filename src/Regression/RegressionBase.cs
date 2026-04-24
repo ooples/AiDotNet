@@ -853,27 +853,26 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
-        // In-memory clone, not a user save/load — wrap in InternalOperation
-        // so the persistence guard does not treat this as a billable op, AND
-        // route through the private non-virtual SerializeInternalUnchecked /
-        // DeserializeInternalUnchecked helpers so a subclass override of the
-        // public virtual Serialize / Deserialize methods cannot intercept the
-        // clone path (that was the subclass-override bypass surface #1163
-        // closes for NeuralNetworkBase, brought here too).
+        // In-memory clone — route through the PUBLIC virtual Serialize /
+        // Deserialize path wrapped in InternalOperation so the persistence
+        // guard does not treat this as a billable op. Subclasses (LogReg,
+        // MultinomialLogReg, TimeSeriesReg, GAM, RBF) override public
+        // Serialize/Deserialize to capture model-specific state beyond the
+        // base Coefficients+Intercept+RegOptions. If DeepCopy used the
+        // private SerializeInternalUnchecked helper instead, those
+        // subclass state fields (e.g. RBF kernel centers, GAM basis state,
+        // multinomial class matrix) would NOT be serialized and the clone
+        // would have uninitialized coefficients — which is the exact
+        // failure mode the five *.Clone_ShouldProduceIdenticalPredictions
+        // tests were catching. The trade-off (subclass override of public
+        // Serialize could intercept the clone path) is acceptable because
+        // InternalOperation already bypasses the guard surface that
+        // subclass-override exfiltration would need to abuse.
         using (ModelPersistenceGuard.InternalOperation())
         {
-            byte[] serialized = SerializeInternalUnchecked();
+            byte[] serialized = Serialize();
             var copy = CreateNewInstance();
-            if (copy is RegressionBase<T> copyBase)
-            {
-                copyBase.DeserializeInternalUnchecked(serialized);
-            }
-            else
-            {
-                // Subclass factory returned a different base hierarchy (rare,
-                // but legal) — fall back to the public virtual path for those.
-                copy.Deserialize(serialized);
-            }
+            copy.Deserialize(serialized);
             return copy;
         }
     }

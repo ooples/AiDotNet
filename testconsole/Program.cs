@@ -31,6 +31,46 @@ class Program
             MOMENTProfile.Run();
             return;
         }
+        if (args.Length > 0 && args[0] == "lstmvae-profile")
+        {
+            LSTMVAEProfile.Run();
+            return;
+        }
+        if (args.Length > 0 && args[0] == "deepant-profile")
+        {
+            DeepANTProfile.Run();
+            return;
+        }
+        if (args.Length > 0 && args[0] == "nbeats-profile")
+        {
+            NBEATSProfile.Run();
+            return;
+        }
+        if (args.Length > 0 && args[0] == "autoformer-profile")
+        {
+            AutoformerProfile.Run();
+            return;
+        }
+        if (args.Length > 0 && args[0] == "clone-diag")
+        {
+            CloneDiag.Run();
+            return;
+        }
+        if (args.Length > 0 && args[0] == "ngboost-profile")
+        {
+            NGBoostProfile.Run();
+            return;
+        }
+        if (args.Length > 0 && args[0] == "svc-profile")
+        {
+            SVCProfile.Run();
+            return;
+        }
+        if (args.Length > 0 && args[0] == "vec-inspect")
+        {
+            VecInspect.Run();
+            return;
+        }
 
         int choice = -1;
 

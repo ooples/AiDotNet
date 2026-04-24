@@ -295,6 +295,34 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
     protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Bypasses the base-class <see cref="NeuralNetworkBase{T}.PredictCompiled"/>
+    /// auto-compiler and routes directly through <see cref="Forward"/>. Sandler
+    /// et al. 2018's MobileNetV2 has a non-sequential topology (per-block
+    /// expansion → depthwise → squeeze-excitation? → projection → residual add
+    /// inside every <see cref="InvertedResidualBlock{T}"/>, plus the
+    /// transpose-NCHW-to-NHWC hops around the SE module and the rank-3 →
+    /// rank-4 input promotion around the whole stack). The generic tracer
+    /// in <see cref="CompiledModelHost{T}"/> captures the top-level
+    /// <c>foreach (layer in Layers)</c> sequential replay from
+    /// <see cref="Forward"/>, but the tracer's inspection of the inverted-
+    /// residual block's internal tensors corrupts the parameter references
+    /// (verified locally: Predict zeros the output AND subsequent direct
+    /// Forward calls on the same instance also return zero, so the compiled
+    /// plan is writing back into the shared weight buffers on replay).
+    /// Eager replay keeps weights read-only per forward pass, matches
+    /// ResNet/VGG's contract, and avoids the compile-host's coupling to the
+    /// block's internal layer layout. Training (<see cref="Train"/>) still
+    /// runs through the tape for gradient flow; only inference bypasses the
+    /// plan cache.
+    /// </remarks>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Forward(input);
+    }
+
+    /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Mirror Forward's shape contract — expand 3D inputs (and their

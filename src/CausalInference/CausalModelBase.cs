@@ -427,10 +427,43 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     /// </summary>
     public virtual void Train(Matrix<T> x, Vector<T> y)
     {
-        // Default: treat y as outcome with no treatment effect
-        // Subclasses should override with proper causal training
-        NumFeatures = x.Columns;
-        IsFitted = true;
+        // Causal-inference models from the meta-learner family
+        // (Künzel et al. 2019 "Metalearners for estimating heterogeneous
+        // treatment effects") are usually trained from three signals
+        // (features, treatment indicator, outcome), but the IFullModel
+        // contract this base inherits exposes a single Train(X, Y).
+        //
+        // Convention used by the unit-test harness and by every existing
+        // CausalModelBase consumer: the first column of X is the binary
+        // treatment indicator, columns 1.. are the covariates, Y is the
+        // observed outcome. Split X here and dispatch to the specialised
+        // Fit(features, treatment, outcome) that subclasses (TLearner,
+        // SLearner, XLearner, etc.) implement so the model actually
+        // trains. The previous default just flipped IsFitted = true
+        // without learning anything, leaving downstream Predict to
+        // throw on uninitialised coefficient vectors.
+        if (x.Columns < 2)
+        {
+            // Not enough columns for the treatment+features split — keep
+            // the legacy stub behaviour rather than throwing in case any
+            // caller relies on it.
+            NumFeatures = x.Columns;
+            IsFitted = true;
+            return;
+        }
+
+        int n = x.Rows;
+        int p = x.Columns - 1;
+        var features = new Matrix<T>(n, p);
+        var treatment = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            treatment[i] = x[i, 0];
+            for (int j = 0; j < p; j++)
+                features[i, j] = x[i, j + 1];
+        }
+
+        Fit(features, treatment, y);
     }
 
     /// <summary>

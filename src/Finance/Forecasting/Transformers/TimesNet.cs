@@ -470,6 +470,110 @@ public class TimesNet<T> : ForecastingModelBase<T>
         return Forward(input);
     }
 
+    /// <summary>
+    /// Propagates training mode to every layer. The base class only flips
+    /// the network-level flag, so DropoutLayer stays at its default
+    /// <c>IsTrainingMode = true</c> and continues firing during
+    /// <see cref="Predict"/>. That breaks determinism invariants
+    /// (<c>Predict_ShouldBeDeterministic</c>, <c>Clone_ShouldProduceIdenticalOutput</c>)
+    /// because each call samples a fresh dropout mask.
+    /// </summary>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(isTraining);
+    }
+
+    /// <summary>
+    /// Captures named activations along TimesNet's actual forward path. The
+    /// base implementation just iterates <c>Layers</c> linearly, which fails
+    /// for TimesNet because the conv blocks expect NCHW (rank-4) but follow
+    /// a Dense embedding that emits [B, S, C] (rank-3). Per Wu et al. 2023
+    /// §3.2 the conv input is built by transpose+reshape inside the block,
+    /// so we replay that here.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+
+        var current = input;
+        if (current.Rank == 1)
+            current = current.Reshape(1, current.Shape[0], 1);
+        else if (current.Rank == 2)
+            current = current.Reshape(current.Shape[0], current.Shape[1], 1);
+
+        int layerIdx = 0;
+
+        if (_embeddingLayer is not null)
+        {
+            current = _embeddingLayer.Forward(current);
+            activations[$"Layer_{layerIdx++}_{_embeddingLayer.GetType().Name}"] = current.Clone();
+        }
+
+        int ffnIdx = 0;
+        for (int i = 0; i < _convLayers.Count; i++)
+        {
+            var residual = current;
+
+            int batchSize = current.Shape[0];
+            int seqLen = current.Shape[1];
+            int channels = current.Shape[2];
+            var convInput = Engine.Reshape(
+                Engine.TensorPermute(current, new[] { 0, 2, 1 }),
+                new[] { batchSize, channels, 1, seqLen });
+            var convOutput = _convLayers[i].Forward(convInput);
+            activations[$"Layer_{layerIdx++}_{_convLayers[i].GetType().Name}"] = convOutput.Clone();
+
+            int outSeqLen = convOutput.Shape[3];
+            int outChannels = convOutput.Shape[1];
+            current = Engine.Reshape(
+                Engine.TensorPermute(convOutput, new[] { 0, 3, 1, 2 }),
+                new[] { batchSize, outSeqLen, outChannels });
+
+            if (ffnIdx < _ffnLayers.Count)
+            {
+                current = _ffnLayers[ffnIdx].Forward(current);
+                activations[$"Layer_{layerIdx++}_{_ffnLayers[ffnIdx].GetType().Name}"] = current.Clone();
+                ffnIdx++;
+            }
+            if (ffnIdx < _ffnLayers.Count)
+            {
+                current = _ffnLayers[ffnIdx].Forward(current);
+                activations[$"Layer_{layerIdx++}_{_ffnLayers[ffnIdx].GetType().Name}"] = current.Clone();
+                ffnIdx++;
+            }
+
+            if (i < _dropoutLayers.Count)
+            {
+                current = _dropoutLayers[i].Forward(current);
+                activations[$"Layer_{layerIdx++}_{_dropoutLayers[i].GetType().Name}"] = current.Clone();
+            }
+
+            current = AddResidualConnection(residual, current);
+
+            if (i < _normLayers.Count)
+            {
+                current = _normLayers[i].Forward(current);
+                activations[$"Layer_{layerIdx++}_{_normLayers[i].GetType().Name}"] = current.Clone();
+            }
+        }
+
+        if (_finalNorm is not null)
+        {
+            current = _finalNorm.Forward(current);
+            activations[$"Layer_{layerIdx++}_{_finalNorm.GetType().Name}"] = current.Clone();
+        }
+
+        if (_outputProjection is not null)
+        {
+            current = _outputProjection.Forward(current);
+            activations[$"Layer_{layerIdx++}_{_outputProjection.GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
+
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
@@ -582,6 +686,20 @@ public class TimesNet<T> : ForecastingModelBase<T>
         _convKernelSize = reader.ReadInt32();
         _dropout = reader.ReadDouble();
         _useInstanceNormalization = reader.ReadBoolean();
+
+        // Re-bind the typed layer-reference fields against the freshly
+        // deserialized Layers list. Without this, Forward() sees null for
+        // _embeddingLayer / _outputProjection / etc. and short-circuits to
+        // returning the input unchanged — which makes the cloned network
+        // produce all-zero output and breaks Clone_ShouldProduceIdenticalOutput.
+        _embeddingLayer = null;
+        _convLayers.Clear();
+        _ffnLayers.Clear();
+        _dropoutLayers.Clear();
+        _normLayers.Clear();
+        _finalNorm = null;
+        _outputProjection = null;
+        ExtractLayerReferences();
     }
 
     #endregion
@@ -722,7 +840,17 @@ public class TimesNet<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> Forward(Tensor<T> input)
     {
+        // Per Wu et al. 2023 ("TimesNet: Temporal 2D-Variation Modeling for
+        // General Time Series Analysis"), TimesNet operates on
+        // [batch, sequence_length, features]. Univariate inputs from the
+        // forecasting test harness arrive as rank-1 [contextLength] or
+        // rank-2 [batch, contextLength]; promote them so the downstream
+        // shape math (current.Shape[1] / [2]) does not OOR.
         var current = input;
+        if (current.Rank == 1)
+            current = current.Reshape(1, current.Shape[0], 1);
+        else if (current.Rank == 2)
+            current = current.Reshape(current.Shape[0], current.Shape[1], 1);
 
         // Embedding
         if (_embeddingLayer is not null)
@@ -736,17 +864,27 @@ public class TimesNet<T> : ForecastingModelBase<T>
         {
             var residual = current;
 
-            // Convolution expects NCHW; reshape [B, S, C] -> [B, C, 1, S]
+            // Convolution expects NCHW; reshape [B, S, C] -> [B, C, 1, S].
+            // Engine.TensorPermute / Engine.Reshape so the gradient tape
+            // records both ops — Tensor<T>.Transpose / .Reshape skip the tape
+            // (TrainWithTape:2787 uses Engine.Reshape for the same reason),
+            // breaking gradient flow back through the conv layer and leaving
+            // every parameter at zero gradient (the failing
+            // GradientFlow_ShouldBeNonZeroAndFinite invariant).
             int batchSize = current.Shape[0];
             int seqLen = current.Shape[1];
             int channels = current.Shape[2];
-            var convInput = current.Transpose(new[] { 0, 2, 1 }).Reshape(batchSize, channels, 1, seqLen);
+            var convInput = Engine.Reshape(
+                Engine.TensorPermute(current, new[] { 0, 2, 1 }),
+                new[] { batchSize, channels, 1, seqLen });
             var convOutput = _convLayers[i].Forward(convInput);
 
-            // Reshape back to [B, S, C]
+            // Reshape back to [B, S, C] via tape-tracked permute + reshape.
             int outSeqLen = convOutput.Shape[3];
             int outChannels = convOutput.Shape[1];
-            current = convOutput.Transpose(new[] { 0, 3, 1, 2 }).Reshape(batchSize, outSeqLen, outChannels);
+            current = Engine.Reshape(
+                Engine.TensorPermute(convOutput, new[] { 0, 3, 1, 2 }),
+                new[] { batchSize, outSeqLen, outChannels });
 
             // FFN (2 layers)
             if (ffnIdx < _ffnLayers.Count)
@@ -958,37 +1096,40 @@ public class TimesNet<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Adjusts output to match prediction horizon.
+    /// Trims the sequence dimension to <see cref="_predictionHorizon"/>,
+    /// taking the LAST <c>pred_len</c> timesteps per Wu et al. 2023's official
+    /// implementation (<c>dec_out[:, -self.pred_len:, :]</c>). Uses
+    /// <see cref="Engine"/> ops so the gradient tape sees the slice — manual
+    /// per-element copy bypasses the tape and zeroes every gradient that
+    /// would flow back through the trimmed timesteps.
     /// </summary>
-    /// <param name="output">Output from network.</param>
-    /// <returns>Adjusted output with correct prediction horizon size.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The network might output a different sequence length
-    /// than the desired prediction horizon. This adjusts the output to match.
-    /// </para>
-    /// </remarks>
     private Tensor<T> AdjustToPredictionHorizon(Tensor<T> output)
     {
         int currentLen = output.Shape[1];
         if (currentLen == _predictionHorizon)
             return output;
 
-        var adjusted = new Tensor<T>(new[] { output.Shape[0], _predictionHorizon, output.Shape[2] });
-        int copyLen = Math.Min(currentLen, _predictionHorizon);
-
-        for (int b = 0; b < output.Shape[0]; b++)
+        if (currentLen > _predictionHorizon)
         {
-            for (int t = 0; t < copyLen; t++)
-            {
-                for (int f = 0; f < output.Shape[2]; f++)
-                {
-                    adjusted[b, t, f] = output[b, t, f];
-                }
-            }
+            // Take the last predictionHorizon timesteps along axis=1.
+            // Engine.TensorSlice records the slice on the tape so backward
+            // can propagate gradients into the embedded/conv/FFN stack.
+            int batchSize = output.Shape[0];
+            int features = output.Shape[2];
+            int seqOffset = currentLen - _predictionHorizon;
+            return Engine.TensorSlice(output,
+                new[] { 0, seqOffset, 0 },
+                new[] { batchSize, _predictionHorizon, features });
         }
 
-        return adjusted;
+        // currentLen < predictionHorizon: zero-pad. Rare in practice and only
+        // relevant when an external caller bypasses the helper layer sizing.
+        var padded = new Tensor<T>(new[] { output.Shape[0], _predictionHorizon, output.Shape[2] });
+        for (int b = 0; b < output.Shape[0]; b++)
+            for (int t = 0; t < currentLen; t++)
+                for (int f = 0; f < output.Shape[2]; f++)
+                    padded[b, t, f] = output[b, t, f];
+        return padded;
     }
 
     #endregion

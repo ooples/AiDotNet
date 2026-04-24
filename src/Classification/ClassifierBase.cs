@@ -587,23 +587,29 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     public virtual IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
         // In-memory clone, not a user save/load — wrap in InternalOperation
-        // so the persistence guard does not treat this as a billable op, AND
-        // route through the private non-virtual SerializeInternalUnchecked /
-        // DeserializeInternalUnchecked helpers so a subclass override of the
-        // public virtual Serialize / Deserialize methods cannot intercept the
-        // clone path (closes the subclass-override bypass surface).
+        // so the persistence guard does not treat this as a billable op.
+        //
+        // The clone MUST go through the public virtual Serialize / Deserialize
+        // pair so that subclass overrides (which capture trained state like
+        // tree ensembles, weight tensors, fitted thresholds, etc.) actually
+        // run. The previous implementation routed through the private
+        // non-virtual SerializeInternalUnchecked / DeserializeInternalUnchecked
+        // helpers to "close the subclass-override bypass surface" — but those
+        // base-class helpers only persist NumClasses / NumFeatures / TaskType /
+        // ClassLabels / RegularizationOptions. Every classifier with extra
+        // trained state (BalancedRandomForest's _trees, RocketClassifier's
+        // kernels, OrdinalLogistic's coefficients, every tree-ensemble model's
+        // estimator list, etc.) silently lost that state on clone, so the
+        // cloned model produced different predictions than the original — the
+        // exact failure pattern the Clone_ShouldProduceIdenticalPredictions
+        // suite is asserting against. The licensing concern that motivated
+        // the bypass is already handled by InternalOperation() above; there
+        // was never a real bypass surface to close.
         using (ModelPersistenceGuard.InternalOperation())
         {
-            byte[] serialized = SerializeInternalUnchecked();
+            byte[] serialized = Serialize();
             var copy = CreateNewInstance();
-            if (copy is ClassifierBase<T> copyBase)
-            {
-                copyBase.DeserializeInternalUnchecked(serialized);
-            }
-            else
-            {
-                copy.Deserialize(serialized);
-            }
+            copy.Deserialize(serialized);
             return copy;
         }
     }

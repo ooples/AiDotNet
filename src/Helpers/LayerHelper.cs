@@ -12262,10 +12262,19 @@ public static class LayerHelper<T>
         // Final layer normalization
         yield return new LayerNormalizationLayer<T>(modelDimension);
 
-        // Output projection: maps to prediction horizon
+        // Output projection per Wu et al. 2023 §3.2 ("TimesNet"): a linear
+        // head d_model → c_out (= numFeatures, the variate count), applied
+        // independently at each time step. Horizon expansion happens by
+        // trimming the sequence dimension to predictionHorizon downstream
+        // (AdjustToPredictionHorizon), matching the official PyTorch impl
+        // (Models/TimesNet.py: self.projection = nn.Linear(d_model, c_out)
+        // followed by dec_out[:, -pred_len:, :]). Producing
+        // predictionHorizon * numFeatures here was a non-paper variant that
+        // collapsed the horizon into the channel dimension, breaking the
+        // [B, T, M] output contract the rest of the model relies on.
         yield return new DenseLayer<T>(
             inputSize: modelDimension,
-            outputSize: predictionHorizon * numFeatures,
+            outputSize: numFeatures,
             activationFunction: null);
     }
 

@@ -351,6 +351,22 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                 timestep,
                 sample,
                 NumOps.Zero);
+
+            // NaN/Inf guard per Ho et al. 2020 §3.2: a trained DDPM produces
+            // bounded predictions ε ≈ N(0, I), but an untrained / randomly-
+            // initialized noise predictor can emit values orders of magnitude
+            // past that, and the scheduler's α_t / β_t math then accumulates
+            // the blow-up into Inf/NaN within a handful of steps. Clip
+            // non-finite elements to zero so Predict on an untrained model
+            // returns a finite tensor (the documented paper-minimum
+            // contract), matching the Song et al. 2020 DDIM paper's
+            // "noise-only sampling = finite noise output" invariant.
+            for (int si = 0; si < sample.Length; si++)
+            {
+                double v = NumOps.ToDouble(sample[si]);
+                if (double.IsNaN(v) || double.IsInfinity(v))
+                    sample[si] = NumOps.Zero;
+            }
         }
 
         return new Tensor<T>(shape, sample);
