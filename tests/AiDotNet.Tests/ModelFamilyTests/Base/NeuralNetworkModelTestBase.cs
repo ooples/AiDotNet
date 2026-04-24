@@ -60,6 +60,20 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     /// </summary>
     protected virtual double MoreDataTolerance => 1e-4;
 
+    /// <summary>
+    /// Tolerance for the Clone test's per-element output comparison.
+    /// Defaults to bit-near-exact (1e-10) for shallow networks.
+    /// Deep CNN-with-BatchNorm stacks (e.g. ResNet50 with 50+ BN layers)
+    /// accumulate ~1e-6 floating-point drift between independent forward
+    /// passes because the cloned BN's cached inference scale is
+    /// recomputed in a different SIMD reduction order than the original's
+    /// — bit-exact reproduction is not a meaningful invariant at that
+    /// depth (PyTorch state_dict / load_state_dict has the same property).
+    /// Override per-network when the model's architecture causes inherent
+    /// FP non-associativity above the default tolerance.
+    /// </summary>
+    protected virtual double CloneTolerance => 1e-10;
+
     protected Tensor<double> CreateRandomTensor(int[] shape, Random rng)
     {
         var tensor = new Tensor<double>(shape);
@@ -337,9 +351,10 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var clonedOutput = cloned.Predict(input);
 
         Assert.Equal(original.Length, clonedOutput.Length);
+        var tolerance = CloneTolerance;
         for (int i = 0; i < original.Length; i++)
-            Assert.True(Math.Abs(original[i] - clonedOutput[i]) < 1e-10,
-                $"Clone output[{i}] differs: original={original[i]}, cloned={clonedOutput[i]}");
+            Assert.True(Math.Abs(original[i] - clonedOutput[i]) < tolerance,
+                $"Clone output[{i}] differs: original={original[i]}, cloned={clonedOutput[i]} (tolerance={tolerance})");
     }
 
     [Fact(Timeout = 120000)]
