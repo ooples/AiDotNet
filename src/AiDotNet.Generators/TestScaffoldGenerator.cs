@@ -1711,6 +1711,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             string outShape = isOpticalFlowModel ? "2, 64, 64" : "3, 64, 64";
             sb.AppendLine($"    protected override int[] OutputShape => new[] {{ {outShape} }};");
         }
+        else if (isVisionModel && model.ClassName.StartsWith("ViLBERT", System.StringComparison.Ordinal))
+        {
+            // Lu et al. 2019 §3 ("ViLBERT") feeds Faster-RCNN region
+            // features into the vision stream, NOT raw pixels — the
+            // paper uses MaxVisualRegions=36 regions with VisionDim=1024
+            // (Table 1). The model's first vision-stream layer is
+            // LayerNorm(VisionDim=1024), which rejects a raw-image
+            // [3,64,64] tensor because its last dim (64) doesn't match
+            // gamma (1024). Emit the paper-correct region-feature shape
+            // so the invariant tests actually exercise the vision
+            // stream at its specified input contract.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 36, 1024 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
         else if (isVisionModel)
         {
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 64, 64 };");
