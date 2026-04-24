@@ -21,6 +21,7 @@ class Program
         ["deepant-profile"]     = DeepANTProfile.Run,
         ["nbeats-profile"]      = NBEATSProfile.Run,
         ["autoformer-profile"]  = AutoformerProfile.Run,
+        ["resnet50-profile"]    = ResNet50Profile.Run,
         ["clone-diag"]          = CloneDiag.Run,
         ["ngboost-profile"]     = NGBoostProfile.Run,
         ["svc-profile"]         = SVCProfile.Run,
