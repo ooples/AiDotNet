@@ -2417,6 +2417,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (SupportsTraining)
         {
             IsTrainingMode = isTraining;
+            // Propagate to stateful layers (Dropout, BatchNormalization,
+            // GaussianNoise, etc.). LayerBase.IsTrainingMode defaults to
+            // true at construction, so without this propagation a network
+            // in "eval mode" still has Dropout dropping random units and
+            // BatchNorm using batch stats — matching PyTorch's
+            // model.eval() contract, which walks the module tree.
+            for (int i = 0; i < _layers.Count; i++)
+            {
+                _layers[i].SetTrainingMode(isTraining);
+            }
         }
     }
 

@@ -671,6 +671,18 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         // Layers like GaussianNoiseLayer and DropoutLayer need training mode
         // to control their behavior even though they have no trainable parameters.
         IsTrainingMode = isTraining;
+        // Propagate to registered sub-layers so composite layers
+        // (ResidualLayer, BasicBlock, BottleneckBlock, MultiHeadAttention,
+        // etc.) put their internal Conv / BN / Dropout / Attention layers
+        // into the same mode. Without this, a BasicBlock in eval mode
+        // still has its embedded BN computing batch stats from a single
+        // sample (variance = 0 → output saturates to beta), defeating
+        // model.eval()'s purpose. Mirrors PyTorch nn.Module.train(mode)
+        // which walks self.children() recursively.
+        for (int i = 0; i < _registeredSubLayers.Count; i++)
+        {
+            _registeredSubLayers[i].SetTrainingMode(isTraining);
+        }
     }
 
     /// <summary>

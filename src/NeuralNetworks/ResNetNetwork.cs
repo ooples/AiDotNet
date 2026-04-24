@@ -505,6 +505,26 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
 
+    // Hotfix: bypass the compiled-replay path in NeuralNetworkBase.Predict.
+    // Forward has shape-conditional control flow (rank-3 → rank-4 batch
+    // promotion and the trailing Reshape that strips the synthetic batch
+    // dim) that the tracer does not capture correctly — routing through
+    // PredictCompiled returned an intermediate feature-map shape instead of
+    // the final logits, and also cached the first input so Predict(x2)
+    // returned Predict(x1)'s output. Tracked upstream at
+    // ooples/AiDotNet.Tensors#228; remove this override once that lands.
+    //
+    // Also force eval mode here (matches PyTorch model.eval()). The base
+    // class defaults IsTrainingMode=true at construction, which would let
+    // BatchNorm use batch stats instead of the (zero-init) running stats
+    // and produce non-deterministic Predict output across calls.
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        SetTrainingMode(false);
+        return Forward(input);
+    }
+
     /// <summary>
     /// Trains the ResNet network using the provided input and expected output.
     /// </summary>
