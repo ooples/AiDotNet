@@ -46,6 +46,16 @@ public class TransformerTrainConvergenceTests
         const int ffDim = 32;
         const int numFacts = 4;
 
+        // Each fact gets class-index `f` in the one-hot target below.
+        // If a future edit bumps numFacts past vocabSize the loop at
+        // `tgt[0, f] = 1f` would silently miss or read out-of-range,
+        // producing a malformed target and a misleading test failure.
+        // Fail fast with the variable names in the message so the cause
+        // is obvious to whoever tripped it.
+        Assert.True(numFacts <= vocabSize,
+            $"numFacts ({numFacts}) must not exceed vocabSize ({vocabSize}) — " +
+            "one-hot target indexing assumes class id < vocab.");
+
         var architecture = new TransformerArchitecture<float>(
             inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.SequenceClassification,
