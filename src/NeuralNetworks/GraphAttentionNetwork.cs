@@ -787,57 +787,50 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        Tensor<T> normalizedInput = NormalizeSingleNodeInput(input, out _);
-        Tensor<T> normalizedExpected = NormalizeSingleNodeInput(expectedOutput, out _);
-        var adjacencyMatrix = EnsureAdjacencyMatrix(normalizedInput);
+        // Route through TrainWithTape so the gradient flows back through
+        // the layer stack via GradientTape (the unified post-#1060
+        // training path). The previous implementation called
+        // GetParameterGradients() WITHOUT first running a backward pass
+        // through layers — since Backward() was removed from ILayer<T>
+        // by #b92c4d0dd, those gradients are always whatever stale value
+        // the layer's _kernelsGradient field holds (zero on a fresh
+        // network), which is why Training_ShouldChangeParameters and
+        // GradientFlow_ShouldBeNonZeroAndFinite reported "no parameters
+        // changed". ForwardForTraining is overridden below to set the
+        // adjacency matrix on graph layers before the tape-recorded
+        // forward pass.
+        SetTrainingMode(true);
+        try
+        {
+            Tensor<T> normalizedInput = NormalizeSingleNodeInput(input, out _);
+            Tensor<T> normalizedExpected = NormalizeSingleNodeInput(expectedOutput, out _);
+            TrainWithTape(normalizedInput, normalizedExpected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
 
-        // Set all layers to training mode
+    /// <inheritdoc />
+    /// <remarks>
+    /// Computes the adjacency matrix and pushes it into every IGraphConvolutionLayer
+    /// before the tape-recorded forward pass. Without this, graph layers see
+    /// stale or empty adjacency from a previous unrelated call (or none at
+    /// all), which makes their attention weights collapse and produces zero
+    /// loss-gradient → zero parameter updates.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var adjacencyMatrix = EnsureAdjacencyMatrix(input);
         foreach (var layer in Layers)
         {
-            layer.SetTrainingMode(true);
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+            {
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+            }
         }
-
-        // Forward pass
-        var predictions = Forward(normalizedInput, adjacencyMatrix);
-
-        // Flatten tensors for loss function (which works on vectors)
-        var flattenedPredictions = predictions.ToVector();
-        var flattenedExpected = normalizedExpected.ToVector();
-
-        // Compute loss
-        LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
-
-        // Compute loss gradient
-        var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-        var gradOutput = Tensor<T>.FromVector(outputGradients);
-
-        // Reshape gradient back to tensor shape if needed
-        if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
-        {
-            gradOutput = gradOutput.Reshape(predictions._shape);
-        }
-
-        // Backward pass through all layers
-
-        // Get parameter gradients for all trainable layers and update
-        Vector<T> parameterGradients = GetParameterGradients();
-
-        // Clip gradients to prevent exploding gradients
-        parameterGradients = ClipGradient(parameterGradients);
-
-
-        // Fresh optimizer per step for stable convergence (no momentum oscillation).
-        // The persistent _optimizer with scheduler is used by TrainOnGraph for real training.
-        var stepOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
-        // Get current parameters
-        Vector<T> currentParameters = GetParameters();
-
-        // Update parameters using the optimizer
-        Vector<T> updatedParameters = stepOptimizer.UpdateParameters(currentParameters, parameterGradients);
-
-        // Apply updated parameters
-        UpdateParameters(updatedParameters);
+        return base.ForwardForTraining(input);
     }
 
     /// <summary>
