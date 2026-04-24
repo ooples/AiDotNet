@@ -1730,6 +1730,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 64, 64 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
+        else if (family == TestFamily.TTS)
+        {
+            // TTS vocoders (MelGAN family, HiFiGAN, ParallelWaveGAN, etc.)
+            // take a mel-spectrogram of shape [MelChannels=80, T_frames]
+            // per the standard TTS pipeline (mel frames at 24 kHz with
+            // hop_size=300, MelChannels=80 per Yang et al. 2021 §3.1 and
+            // peers). The default vocoder layer stack projects
+            // [T_frames, MelChannels] → [T_frames, hiddenDim=384] → ...
+            // → [T_frames, 1] so the natural network output is
+            // [T_frames, 1] (one waveform sample per mel frame before
+            // PQMF synthesis upsamples to T_frames × HopSize). Use a
+            // short 8-frame mel for smoke-test speed.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 8, 80 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 1 };");
+        }
         else if (isAudioModel)
         {
             sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
