@@ -1725,6 +1725,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 36, 1024 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
+        else if (isVisionModel &&
+                 (model.ClassName.StartsWith("UNITER", System.StringComparison.Ordinal)
+                  || model.ClassName.StartsWith("VisualBERT", System.StringComparison.Ordinal)
+                  || model.ClassName.StartsWith("Oscar", System.StringComparison.Ordinal)
+                  || model.ClassName.StartsWith("VinVL", System.StringComparison.Ordinal)))
+        {
+            // Single-stream VL models (Chen et al. 2020 UNITER, Li et al.
+            // 2019 VisualBERT, Li et al. 2020 Oscar, Zhang et al. 2021
+            // VinVL) all take Faster-RCNN region features of shape
+            // [MaxRegions=36, VisionDim=2048] per their respective
+            // papers — raw pixels are never the input; a separate
+            // Faster-RCNN extractor runs upstream. The models'
+            // projection layer (Dense(2048, FusionDim=768)) rejects a
+            // raw-image tensor because its last dim (64) doesn't match
+            // the expected 2048. Emit the paper-correct shape so the
+            // transformer actually runs.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 36, 2048 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
         else if (isVisionModel)
         {
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 64, 64 };");
