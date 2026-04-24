@@ -127,7 +127,14 @@ public class CalibratedProbabilityFitDetectorIssue1186Tests
         var detector = new CalibratedProbabilityFitDetector<double, Tensor<double>, Tensor<double>>();
         var result = detector.DetectFit(BuildEvalData(predTensor, actualTensor));
 
+        // Behavioral assertions rather than a bare NotNull — a regression
+        // that silently produced a garbage FitType or a confidence
+        // outside [0, 1] would otherwise pass this test.
         Assert.NotNull(result);
+        Assert.True(Enum.IsDefined(typeof(AiDotNet.Enums.FitType), result.FitType),
+            $"FitType must be a defined enum value; got {result.FitType}.");
+        Assert.InRange(result.ConfidenceLevel, 0.0, 1.0);
+        Assert.NotEmpty(result.Recommendations);
     }
 
     private static ModelEvaluationData<double, Tensor<double>, Tensor<double>> BuildEvalData(

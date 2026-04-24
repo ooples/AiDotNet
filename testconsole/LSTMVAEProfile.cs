@@ -55,8 +55,16 @@ internal static class LSTMVAEProfile
         trainSw.Stop();
         Console.WriteLine($"Train         : {trainSw.Elapsed.TotalSeconds,8:F3} s  (CI timeout = 60s)");
 
+        // LSTMVAE.Predict(Matrix) short-circuits to _trainingSeries
+        // for any row index < trainN, so predicting on the same rows
+        // we just trained on measures a memoized lookup — not the
+        // encoder → reparam → decoder path we actually want to
+        // profile. Route through PredictSingle, which always runs
+        // the full inference.
         var predictSw = Stopwatch.StartNew();
-        var pred = model.Predict(x);
+        var pred = new Vector<double>(trainLength);
+        for (int i = 0; i < trainLength; i++)
+            pred[i] = model.PredictSingle(x.GetRow(i));
         predictSw.Stop();
         Console.WriteLine($"Predict       : {predictSw.Elapsed.TotalSeconds,8:F3} s  (output length={pred.Length})");
 

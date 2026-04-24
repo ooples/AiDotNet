@@ -246,15 +246,18 @@ public class CalibratedProbabilityFitDetector<T, TInput, TOutput> : FitDetectorB
                 int classIdx = NumOps.ToInt32(actual[i]);
                 if (classIdx < 0 || classIdx >= numClasses)
                 {
-                    // Not class indices — labels were probabilities or some
-                    // other shape we don't understand. Fall back to binary
-                    // treatment of the "predicted probability of class 0"
-                    // slice so we don't crash; callers passing genuine
-                    // multiclass probability tensors for BOTH predicted AND
-                    // actual should have them flattened to equal length.
-                    reducedPredicted[i] = predicted[i * numClasses];
-                    reducedActual[i] = actual[i];
-                    continue;
+                    // A label outside [0, numClasses) means the caller
+                    // passed something other than class indices (e.g.
+                    // soft probabilities, one-hot rows flattened into
+                    // this position, or a mis-encoded class). The old
+                    // code silently coerced to class 0 — that hid real
+                    // bugs behind seemingly-valid calibration numbers.
+                    // Fail fast with both the sample index and the
+                    // legal range so the caller can fix the pipeline
+                    // instead of shipping garbage metrics.
+                    throw new InvalidOperationException(
+                        $"CalibratedProbabilityFitDetector: class label at sample {i} is out of range. " +
+                        $"Received {classIdx}, expected [0, {numClasses - 1}].");
                 }
                 reducedPredicted[i] = predicted[i * numClasses + classIdx];
                 reducedActual[i] = NumOps.One;
