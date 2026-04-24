@@ -153,6 +153,51 @@ public class ConditioningModuleTests
         Assert.Equal(4096, embeddings.Shape[2]);
     }
 
+    /// <summary>
+    /// Regression test for issue #1189. Before the rent-and-return refactor the
+    /// T5-XXL constructor overflowed int32 (24 layers × 193M elements per layer
+    /// = 4.6B > int.MaxValue) and downstream <c>SliceMatrixTensor</c> threw
+    /// <see cref="ArgumentOutOfRangeException"/> during forward. Now the ctor
+    /// allocates no transformer weights (only the shared RPB + token/pos
+    /// embeddings) and per-layer tensors are rented on demand from
+    /// <c>TensorAllocator</c>.
+    /// </summary>
+    /// <remarks>
+    /// Uses a small maxSequenceLength so the T5-XXL forward pass is tractable
+    /// on CPU in the xunit time budget — the full-seq path is exercised by
+    /// <see cref="T5Conditioner_EncodeText_ReturnsFiniteValues"/>. This test's
+    /// purpose is to confirm the overflow is gone and the encode completes
+    /// without OOM, not to benchmark throughput.
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public async Task T5Conditioner_XXL_DoesNotOverflowOrOOM_Issue1189()
+    {
+        var t5 = new T5TextConditioner<double>(
+            variant: "T5-XXL",
+            maxSequenceLength: 8,
+            seed: 42);
+
+        Assert.Equal(4096, t5.EmbeddingDimension);
+
+        var tokens = t5.Tokenize("a starry night");
+        var embeddings = t5.EncodeText(tokens);
+
+        Assert.Equal(3, embeddings.Shape.Length);
+        Assert.Equal(1, embeddings.Shape[0]);
+        Assert.Equal(8, embeddings.Shape[1]);
+        Assert.Equal(4096, embeddings.Shape[2]);
+
+        // Spot-check finiteness at two corners.
+        double v0 = embeddings[0, 0, 0];
+        double vN = embeddings[0, 7, 4095];
+        Assert.True(!double.IsNaN(v0) && !double.IsInfinity(v0));
+        Assert.True(!double.IsNaN(vN) && !double.IsInfinity(vN));
+
+        // Determinism across calls — seeded weights must reproduce exactly.
+        var embeddings2 = t5.EncodeText(tokens);
+        Assert.Equal(v0, (double)embeddings2[0, 0, 0]);
+    }
+
     #endregion
 
     #region Dual Text Conditioner Tests

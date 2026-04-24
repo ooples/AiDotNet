@@ -119,7 +119,8 @@ public abstract class TextConditioningBase<T> : IConditioningModule<T>
         int numLayers,
         int numHeads,
         int maxSequenceLength,
-        int? seed = null)
+        int? seed = null,
+        bool skipBaseWeightAllocation = false)
     {
         VocabSize = vocabSize;
         EmbeddingDimension = embeddingDimension;
@@ -133,10 +134,45 @@ public abstract class TextConditioningBase<T> : IConditioningModule<T>
         TokenEmbeddings = InitializeWeights(vocabSize * hiddenSize);
         PositionEmbeddings = InitializeWeights(maxSequenceLength * hiddenSize);
 
-        // Each transformer layer has: Q, K, V projections + output projection + 2 MLP layers + 2 LayerNorms
-        // Approximate: 4 * hiddenSize^2 + 8 * hiddenSize^2 + 4 * hiddenSize = 12 * hiddenSize^2 + 4 * hiddenSize per layer
-        int weightsPerLayer = 12 * hiddenSize * hiddenSize + 4 * hiddenSize;
-        TransformerWeights = InitializeWeights(numLayers * weightsPerLayer);
+        // Subclasses that own per-layer weight storage (and specifically
+        // subclasses whose variant weights don't fit in a single Vector<T>
+        // — e.g., T5-XXL has ~4.6B parameters, ~17× the int32 Vector cap)
+        // pass skipBaseWeightAllocation:true and manage their own
+        // per-layer rent-and-return via TensorAllocator. Everything else
+        // goes through the default path below: a single contiguous
+        // Vector<T> sized by the generic `12 * H^2 + 4 * H` per-layer
+        // budget, which works for all CLIP/SigLIP/Gemma/Qwen/ChatGLM
+        // variants in this codebase.
+        if (skipBaseWeightAllocation)
+        {
+            // Empty placeholder — never read by the default forward
+            // path when subclasses opt out of the flat layout.
+            TransformerWeights = new Vector<T>(0);
+        }
+        else
+        {
+            // Use long arithmetic to compute the requested size, then
+            // detect int32 overflow before handing it to Vector<T>
+            // (whose ctor takes an int). The silent-wrap behavior of
+            // the old code masked T5-XXL-style overflows as a wildly
+            // undersized buffer that only blew up downstream inside
+            // SliceMatrixTensor (issue #1189).
+            long weightsPerLayer = 12L * hiddenSize * hiddenSize + 4L * hiddenSize;
+            long totalWeights = (long)numLayers * weightsPerLayer;
+            if (totalWeights > int.MaxValue)
+            {
+                throw new InvalidOperationException(
+                    $"TextConditioningBase: requested transformer weight count " +
+                    $"({totalWeights:N0} elements) exceeds the int32 Vector<T> " +
+                    $"capacity ({int.MaxValue:N0}). This typically means the " +
+                    $"variant is T5-XXL (or similarly large). Subclasses that " +
+                    $"need to support variants at this scale must pass " +
+                    $"skipBaseWeightAllocation:true to this constructor and " +
+                    $"manage per-layer weight storage via TensorAllocator " +
+                    $"(see T5TextConditioner for the reference pattern).");
+            }
+            TransformerWeights = InitializeWeights((int)totalWeights);
+        }
 
         FinalLayerNormWeights = new Vector<T>(hiddenSize);
         FinalLayerNormBias = new Vector<T>(hiddenSize);
