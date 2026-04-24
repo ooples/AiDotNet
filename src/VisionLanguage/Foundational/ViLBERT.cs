@@ -147,8 +147,77 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         return tokens;
     }
 
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    /// <summary>
+    /// Dual-stream routing per Lu et al. 2019 §3.1 — ViLBERT's vision and text
+    /// transformers are parallel streams, not a sequential pipeline, so a
+    /// naïve <c>foreach (Layers) Forward</c> chains the text-stream layers
+    /// (expecting <c>TextDim</c>-wide token embeddings) onto the vision-stream
+    /// output, which fails the first LayerNorm in the text stream with a
+    /// gamma/input shape mismatch. Route by input shape:
+    ///   - Raw image ([C,H,W] or [B,C,H,W]) → vision stream (matches <see cref="EncodeImage"/>)
+    ///   - Faster-RCNN region features ([N,VisionDim] or [B,N,VisionDim]) → vision stream
+    ///   - Token indices ([L] or [B,L]) → text stream
+    /// Callers that need the fused multi-modal output should use <see cref="FuseImageText"/>.
+    /// </summary>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        int rank = input.Shape.Length;
+        int lastDim = rank > 0 ? input.Shape[rank - 1] : 0;
+        // Region features have last-dim = VisionDim; route through the
+        // vision stream without preprocessing. Raw images (rank 3/4 with
+        // ImageChannels as leading non-batch dim) go through PreprocessImage
+        // first.
+        bool isRegionFeatures = rank >= 2 && lastDim == _options.VisionDim;
+        bool isImage = rank >= 3 && !isRegionFeatures;
+        var c = input;
+        if (isImage)
+        {
+            c = PreprocessImage(c);
+            for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c);
+        }
+        else if (isRegionFeatures)
+        {
+            for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c);
+        }
+        else
+        {
+            for (int i = _visionLayerEnd; i < _textLayerEnd; i++) c = Layers[i].Forward(c);
+        }
+        return c;
+    }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
+
+    /// <summary>
+    /// Same dual-stream routing as <see cref="Predict"/>, applied to the
+    /// tape-recorded forward pass used by <c>TrainWithTape</c>. The base
+    /// class iterates all <c>Layers</c> sequentially; ViLBERT needs to
+    /// route by input shape so the text stream doesn't get fed
+    /// vision-stream output and vice-versa.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        int lastDim = rank > 0 ? input.Shape[rank - 1] : 0;
+        bool isRegionFeatures = rank >= 2 && lastDim == _options.VisionDim;
+        bool isImage = rank >= 3 && !isRegionFeatures;
+        var c = input;
+        if (isImage)
+        {
+            c = PreprocessImage(c);
+            for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c);
+        }
+        else if (isRegionFeatures)
+        {
+            for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c);
+        }
+        else
+        {
+            for (int i = _visionLayerEnd; i < _textLayerEnd; i++) c = Layers[i].Forward(c);
+        }
+        return c;
+    }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;

@@ -3502,7 +3502,31 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     private byte[] SerializeInternalUnchecked()
     {
-        using var ms = new MemoryStream();
+        // Pre-size the MemoryStream to avoid ensureCapacity doubling near the
+        // 2GB array cap on large models. ViLBERT (~174M params × 8 B = 1.4 GB)
+        // hits OutOfMemoryException during serialize because at ~1 GB filled
+        // the stream tries to double to 2 GB, which exceeds Array.MaxLength.
+        // Compute the parameter payload ahead of time; rough overhead for
+        // type-name strings, shape ints, metadata etc. is tiny vs the
+        // parameter doubles, but budget ~64 KB per layer just in case.
+        long paramBytes = 0;
+        foreach (var layer in Layers)
+        {
+            paramBytes += (long)layer.ParameterCount * sizeof(double);
+            if (layer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> extras)
+            {
+                paramBytes += (long)extras.ExtraParameterCount * sizeof(double);
+            }
+        }
+        long estimatedTotal = paramBytes + (long)Layers.Count * 65536 + 1024;
+        // MemoryStream capacity is an int. Cap at Array.MaxLength so we never
+        // request a capacity that cannot be allocated as a single byte array.
+        // If the model is so large that even this cap won't hold it, the
+        // existing grow-on-write logic will still fail at the correct point,
+        // which is the right behavior (serialization of a >2 GB blob needs a
+        // file-backed stream, not an in-memory byte array).
+        int initialCapacity = (int)Math.Min(estimatedTotal, (long)Array.MaxLength);
+        using var ms = new MemoryStream(initialCapacity);
         using var writer = new BinaryWriter(ms);
 
         writer.Write(SerializationMagic);
@@ -3972,6 +3996,53 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         //
         // If you need to customise how DeepCopy behaves, override DeepCopy
         // itself — that's the correct extension point.
+
+        // Large-model fast path: when the serialized byte[] would exceed the
+        // CLR array limit (~2 GB), skip the serialize/deserialize roundtrip
+        // and copy parameters layer-by-layer into a freshly-constructed
+        // instance. Foundational VLMs (ViLBERT, VisualBERT, UNITER) and
+        // GPT-3-class transformers cross the 256M-params × 8 B = 2 GB line
+        // and fail with "Array dimensions exceeded supported range" when
+        // MemoryStream tries to grow past Array.MaxLength. The direct path
+        // is also strictly faster — no 2 GB allocate/free cycle, no
+        // redundant double-conversion loop — so we also take it whenever
+        // the new instance has an identically-shaped Layers list.
+        long paramBytes = 0;
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            paramBytes += (long)_layers[i].ParameterCount * sizeof(double);
+            if (_layers[i] is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> ext)
+                paramBytes += (long)ext.ExtraParameterCount * sizeof(double);
+        }
+
+        if (paramBytes > (long)Array.MaxLength)
+        {
+            var largeCopy = CreateNewInstance();
+            if (largeCopy is NeuralNetworkBase<T> largeBase && largeBase._layers.Count == _layers.Count)
+            {
+                // Copy layer-by-layer parameters + serialization extras + network-specific data.
+                for (int i = 0; i < _layers.Count; i++)
+                {
+                    var srcLayer = _layers[i];
+                    var dstLayer = largeBase._layers[i];
+                    if (srcLayer.ParameterCount > 0 && dstLayer.ParameterCount == srcLayer.ParameterCount)
+                    {
+                        dstLayer.SetParameters(srcLayer.GetParameters());
+                    }
+                    if (srcLayer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> srcExtras
+                        && dstLayer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> dstExtras
+                        && srcExtras.ExtraParameterCount == dstExtras.ExtraParameterCount
+                        && srcExtras.ExtraParameterCount > 0)
+                    {
+                        dstExtras.SetExtraParameters(srcExtras.GetExtraParameters());
+                    }
+                }
+                largeBase.InvalidateParameterCountCache();
+                largeBase.SetTrainingMode(false);
+                return largeCopy;
+            }
+        }
+
         byte[] serialized = SerializeInternalUnchecked();
         var copy = CreateNewInstance();
         if (copy is NeuralNetworkBase<T> copyBase)
