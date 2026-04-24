@@ -121,13 +121,36 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Contract: <paramref name="predicted"/> must already be a probability
+    /// distribution (the output of a softmax layer or otherwise
+    /// non-negative with a last-axis sum of ~1). This matches the class
+    /// docstring's formula <c>CCE = -Σ actual * log(predicted)</c> and
+    /// the <see cref="CalculateLoss(Vector{T}, Vector{T})"/> branch
+    /// above — both of which treat <paramref name="predicted"/> as
+    /// probabilities.
+    /// </para>
+    /// <para>
+    /// If your model produces raw logits instead, use
+    /// <see cref="CrossEntropyWithLogitsLoss{T}"/>, which applies
+    /// <c>log_softmax</c> internally. Using this loss on top of a
+    /// softmax output used to silently apply softmax a second time
+    /// here, which squashed the already-normalized distribution toward
+    /// uniform and made gradients vanish at initialization — the
+    /// symptom in issue #1187 where <c>Transformer&lt;T&gt;.Train()</c>
+    /// plateaued at <c>log(V)/V</c> from epoch 1.
+    /// </para>
+    /// </remarks>
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
         target = EnsureTargetMatchesPredicted(predicted, target);
-        // Categorical CE = -mean(target * log(softmax(predicted) + eps))
-        var softmaxed = Engine.Softmax(predicted);
-        var safeSoftmax = Engine.TensorAddScalar(softmaxed, NumOps.FromDouble(1e-7));
-        var logP = Engine.TensorLog(safeSoftmax);
+        // Categorical CE = -mean(target * log(predicted + eps)). The
+        // model's last layer is responsible for producing a proper
+        // probability distribution — we only add a small epsilon to
+        // avoid log(0) on any class the target happens to ignore.
+        var safePredicted = Engine.TensorAddScalar(predicted, NumOps.FromDouble(1e-7));
+        var logP = Engine.TensorLog(safePredicted);
         var product = Engine.TensorMultiply(target, logP);
         var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();
         var mean = Engine.ReduceMean(product, allAxes, keepDims: false);
