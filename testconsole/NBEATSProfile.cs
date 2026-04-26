@@ -28,7 +28,9 @@ internal static class NBEATSProfile
             $"LookbackWindow={opts.LookbackWindow} ForecastHorizon={opts.ForecastHorizon} " +
             $"Epochs={opts.Epochs} BatchSize={opts.BatchSize}");
 
-        var rng = new Random(42);
+        // Deterministic synthetic signal — randomness would only add
+        // variance to profiler timing without changing what NBEATS does
+        // on the forward path.
         const int trainLength = 100;
         var x = new Matrix<double>(trainLength, 1);
         var y = new Vector<double>(trainLength);

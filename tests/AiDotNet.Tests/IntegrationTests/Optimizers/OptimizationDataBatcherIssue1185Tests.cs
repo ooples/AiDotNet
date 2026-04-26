@@ -60,6 +60,11 @@ public class OptimizationDataBatcherIssue1185Tests
             Assert.Equal(rows, yTrain.Shape[0]);
             Assert.Equal(indices.Length, xBatch.Shape[0]);
             Assert.Equal(features, xBatch.Shape[1]);
+            // Label-side shape: must mirror xBatch's batch dim and preserve
+            // the trailing-1 column so loss functions don't silently see a
+            // rank-collapsed target.
+            Assert.Equal(indices.Length, yBatch.Shape[0]);
+            Assert.Equal(1, yBatch.Shape[1]);
             foreach (var idx in indices)
             {
                 Assert.InRange(idx, 0, rows - 1);
@@ -156,6 +161,10 @@ public class OptimizationDataBatcherIssue1185Tests
             Assert.Equal(channels, xBatch.Shape[1]);
             Assert.Equal(height, xBatch.Shape[2]);
             Assert.Equal(width, xBatch.Shape[3]);
+            // Label-side shape: matches xBatch's batch dim and keeps the
+            // trailing-1 column the source yTrain was constructed with.
+            Assert.Equal(indices.Length, yBatch.Shape[0]);
+            Assert.Equal(1, yBatch.Shape[1]);
         }
     }
 }

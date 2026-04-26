@@ -1713,21 +1713,29 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             if (_cachedParameterCount == null)
             {
-                // Accumulate as long and saturate at int.MaxValue so large
-                // architectures (paper-default MGTSD / TimeMoE / DiT-XL etc.
-                // routinely exceed 2^31 parameters) don't overflow under the
-                // checked Linq Sum overload introduced in .NET 7+. Capping
-                // matches the IFullModel<T> contract — callers that need the
-                // exact count should walk Layers themselves.
+                // Accumulate as long so the addition itself doesn't overflow
+                // under the checked Linq Sum overload introduced in .NET 7+.
+                // If the total exceeds int.MaxValue we MUST fail fast: the
+                // rest of the flat-parameter int-indexed API
+                // (GetParameters / SetParameters / GetAllLayerInfo) cannot
+                // represent that many elements as a single Vector<T>, so
+                // returning a saturated int here would silently mis-slice
+                // the parameter buffer downstream. Callers hitting this
+                // limit either need to walk Layers themselves and stay in
+                // long arithmetic, or split the model across instances.
                 long total = 0L;
                 for (int i = 0; i < Layers.Count; i++)
                 {
                     total += Layers[i].ParameterCount;
-                    if (total >= int.MaxValue)
-                    {
-                        total = int.MaxValue;
-                        break;
-                    }
+                }
+                if (total > int.MaxValue)
+                {
+                    throw new InvalidOperationException(
+                        $"Total parameter count ({total:N0}) exceeds int32 capacity " +
+                        $"({int.MaxValue:N0}). The flat-parameter API in NeuralNetworkBase " +
+                        $"cannot represent this many parameters as a single Vector<T>. Walk " +
+                        $"Layers per-layer and accumulate in long, or split this " +
+                        $"architecture across multiple network instances.");
                 }
                 _cachedParameterCount = (int)total;
             }

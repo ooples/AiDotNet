@@ -270,7 +270,16 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
             {
                 return MatrixSolutionHelper.SolveLinearSystem(K, y, preferredType);
             }
-            catch (ArgumentException ex) when (ex.Message.Contains("positive definite") || ex.Message.Contains("singular"))
+            // This matches MatrixSolutionHelper.SolveLinearSystem's specific
+            // ArgumentException messages for non-PD / singular matrices.
+            // If those messages change (rewording, localization), update
+            // the substring set here — failing to match falls through to
+            // the throw rather than retrying with jitter, so the
+            // dependency is fragile but not silent. Case-insensitive
+            // match guards against minor capitalization drift.
+            catch (ArgumentException ex) when (
+                ex.Message.IndexOf("positive definite", StringComparison.OrdinalIgnoreCase) >= 0
+                || ex.Message.IndexOf("singular", StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 if (attempt == maxRetries)
                 {

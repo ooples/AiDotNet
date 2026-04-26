@@ -13,7 +13,10 @@ internal static class DeepANTProfile
         var opts = new DeepANTOptions<double>();
         Console.WriteLine($"WindowSize={opts.WindowSize} Epochs={opts.Epochs} BatchSize={opts.BatchSize}");
 
-        var rng = new Random(42);
+        // Deterministic synthetic signal — a linear ramp + 1.0-period
+        // sinusoid is enough to exercise DeepANT's anomaly-detection
+        // path under the profiler without randomness adding variance
+        // to the timing measurements.
         const int trainLength = 100;
         var x = new Matrix<double>(trainLength, opts.WindowSize);
         var y = new Vector<double>(trainLength);

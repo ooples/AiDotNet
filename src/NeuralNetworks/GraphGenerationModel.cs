@@ -534,48 +534,35 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         int epochs = 200,
         double learningRate = 0.01)
     {
-        var lr = NumOps.FromDouble(learningRate);
-
-        for (int epoch = 0; epoch < epochs; epoch++)
+        // The previous implementation walked an alternative gradient path
+        // (ComputeReconstructionGradient + per-layer UpdateParameters) that
+        // never wired the reconstruction gradient back into the variational
+        // weight gradients — Adam saw an all-zero gradient and parameters
+        // never moved. Route through the same tape-based training step the
+        // single-step Train(input, expectedOutput) uses; the explicit
+        // adjacencyMatrix overrides EnsureAdjacencyMatrix's fully-connected
+        // default for the duration of this call.
+        _autoAdjacencyMatrix = adjacencyMatrix;
+        try
         {
-            // Set to training mode
-            foreach (var layer in Layers)
+            for (int epoch = 0; epoch < epochs; epoch++)
             {
-                layer.SetTrainingMode(true);
-            }
-
-            // Forward pass
-            var reconstructed = Forward(nodeFeatures, adjacencyMatrix);
-
-            // Compute reconstruction gradient
-            var reconGrad = ComputeReconstructionGradient(reconstructed, adjacencyMatrix);
-
-            // Backward pass
-
-            // Update encoder parameters
-            foreach (var layer in Layers)
-            {
-                layer.UpdateParameters(lr);
-            }
-
-            // Update variational layer parameters
-            if (_meanWeightsGradient != null)
-            {
-                _meanWeights = Engine.TensorSubtract(_meanWeights,
-                    Engine.TensorMultiplyScalar(_meanWeightsGradient, lr));
-            }
-            if (_logVarWeightsGradient != null)
-            {
-                _logVarWeights = Engine.TensorSubtract(_logVarWeights,
-                    Engine.TensorMultiplyScalar(_logVarWeightsGradient, lr));
+                // expectedOutput is unused by the tape path (the adjacency
+                // matrix is the reconstruction target and is supplied via
+                // _autoAdjacencyMatrix); pass adjacencyMatrix for clarity.
+                Train(nodeFeatures, adjacencyMatrix);
             }
         }
-
-        // Set to inference mode
-        foreach (var layer in Layers)
+        finally
         {
-            layer.SetTrainingMode(false);
+            foreach (var layer in Layers)
+                layer.SetTrainingMode(false);
         }
+        // Note: learningRate is currently absorbed by AdamOptimizer's
+        // default options inside the tape-based step. Honoring a custom
+        // learningRate here would require threading an optimizer factory
+        // through Train(input, expectedOutput) — tracked separately.
+        _ = learningRate;
     }
 
     /// <summary>
@@ -932,11 +919,20 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         var latent = Reparameterize(mean, logVar);
         var reconstructed = Decode(latent);
 
-        // Reconstruction loss via a standard BCE loss function that we
-        // know backpropagates correctly on the tape. BinaryCrossEntropy
-        // handles the ε-clamp and log internally.
-        var bceLoss = new LossFunctions.BinaryCrossEntropyLoss<T>();
-        var reconLoss = bceLoss.ComputeTapeLoss(reconstructed, adjacencyMatrix);
+        // Reconstruction loss via the configured loss function. Defaults
+        // to BinaryCrossEntropy (paper-faithful for VGAE; ε-clamp + log
+        // handled internally) when the caller didn't supply one. Using
+        // the field instead of a fresh instance respects caller overrides
+        // and means any stateful loss (e.g., a tracked moving average)
+        // sees every step.
+        if (_lossFunction is not LossFunctions.LossFunctionBase<T> tapeLoss)
+        {
+            throw new InvalidOperationException(
+                "GraphGenerationModel requires a tape-capable loss function " +
+                $"(got {_lossFunction.GetType().Name}). Pass a LossFunctionBase<T> " +
+                "subclass via the lossFunction constructor parameter.");
+        }
+        var reconLoss = tapeLoss.ComputeTapeLoss(reconstructed, adjacencyMatrix);
 
         // KL divergence to N(0, I) per Kipf & Welling 2016 §3.2:
         //   KL = 0.5 * Σ (exp(logVar) + μ² - 1 - logVar)
@@ -949,7 +945,14 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         var klTerms = Engine.TensorSubtract<T>(minusOne, logVar);
         var klAxes = Enumerable.Range(0, klTerms.Shape.Length).ToArray();
         var klSum = Engine.ReduceSum<T>(klTerms, klAxes, keepDims: false);
-        var klLoss = Engine.TensorMultiplyScalar<T>(klSum, NumOps.FromDouble(0.5));
+        // Average per element to match ComputeKLDivergence() / ComputeLoss()
+        // which return a per-element mean. Without this normalization, larger
+        // graphs / latent sizes scale the KL term linearly while BCE stays
+        // averaged, so the training objective drifts from what the inference-
+        // path metrics report.
+        int klElements = Math.Max(1, mean.Length);
+        var klScale = NumOps.FromDouble(0.5 / klElements);
+        var klLoss = Engine.TensorMultiplyScalar<T>(klSum, klScale);
 
         // L = L_recon + β · L_KL. β = KLWeight matches the warmup /
         // annealing constant the paper suggests for VGAE training.
@@ -1008,9 +1011,12 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
 
         var parameterGradients = new Vector<T>(gradList.ToArray());
 
-        var stepOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Use the configured _optimizer so Adam momentum / scheduler state
+        // accumulates across batches. The previous code created a fresh
+        // optimizer per step, which silently reset moments to zero and made
+        // training behave like plain SGD with momentum=0.
         var currentParameters = GetParameters();
-        var updatedParameters = stepOptimizer.UpdateParameters(currentParameters, parameterGradients);
+        var updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
         UpdateParameters(updatedParameters);
     }
 

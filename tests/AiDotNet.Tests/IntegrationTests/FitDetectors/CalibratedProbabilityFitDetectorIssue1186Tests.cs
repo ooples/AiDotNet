@@ -2,6 +2,7 @@ using System;
 using AiDotNet.FitDetectors;
 using AiDotNet.Models;
 using AiDotNet.Models.Inputs;
+using AiDotNet.Models.Results;
 using AiDotNet.Statistics;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -82,8 +83,7 @@ public class CalibratedProbabilityFitDetectorIssue1186Tests
         var detector = new CalibratedProbabilityFitDetector<double, Tensor<double>, Tensor<double>>();
         var result = detector.DetectFit(BuildEvalData(predTensor, actualTensor));
 
-        Assert.NotNull(result);
-        Assert.NotEmpty(result.Recommendations);
+        AssertValidResult(result);
     }
 
     /// <summary>
@@ -127,7 +127,23 @@ public class CalibratedProbabilityFitDetectorIssue1186Tests
         var detector = new CalibratedProbabilityFitDetector<double, Tensor<double>, Tensor<double>>();
         var result = detector.DetectFit(BuildEvalData(predTensor, actualTensor));
 
+        AssertValidResult(result);
+    }
+
+    /// <summary>
+    /// Shared assertion: a valid CalibratedProbabilityFitDetector result must
+    /// have a defined FitType, a confidence in [0, 1], and at least one
+    /// recommendation. "Does not throw" alone is too weak — it would still
+    /// pass if a regression silently returned default(FitDetectorResult).
+    /// </summary>
+    private static void AssertValidResult(FitDetectorResult<double> result)
+    {
         Assert.NotNull(result);
+        Assert.True(Enum.IsDefined(typeof(AiDotNet.Enums.FitType), result.FitType),
+            $"FitType = {result.FitType} is not a defined enum value.");
+        Assert.True(result.ConfidenceLevel >= 0.0 && result.ConfidenceLevel <= 1.0,
+            $"ConfidenceLevel = {result.ConfidenceLevel} should be in [0, 1].");
+        Assert.NotEmpty(result.Recommendations);
     }
 
     private static ModelEvaluationData<double, Tensor<double>, Tensor<double>> BuildEvalData(

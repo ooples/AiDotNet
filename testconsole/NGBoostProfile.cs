@@ -38,7 +38,8 @@ internal static class NGBoostProfile
         Console.WriteLine($"Train   : {trainSw.Elapsed.TotalSeconds,8:F3} s  (CI timeout = 60s)");
 
         var predictSw = Stopwatch.StartNew();
-        var pred = model.Predict(testX);
+        // Discard — we only care about wall-clock time for the profile.
+        _ = model.Predict(testX);
         predictSw.Stop();
         Console.WriteLine($"Predict : {predictSw.Elapsed.TotalSeconds,8:F3} s");
 

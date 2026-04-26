@@ -36,7 +36,8 @@ internal static class SVCProfile
         Console.WriteLine($"Train   : {trainSw.Elapsed.TotalSeconds,8:F3} s  (CI timeout = 60s)");
 
         var predictSw = Stopwatch.StartNew();
-        var pred = model.Predict(testX);
+        // Discard — only the wall-clock measurement matters here.
+        _ = model.Predict(testX);
         predictSw.Stop();
         Console.WriteLine($"Predict : {predictSw.Elapsed.TotalSeconds,8:F3} s");
 
