@@ -48,10 +48,19 @@ internal static class DeepANTProfile
             return;
         }
 
+        // DeepANT.Predict(Matrix) short-circuits to the training-series
+        // cache (returns _trainingSeries[i] for rows where i < trainN),
+        // so it never actually exercises the conv/FC path on the train
+        // matrix we just fit on. That makes the benchmark useless for
+        // profiling inference — we'd be timing a dictionary lookup.
+        // Route row-by-row through PredictSingle, which always runs the
+        // forward pass.
         var predictSw = Stopwatch.StartNew();
         try
         {
-            _ = model.Predict(x);
+            var pred = new Vector<double>(trainLength);
+            for (int i = 0; i < trainLength; i++)
+                pred[i] = model.PredictSingle(x.GetRow(i));
             predictSw.Stop();
             Console.WriteLine($"Predict : {predictSw.Elapsed.TotalSeconds,8:F3} s");
         }

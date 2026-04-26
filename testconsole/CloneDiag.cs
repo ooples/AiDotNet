@@ -82,7 +82,18 @@ internal static class CloneDiag
         var cp = type.GetProperty("ClassProbabilities")?.GetValue(node);
         var lc = type.GetProperty("LeftChild")?.GetValue(node);
         var rc = type.GetProperty("RightChild")?.GetValue(node);
-        string cpStr = cp is null ? "<null>" : "[" + string.Join(",", (cp as System.Collections.IEnumerable)!.Cast<object>().Select(o => o?.ToString())) + "]";
+        // Defend against ClassProbabilities exposing a scalar or a
+        // dictionary via reflection — only treat it as a sequence when
+        // it actually implements IEnumerable. Otherwise fall back to
+        // the value's ToString() so the diagnostic still prints
+        // something useful instead of throwing NRE on `.Cast<object>()`.
+        string cpStr = cp switch
+        {
+            null => "<null>",
+            System.Collections.IEnumerable enumerable =>
+                "[" + string.Join(",", enumerable.Cast<object>().Select(o => o?.ToString())) + "]",
+            _ => cp.ToString() ?? "<unknown>"
+        };
         string leaf = (lc is null && rc is null) ? "LEAF" : "INNER";
         return $"{leaf} feat={fi} th={th} pred={pc} cp={cpStr}";
     }

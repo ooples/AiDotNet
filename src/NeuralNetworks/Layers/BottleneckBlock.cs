@@ -66,6 +66,17 @@ public class BottleneckBlock<T> : LayerBase<T>
     private readonly BatchNormalizationLayer<T>? _downsampleBn;
     private readonly IActivationFunction<T> _relu;
     private readonly bool _hasDownsample;
+    // Stored constructor args for serialization round-trip — without
+    // these, DeserializationHelper defaults Stride=1 / ZeroInitResidual=true
+    // which makes the cloned ResNet50 spatial dims diverge from the
+    // original (224→56 instead of 224→7) and a single Predict call goes
+    // from ~5s to ~80s due to convs running at 64× larger feature maps.
+    private readonly int _inChannels;
+    private readonly int _baseChannels;
+    private readonly int _stride;
+    private readonly int _inputHeight;
+    private readonly int _inputWidth;
+    private readonly bool _zeroInitResidual;
 
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastConv1Output;
@@ -125,6 +136,12 @@ public class BottleneckBlock<T> : LayerBase<T>
             inputShape: [inChannels, inputHeight, inputWidth],
             outputShape: [baseChannels * Expansion, inputHeight / stride, inputWidth / stride])
     {
+        _inChannels = inChannels;
+        _baseChannels = baseChannels;
+        _stride = stride;
+        _inputHeight = inputHeight;
+        _inputWidth = inputWidth;
+        _zeroInitResidual = zeroInitResidual;
         int outChannels = baseChannels * Expansion;
         _relu = new ReLUActivation<T>();
 
@@ -202,6 +219,27 @@ public class BottleneckBlock<T> : LayerBase<T>
         RegisterSubLayer(_bn3);
         if (_downsampleConv is not null) RegisterSubLayer(_downsampleConv);
         if (_downsampleBn is not null) RegisterSubLayer(_downsampleBn);
+    }
+
+    // Constructor args round-trip for serialization. DeserializationHelper
+    // reads BaseChannels (via OutputChannels/Expansion), Stride, and
+    // ZeroInitResidual to recreate an identically-configured block.
+    // Without these, downsample blocks (stride=2 in ResNet50 stages 2/3/4)
+    // reconstruct with stride=1 — the cloned network's spatial dims stay
+    // 56×56 through every stage instead of shrinking to 7×7, so each
+    // Predict call does 64× more work in the late stages and a 5s
+    // Predict turns into 80+ seconds.
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        var ic = System.Globalization.CultureInfo.InvariantCulture;
+        metadata["InChannels"] = _inChannels.ToString(ic);
+        metadata["BaseChannels"] = _baseChannels.ToString(ic);
+        metadata["Stride"] = _stride.ToString(ic);
+        metadata["InputHeight"] = _inputHeight.ToString(ic);
+        metadata["InputWidth"] = _inputWidth.ToString(ic);
+        metadata["ZeroInitResidual"] = _zeroInitResidual.ToString(ic);
+        return metadata;
     }
 
     /// <summary>

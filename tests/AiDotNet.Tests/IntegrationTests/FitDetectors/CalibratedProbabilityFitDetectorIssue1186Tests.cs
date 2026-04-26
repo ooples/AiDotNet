@@ -140,9 +140,8 @@ public class CalibratedProbabilityFitDetectorIssue1186Tests
     {
         Assert.NotNull(result);
         Assert.True(Enum.IsDefined(typeof(AiDotNet.Enums.FitType), result.FitType),
-            $"FitType = {result.FitType} is not a defined enum value.");
-        Assert.True(result.ConfidenceLevel >= 0.0 && result.ConfidenceLevel <= 1.0,
-            $"ConfidenceLevel = {result.ConfidenceLevel} should be in [0, 1].");
+            $"FitType must be a defined enum value; got {result.FitType}.");
+        Assert.InRange(result.ConfidenceLevel, 0.0, 1.0);
         Assert.NotEmpty(result.Recommendations);
     }
 

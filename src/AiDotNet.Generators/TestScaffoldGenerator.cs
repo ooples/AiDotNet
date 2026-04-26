@@ -1713,10 +1713,58 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             string outShape = isOpticalFlowModel ? "2, 64, 64" : "3, 64, 64";
             sb.AppendLine($"    protected override int[] OutputShape => new[] {{ {outShape} }};");
         }
+        else if (isVisionModel && model.ClassName.StartsWith("ViLBERT", System.StringComparison.Ordinal))
+        {
+            // Lu et al. 2019 §3 ("ViLBERT") feeds Faster-RCNN region
+            // features into the vision stream, NOT raw pixels — the
+            // paper uses MaxVisualRegions=36 regions with VisionDim=1024
+            // (Table 1). The model's first vision-stream layer is
+            // LayerNorm(VisionDim=1024), which rejects a raw-image
+            // [3,64,64] tensor because its last dim (64) doesn't match
+            // gamma (1024). Emit the paper-correct region-feature shape
+            // so the invariant tests actually exercise the vision
+            // stream at its specified input contract.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 36, 1024 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
+        else if (isVisionModel &&
+                 (model.ClassName.StartsWith("UNITER", System.StringComparison.Ordinal)
+                  || model.ClassName.StartsWith("VisualBERT", System.StringComparison.Ordinal)
+                  || model.ClassName.StartsWith("Oscar", System.StringComparison.Ordinal)
+                  || model.ClassName.StartsWith("VinVL", System.StringComparison.Ordinal)))
+        {
+            // Single-stream VL models (Chen et al. 2020 UNITER, Li et al.
+            // 2019 VisualBERT, Li et al. 2020 Oscar, Zhang et al. 2021
+            // VinVL) all take Faster-RCNN region features of shape
+            // [MaxRegions=36, VisionDim=2048] per their respective
+            // papers — raw pixels are never the input; a separate
+            // Faster-RCNN extractor runs upstream. The models'
+            // projection layer (Dense(2048, FusionDim=768)) rejects a
+            // raw-image tensor because its last dim (64) doesn't match
+            // the expected 2048. Emit the paper-correct shape so the
+            // transformer actually runs.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 36, 2048 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
         else if (isVisionModel)
         {
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 64, 64 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
+        else if (family == TestFamily.TTS)
+        {
+            // TTS vocoders (MelGAN family, HiFiGAN, ParallelWaveGAN, etc.)
+            // take a mel-spectrogram of shape [MelChannels=80, T_frames]
+            // per the standard TTS pipeline (mel frames at 24 kHz with
+            // hop_size=300, MelChannels=80 per Yang et al. 2021 §3.1 and
+            // peers). The default vocoder layer stack projects
+            // [T_frames, MelChannels] → [T_frames, hiddenDim=384] → ...
+            // → [T_frames, 1] so the natural network output is
+            // [T_frames, 1] (one waveform sample per mel frame before
+            // PQMF synthesis upsamples to T_frames × HopSize). Use a
+            // short 8-frame mel for smoke-test speed.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 8, 80 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 1 };");
         }
         else if (isAudioModel)
         {

@@ -348,7 +348,13 @@ public class NeuralNetworkArchitecture<T>
             InputType.TwoDimensional => 2,
             InputType.ThreeDimensional => 3,
             InputType.FourDimensional => 4,
-            _ => 3
+            // Fail fast on invalid / deserialized-garbage enum values
+            // instead of silently coercing to 3D — a wrong dimensionality
+            // propagates into every downstream layer's shape arithmetic
+            // and is nearly impossible to diagnose after the fact.
+            _ => throw new InvalidOperationException(
+                $"Invalid InputType enum value '{InputType}' in InputDimension. " +
+                "Expected One/Two/Three/FourDimensional.")
         };
 
     /// <summary>

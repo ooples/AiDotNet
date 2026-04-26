@@ -345,6 +345,28 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
 
+    // Hotfix: bypass the compiled-replay path in NeuralNetworkBase.Predict
+    // because Forward has shape-conditional control flow (batch-dim
+    // promotion, post-pipeline reshape) that the tracer does not capture
+    // correctly — routing through PredictCompiled returned an intermediate
+    // feature-map shape instead of the final logits, and also cached the
+    // first input so Predict(x2) returned Predict(x1)'s output. Tracked at
+    // ooples/AiDotNet.Tensors#228; remove this override once that lands.
+    //
+    // Also force eval mode here (matches PyTorch model.eval() before
+    // inference). NeuralNetworkBase defaults IsTrainingMode=true at
+    // construction, so a fresh-out-of-ctor VGG runs Predict with the
+    // classifier-head DropoutLayers actively dropping random units —
+    // Clone()'s deserialized copy ends up in eval mode (the deserializer
+    // calls SetTrainingMode(false)), so original and clone diverge by the
+    // dropout mask.
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        SetTrainingMode(false);
+        return Forward(input);
+    }
+
     /// <summary>
     /// Trains the VGG network using the provided input and expected output.
     /// </summary>

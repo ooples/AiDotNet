@@ -197,6 +197,11 @@ public class SupportVectorClassifier<T> : SVMBase<T>
             _xTrainRows[i] = GetRowArray(_xTrain, i);
         _yTrainArr = _yTrain.ToArray();
         _alphasArr = new T[n];
+        // Capture the freshly-initialized array once so the hot SMO
+        // inner loop doesn't carry a `_alphasArr!` null-forgive on
+        // every write. The field is guaranteed non-null for the scope
+        // of this method.
+        var alphasArr = _alphasArr;
 
         T C = NumOps.FromDouble(Options.C);
         T tolerance = NumOps.FromDouble(Options.Tolerance);
@@ -271,8 +276,8 @@ public class SupportVectorClassifier<T> : SVMBase<T>
 
                     _alphas[i] = alphaINew;
                     _alphas[j] = alphaJNew;
-                    _alphasArr![i] = alphaINew;
-                    _alphasArr![j] = alphaJNew;
+                    alphasArr[i] = alphaINew;
+                    alphasArr[j] = alphaJNew;
 
                     numChangedAlphas++;
                 }

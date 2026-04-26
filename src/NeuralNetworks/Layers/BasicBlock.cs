@@ -57,6 +57,18 @@ public class BasicBlock<T> : LayerBase<T>
     private readonly BatchNormalizationLayer<T>? _downsampleBn;
     private readonly IActivationFunction<T> _relu;
     private readonly bool _hasDownsample;
+    // Stored constructor args needed for serialization round-trip
+    // (DeserializationHelper reads these from GetMetadata to reconstruct
+    // an identically-configured block — without them, stride/inChannels/
+    // zeroInitResidual all default to wrong values for downsample blocks
+    // and the cloned ResNet's spatial dimensions diverge from the
+    // original's, producing wrong inference output).
+    private readonly int _inChannels;
+    private readonly int _outChannels;
+    private readonly int _stride;
+    private readonly int _inputHeight;
+    private readonly int _inputWidth;
+    private readonly bool _zeroInitResidual;
 
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastConv1Output;
@@ -111,6 +123,12 @@ public class BasicBlock<T> : LayerBase<T>
             inputShape: [inChannels, inputHeight, inputWidth],
             outputShape: [outChannels, inputHeight / stride, inputWidth / stride])
     {
+        _inChannels = inChannels;
+        _outChannels = outChannels;
+        _stride = stride;
+        _inputHeight = inputHeight;
+        _inputWidth = inputWidth;
+        _zeroInitResidual = zeroInitResidual;
         _relu = new ReLUActivation<T>();
 
         // First conv: 3x3, stride = stride
@@ -172,6 +190,24 @@ public class BasicBlock<T> : LayerBase<T>
         RegisterSubLayer(_bn2);
         if (_downsampleConv is not null) RegisterSubLayer(_downsampleConv);
         if (_downsampleBn is not null) RegisterSubLayer(_downsampleBn);
+    }
+
+    // Constructor args round-trip for serialization. DeserializationHelper
+    // reads these to recreate an identically-configured block — without
+    // them, downsample blocks (stride=2 in stage 2/3/4) reconstruct with
+    // stride=1, keeping spatial dims unchanged through the network and
+    // producing wrong inference output in the cloned model.
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        var ic = System.Globalization.CultureInfo.InvariantCulture;
+        metadata["InChannels"] = _inChannels.ToString(ic);
+        metadata["OutChannels"] = _outChannels.ToString(ic);
+        metadata["Stride"] = _stride.ToString(ic);
+        metadata["InputHeight"] = _inputHeight.ToString(ic);
+        metadata["InputWidth"] = _inputWidth.ToString(ic);
+        metadata["ZeroInitResidual"] = _zeroInitResidual.ToString(ic);
+        return metadata;
     }
 
     /// <summary>

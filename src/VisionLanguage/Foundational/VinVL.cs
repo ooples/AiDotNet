@@ -57,6 +57,9 @@ public class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
     private int _projectionLayerEnd;
+    // Task head index — Zhang et al. 2021 VinVL inherits Oscar's
+    // pooled-token → Dense head pattern for downstream tasks (paper §4).
+    private int _taskHeadIdx;
 
     public VinVL(NeuralNetworkArchitecture<T> architecture, string modelPath, VinVLOptions? options = null) : base(architecture) { _options = options ?? new VinVLOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.FusionDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
     public VinVL(NeuralNetworkArchitecture<T> architecture, VinVLOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new VinVLOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.FusionDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
@@ -106,16 +109,60 @@ public class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _projectionLayerEnd = 0; }
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _projectionLayerEnd = 0;
+            _taskHeadIdx = Layers.Count;
+        }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultSingleStreamFusionLayers(_options.VisionDim, _options.TextDim, _options.FusionDim, _options.NumFusionLayers, _options.NumHeads, _options.DropoutRate));
-            _projectionLayerEnd = (_options.VisionDim != _options.FusionDim ? 2 : 0) + (_options.TextDim != _options.FusionDim ? 2 : 0);
+            Layers.AddRange(LayerHelper<T>.CreateDefaultSingleStreamFusionLayers(
+                _options.VisionDim, _options.TextDim, _options.FusionDim,
+                _options.NumFusionLayers, _options.NumHeads, _options.DropoutRate));
+            _projectionLayerEnd = (_options.VisionDim != _options.FusionDim ? 2 : 0)
+                                 + (_options.TextDim != _options.FusionDim ? 2 : 0);
+            _taskHeadIdx = Layers.Count;
+            AiDotNet.Interfaces.IActivationFunction<T> idAct =
+                new AiDotNet.ActivationFunctions.IdentityActivation<T>();
+            Layers.Add(new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(
+                _options.FusionDim, Architecture.OutputSize, idAct));
         }
     }
 
+    private static Tensor<T> MeanPoolOverTokens(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank != 2) return input;
+        int n = input.Shape[0]; int d = input.Shape[1];
+        var output = new Tensor<T>([d]);
+        T invN = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().FromDouble(1.0 / n);
+        for (int i = 0; i < d; i++)
+        {
+            T sum = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Zero;
+            for (int j = 0; j < n; j++)
+                sum = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Add(sum, input[j, i]);
+            output[i] = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Multiply(sum, invN);
+        }
+        return output;
+    }
+
+    private Tensor<T> RunStream(Tensor<T> input)
+    {
+        var c = input;
+        int end = _taskHeadIdx;
+        for (int i = 0; i < end; i++) c = Layers[i].Forward(c);
+        if (_taskHeadIdx < Layers.Count)
+        {
+            c = MeanPoolOverTokens(c);
+            c = Layers[_taskHeadIdx].Forward(c);
+        }
+        return c;
+    }
+
     private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>(); SetTrainingMode(false); return RunStream(input); }
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunStream(input);
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);

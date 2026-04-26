@@ -246,16 +246,21 @@ public class CalibratedProbabilityFitDetector<T, TInput, TOutput> : FitDetectorB
                 int classIdx = NumOps.ToInt32(actual[i]);
                 if (classIdx < 0 || classIdx >= numClasses)
                 {
-                    // Bad input shape, not "labels happen to be probabilities".
-                    // Failing fast surfaces the encoding mismatch where the
-                    // caller can fix it; the previous silent fallback to a
-                    // class-0 slice produced misleading calibration values
-                    // that looked plausible at a glance.
+                    // A label outside [0, numClasses) means the caller
+                    // passed something other than class indices (e.g.
+                    // soft probabilities, one-hot rows flattened into
+                    // this position, or a mis-encoded class). The old
+                    // code silently coerced to class 0 — that hid real
+                    // bugs behind seemingly-valid calibration numbers.
+                    // Fail fast with both the sample index and the
+                    // legal range so the caller can fix the pipeline
+                    // instead of shipping garbage metrics. If 'actual'
+                    // contains probabilities rather than class indices,
+                    // flatten it to match 'predicted' length so the
+                    // binary calibration path is selected instead.
                     throw new InvalidOperationException(
-                        $"CalibratedProbabilityFitDetector: invalid class index {classIdx} at sample {i}. " +
-                        $"Expected class indices in [0, {numClasses - 1}]. If 'actual' contains probabilities " +
-                        $"rather than class indices, flatten it to match 'predicted' length so the binary " +
-                        $"calibration path is selected instead.");
+                        $"CalibratedProbabilityFitDetector: class label at sample {i} is out of range. " +
+                        $"Received {classIdx}, expected [0, {numClasses - 1}].");
                 }
                 reducedPredicted[i] = predicted[i * numClasses + classIdx];
                 reducedActual[i] = NumOps.One;

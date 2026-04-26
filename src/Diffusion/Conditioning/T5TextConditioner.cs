@@ -3,6 +3,7 @@ using AiDotNet.Models;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Attention;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Diffusion.Conditioning;
 
@@ -76,25 +77,76 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
     /// </summary>
     private readonly int _ffnDim;
 
-    // ---- Cached per-layer weight tensors. Lazily built from TransformerWeights on first call. ----
-    // Layout per layer (offset into TransformerWeights, sizes in elements):
-    //   0                                    : norm1_gamma  [H]
-    //   H                                    : W_q          [H, H]
-    //   H + H^2                              : W_k          [H, H]
-    //   H + 2*H^2                            : W_v          [H, H]
-    //   H + 3*H^2                            : W_o          [H, H]
-    //   H + 4*H^2                            : norm2_gamma  [H]
-    //   2*H + 4*H^2                          : W_i_0        [H, FFN]   (GeGLU gate path, GELU activated)
-    //   2*H + 4*H^2 + H*FFN                  : W_i_1        [H, FFN]   (GeGLU value path, linear)
-    //   2*H + 4*H^2 + 2*H*FFN                : W_o_ffn      [FFN, H]
-    // Total per layer: 4*H^2 + 3*H*FFN + 2*H elements.
-    private Tensor<T>[]? _qWeightTensors;
-    private Tensor<T>[]? _kWeightTensors;
-    private Tensor<T>[]? _vWeightTensors;
-    private Tensor<T>[]? _attnOutWeightTensors;
-    private Tensor<T>[]? _ffnGateWeightTensors;   // W_i_0 in GeGLU
-    private Tensor<T>[]? _ffnValueWeightTensors;  // W_i_1 in GeGLU
-    private Tensor<T>[]? _ffnOutWeightTensors;    // W_o (FFN down-projection)
+    // ---- Per-layer lazy rent-and-return weight storage. ----
+    // The previous implementation cached every layer's Q/K/V/O/FFN
+    // tensors simultaneously in a single flat Vector<T>. That layout
+    // overflows int32 for T5-XXL (24 layers × 4·H² + 3·H·F + 2·H =
+    // ~4.6B elements; issue #1189) AND keeps ~37GB of weight memory
+    // resident in a 32GB CI process even when it fits in int.
+    //
+    // Instead we allocate each layer's weights on demand inside the
+    // forward pass via TensorAllocator.Rent<T>(), initialize them from
+    // a per-layer deterministic seed, run the layer, and return the
+    // rented buffers to the pool before the next layer's rent. Peak
+    // working memory drops to a single layer (≈1.5GB for T5-XXL at
+    // double) and the pool reuses the same backing arrays across the
+    // 24 layers.
+    //
+    // Determinism: every EncodeText call re-seeds layer l from
+    // (_baseSeed XOR l XOR matrixTag), so repeat calls with the same
+    // input produce the same output without ever persisting weights.
+    // When a caller eventually wants pretrained weights loaded from a
+    // .safetensors checkpoint, that is a separate code path that
+    // populates a _loadedWeights cache short-circuiting the rent — not
+    // in this PR.
+    //
+    // Matrix tags (used to salt the per-matrix seed so Q weights are
+    // distinct from K, V, O, etc. within the same layer).
+    private const int MatrixTagQ       = 0;
+    private const int MatrixTagK       = 1;
+    private const int MatrixTagV       = 2;
+    private const int MatrixTagO       = 3;
+    private const int MatrixTagFfnGate = 4;
+    private const int MatrixTagFfnVal  = 5;
+    private const int MatrixTagFfnOut  = 6;
+
+    /// <summary>
+    /// The master seed this encoder was constructed with. Used to
+    /// generate per-layer per-matrix deterministic weights during
+    /// forward. Stored separately from <see cref="TextConditioningBase{T}.Rng"/>
+    /// (which is shared with TokenEmbeddings / PositionEmbeddings
+    /// initialization) so layer weight generation is reproducible
+    /// independently of any other random draws.
+    /// </summary>
+    private readonly int _baseSeed;
+
+    /// <summary>
+    /// Bundle of rented tensors that make up one encoder layer's
+    /// weight set. Populated by <see cref="RentAndInitLayerWeights"/>,
+    /// returned to the pool by <see cref="ReturnLayerWeights"/>.
+    /// </summary>
+    private readonly struct LayerWeights
+    {
+        public readonly Tensor<T> Q;            // [H, H]
+        public readonly Tensor<T> K;            // [H, H]
+        public readonly Tensor<T> V;            // [H, H]
+        public readonly Tensor<T> AttnOut;      // [H, H]
+        public readonly Tensor<T> FfnGate;      // [H, F] — GeGLU gate (GELU-activated)
+        public readonly Tensor<T> FfnValue;     // [H, F] — GeGLU value (linear)
+        public readonly Tensor<T> FfnOut;       // [F, H] — FFN down-projection
+        public readonly Vector<T> Norm1Gamma;   // [H]
+        public readonly Vector<T> Norm2Gamma;   // [H]
+
+        public LayerWeights(
+            Tensor<T> q, Tensor<T> k, Tensor<T> v, Tensor<T> attnOut,
+            Tensor<T> ffnGate, Tensor<T> ffnValue, Tensor<T> ffnOut,
+            Vector<T> norm1Gamma, Vector<T> norm2Gamma)
+        {
+            Q = q; K = k; V = v; AttnOut = attnOut;
+            FfnGate = ffnGate; FfnValue = ffnValue; FfnOut = ffnOut;
+            Norm1Gamma = norm1Gamma; Norm2Gamma = norm2Gamma;
+        }
+    }
 
     /// <summary>
     /// Cached relative-position-bias broadcast for a specific seqLen, shape [NumHeads, seqLen, seqLen].
@@ -134,6 +186,16 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
     private Tensor<T>? _rmsEpsTensor;
 
     /// <summary>
+    /// Shared all-ones Vector&lt;T&gt; of length HiddenSize, reused for every
+    /// layer's pre-attention and pre-FFN RMSNorm gamma. T5.1.1 initializes
+    /// every norm gamma to 1.0 and the forward pass never mutates them, so
+    /// 24 layers × 2 gammas can safely alias a single immutable buffer
+    /// instead of allocating 48 fresh Vector&lt;T&gt;(H) per encode (~1.5MB
+    /// of gen0 garbage per call for T5-XXL).
+    /// </summary>
+    private Vector<T>? _onesGamma;
+
+    /// <summary>
     /// Gets whether this module produces pooled output (T5 does not).
     /// </summary>
     public override bool ProducesPooledOutput => false;
@@ -167,121 +229,240 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
             numLayers: GetNumLayers(variant),
             numHeads: GetNumHeads(variant),
             maxSequenceLength: maxSequenceLength,
-            seed: seed)
+            seed: seed,
+            // We manage per-layer weight storage ourselves via lazy
+            // rent-and-return on TensorAllocator (see LayerWeights +
+            // RentAndInitLayerWeights). The base class's single flat
+            // Vector<T> layout cannot represent T5-XXL (4.6B params >
+            // int.MaxValue), so opt out of that allocation entirely.
+            skipBaseWeightAllocation: true)
     {
         _variant = variant;
         _numBuckets = 32;
         _ffnDim = GetFfnDim(variant);
+        // Default seed when the caller passes null: 0 is fine because
+        // the master seed salts per-layer, per-matrix below and the
+        // hash-combine guarantees distinct streams for different
+        // (layer, matrix) pairs even at _baseSeed == 0.
+        _baseSeed = seed ?? 0;
 
         // Relative position bias: [numHeads, numBuckets] — shared across all encoder layers
         // per the original T5 reference implementation.
         _relativePositionBias = InitializeWeights(NumHeads * _numBuckets);
 
-        // The base class allocated TransformerWeights using its generic 12*H^2 + 4*H per-layer
-        // budget. Reallocate using the actual T5.1.1 budget so each layer gets the right
-        // amount of storage for Q/K/V/O attention plus the GeGLU FFN's three matrices and two
-        // RMS norm gammas. With T5-XXL's d_ff=10240, this is roughly the same total size as
-        // the old generic allocation (~190M params/layer for T5-XXL), but with a layout that
-        // lets us slice each weight matrix to its correct shape rather than reading a single
-        // truncated H^2 block.
-        TransformerWeights = InitializeWeights(NumLayers * GetWeightsPerLayer(HiddenSize, _ffnDim));
-    }
-
-    /// <summary>
-    /// Per-layer storage budget for the T5.1.1 weight blob:
-    /// 4*H^2 attention (Q, K, V, O) + 3*H*FFN GeGLU FFN (gate, value, down) + 2*H norm gammas.
-    /// </summary>
-    private static int GetWeightsPerLayer(int hiddenSize, int ffnDim)
-        => 4 * hiddenSize * hiddenSize + 3 * hiddenSize * ffnDim + 2 * hiddenSize;
-
-    /// <summary>
-    /// Pre-builds per-layer weight matrix tensors from the flat TransformerWeights vector.
-    /// Called lazily on first EncodeText call (after which the cache is reused) and
-    /// after <see cref="InvalidateCachedWeightTensors"/> is invoked to drop stale views.
-    /// </summary>
-    private void EnsureWeightTensorsBuilt()
-    {
-        if (_qWeightTensors != null) return;
-
-        int H = HiddenSize;
-        int F = _ffnDim;
-        int hSq = H * H;
-        int hF = H * F;
-        int weightsPerLayer = GetWeightsPerLayer(H, F);
-
-        _qWeightTensors = new Tensor<T>[NumLayers];
-        _kWeightTensors = new Tensor<T>[NumLayers];
-        _vWeightTensors = new Tensor<T>[NumLayers];
-        _attnOutWeightTensors = new Tensor<T>[NumLayers];
-        _ffnGateWeightTensors = new Tensor<T>[NumLayers];
-        _ffnValueWeightTensors = new Tensor<T>[NumLayers];
-        _ffnOutWeightTensors = new Tensor<T>[NumLayers];
-
-        for (int layer = 0; layer < NumLayers; layer++)
+        // Sanity-check that a single layer's weight matrices fit in
+        // int32 (needed for Vector<T> and the per-matrix element count
+        // passed to TensorAllocator.Rent). For T5-XXL per-layer is
+        // 4·H² + 3·H·F + 2·H = ~193M elements, well below int.MaxValue
+        // (2.1B) — so this is a guard for future oversized variants,
+        // not for T5-XXL itself. T5-XXL's per-layer size at double is
+        // ~1.5GB of RAM, which our rent-and-return pattern keeps to
+        // one layer resident at a time.
+        long perLayerElements = 4L * HiddenSize * HiddenSize
+                              + 3L * HiddenSize * _ffnDim
+                              + 2L * HiddenSize;
+        if (perLayerElements > int.MaxValue)
         {
-            int layerOffset = layer * weightsPerLayer;
-
-            // Skip norm1_gamma (read directly by RMSNormEngine in the forward pass).
-            int qOffset    = layerOffset + H;
-            int kOffset    = qOffset + hSq;
-            int vOffset    = kOffset + hSq;
-            int oOffset    = vOffset + hSq;
-            // Skip norm2_gamma.
-            int wi0Offset  = oOffset + hSq + H;
-            int wi1Offset  = wi0Offset + hF;
-            int woOffset   = wi1Offset + hF;
-
-            _qWeightTensors[layer]        = SliceMatrixTensor(qOffset,   H, H);
-            _kWeightTensors[layer]        = SliceMatrixTensor(kOffset,   H, H);
-            _vWeightTensors[layer]        = SliceMatrixTensor(vOffset,   H, H);
-            _attnOutWeightTensors[layer]  = SliceMatrixTensor(oOffset,   H, H);
-            _ffnGateWeightTensors[layer]  = SliceMatrixTensor(wi0Offset, H, F);
-            _ffnValueWeightTensors[layer] = SliceMatrixTensor(wi1Offset, H, F);
-            _ffnOutWeightTensors[layer]   = SliceMatrixTensor(woOffset,  F, H);
+            throw new InvalidOperationException(
+                $"T5 variant '{variant}' has {perLayerElements:N0} elements per layer, " +
+                $"which exceeds the int32 per-layer cap ({int.MaxValue:N0}). " +
+                $"Per-layer lazy allocation only works when each individual " +
+                $"matrix fits in a single Vector<T> / Tensor<T>. No known T5 " +
+                $"variant trips this — if you hit it, you're on an unsupported " +
+                $"config.");
         }
     }
 
     /// <summary>
-    /// Slices a <c>[rows, cols]</c> matrix tensor out of <see cref="TransformerWeights"/>
-    /// at the given offset, padding with zeros if the source ran short (defensive against
-    /// any caller that under-allocated TransformerWeights).
-    /// </summary>
-    private Tensor<T> SliceMatrixTensor(int offset, int rows, int cols)
-    {
-        int needed = rows * cols;
-        int safeSize = Math.Max(0, Math.Min(needed, TransformerWeights.Length - offset));
-        var data = new Vector<T>(needed);
-        if (safeSize > 0)
-        {
-            var src = TransformerWeights.AsSpan().Slice(offset, safeSize);
-            for (int i = 0; i < safeSize; i++) data[i] = src[i];
-        }
-        return new Tensor<T>(new[] { rows, cols }, data);
-    }
-
-    /// <summary>
-    /// Drops every cached tensor view of <see cref="TransformerWeights"/> and
-    /// <see cref="_relativePositionBias"/>. Call this from any code path that mutates the
-    /// underlying parameter vectors (e.g., custom <c>SetParameters</c> overrides, checkpoint
-    /// loading, or quantization-aware training updates) to prevent the cached tensors from
-    /// silently serving stale weights.
+    /// Rents the seven weight tensors and two norm gammas that make up one
+    /// encoder layer, populating each tensor's backing buffer with a
+    /// deterministic Xavier-normal draw seeded by
+    /// <c>(_baseSeed, layerIdx, matrixTag)</c>.
     /// </summary>
     /// <remarks>
-    /// The cached weight tensors are rebuilt by copying slices of <see cref="TransformerWeights"/>
-    /// (because <c>Vector&lt;T&gt;</c> does not currently expose a view constructor). Without
-    /// invalidation, parameter updates would leave one half of each layer (the cached attn/FFN
-    /// matmul) reading the old weights while the RMS norm path reads the live vector — a subtle
-    /// correctness bug noted in PR review.
+    /// <para>
+    /// The tensors are drawn from <see cref="TensorAllocator"/>'s pool, so
+    /// after the first forward pass warms the arena, every subsequent
+    /// layer in every subsequent call reuses the same underlying arrays —
+    /// zero GC allocations in steady state. Every rented buffer MUST be
+    /// handed back via <see cref="ReturnLayerWeights"/> before the next
+    /// layer is rented so the pool recycles them into the next layer's
+    /// rents rather than growing unboundedly.
+    /// </para>
+    /// <para>
+    /// Determinism across calls: the per-matrix seed is derived by
+    /// <see cref="DeriveSeed"/>, a process-stable integer mix (deliberately
+    /// NOT <c>HashCode.Combine</c>, which is randomized per process start).
+    /// So a T5TextConditioner constructed with a given seed produces the
+    /// same encoder output on every call — essential for checkpointing and
+    /// reproducible training — without persisting any weight cache.
+    /// </para>
+    /// </remarks>
+    private LayerWeights RentAndInitLayerWeights(int layerIdx)
+    {
+        int H = HiddenSize;
+        int F = _ffnDim;
+
+        Tensor<T>? q = null, k = null, v = null, attnOut = null;
+        Tensor<T>? ffnGate = null, ffnValue = null, ffnOut = null;
+        try
+        {
+            // RentUninitialized — every element is overwritten below by
+            // FillXavier so zeroing the buffer first would be wasted work.
+            q        = TensorAllocator.RentUninitialized<T>(new[] { H, H });
+            k        = TensorAllocator.RentUninitialized<T>(new[] { H, H });
+            v        = TensorAllocator.RentUninitialized<T>(new[] { H, H });
+            attnOut  = TensorAllocator.RentUninitialized<T>(new[] { H, H });
+            ffnGate  = TensorAllocator.RentUninitialized<T>(new[] { H, F });
+            ffnValue = TensorAllocator.RentUninitialized<T>(new[] { H, F });
+            ffnOut   = TensorAllocator.RentUninitialized<T>(new[] { F, H });
+
+            FillXavier(q.AsWritableSpan(),        H * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagQ));
+            FillXavier(k.AsWritableSpan(),        H * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagK));
+            FillXavier(v.AsWritableSpan(),        H * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagV));
+            FillXavier(attnOut.AsWritableSpan(),  H * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagO));
+            FillXavier(ffnGate.AsWritableSpan(),  H * F, DeriveSeed(_baseSeed, layerIdx, MatrixTagFfnGate));
+            FillXavier(ffnValue.AsWritableSpan(), H * F, DeriveSeed(_baseSeed, layerIdx, MatrixTagFfnVal));
+            FillXavier(ffnOut.AsWritableSpan(),   F * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagFfnOut));
+
+            // RMSNorm gammas: T5.1.1 initializes every gamma to 1.0 and the
+            // forward pass never mutates them, so all 48 per-layer gammas
+            // (24 layers × 2 norms) safely alias a single shared all-ones
+            // buffer cached on the instance. Saves ~1.5MB of per-call gen0
+            // garbage for T5-XXL.
+            var ones = _onesGamma;
+            if (ones == null || ones.Length != H)
+            {
+                ones = new Vector<T>(H);
+                T one = NumOps.One;
+                for (int i = 0; i < H; i++) ones[i] = one;
+                _onesGamma = ones;
+            }
+
+            return new LayerWeights(q, k, v, attnOut, ffnGate, ffnValue, ffnOut, ones, ones);
+        }
+        catch
+        {
+            // A failure mid-init (RentUninitialized OOM, FillXavier
+            // throwing on a degenerate seed, etc.) must not strand the
+            // earlier rents in the pool — for T5-XXL each layer's
+            // rents total ~1.5GB and would never be reclaimed.
+            // TryReturn swallows secondary failures so the original
+            // exception still surfaces.
+            Exception? cleanup = null;
+            if (q        != null) TryReturn(q,        ref cleanup);
+            if (k        != null) TryReturn(k,        ref cleanup);
+            if (v        != null) TryReturn(v,        ref cleanup);
+            if (attnOut  != null) TryReturn(attnOut,  ref cleanup);
+            if (ffnGate  != null) TryReturn(ffnGate,  ref cleanup);
+            if (ffnValue != null) TryReturn(ffnValue, ref cleanup);
+            if (ffnOut   != null) TryReturn(ffnOut,   ref cleanup);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Returns every tensor in <paramref name="lw"/> to the shared pool so
+    /// subsequent <see cref="RentAndInitLayerWeights"/> calls reuse the
+    /// backing arrays. Must be called in a <c>finally</c> block so a failure
+    /// inside the forward pass doesn't leak the layer's buffers.
+    /// </summary>
+    /// <remarks>
+    /// Each return is independently guarded: if one tensor's <c>Return</c>
+    /// throws (e.g., the allocator's double-return detection trips on a
+    /// caller mistake), the remaining tensors still go back to the pool so
+    /// a single bad return doesn't leak ~1.5GB of layer weights for T5-XXL.
+    /// The first exception is rethrown after all returns have been
+    /// attempted; subsequent exceptions are dropped because surfacing both
+    /// the original failure and downstream failures-to-clean-up only adds
+    /// noise to the stack trace without changing the diagnosis.
+    /// </remarks>
+    private static void ReturnLayerWeights(LayerWeights lw)
+    {
+        Exception? first = null;
+        TryReturn(lw.Q, ref first);
+        TryReturn(lw.K, ref first);
+        TryReturn(lw.V, ref first);
+        TryReturn(lw.AttnOut, ref first);
+        TryReturn(lw.FfnGate, ref first);
+        TryReturn(lw.FfnValue, ref first);
+        TryReturn(lw.FfnOut, ref first);
+        // Norm gammas are plain Vector<T>; the GC reclaims them.
+        if (first != null) throw first;
+    }
+
+    private static void TryReturn(Tensor<T> t, ref Exception? first)
+    {
+        try
+        {
+            TensorAllocator.Return(t);
+        }
+        catch (Exception ex)
+        {
+            if (first == null) first = ex;
+        }
+    }
+
+    /// <summary>
+    /// Fills <paramref name="buf"/> with a Box-Muller Xavier-normal draw
+    /// (stddev = sqrt(2/(size+1))) from a fresh <see cref="Random"/> seeded
+    /// with <paramref name="seed"/>. Each pair of uniforms produces two
+    /// independent normals (cos + sin branches) so RNG work is halved
+    /// versus the single-branch implementation in
+    /// <see cref="TextConditioningBase{T}.InitializeWeights"/> — which
+    /// matters because T5-XXL fills ~193M elements per layer × 24 layers
+    /// on every encode.
+    /// </summary>
+    private static void FillXavier(Span<T> buf, int size, int seed)
+    {
+        var rng = new Random(seed);
+        double stddev = Math.Sqrt(2.0 / (size + 1));
+        int i = 0;
+        while (i < size)
+        {
+            double u1 = 1.0 - rng.NextDouble();
+            double u2 = 1.0 - rng.NextDouble();
+            double r = Math.Sqrt(-2.0 * Math.Log(u1));
+            double theta = 2.0 * Math.PI * u2;
+            buf[i++] = NumOps.FromDouble(r * Math.Cos(theta) * stddev);
+            if (i < size)
+                buf[i++] = NumOps.FromDouble(r * Math.Sin(theta) * stddev);
+        }
+    }
+
+    /// <summary>
+    /// Stable per-process integer mix of <c>(baseSeed, layerIdx, matrixTag)</c>.
+    /// Deliberately does NOT use <see cref="System.HashCode.Combine(int, int, int)"/>
+    /// because that API is randomized per-process by design, which would
+    /// make encoder outputs non-reproducible across process starts.
+    /// </summary>
+    private static int DeriveSeed(int baseSeed, int layerIdx, int matrixTag)
+    {
+        unchecked
+        {
+            int h = baseSeed;
+            h = h * 397 ^ layerIdx;
+            h = h * 397 ^ matrixTag;
+            return h;
+        }
+    }
+
+    /// <summary>
+    /// Drops the cached relative-position-bias broadcasts. Call this from
+    /// any code path that mutates <see cref="_relativePositionBias"/>
+    /// (custom <c>SetParameters</c>, checkpoint load, QAT update) so the
+    /// next <see cref="EncodeText"/> rebuilds the per-seqLen broadcast
+    /// from the new bias values.
+    /// </summary>
+    /// <remarks>
+    /// Encoder-layer weights are no longer cached — they are rented fresh
+    /// from <see cref="TensorAllocator"/> on every forward pass (see
+    /// <see cref="RentAndInitLayerWeights"/>), so no weight invalidation
+    /// is needed. The method's name is kept for API stability; only the
+    /// RPB cache survived the rent-and-return refactor.
     /// </remarks>
     public void InvalidateCachedWeightTensors()
     {
-        _qWeightTensors = null;
-        _kWeightTensors = null;
-        _vWeightTensors = null;
-        _attnOutWeightTensors = null;
-        _ffnGateWeightTensors = null;
-        _ffnValueWeightTensors = null;
-        _ffnOutWeightTensors = null;
         _rpbBroadcastCache.Clear();
         _rpbCacheLruOrder.Clear();
     }
@@ -295,7 +476,16 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
     /// <inheritdoc />
     public override Tensor<T> EncodeText(Tensor<T> tokenIds, Tensor<T>? attentionMask = null)
     {
-        EnsureWeightTensorsBuilt();
+        // NOTE: we DO NOT open a TensorArena scope here. A tempting
+        // optimization would be to wrap the whole encode in
+        // `using var arena = TensorArena.Create()` for zero GC across
+        // calls, but the arena captures every rent and only recycles on
+        // Dispose — which means mid-flight Return() calls are no-ops.
+        // For T5-XXL each layer rents ~1.5GB of weight tensors, so 24
+        // layers inside an arena would accumulate to ~37GB before
+        // release (exactly the pre-refactor OOM pattern). Skipping the
+        // arena lets Return() actually recycle each layer's buffers into
+        // the next layer's rents, keeping peak working set at one layer.
 
         var shape = tokenIds._shape;
         int batchSize = shape[0];
@@ -438,17 +628,13 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
     /// </remarks>
     private Tensor<T> ApplyT5EncoderLayersBatched(Tensor<T> hidden, int batchSize, int seqLen)
     {
-        EnsureWeightTensorsBuilt();
-
         int H = HiddenSize;
-        int F = _ffnDim;
         if (H % NumHeads != 0)
         {
             throw new InvalidOperationException(
                 $"HiddenSize ({H}) must be divisible by NumHeads ({NumHeads}). Variant '{_variant}' has an invalid configuration.");
         }
         int headDim = H / NumHeads;
-        int weightsPerLayer = GetWeightsPerLayer(H, F);
         int totalTokens = batchSize * seqLen;
 
         // Build the relative-position-bias tensor once for this seqLen and reuse for every
@@ -467,58 +653,88 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
 
         for (int layer = 0; layer < NumLayers; layer++)
         {
-            int layerOffset = layer * weightsPerLayer;
+            // Rent this layer's weights from the pool, use them for exactly
+            // this layer's forward, and return them before the next layer's
+            // rent. Peak working memory drops from all-layers-cached
+            // (~37GB for T5-XXL at double) to one-layer-resident
+            // (~1.5GB), and the pool reuses the same backing arrays across
+            // all 24 layers — zero GC allocations after the first pass
+            // warms the pool.
+            var lw = RentAndInitLayerWeights(layer);
+            Exception? bodyFailure = null;
+            try
+            {
+                // ===== Self-attention block (pre-norm + residual) =====
+                var residual = hidden;
+                var normed = RMSNormEngine(hidden, lw.Norm1Gamma, H);
 
-            // ===== Self-attention block (pre-norm + residual) =====
-            var residual = hidden;
-            var norm1Gamma = ExtractSubVectorFast(TransformerWeights, layerOffset, H);
-            var normed = RMSNormEngine(hidden, norm1Gamma, H);
+                // Project Q, K, V via 2D matmul (collapse batch and seq into one axis).
+                var normed2D = Engine.Reshape(normed, new[] { totalTokens, H });
+                var qFlat = Engine.TensorMatMul(normed2D, lw.Q);  // [B*S, H]
+                var kFlat = Engine.TensorMatMul(normed2D, lw.K);
+                var vFlat = Engine.TensorMatMul(normed2D, lw.V);
 
-            // Project Q, K, V via 2D matmul (collapse batch and seq into one axis).
-            var normed2D = Engine.Reshape(normed, new[] { totalTokens, H });
-            var qFlat = Engine.TensorMatMul(normed2D, _qWeightTensors![layer]);  // [B*S, H]
-            var kFlat = Engine.TensorMatMul(normed2D, _kWeightTensors![layer]);
-            var vFlat = Engine.TensorMatMul(normed2D, _vWeightTensors![layer]);
+                // Split heads: [B*S, H] → [B, S, NumHeads, HeadDim] → [B, NumHeads, S, HeadDim]
+                var qSplit = Engine.Reshape(qFlat, new[] { batchSize, seqLen, NumHeads, headDim });
+                var kSplit = Engine.Reshape(kFlat, new[] { batchSize, seqLen, NumHeads, headDim });
+                var vSplit = Engine.Reshape(vFlat, new[] { batchSize, seqLen, NumHeads, headDim });
+                var q4D = Engine.TensorPermute(qSplit, new[] { 0, 2, 1, 3 });
+                var k4D = Engine.TensorPermute(kSplit, new[] { 0, 2, 1, 3 });
+                var v4D = Engine.TensorPermute(vSplit, new[] { 0, 2, 1, 3 });
 
-            // Split heads: [B*S, H] → [B, S, NumHeads, HeadDim] → [B, NumHeads, S, HeadDim]
-            var qSplit = Engine.Reshape(qFlat, new[] { batchSize, seqLen, NumHeads, headDim });
-            var kSplit = Engine.Reshape(kFlat, new[] { batchSize, seqLen, NumHeads, headDim });
-            var vSplit = Engine.Reshape(vFlat, new[] { batchSize, seqLen, NumHeads, headDim });
-            var q4D = Engine.TensorPermute(qSplit, new[] { 0, 2, 1, 3 });
-            var k4D = Engine.TensorPermute(kSplit, new[] { 0, 2, 1, 3 });
-            var v4D = Engine.TensorPermute(vSplit, new[] { 0, 2, 1, 3 });
+                // FlashAttention: softmax(Q @ K^T + RPB) @ V, with our scale=1.0 override (T5).
+                var (attnOut4D, _) = FlashAttention<T>.Forward(
+                    q4D, k4D, v4D, flashConfig, queryOffset: 0, attentionBias: rpb);
+                // attnOut4D: [B, NumHeads, S, HeadDim]
 
-            // FlashAttention: softmax(Q @ K^T + RPB) @ V, with our scale=1.0 override (T5).
-            var (attnOut4D, _) = FlashAttention<T>.Forward(
-                q4D, k4D, v4D, flashConfig, queryOffset: 0, attentionBias: rpb);
-            // attnOut4D: [B, NumHeads, S, HeadDim]
+                // Combine heads: [B, NumHeads, S, HeadDim] → [B, S, NumHeads, HeadDim] → [B*S, H]
+                var attnPerm = Engine.TensorPermute(attnOut4D, new[] { 0, 2, 1, 3 });
+                var attnFlat = Engine.Reshape(attnPerm, new[] { totalTokens, H });
 
-            // Combine heads: [B, NumHeads, S, HeadDim] → [B, S, NumHeads, HeadDim] → [B*S, H]
-            var attnPerm = Engine.TensorPermute(attnOut4D, new[] { 0, 2, 1, 3 });
-            var attnFlat = Engine.Reshape(attnPerm, new[] { totalTokens, H });
+                // Output projection W_o.
+                var attnProjFlat = Engine.TensorMatMul(attnFlat, lw.AttnOut);
+                var attnProj = Engine.Reshape(attnProjFlat, new[] { batchSize, seqLen, H });
 
-            // Output projection W_o.
-            var attnProjFlat = Engine.TensorMatMul(attnFlat, _attnOutWeightTensors![layer]);
-            var attnProj = Engine.Reshape(attnProjFlat, new[] { batchSize, seqLen, H });
+                hidden = Engine.TensorAdd(residual, attnProj);
 
-            hidden = Engine.TensorAdd(residual, attnProj);
+                // ===== Feed-forward block (pre-norm + residual + GeGLU) =====
+                residual = hidden;
+                normed = RMSNormEngine(hidden, lw.Norm2Gamma, H);
+                normed2D = Engine.Reshape(normed, new[] { totalTokens, H });
 
-            // ===== Feed-forward block (pre-norm + residual + GeGLU) =====
-            residual = hidden;
-            int norm2Offset = layerOffset + H + 4 * H * H;
-            var norm2Gamma = ExtractSubVectorFast(TransformerWeights, norm2Offset, H);
-            normed = RMSNormEngine(hidden, norm2Gamma, H);
-            normed2D = Engine.Reshape(normed, new[] { totalTokens, H });
+                // GeGLU: gate = GELU(x @ W_i_0), value = x @ W_i_1, fused = gate ⊙ value, out = fused @ W_o
+                var gateProj = Engine.TensorMatMul(normed2D, lw.FfnGate);   // [B*S, F]
+                var valueProj = Engine.TensorMatMul(normed2D, lw.FfnValue); // [B*S, F]
+                var gateActivated = Engine.GELU(gateProj);                  // GELU per Shazeer
+                var fused = Engine.TensorMultiply(gateActivated, valueProj); // elementwise gating
+                var ffnOutFlat = Engine.TensorMatMul(fused, lw.FfnOut);      // [B*S, H]
+                var ffnOut = Engine.Reshape(ffnOutFlat, new[] { batchSize, seqLen, H });
 
-            // GeGLU: gate = GELU(x @ W_i_0), value = x @ W_i_1, fused = gate ⊙ value, out = fused @ W_o
-            var gateProj = Engine.TensorMatMul(normed2D, _ffnGateWeightTensors![layer]);   // [B*S, F]
-            var valueProj = Engine.TensorMatMul(normed2D, _ffnValueWeightTensors![layer]); // [B*S, F]
-            var gateActivated = Engine.GELU(gateProj);                                      // GELU per Shazeer
-            var fused = Engine.TensorMultiply(gateActivated, valueProj);                    // elementwise gating
-            var ffnOutFlat = Engine.TensorMatMul(fused, _ffnOutWeightTensors![layer]);      // [B*S, H]
-            var ffnOut = Engine.Reshape(ffnOutFlat, new[] { batchSize, seqLen, H });
-
-            hidden = Engine.TensorAdd(residual, ffnOut);
+                hidden = Engine.TensorAdd(residual, ffnOut);
+            }
+            catch (Exception ex)
+            {
+                bodyFailure = ex;
+                throw;
+            }
+            finally
+            {
+                // If the layer body already failed, swallow any cleanup
+                // exception so the original matmul/attention error keeps
+                // propagating — losing that diagnosis to a downstream
+                // pool-return failure would defeat the whole point of
+                // the rent/return pattern. When the body succeeded,
+                // a Return failure should still surface (pool corruption
+                // or double-return is a real bug worth seeing).
+                try
+                {
+                    ReturnLayerWeights(lw);
+                }
+                catch when (bodyFailure != null)
+                {
+                    // Original failure wins; do nothing.
+                }
+            }
         }
 
         return hidden;
@@ -667,19 +883,6 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
         var scaled = Engine.TensorBroadcastMultiply(normalized, gammaTensor);
 
         return scaled.Reshape(shape);
-    }
-
-    /// <summary>
-    /// Fast sub-vector extraction using Span slice (avoids scalar element copy loop).
-    /// </summary>
-    private static Vector<T> ExtractSubVectorFast(Vector<T> source, int offset, int length)
-    {
-        if (offset < 0)
-            throw new ArgumentOutOfRangeException(nameof(offset), "Offset must be non-negative.");
-        int safeLength = Math.Min(length, source.Length - offset);
-        if (safeLength <= 0)
-            return new Vector<T>(length);
-        return new Vector<T>(source.AsSpan().Slice(offset, safeLength).ToArray());
     }
 
     #region Variant Configuration

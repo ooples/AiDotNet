@@ -6,11 +6,12 @@ namespace AiDotNetTestConsole;
 
 class Program
 {
-    // Bottleneck-profiling mode: invoked under dotnet-trace to collect CPU
-    // samples for the PR #1182 perf investigation. Each entry runs a single
-    // model at research-paper defaults and exits. Adding a new profile is a
-    // one-line dictionary insert.
-    private static readonly Dictionary<string, Action> ProfileCommands = new(StringComparer.OrdinalIgnoreCase)
+    // Bottleneck-profiling entry points: each key matches a CLI arg
+    // passed under dotnet-trace to collect CPU samples against a
+    // single model at research-paper defaults. Adding a new profile
+    // now means one line here instead of a new `if (args[0] == …)`
+    // block below.
+    private static readonly Dictionary<string, Action> ProfileModes = new()
     {
         ["chronosbolt-profile"] = ChronosBoltProfile.Run,
         ["timemoe-profile"]     = TimeMoEProfile.Run,
@@ -20,6 +21,7 @@ class Program
         ["deepant-profile"]     = DeepANTProfile.Run,
         ["nbeats-profile"]      = NBEATSProfile.Run,
         ["autoformer-profile"]  = AutoformerProfile.Run,
+        ["resnet50-profile"]    = ResNet50Profile.Run,
         ["clone-diag"]          = CloneDiag.Run,
         ["ngboost-profile"]     = NGBoostProfile.Run,
         ["svc-profile"]         = SVCProfile.Run,
@@ -28,9 +30,9 @@ class Program
 
     static async Task Main(string[] args)
     {
-        if (args.Length > 0 && ProfileCommands.TryGetValue(args[0], out var runProfile))
+        if (args.Length > 0 && ProfileModes.TryGetValue(args[0], out var profile))
         {
-            runProfile();
+            profile();
             return;
         }
 
