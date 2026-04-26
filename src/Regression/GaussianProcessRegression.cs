@@ -287,11 +287,16 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
                     // without PD requirement. Slower but robust.
                     return MatrixSolutionHelper.SolveLinearSystem(K, y, MatrixDecompositionType.Qr);
                 }
-                // Bump diagonal jitter by 10x for the next attempt (increment
-                // is the delta between current cumulative jitter and next).
-                double nextJitter = baseNoise * Math.Pow(10, attempt + 1);
-                double currentJitter = attempt == 0 ? 0 : baseNoise * Math.Pow(10, attempt);
-                T delta = NumOps.FromDouble(nextJitter - currentJitter);
+                // Bump diagonal jitter by 10x for the next attempt. K already
+                // includes the base noise (added at Lines 209 / 214-217 before
+                // we got here), so the previous total at attempt 0 is baseNoise
+                // (not zero). Computing the delta as `next - previous` keeps
+                // the cumulative schedule at exactly baseNoise × 10^k after
+                // retry k; the previous code's "zero at attempt 0" gave 11×
+                // after retry 1 instead of 10×.
+                double targetTotalJitter   = baseNoise * Math.Pow(10, attempt + 1);
+                double previousTotalJitter = baseNoise * Math.Pow(10, attempt);
+                T delta = NumOps.FromDouble(targetTotalJitter - previousTotalJitter);
                 for (int i = 0; i < n; i++)
                     K[i, i] = NumOps.Add(K[i, i], delta);
             }

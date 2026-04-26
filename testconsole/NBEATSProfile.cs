@@ -1,7 +1,6 @@
 using System;
 using System.Diagnostics;
 using AiDotNet.Models.Options;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TimeSeries;
 
 namespace AiDotNetTestConsole;

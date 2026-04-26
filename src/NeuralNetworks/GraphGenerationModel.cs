@@ -376,7 +376,14 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         // through reparameterization into the encoder weights (epsilon is
         // detached noise, no gradient needed for it).
         var halfLogVar = Engine.TensorMultiplyScalar(logVar, NumOps.FromDouble(0.5));
-        var std = Engine.TensorExp(halfLogVar);
+        // Bound halfLogVar before exponentiating so a runaway encoder (e.g.,
+        // poorly-initialized weights early in training) can't push exp into
+        // Inf/NaN and poison both the reparameterization output and the
+        // downstream KL term. [-15, 15] keeps std ∈ [~3e-7, ~3.3e6], which
+        // covers any realistic VAE latent scale; the clamp is engine-side
+        // so gradients still flow back to the encoder for unsaturated values.
+        var clampedHalfLogVar = Engine.TensorClamp(halfLogVar, NumOps.FromDouble(-15.0), NumOps.FromDouble(15.0));
+        var std = Engine.TensorExp(clampedHalfLogVar);
 
         // Sample epsilon (detached): no tape needed for the noise term.
         var epsilon = new Tensor<T>(mean._shape);
@@ -546,6 +553,24 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         int epochs = 200,
         double learningRate = 0.01)
     {
+        // Validate learningRate BEFORE the training loop so an unsupported
+        // value is rejected side-effect free. The previous order threw
+        // after epochs had already updated weights, leaving the caller
+        // with both an exception and a partially-trained model.
+        // Honoring a per-call learningRate would require threading an
+        // optimizer factory through Train(input, expectedOutput) so that
+        // path can build a fresh optimizer instead of using the configured
+        // _optimizer. That refactor is intentionally out of scope here.
+        const double defaultLearningRate = 0.01;
+        if (Math.Abs(learningRate - defaultLearningRate) > double.Epsilon)
+        {
+            throw new NotSupportedException(
+                $"GraphGenerationModel.Train does not currently apply per-call " +
+                $"learning rates (got {learningRate}). Configure the optimizer " +
+                $"passed to the constructor instead, or omit this argument to " +
+                $"accept the default ({defaultLearningRate}).");
+        }
+
         // The previous implementation walked an alternative gradient path
         // (ComputeReconstructionGradient + per-layer UpdateParameters) that
         // never wired the reconstruction gradient back into the variational
@@ -566,24 +591,6 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         {
             foreach (var layer in Layers)
                 layer.SetTrainingMode(false);
-        }
-        // Honoring a per-call learningRate would require threading an
-        // optimizer factory through Train(input, expectedOutput) so that
-        // path can build a fresh optimizer instead of using the configured
-        // _optimizer. That refactor is intentionally out of scope here.
-        // Until it lands, fail fast when the caller passes a non-default
-        // value rather than silently absorbing it into AdamOptimizer's
-        // built-in 0.001 — the previous "_ = learningRate" no-op meant
-        // a caller could pass 0.5 expecting big steps and get the
-        // default 0.001 with no diagnostic.
-        const double defaultLearningRate = 0.01;
-        if (Math.Abs(learningRate - defaultLearningRate) > double.Epsilon)
-        {
-            throw new NotSupportedException(
-                $"GraphGenerationModel.Train does not currently apply per-call " +
-                $"learning rates (got {learningRate}). Configure the optimizer " +
-                $"passed to the constructor instead, or omit this argument to " +
-                $"accept the default ({defaultLearningRate}).");
         }
     }
 

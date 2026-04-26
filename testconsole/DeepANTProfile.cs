@@ -13,7 +13,7 @@ internal static class DeepANTProfile
         var opts = new DeepANTOptions<double>();
         Console.WriteLine($"WindowSize={opts.WindowSize} Epochs={opts.Epochs} BatchSize={opts.BatchSize}");
 
-        // Deterministic synthetic signal — a linear ramp + 1.0-period
+        // Deterministic synthetic signal — a linear ramp + 20-sample-period
         // sinusoid is enough to exercise DeepANT's anomaly-detection
         // path under the profiler without randomness adding variance
         // to the timing measurements.
