@@ -371,20 +371,27 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
     /// <summary>
     /// Fills <paramref name="buf"/> with a Box-Muller Xavier-normal draw
     /// (stddev = sqrt(2/(size+1))) from a fresh <see cref="Random"/> seeded
-    /// with <paramref name="seed"/>. Matches
-    /// <see cref="TextConditioningBase{T}.InitializeWeights"/>'s distribution
-    /// so this encoder's statistics remain comparable across refactors.
+    /// with <paramref name="seed"/>. Each pair of uniforms produces two
+    /// independent normals (cos + sin branches) so RNG work is halved
+    /// versus the single-branch implementation in
+    /// <see cref="TextConditioningBase{T}.InitializeWeights"/> — which
+    /// matters because T5-XXL fills ~193M elements per layer × 24 layers
+    /// on every encode.
     /// </summary>
     private static void FillXavier(Span<T> buf, int size, int seed)
     {
         var rng = new Random(seed);
         double stddev = Math.Sqrt(2.0 / (size + 1));
-        for (int i = 0; i < size; i++)
+        int i = 0;
+        while (i < size)
         {
             double u1 = 1.0 - rng.NextDouble();
             double u2 = 1.0 - rng.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            buf[i] = NumOps.FromDouble(normal * stddev);
+            double r = Math.Sqrt(-2.0 * Math.Log(u1));
+            double theta = 2.0 * Math.PI * u2;
+            buf[i++] = NumOps.FromDouble(r * Math.Cos(theta) * stddev);
+            if (i < size)
+                buf[i++] = NumOps.FromDouble(r * Math.Sin(theta) * stddev);
         }
     }
 
