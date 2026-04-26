@@ -186,6 +186,16 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
     private Tensor<T>? _rmsEpsTensor;
 
     /// <summary>
+    /// Shared all-ones Vector&lt;T&gt; of length HiddenSize, reused for every
+    /// layer's pre-attention and pre-FFN RMSNorm gamma. T5.1.1 initializes
+    /// every norm gamma to 1.0 and the forward pass never mutates them, so
+    /// 24 layers × 2 gammas can safely alias a single immutable buffer
+    /// instead of allocating 48 fresh Vector&lt;T&gt;(H) per encode (~1.5MB
+    /// of gen0 garbage per call for T5-XXL).
+    /// </summary>
+    private Vector<T>? _onesGamma;
+
+    /// <summary>
     /// Gets whether this module produces pooled output (T5 does not).
     /// </summary>
     public override bool ProducesPooledOutput => false;
@@ -311,19 +321,21 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
         FillXavier(ffnValue.AsWritableSpan(), H * F, DeriveSeed(_baseSeed, layerIdx, MatrixTagFfnVal));
         FillXavier(ffnOut.AsWritableSpan(),   F * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagFfnOut));
 
-        // RMSNorm gammas: initialize to 1 per the standard T5.1.1 convention
-        // so the pre-norm behaves as identity-scale at step 0. Kept as
-        // Vector<T> (not pooled) because RMSNormEngine consumes them that way.
-        var norm1Gamma = new Vector<T>(H);
-        var norm2Gamma = new Vector<T>(H);
-        T one = NumOps.One;
-        for (int i = 0; i < H; i++)
+        // RMSNorm gammas: T5.1.1 initializes every gamma to 1.0 and the
+        // forward pass never mutates them, so all 48 per-layer gammas
+        // (24 layers × 2 norms) safely alias a single shared all-ones
+        // buffer cached on the instance. Saves ~1.5MB of per-call gen0
+        // garbage for T5-XXL.
+        var ones = _onesGamma;
+        if (ones == null || ones.Length != H)
         {
-            norm1Gamma[i] = one;
-            norm2Gamma[i] = one;
+            ones = new Vector<T>(H);
+            T one = NumOps.One;
+            for (int i = 0; i < H; i++) ones[i] = one;
+            _onesGamma = ones;
         }
 
-        return new LayerWeights(q, k, v, attnOut, ffnGate, ffnValue, ffnOut, norm1Gamma, norm2Gamma);
+        return new LayerWeights(q, k, v, attnOut, ffnGate, ffnValue, ffnOut, ones, ones);
     }
 
     /// <summary>
