@@ -117,8 +117,11 @@ public class TransformerTrainConvergenceTests
         }
 
         // Sanity: every epoch produced a finite, non-negative loss.
+        // Use !IsNaN && !IsInfinity instead of float.IsFinite — the latter
+        // is netcoreapp2.1+ / netstandard2.1+ only and this test compiles
+        // on net471 too.
         foreach (var l in losses)
-            Assert.True(float.IsFinite(l) && l >= 0, $"loss must be finite and non-negative; got {l}");
+            Assert.True(!float.IsNaN(l) && !float.IsInfinity(l) && l >= 0, $"loss must be finite and non-negative; got {l}");
 
         // Core regression guard: a bit-identical-across-epochs loss is
         // exactly the symptom issue #1187 describes. With a working
