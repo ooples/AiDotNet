@@ -444,12 +444,18 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
         // throw on uninitialised coefficient vectors.
         if (x.Columns < 2)
         {
-            // Not enough columns for the treatment+features split — keep
-            // the legacy stub behaviour rather than throwing in case any
-            // caller relies on it.
-            NumFeatures = x.Columns;
-            IsFitted = true;
-            return;
+            throw new ArgumentException(
+                "Causal models require at least 2 columns in X: column 0 is the binary " +
+                "treatment indicator and columns 1.. are the covariates. The previous " +
+                "permissive code path silently flipped IsFitted=true without learning " +
+                "anything, which left Predict throwing on uninitialised coefficients.",
+                nameof(x));
+        }
+        if (x.Rows != y.Length)
+        {
+            throw new ArgumentException(
+                $"Sample count mismatch: X has {x.Rows} rows but Y has {y.Length} outcomes.",
+                nameof(y));
         }
 
         int n = x.Rows;

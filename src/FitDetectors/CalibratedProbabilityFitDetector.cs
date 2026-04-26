@@ -246,15 +246,16 @@ public class CalibratedProbabilityFitDetector<T, TInput, TOutput> : FitDetectorB
                 int classIdx = NumOps.ToInt32(actual[i]);
                 if (classIdx < 0 || classIdx >= numClasses)
                 {
-                    // Not class indices — labels were probabilities or some
-                    // other shape we don't understand. Fall back to binary
-                    // treatment of the "predicted probability of class 0"
-                    // slice so we don't crash; callers passing genuine
-                    // multiclass probability tensors for BOTH predicted AND
-                    // actual should have them flattened to equal length.
-                    reducedPredicted[i] = predicted[i * numClasses];
-                    reducedActual[i] = actual[i];
-                    continue;
+                    // Bad input shape, not "labels happen to be probabilities".
+                    // Failing fast surfaces the encoding mismatch where the
+                    // caller can fix it; the previous silent fallback to a
+                    // class-0 slice produced misleading calibration values
+                    // that looked plausible at a glance.
+                    throw new InvalidOperationException(
+                        $"CalibratedProbabilityFitDetector: invalid class index {classIdx} at sample {i}. " +
+                        $"Expected class indices in [0, {numClasses - 1}]. If 'actual' contains probabilities " +
+                        $"rather than class indices, flatten it to match 'predicted' length so the binary " +
+                        $"calibration path is selected instead.");
                 }
                 reducedPredicted[i] = predicted[i * numClasses + classIdx];
                 reducedActual[i] = NumOps.One;

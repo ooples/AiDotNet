@@ -233,10 +233,16 @@ public abstract class AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, Vector<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters is not null && parameters.Length >= 1)
-        {
-            _threshold = parameters[0];
-        }
+        if (parameters is null)
+            throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Length < 1)
+            throw new ArgumentException("At least one parameter (threshold) is required.", nameof(parameters));
+
+        _threshold = parameters[0];
+        // After parameters are restored, the detector is in a fitted
+        // state — Predict can run without re-fitting on the original
+        // training data.
+        _isFitted = true;
     }
 
     /// <inheritdoc/>

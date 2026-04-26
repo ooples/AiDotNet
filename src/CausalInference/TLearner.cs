@@ -269,7 +269,7 @@ public class TLearner<T> : CausalModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        if (NumFeatures > 0 && input.Columns == NumFeatures + 1)
+        if (input.Columns == NumFeatures + 1)
         {
             int n = input.Rows;
             var features = new Matrix<T>(n, NumFeatures);
@@ -277,6 +277,13 @@ public class TLearner<T> : CausalModelBase<T>
                 for (int j = 0; j < NumFeatures; j++)
                     features[i, j] = input[i, j + 1];
             return EstimateTreatmentEffect(features);
+        }
+        if (input.Columns != NumFeatures)
+        {
+            throw new ArgumentException(
+                $"Input must have {NumFeatures} covariate columns, or {NumFeatures + 1} " +
+                $"columns where the first is the treatment indicator. Got {input.Columns}.",
+                nameof(input));
         }
         return EstimateTreatmentEffect(input);
     }

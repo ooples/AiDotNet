@@ -1146,10 +1146,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// <summary>
     /// Checks if a type inherits from any base class in <see cref="ExcludedBaseClasses"/>,
     /// or matches any class name in <see cref="ExcludedClassNames"/>. The first handles
-    /// compositional wrappers (meta-learning, distributed) that can't be auto-constructed;
-    /// the second handles specific diffusion variants whose UNets take non-standard input
-    /// channel counts (inpainting, img2img, ControlNet-family) that the generic
-    /// [3,64,64] vision InputShape can't satisfy.
+    /// compositional wrappers (meta-learning, distributed) that can't be auto-constructed.
+    /// The second is currently empty and reserved for future use — non-standard diffusion
+    /// UNet channel counts are now handled paper-faithfully by
+    /// <c>DiffusionModelBase.Predict</c>'s CanonicalizeGenShape hook.
     /// </summary>
     private static bool InheritsFromAnyExcludedBase(INamedTypeSymbol type)
     {
@@ -1515,7 +1515,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     }
                 }
             }
-            else if (model.Domains.Contains(4) && !model.Tasks.Contains(35))
+            else if (model.Domains.Contains(4)
+                     && !model.Tasks.Contains(35)   // FrameInterpolation: handled by the 2-frame [6,64,64] path below
+                     && !model.Tasks.Contains(20))  // OpticalFlow: same — concat-channel two-frame input
             {
                 // Temporal video models (ActionRecognition=22, VideoGeneration=41, etc.)
                 // want a 4D [frames, channels, height, width] input shape.
@@ -3617,7 +3619,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             // TimesNet (Wu et al. 2023): paper-faithful multivariate input
             // [B, S, M]. M = TimesNetOptions.NumFeatures default 7.
-            "TimesNet" => "1, 96, 7",
+            "TimesNet" => $"1, {paperCtx.ToString(System.Globalization.CultureInfo.InvariantCulture)}, 7",
             _ => paperCtx.ToString(System.Globalization.CultureInfo.InvariantCulture),
         };
     }

@@ -361,11 +361,26 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             // returns a finite tensor (the documented paper-minimum
             // contract), matching the Song et al. 2020 DDIM paper's
             // "noise-only sampling = finite noise output" invariant.
+            int sanitizedCount = 0;
             for (int si = 0; si < sample.Length; si++)
             {
                 double v = NumOps.ToDouble(sample[si]);
                 if (double.IsNaN(v) || double.IsInfinity(v))
+                {
                     sample[si] = NumOps.Zero;
+                    sanitizedCount++;
+                }
+            }
+            if (sanitizedCount > 0)
+            {
+                // Trace at warning level so this diagnostic is visible
+                // when listeners are attached but doesn't pollute the
+                // happy path. Surfacing the count + timestep gives
+                // anyone debugging a "blank output" complaint enough
+                // to localize whether instability hits early (high t)
+                // or late (small t).
+                System.Diagnostics.Trace.TraceWarning(
+                    $"DiffusionModelBase.Generate: sanitized {sanitizedCount} non-finite element(s) at timestep {timestep}.");
             }
         }
 
