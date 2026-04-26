@@ -332,16 +332,40 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
     /// backing arrays. Must be called in a <c>finally</c> block so a failure
     /// inside the forward pass doesn't leak the layer's buffers.
     /// </summary>
+    /// <remarks>
+    /// Each return is independently guarded: if one tensor's <c>Return</c>
+    /// throws (e.g., the allocator's double-return detection trips on a
+    /// caller mistake), the remaining tensors still go back to the pool so
+    /// a single bad return doesn't leak ~1.5GB of layer weights for T5-XXL.
+    /// The first exception is rethrown after all returns have been
+    /// attempted; subsequent exceptions are dropped because surfacing both
+    /// the original failure and downstream failures-to-clean-up only adds
+    /// noise to the stack trace without changing the diagnosis.
+    /// </remarks>
     private static void ReturnLayerWeights(LayerWeights lw)
     {
-        TensorAllocator.Return(lw.Q);
-        TensorAllocator.Return(lw.K);
-        TensorAllocator.Return(lw.V);
-        TensorAllocator.Return(lw.AttnOut);
-        TensorAllocator.Return(lw.FfnGate);
-        TensorAllocator.Return(lw.FfnValue);
-        TensorAllocator.Return(lw.FfnOut);
+        Exception? first = null;
+        TryReturn(lw.Q, ref first);
+        TryReturn(lw.K, ref first);
+        TryReturn(lw.V, ref first);
+        TryReturn(lw.AttnOut, ref first);
+        TryReturn(lw.FfnGate, ref first);
+        TryReturn(lw.FfnValue, ref first);
+        TryReturn(lw.FfnOut, ref first);
         // Norm gammas are plain Vector<T>; the GC reclaims them.
+        if (first != null) throw first;
+    }
+
+    private static void TryReturn(Tensor<T> t, ref Exception? first)
+    {
+        try
+        {
+            TensorAllocator.Return(t);
+        }
+        catch (Exception ex)
+        {
+            if (first == null) first = ex;
+        }
     }
 
     /// <summary>
