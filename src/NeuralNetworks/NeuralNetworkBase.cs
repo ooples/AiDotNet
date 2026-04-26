@@ -3484,6 +3484,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private const int SerializationMagic = 0x4E444941; // "AIDN" (little-endian int)
     private const int SerializationVersion = 4;
 
+    // Mirrors System.Array.MaxLength (introduced in .NET 6). Hardcoded
+    // here so the check still compiles on net471, where Array.MaxLength
+    // is not defined. Value is the CLR's actual largest single-dimension
+    // byte array length (= int.MaxValue - 56).
+    private const int MaxArrayLength = 0X7FFFFFC7;
+
     /// <summary>
     /// Serializes the neural network to a byte array.
     /// </summary>
@@ -3519,13 +3525,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
         }
         long estimatedTotal = paramBytes + (long)Layers.Count * 65536 + 1024;
-        // MemoryStream capacity is an int. Cap at Array.MaxLength so we never
+        // MemoryStream capacity is an int. Cap at MaxArrayLength so we never
         // request a capacity that cannot be allocated as a single byte array.
         // If the model is so large that even this cap won't hold it, the
         // existing grow-on-write logic will still fail at the correct point,
         // which is the right behavior (serialization of a >2 GB blob needs a
         // file-backed stream, not an in-memory byte array).
-        int initialCapacity = (int)Math.Min(estimatedTotal, (long)Array.MaxLength);
+        int initialCapacity = (int)Math.Min(estimatedTotal, (long)MaxArrayLength);
         using var ms = new MemoryStream(initialCapacity);
         using var writer = new BinaryWriter(ms);
 
@@ -4003,7 +4009,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // instance. Foundational VLMs (ViLBERT, VisualBERT, UNITER) and
         // GPT-3-class transformers cross the 256M-params × 8 B = 2 GB line
         // and fail with "Array dimensions exceeded supported range" when
-        // MemoryStream tries to grow past Array.MaxLength. The direct path
+        // MemoryStream tries to grow past MaxArrayLength. The direct path
         // is also strictly faster — no 2 GB allocate/free cycle, no
         // redundant double-conversion loop — so we also take it whenever
         // the new instance has an identically-shaped Layers list.
@@ -4015,7 +4021,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 paramBytes += (long)ext.ExtraParameterCount * sizeof(double);
         }
 
-        if (paramBytes > (long)Array.MaxLength)
+        if (paramBytes > (long)MaxArrayLength)
         {
             var largeCopy = CreateNewInstance();
             if (largeCopy is NeuralNetworkBase<T> largeBase && largeBase._layers.Count == _layers.Count)
