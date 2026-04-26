@@ -252,12 +252,12 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     }
 
     /// <summary>
-    /// Solves (K + σ²I) α = y with progressive jitter doubling on Cholesky
-    /// failure per Rasmussen &amp; Williams 2006 §2.2 numerical-stability note.
-    /// Each retry adds extra jitter to the diagonal and re-attempts. After
-    /// 6 retries (up to 10^6-fold jitter boost) falls back to a rank-
-    /// revealing QR that works on any full-rank matrix without a PD
-    /// precondition.
+    /// Solves (K + σ²I) α = y with progressive jitter escalation (×10 per
+    /// retry) on Cholesky failure per Rasmussen &amp; Williams 2006 §2.2
+    /// numerical-stability note. Each retry adds 10× the previous jitter
+    /// to the diagonal and re-attempts. After 6 retries (up to 10^6-fold
+    /// jitter boost) falls back to a rank-revealing QR that works on any
+    /// full-rank matrix without a PD precondition.
     /// </summary>
     private Vector<T> SolveWithJitterRetry(Matrix<T> K, Vector<T> y, MatrixDecompositionType preferredType)
     {

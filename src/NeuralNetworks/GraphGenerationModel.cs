@@ -237,6 +237,18 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         KLWeight = klWeight;
 
         _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
+        // Train(input, expectedOutput) needs a tape-capable loss to call
+        // ComputeTapeLoss; reject anything narrower up front so invalid
+        // configurations fail at construction with a clear message instead
+        // of throwing mid-training when the user has already paid the cost
+        // of the forward pass.
+        if (_lossFunction is not LossFunctions.LossFunctionBase<T>)
+        {
+            throw new ArgumentException(
+                "GraphGenerationModel requires a tape-capable loss function. " +
+                $"Pass a LossFunctionBase<T> implementation (got {_lossFunction.GetType().Name}).",
+                nameof(lossFunction));
+        }
         var adamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
             InitialLearningRate = 0.001,
@@ -539,17 +551,14 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         // never wired the reconstruction gradient back into the variational
         // weight gradients — Adam saw an all-zero gradient and parameters
         // never moved. Route through the same tape-based training step the
-        // single-step Train(input, expectedOutput) uses; the explicit
-        // adjacencyMatrix overrides EnsureAdjacencyMatrix's fully-connected
-        // default for the duration of this call.
-        _autoAdjacencyMatrix = adjacencyMatrix;
+        // single-step Train(input, expectedOutput) uses, passing the explicit
+        // adjacencyMatrix as the reconstruction target. We deliberately do
+        // NOT mutate _autoAdjacencyMatrix here: doing so leaked the training
+        // adjacency into subsequent Predict calls on same-sized graphs.
         try
         {
             for (int epoch = 0; epoch < epochs; epoch++)
             {
-                // expectedOutput is unused by the tape path (the adjacency
-                // matrix is the reconstruction target and is supplied via
-                // _autoAdjacencyMatrix); pass adjacencyMatrix for clarity.
                 Train(nodeFeatures, adjacencyMatrix);
             }
         }
@@ -558,11 +567,24 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
             foreach (var layer in Layers)
                 layer.SetTrainingMode(false);
         }
-        // Note: learningRate is currently absorbed by AdamOptimizer's
-        // default options inside the tape-based step. Honoring a custom
-        // learningRate here would require threading an optimizer factory
-        // through Train(input, expectedOutput) — tracked separately.
-        _ = learningRate;
+        // Honoring a per-call learningRate would require threading an
+        // optimizer factory through Train(input, expectedOutput) so that
+        // path can build a fresh optimizer instead of using the configured
+        // _optimizer. That refactor is intentionally out of scope here.
+        // Until it lands, fail fast when the caller passes a non-default
+        // value rather than silently absorbing it into AdamOptimizer's
+        // built-in 0.001 — the previous "_ = learningRate" no-op meant
+        // a caller could pass 0.5 expecting big steps and get the
+        // default 0.001 with no diagnostic.
+        const double defaultLearningRate = 0.01;
+        if (Math.Abs(learningRate - defaultLearningRate) > double.Epsilon)
+        {
+            throw new NotSupportedException(
+                $"GraphGenerationModel.Train does not currently apply per-call " +
+                $"learning rates (got {learningRate}). Configure the optimizer " +
+                $"passed to the constructor instead, or omit this argument to " +
+                $"accept the default ({defaultLearningRate}).");
+        }
     }
 
     /// <summary>
@@ -899,7 +921,25 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
             input = input.Reshape([1, input.Shape[0]]);
 
         int numNodes = input.Shape[0];
-        var adjacencyMatrix = EnsureAdjacencyMatrix(numNodes);
+
+        // The reconstruction target is the caller-supplied adjacency matrix.
+        // Previously this method ignored expectedOutput and silently smuggled
+        // the target through _autoAdjacencyMatrix, so direct callers ended up
+        // optimizing against an all-ones fallback. Validate the shape up front
+        // so misuse (e.g., passing per-sample labels) fails with a clear
+        // message instead of producing nonsense gradients.
+        if (expectedOutput is null)
+            throw new ArgumentNullException(nameof(expectedOutput));
+        if (expectedOutput.Rank != 2
+            || expectedOutput.Shape[0] != numNodes
+            || expectedOutput.Shape[1] != numNodes)
+        {
+            throw new ArgumentException(
+                $"expectedOutput must be a [{numNodes}, {numNodes}] adjacency matrix; " +
+                $"got shape [{string.Join(", ", expectedOutput.Shape)}].",
+                nameof(expectedOutput));
+        }
+        var adjacencyMatrix = expectedOutput;
 
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
@@ -921,17 +961,10 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
 
         // Reconstruction loss via the configured loss function. Defaults
         // to BinaryCrossEntropy (paper-faithful for VGAE; ε-clamp + log
-        // handled internally) when the caller didn't supply one. Using
-        // the field instead of a fresh instance respects caller overrides
-        // and means any stateful loss (e.g., a tracked moving average)
-        // sees every step.
-        if (_lossFunction is not LossFunctions.LossFunctionBase<T> tapeLoss)
-        {
-            throw new InvalidOperationException(
-                "GraphGenerationModel requires a tape-capable loss function " +
-                $"(got {_lossFunction.GetType().Name}). Pass a LossFunctionBase<T> " +
-                "subclass via the lossFunction constructor parameter.");
-        }
+        // handled internally) when the caller didn't supply one. The
+        // constructor enforces LossFunctionBase<T> so this cast cannot
+        // fail at runtime.
+        var tapeLoss = (LossFunctions.LossFunctionBase<T>)_lossFunction;
         var reconLoss = tapeLoss.ComputeTapeLoss(reconstructed, adjacencyMatrix);
 
         // KL divergence to N(0, I) per Kipf & Welling 2016 §3.2:
@@ -992,21 +1025,31 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
                     gradList.Add(NumOps.Zero);
             }
         }
+        // Variational weight gradients: append to the flat vector AND
+        // persist the tensor-shaped gradients on _meanWeightsGradient /
+        // _logVarWeightsGradient so GetParameterGradients() returns the
+        // real numbers instead of the all-zero defaults. Without this
+        // persist step, callers walking GetParameterGradients() saw
+        // zeros even though the optimizer step had moved the weights.
         if (allGrads.TryGetValue(_meanWeights, out var mg))
         {
             for (int i = 0; i < mg.Length; i++) gradList.Add(mg.GetFlat(i));
+            _meanWeightsGradient = mg;
         }
         else
         {
             for (int i = 0; i < _meanWeights.Length; i++) gradList.Add(NumOps.Zero);
+            _meanWeightsGradient = new Tensor<T>(_meanWeights._shape);
         }
         if (allGrads.TryGetValue(_logVarWeights, out var lvg))
         {
             for (int i = 0; i < lvg.Length; i++) gradList.Add(lvg.GetFlat(i));
+            _logVarWeightsGradient = lvg;
         }
         else
         {
             for (int i = 0; i < _logVarWeights.Length; i++) gradList.Add(NumOps.Zero);
+            _logVarWeightsGradient = new Tensor<T>(_logVarWeights._shape);
         }
 
         var parameterGradients = new Vector<T>(gradList.ToArray());

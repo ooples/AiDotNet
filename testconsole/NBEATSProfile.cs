@@ -46,15 +46,36 @@ internal static class NBEATSProfile
         ctorSw.Stop();
         Console.WriteLine($"ctor    : {ctorSw.Elapsed.TotalSeconds,8:F3} s");
 
+        // Guard Train/Predict so a model bug surfaces a structured timing
+        // line (matching SVC/NGBoost/DeepANT profiles) instead of
+        // hard-aborting the profile command.
         var trainSw = Stopwatch.StartNew();
-        model.Train(x, y);
-        trainSw.Stop();
-        Console.WriteLine($"Train   : {trainSw.Elapsed.TotalSeconds,8:F3} s  (CI timeout = 60s)");
+        try
+        {
+            model.Train(x, y);
+            trainSw.Stop();
+            Console.WriteLine($"Train   : {trainSw.Elapsed.TotalSeconds,8:F3} s  (CI timeout = 60s)");
+        }
+        catch (Exception ex)
+        {
+            trainSw.Stop();
+            Console.WriteLine($"Train   : {ex.GetType().Name} after {trainSw.Elapsed.TotalSeconds:F3}s — {ex.Message}");
+            return;
+        }
 
         var predictSw = Stopwatch.StartNew();
-        var pred = model.Predict(x);
-        predictSw.Stop();
-        Console.WriteLine($"Predict : {predictSw.Elapsed.TotalSeconds,8:F3} s");
+        try
+        {
+            _ = model.Predict(x);
+            predictSw.Stop();
+            Console.WriteLine($"Predict : {predictSw.Elapsed.TotalSeconds,8:F3} s");
+        }
+        catch (Exception ex)
+        {
+            predictSw.Stop();
+            Console.WriteLine($"Predict : {ex.GetType().Name} after {predictSw.Elapsed.TotalSeconds:F3}s — {ex.Message}");
+            return;
+        }
 
         Console.WriteLine($"TOTAL   : {(ctorSw.Elapsed + trainSw.Elapsed + predictSw.Elapsed).TotalSeconds:F3} s");
     }
