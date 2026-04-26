@@ -303,39 +303,62 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
         int H = HiddenSize;
         int F = _ffnDim;
 
-        // RentUninitialized — every element is overwritten below by FillXavier
-        // so zeroing the buffer first would be wasted work.
-        var q        = TensorAllocator.RentUninitialized<T>(new[] { H, H });
-        var k        = TensorAllocator.RentUninitialized<T>(new[] { H, H });
-        var v        = TensorAllocator.RentUninitialized<T>(new[] { H, H });
-        var attnOut  = TensorAllocator.RentUninitialized<T>(new[] { H, H });
-        var ffnGate  = TensorAllocator.RentUninitialized<T>(new[] { H, F });
-        var ffnValue = TensorAllocator.RentUninitialized<T>(new[] { H, F });
-        var ffnOut   = TensorAllocator.RentUninitialized<T>(new[] { F, H });
-
-        FillXavier(q.AsWritableSpan(),       H * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagQ));
-        FillXavier(k.AsWritableSpan(),       H * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagK));
-        FillXavier(v.AsWritableSpan(),       H * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagV));
-        FillXavier(attnOut.AsWritableSpan(), H * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagO));
-        FillXavier(ffnGate.AsWritableSpan(), H * F, DeriveSeed(_baseSeed, layerIdx, MatrixTagFfnGate));
-        FillXavier(ffnValue.AsWritableSpan(), H * F, DeriveSeed(_baseSeed, layerIdx, MatrixTagFfnVal));
-        FillXavier(ffnOut.AsWritableSpan(),   F * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagFfnOut));
-
-        // RMSNorm gammas: T5.1.1 initializes every gamma to 1.0 and the
-        // forward pass never mutates them, so all 48 per-layer gammas
-        // (24 layers × 2 norms) safely alias a single shared all-ones
-        // buffer cached on the instance. Saves ~1.5MB of per-call gen0
-        // garbage for T5-XXL.
-        var ones = _onesGamma;
-        if (ones == null || ones.Length != H)
+        Tensor<T>? q = null, k = null, v = null, attnOut = null;
+        Tensor<T>? ffnGate = null, ffnValue = null, ffnOut = null;
+        try
         {
-            ones = new Vector<T>(H);
-            T one = NumOps.One;
-            for (int i = 0; i < H; i++) ones[i] = one;
-            _onesGamma = ones;
-        }
+            // RentUninitialized — every element is overwritten below by
+            // FillXavier so zeroing the buffer first would be wasted work.
+            q        = TensorAllocator.RentUninitialized<T>(new[] { H, H });
+            k        = TensorAllocator.RentUninitialized<T>(new[] { H, H });
+            v        = TensorAllocator.RentUninitialized<T>(new[] { H, H });
+            attnOut  = TensorAllocator.RentUninitialized<T>(new[] { H, H });
+            ffnGate  = TensorAllocator.RentUninitialized<T>(new[] { H, F });
+            ffnValue = TensorAllocator.RentUninitialized<T>(new[] { H, F });
+            ffnOut   = TensorAllocator.RentUninitialized<T>(new[] { F, H });
 
-        return new LayerWeights(q, k, v, attnOut, ffnGate, ffnValue, ffnOut, ones, ones);
+            FillXavier(q.AsWritableSpan(),        H * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagQ));
+            FillXavier(k.AsWritableSpan(),        H * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagK));
+            FillXavier(v.AsWritableSpan(),        H * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagV));
+            FillXavier(attnOut.AsWritableSpan(),  H * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagO));
+            FillXavier(ffnGate.AsWritableSpan(),  H * F, DeriveSeed(_baseSeed, layerIdx, MatrixTagFfnGate));
+            FillXavier(ffnValue.AsWritableSpan(), H * F, DeriveSeed(_baseSeed, layerIdx, MatrixTagFfnVal));
+            FillXavier(ffnOut.AsWritableSpan(),   F * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagFfnOut));
+
+            // RMSNorm gammas: T5.1.1 initializes every gamma to 1.0 and the
+            // forward pass never mutates them, so all 48 per-layer gammas
+            // (24 layers × 2 norms) safely alias a single shared all-ones
+            // buffer cached on the instance. Saves ~1.5MB of per-call gen0
+            // garbage for T5-XXL.
+            var ones = _onesGamma;
+            if (ones == null || ones.Length != H)
+            {
+                ones = new Vector<T>(H);
+                T one = NumOps.One;
+                for (int i = 0; i < H; i++) ones[i] = one;
+                _onesGamma = ones;
+            }
+
+            return new LayerWeights(q, k, v, attnOut, ffnGate, ffnValue, ffnOut, ones, ones);
+        }
+        catch
+        {
+            // A failure mid-init (RentUninitialized OOM, FillXavier
+            // throwing on a degenerate seed, etc.) must not strand the
+            // earlier rents in the pool — for T5-XXL each layer's
+            // rents total ~1.5GB and would never be reclaimed.
+            // TryReturn swallows secondary failures so the original
+            // exception still surfaces.
+            Exception? cleanup = null;
+            if (q        != null) TryReturn(q,        ref cleanup);
+            if (k        != null) TryReturn(k,        ref cleanup);
+            if (v        != null) TryReturn(v,        ref cleanup);
+            if (attnOut  != null) TryReturn(attnOut,  ref cleanup);
+            if (ffnGate  != null) TryReturn(ffnGate,  ref cleanup);
+            if (ffnValue != null) TryReturn(ffnValue, ref cleanup);
+            if (ffnOut   != null) TryReturn(ffnOut,   ref cleanup);
+            throw;
+        }
     }
 
     /// <summary>
@@ -638,6 +661,7 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
             // all 24 layers — zero GC allocations after the first pass
             // warms the pool.
             var lw = RentAndInitLayerWeights(layer);
+            Exception? bodyFailure = null;
             try
             {
                 // ===== Self-attention block (pre-norm + residual) =====
@@ -688,9 +712,28 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
 
                 hidden = Engine.TensorAdd(residual, ffnOut);
             }
+            catch (Exception ex)
+            {
+                bodyFailure = ex;
+                throw;
+            }
             finally
             {
-                ReturnLayerWeights(lw);
+                // If the layer body already failed, swallow any cleanup
+                // exception so the original matmul/attention error keeps
+                // propagating — losing that diagnosis to a downstream
+                // pool-return failure would defeat the whole point of
+                // the rent/return pattern. When the body succeeded,
+                // a Return failure should still surface (pool corruption
+                // or double-return is a real bug worth seeing).
+                try
+                {
+                    ReturnLayerWeights(lw);
+                }
+                catch when (bodyFailure != null)
+                {
+                    // Original failure wins; do nothing.
+                }
             }
         }
 
