@@ -63,7 +63,25 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
     private int _encoderLayerEnd;
 
     public VideoLLaMA2(NeuralNetworkArchitecture<T> architecture, string modelPath, VideoLLaMA2Options? options = null) : base(architecture) { _options = options ?? new VideoLLaMA2Options(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public VideoLLaMA2(NeuralNetworkArchitecture<T> architecture, VideoLLaMA2Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new VideoLLaMA2Options(); if (architecture.InputType == InputType.FourDimensional && architecture.InputHeight > 0) { _options = new VideoLLaMA2Options(_options) { ImageSize = architecture.InputHeight }; } _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public VideoLLaMA2(NeuralNetworkArchitecture<T> architecture, VideoLLaMA2Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    {
+        _options = options ?? new VideoLLaMA2Options();
+        if (architecture.InputType == InputType.FourDimensional && architecture.InputHeight > 0)
+        {
+            if (architecture.InputWidth > 0 && architecture.InputWidth != architecture.InputHeight)
+                throw new ArgumentException("VideoLLaMA2 native mode requires square frames (InputWidth must equal InputHeight).", nameof(architecture));
+            if (architecture.InputDepth > 0 && architecture.InputDepth != 3)
+                throw new ArgumentException("VideoLLaMA2 native mode requires 3-channel RGB frames (InputDepth must equal 3).", nameof(architecture));
+            _options = new VideoLLaMA2Options(_options) { ImageSize = architecture.InputHeight };
+        }
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
     public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName; public int MaxFrames => _options.MaxFrames;
     public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
@@ -185,7 +203,26 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         return decoderOutput;
     }
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultVideoTemporalVLMLayers(_options.VisionDim, _options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, 2, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, imageHeight: _options.ImageSize, imageWidth: _options.ImageSize, imageChannels: 3, patchSize: 16)); ComputeEncoderDecoderBoundary(); } }
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 2 * lpb + 2; }
+    private void ComputeEncoderDecoderBoundary()
+    {
+        // Encoder/decoder boundary mirrors the layer layout produced by
+        // LayerHelper<T>.CreateDefaultVideoTemporalVLMLayers:
+        //   PatchEmbedding(1) + InitialNorm(1)
+        //   + (NumVisionLayers blocks × lpb layers/block)   ← vision encoder
+        //   + (2 temporal blocks × lpb layers/block)        ← temporal encoder
+        //   + ProjectionMLP(2)                              ← end of encoder
+        //   + (NumDecoderLayers blocks × lpb layers/block)  ← LLM decoder
+        // lpb (layers-per-block) is 5 (Norm+Attn+Norm+FFN1+FFN2) or 6 with dropout.
+        const int patchEmbedLayers = 1;
+        const int initialNormLayer = 1;
+        const int temporalBlocks = 2;
+        const int projectionLayers = 2;
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        _encoderLayerEnd = patchEmbedLayers + initialNormLayer
+            + (_options.NumVisionLayers * lpb)
+            + (temporalBlocks * lpb)
+            + projectionLayers;
+    }
     private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }

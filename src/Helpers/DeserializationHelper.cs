@@ -737,6 +737,11 @@ public static class DeserializationHelper
         {
             // UpsamplingLayer(int[] inputShape, int scaleFactor)
             int scaleFactor = TryGetInt(additionalParams, "ScaleFactor") ?? 2;
+            if (scaleFactor <= 0)
+            {
+                throw new InvalidOperationException(
+                    $"Invalid UpsamplingLayer ScaleFactor metadata: {scaleFactor}. ScaleFactor must be positive.");
+            }
 
             var ctor = type.GetConstructor(new Type[] { typeof(int[]), typeof(int) });
             if (ctor is null)

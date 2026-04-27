@@ -58,12 +58,29 @@ public class RADIOv25<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
     private bool _useNativeMode; private bool _disposed;
 
     public RADIOv25(NeuralNetworkArchitecture<T> architecture, string modelPath, RADIOv25Options? options = null) : base(architecture) { _options = options ?? new RADIOv25Options(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.EmbeddingDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); InitializeLayers(); }
-    public RADIOv25(NeuralNetworkArchitecture<T> architecture, RADIOv25Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new RADIOv25Options(); if (architecture.InputType == InputType.ThreeDimensional && architecture.InputHeight > 0) { _options = new RADIOv25Options(_options) { ImageSize = architecture.InputHeight }; } _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.EmbeddingDim; InitializeLayers(); }
+    public RADIOv25(NeuralNetworkArchitecture<T> architecture, RADIOv25Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    {
+        _options = options ?? new RADIOv25Options();
+        if (architecture.InputHeight > 0)
+        {
+            if (architecture.InputWidth > 0 && architecture.InputWidth != architecture.InputHeight)
+                throw new ArgumentException("RADIOv25 requires square image inputs (InputWidth must equal InputHeight).", nameof(architecture));
+            if (architecture.InputDepth > 0 && architecture.InputDepth != 3)
+                throw new ArgumentException("RADIOv25 requires 3-channel RGB input (InputDepth must equal 3).", nameof(architecture));
+            _options = new RADIOv25Options(_options) { ImageSize = architecture.InputHeight };
+        }
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.EmbeddingDim;
+        InitializeLayers();
+    }
 
     public int EmbeddingDimension => _options.EmbeddingDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3;
     public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; foreach (var l in Layers) c = l.Forward(c); return L2Normalize(c); }
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultViTLayers(_options.EmbeddingDim, _options.NumLayers, _options.NumHeads, _options.DropoutRate, imageHeight: _options.ImageSize, imageWidth: _options.ImageSize, imageChannels: 3, patchSize: 16)); }
+    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultViTLayers(_options.EmbeddingDim, _options.NumLayers, _options.NumHeads, _options.DropoutRate, imageHeight: _options.ImageSize, imageWidth: _options.ImageSize, imageChannels: 3, patchSize: _options.PatchSize)); }
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }

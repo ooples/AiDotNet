@@ -231,7 +231,26 @@ public class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         return output;
     }
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultVideoTemporalVLMLayers(_options.VisionDim, _options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, 2, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, imageHeight: _options.ImageSize, imageWidth: _options.ImageSize, imageChannels: 3, patchSize: 16)); ComputeEncoderDecoderBoundary(); } }
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 2 * lpb + 2; }
+    private void ComputeEncoderDecoderBoundary()
+    {
+        // Encoder/decoder boundary mirrors the layer layout produced by
+        // LayerHelper<T>.CreateDefaultVideoTemporalVLMLayers:
+        //   PatchEmbedding(1) + InitialNorm(1)
+        //   + (NumVisionLayers blocks × lpb layers/block)   ← vision encoder
+        //   + (2 temporal blocks × lpb layers/block)        ← temporal encoder
+        //   + ProjectionMLP(2)                              ← end of encoder
+        //   + (NumDecoderLayers blocks × lpb layers/block)  ← LLM decoder
+        // lpb (layers-per-block) is 5 (Norm+Attn+Norm+FFN1+FFN2) or 6 with dropout.
+        const int patchEmbedLayers = 1;
+        const int initialNormLayer = 1;
+        const int temporalBlocks = 2;
+        const int projectionLayers = 2;
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        _encoderLayerEnd = patchEmbedLayers + initialNormLayer
+            + (_options.NumVisionLayers * lpb)
+            + (temporalBlocks * lpb)
+            + projectionLayers;
+    }
     private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }

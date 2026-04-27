@@ -18,6 +18,8 @@ public class LLaVAVideoOptions : VideoLanguageOptions
 
         Seed = other.Seed;
         ImageSize = other.ImageSize;
+        ImageChannels = other.ImageChannels;
+        PatchSize = other.PatchSize;
         VisionDim = other.VisionDim;
         DecoderDim = other.DecoderDim;
         NumVisionLayers = other.NumVisionLayers;
@@ -48,8 +50,20 @@ public class LLaVAVideoOptions : VideoLanguageOptions
         NumDecoderLayers = 32;
         NumHeads = 32;
         ImageSize = 336;
+        ImageChannels = 3;
+        PatchSize = 16;
         VocabSize = 32000;
         LanguageModelName = "Qwen2";
         MaxFrames = 64;
     }
+
+    /// <summary>
+    /// Number of channels per video frame. Default: 3 (RGB) per the LLaVA-Video paper.
+    /// </summary>
+    public int ImageChannels { get; set; }
+
+    /// <summary>
+    /// Patch size for the vision encoder. Default: 16 (paper uses CLIP ViT/16 for the original config).
+    /// </summary>
+    public int PatchSize { get; set; }
 }

@@ -534,7 +534,10 @@ public class RandomSurvivalForest<T> : SurvivalModelBase<T>
         var copy = new RandomSurvivalForest<T>(NumTrees, MaxDepth, MinSamplesLeaf, MaxFeatures);
         copy.NumFeatures = NumFeatures;
         copy.IsFitted = IsFitted;
-        copy.MaxFeatures = MaxFeatures;
+        if (FeatureNames is not null)
+        {
+            copy.FeatureNames = (string[])FeatureNames.Clone();
+        }
         if (_trees is not null)
         {
             copy._trees = new List<SurvivalTree>(_trees.Count);

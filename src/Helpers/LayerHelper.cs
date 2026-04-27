@@ -23126,6 +23126,19 @@ public static class LayerHelper<T>
         int imageChannels = 3,
         int patchSize = 16)
     {
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
+        if (imageHeight <= 0)
+            throw new ArgumentOutOfRangeException(nameof(imageHeight), "imageHeight must be positive.");
+        if (imageWidth <= 0)
+            throw new ArgumentOutOfRangeException(nameof(imageWidth), "imageWidth must be positive.");
+        if (imageChannels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(imageChannels), "imageChannels must be positive.");
+        if (patchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patchSize), "patchSize must be positive.");
+        if (imageHeight % patchSize != 0 || imageWidth % patchSize != 0)
+            throw new ArgumentException($"imageHeight ({imageHeight}) and imageWidth ({imageWidth}) must be divisible by patchSize ({patchSize}).");
+
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int ffnDim = embeddingDim * 4;
@@ -24193,6 +24206,19 @@ public static class LayerHelper<T>
         int imageChannels = 3,
         int patchSize = 16)
     {
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
+        if (imageHeight <= 0)
+            throw new ArgumentOutOfRangeException(nameof(imageHeight), "imageHeight must be positive.");
+        if (imageWidth <= 0)
+            throw new ArgumentOutOfRangeException(nameof(imageWidth), "imageWidth must be positive.");
+        if (imageChannels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(imageChannels), "imageChannels must be positive.");
+        if (patchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patchSize), "patchSize must be positive.");
+        if (imageHeight % patchSize != 0 || imageWidth % patchSize != 0)
+            throw new ArgumentException($"imageHeight ({imageHeight}) and imageWidth ({imageWidth}) must be divisible by patchSize ({patchSize}).");
+
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int visionFfnDim = visionDim * 4;
@@ -32081,6 +32107,11 @@ public static class LayerHelper<T>
         double dropoutRate = 0.1,
         int inputFeatures = 192)
     {
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
+        if (inputFeatures <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputFeatures), "inputFeatures must be positive.");
+
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         IActivationFunction<T> tanhActivation = new TanhActivation<T>();
@@ -32212,6 +32243,11 @@ public static class LayerHelper<T>
         double dropoutRate = 0.1,
         int inputFeatures = 256)
     {
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
+        if (inputFeatures <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputFeatures), "inputFeatures must be positive.");
+
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int encoderFfnDim = encoderDim * 4;

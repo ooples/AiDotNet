@@ -1569,9 +1569,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 }
                 else if (isVision)
                 {
-                    // Standard vision: [C, H, W] with 64x64 to handle large conv kernels
+                    // Standard vision: [C, H, W] at 112x112. 112 = lcm(14, 16) so it
+                    // is divisible by both common ViT patch sizes — DINOv2/v3, SigLIP,
+                    // InternViT, PerceptionEncoder use ViT-/14 (112÷14=8 tokens), while
+                    // ViT-B, SAM, RADIO, MobileSAM use ViT-/16 (112÷16=7 tokens). This
+                    // keeps the smoke tests paper-faithful for both patch families
+                    // without forcing a 224×224 input that would inflate test memory.
                     inputTypeExpr = "AiDotNet.Enums.InputType.ThreeDimensional";
-                    sizeExpr = "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4";
+                    sizeExpr = "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 4";
                 }
                 else if (isAudio)
                 {
@@ -1748,7 +1753,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (isVisionModel)
         {
-            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 64, 64 };");
+            // 112 = lcm(14, 16) so InputShape divides evenly for both the ViT-/14
+            // family (DINOv2/v3, SigLIP, InternViT, PerceptionEncoder) and the
+            // ViT-/16 family (ViT-B/16, SAM, RADIO, MobileSAM). Must match the
+            // architecture's inputHeight/inputWidth emitted above so the model's
+            // patch embedder receives a paper-divisible spatial size.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 112, 112 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
         else if (family == TestFamily.TTS)

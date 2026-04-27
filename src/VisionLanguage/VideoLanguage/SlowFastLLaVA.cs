@@ -61,7 +61,25 @@ public class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<
     private int _encoderLayerEnd;
 
     public SlowFastLLaVA(NeuralNetworkArchitecture<T> architecture, string modelPath, SlowFastLLaVAOptions? options = null) : base(architecture) { _options = options ?? new SlowFastLLaVAOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public SlowFastLLaVA(NeuralNetworkArchitecture<T> architecture, SlowFastLLaVAOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SlowFastLLaVAOptions(); if (architecture.InputType == InputType.FourDimensional && architecture.InputHeight > 0) { _options = new SlowFastLLaVAOptions(_options) { ImageSize = architecture.InputHeight }; } _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public SlowFastLLaVA(NeuralNetworkArchitecture<T> architecture, SlowFastLLaVAOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    {
+        _options = options ?? new SlowFastLLaVAOptions();
+        if (architecture.InputType == InputType.FourDimensional && architecture.InputHeight > 0)
+        {
+            if (architecture.InputWidth > 0 && architecture.InputWidth != architecture.InputHeight)
+                throw new ArgumentException("SlowFastLLaVA native mode requires square frames (InputWidth must equal InputHeight).", nameof(architecture));
+            if (architecture.InputDepth > 0 && architecture.InputDepth != 3)
+                throw new ArgumentException("SlowFastLLaVA native mode requires 3-channel RGB frames (InputDepth must equal 3).", nameof(architecture));
+            _options = new SlowFastLLaVAOptions(_options) { ImageSize = architecture.InputHeight };
+        }
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
     public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName; public int MaxFrames => _options.MaxFrames;
     public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
