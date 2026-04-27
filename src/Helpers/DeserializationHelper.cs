@@ -591,20 +591,19 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(ConvolutionalLayer<>))
         {
-            // ConvolutionalLayer(int inputDepth, int inputHeight, int inputWidth, int outputDepth, int kernelSize, int stride, int padding, IActivationFunction<T>?, IInitializationStrategy<T>?)
+            // ConvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding, IActivationFunction<T>?, IInitializationStrategy<T>?)
+            // Spatial dims (H/W) and inputDepth are resolved on the first Forward call via OnFirstForward.
+            // The serialized inputShape/outputShape arrays are used only to size the weights via SetParameters
+            // after construction — they do not feed the constructor anymore.
             int kernelSize = TryGetInt(additionalParams, "FilterSize") ?? 3;
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             int padding = TryGetInt(additionalParams, "Padding") ?? 0;
-            // inputShape format: [batch, depth, height, width] (NCHW format)
-            int inputDepth = inputShape.Length > 1 ? inputShape[1] : inputShape[0];
-            int inputHeight = inputShape.Length > 2 ? inputShape[2] : 1;
-            int inputWidth = inputShape.Length > 3 ? inputShape[3] : 1;
             // outputShape format: [batch, depth, height, width] (NCHW format)
             int outputDepth = outputShape.Length > 1 ? outputShape[1] : outputShape[0];
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             var initStrategyType = typeof(AiDotNet.Initialization.IInitializationStrategy<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
             if (ctor is null)
             {
                 throw new InvalidOperationException($"Cannot find ConvolutionalLayer constructor.");
@@ -612,7 +611,7 @@ public static class DeserializationHelper
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             if (activation is null && additionalParams is not null && additionalParams.ContainsKey("ScalarActivationType"))
                 throw new InvalidOperationException($"Failed to deserialize activation function of type '{additionalParams["ScalarActivationType"]}' for ConvolutionalLayer.");
-            instance = ctor.Invoke(new object?[] { inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding, activation, null });
+            instance = ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null });
         }
         else if (genericDef == typeof(Conv3DLayer<>))
         {
