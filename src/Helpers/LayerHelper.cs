@@ -14886,11 +14886,20 @@ public static class LayerHelper<T>
         bool useNormalization = true,
         int numFeatures = 1)
     {
+        // Lazy weight init: the flattened-sequence layout below produces
+        // weight matrices of (modelDim·contextLength) × (stateDim·contextLength)
+        // — at paper defaults that's 131072 × 32768 ≈ 4.3B elements, which
+        // overflows int32 inside TensorAllocator.Rent. Lazy init defers the
+        // allocation to first Forward where lower-rank intermediate tensors
+        // can sidestep the overflow path.
+        var lazy = Initialization.InitializationStrategies<T>.Lazy;
+
         // === Input Embedding ===
         yield return new DenseLayer<T>(
             inputSize: contextLength * numFeatures,
             outputSize: modelDim * contextLength,
-            activationFunction: new GELUActivation<T>());
+            activationFunction: new GELUActivation<T>(),
+            initializationStrategy: lazy);
 
         if (useNormalization)
         {
@@ -14908,7 +14917,8 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(
                 inputSize: modelDim * contextLength,
                 outputSize: stateDim * contextLength,
-                activationFunction: null);
+                activationFunction: null,
+                initializationStrategy: lazy);
 
             // A matrix application (HiPPO state evolution)
             // This simulates the HiPPO matrix A that defines optimal memory
@@ -14916,27 +14926,31 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(
                 inputSize: stateDim * contextLength,
                 outputSize: stateDim * contextLength,
-                activationFunction: new TanhActivation<T>()); // Tanh for stability
+                activationFunction: new TanhActivation<T>(),
+                initializationStrategy: lazy); // Tanh for stability
 
             // Second A application for deeper state evolution
             yield return new DenseLayer<T>(
                 inputSize: stateDim * contextLength,
                 outputSize: stateDim * contextLength,
-                activationFunction: new TanhActivation<T>());
+                activationFunction: new TanhActivation<T>(),
+                initializationStrategy: lazy);
 
             // C projection (polynomial state to output)
             // C reads out the polynomial coefficients to produce output
             yield return new DenseLayer<T>(
                 inputSize: stateDim * contextLength,
                 outputSize: modelDim * contextLength,
-                activationFunction: null);
+                activationFunction: null,
+                initializationStrategy: lazy);
 
             // D feedthrough (skip connection from input to output)
             // Allows direct information flow bypassing the state
             yield return new DenseLayer<T>(
                 inputSize: modelDim * contextLength,
                 outputSize: modelDim * contextLength,
-                activationFunction: new GELUActivation<T>());
+                activationFunction: new GELUActivation<T>(),
+                initializationStrategy: lazy);
 
             // Normalization and dropout
             if (useNormalization)
@@ -14950,12 +14964,14 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(
             inputSize: modelDim * contextLength,
             outputSize: modelDim * contextLength * 2,
-            activationFunction: new GELUActivation<T>());
+            activationFunction: new GELUActivation<T>(),
+            initializationStrategy: lazy);
 
         yield return new DenseLayer<T>(
             inputSize: modelDim * contextLength * 2,
             outputSize: modelDim * contextLength,
-            activationFunction: null);
+            activationFunction: null,
+            initializationStrategy: lazy);
 
         if (useNormalization)
         {
@@ -14966,12 +14982,14 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(
             inputSize: modelDim * contextLength,
             outputSize: modelDim * forecastHorizon / 4,
-            activationFunction: new GELUActivation<T>());
+            activationFunction: new GELUActivation<T>(),
+            initializationStrategy: lazy);
 
         yield return new DenseLayer<T>(
             inputSize: modelDim * forecastHorizon / 4,
             outputSize: forecastHorizon,
-            activationFunction: null);
+            activationFunction: null,
+            initializationStrategy: lazy);
     }
 
     /// <summary>
