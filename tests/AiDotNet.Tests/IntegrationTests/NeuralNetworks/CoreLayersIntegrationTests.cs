@@ -238,7 +238,6 @@ public class CoreLayersIntegrationTests
         int inputWidth = 28;
 
         var layer = new ConvolutionalLayer<float>(
-            inputChannels, inputHeight, inputWidth,
             outputChannels, kernelSize, stride, padding);
         var input = Create4DInput(2, inputChannels, inputHeight, inputWidth);
 
@@ -269,7 +268,6 @@ public class CoreLayersIntegrationTests
         int inputWidth = 16;
 
         var layer = new ConvolutionalLayer<float>(
-            inputChannels, inputHeight, inputWidth,
             outputChannels, kernelSize, stride, padding);
         var input = Create4DInput(1, inputChannels, inputHeight, inputWidth);
 
@@ -289,7 +287,7 @@ public class CoreLayersIntegrationTests
     {
         // Arrange
         // Constructor: (inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding)
-        var layer = new ConvolutionalLayer<float>(1, 8, 8, 4, 3, 1, 1);
+        var layer = new ConvolutionalLayer<float>(4, 3, 1, 1);
         var input = Create4DInput(1, 1, 8, 8);
 
         // Act
@@ -313,7 +311,7 @@ public class CoreLayersIntegrationTests
         int inputChannels = 3;
         int outputChannels = 16;
         int kernelSize = 3;
-        var layer = new ConvolutionalLayer<float>(inputChannels, 28, 28, outputChannels, kernelSize, 1, 1);
+        var layer = new ConvolutionalLayer<float>(outputChannels, kernelSize, 1, 1);
 
         // Act
         int paramCount = layer.ParameterCount;

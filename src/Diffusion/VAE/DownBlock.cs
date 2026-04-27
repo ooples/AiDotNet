@@ -183,11 +183,8 @@ public class DownBlock<T> : LayerBase<T>
         // Strided convolution for 2x downsampling
         // kernel=3, stride=2, padding=1 -> output_size = (input_size + 2*1 - 3) / 2 + 1 = input_size / 2
         _downsample = new ConvolutionalLayer<T>(
-            inputDepth: outChannels,
             outputDepth: outChannels,
             kernelSize: 3,
-            inputHeight: inputSpatialSize,
-            inputWidth: inputSpatialSize,
             stride: 2,
             padding: 1,
             activationFunction: new IdentityActivation<T>());

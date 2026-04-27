@@ -108,14 +108,14 @@ public class FlowFormerPlusPlus<T> : OpticalFlowBase<T>
         int width = arch.InputWidth > 0 ? arch.InputWidth : 64;
         int channels = arch.InputDepth > 0 ? arch.InputDepth : 3;
 
-        _featureExtract = new ConvolutionalLayer<T>(2 * channels, height, width, _numFeatures, 3, 1, 1);
+        _featureExtract = new ConvolutionalLayer<T>(_numFeatures, 3, 1, 1);
 
         for (int i = 0; i < _numLayers; i++)
         {
-            _processingBlocks.Add(new ConvolutionalLayer<T>(_numFeatures, height, width, _numFeatures, 3, 1, 1));
+            _processingBlocks.Add(new ConvolutionalLayer<T>(_numFeatures, 3, 1, 1));
         }
 
-        _outputConv = new ConvolutionalLayer<T>(_numFeatures, height, width, 2, 3, 1, 1);
+        _outputConv = new ConvolutionalLayer<T>(2, 3, 1, 1);
 
         InitializeLayers();
     }

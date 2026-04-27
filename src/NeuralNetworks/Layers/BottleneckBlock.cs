@@ -147,9 +147,6 @@ public class BottleneckBlock<T> : LayerBase<T>
 
         // First 1x1 conv: reduce channels to baseChannels
         _conv1 = new ConvolutionalLayer<T>(
-            inputDepth: inChannels,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             outputDepth: baseChannels,
             kernelSize: 1,
             stride: 1,
@@ -160,9 +157,6 @@ public class BottleneckBlock<T> : LayerBase<T>
 
         // Second 3x3 conv: process at bottleneck width with stride
         _conv2 = new ConvolutionalLayer<T>(
-            inputDepth: baseChannels,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             outputDepth: baseChannels,
             kernelSize: 3,
             stride: stride,
@@ -176,9 +170,6 @@ public class BottleneckBlock<T> : LayerBase<T>
 
         // Third 1x1 conv: expand channels to outChannels (baseChannels * 4)
         _conv3 = new ConvolutionalLayer<T>(
-            inputDepth: baseChannels,
-            inputHeight: outHeight,
-            inputWidth: outWidth,
             outputDepth: outChannels,
             kernelSize: 1,
             stride: 1,
@@ -199,9 +190,6 @@ public class BottleneckBlock<T> : LayerBase<T>
         if (_hasDownsample)
         {
             _downsampleConv = new ConvolutionalLayer<T>(
-                inputDepth: inChannels,
-                inputHeight: inputHeight,
-                inputWidth: inputWidth,
                 outputDepth: outChannels,
                 kernelSize: 1,
                 stride: stride,

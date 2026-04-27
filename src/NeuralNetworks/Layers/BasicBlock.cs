@@ -133,9 +133,6 @@ public class BasicBlock<T> : LayerBase<T>
 
         // First conv: 3x3, stride = stride
         _conv1 = new ConvolutionalLayer<T>(
-            inputDepth: inChannels,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             outputDepth: outChannels,
             kernelSize: 3,
             stride: stride,
@@ -149,9 +146,6 @@ public class BasicBlock<T> : LayerBase<T>
 
         // Second conv: 3x3, stride = 1
         _conv2 = new ConvolutionalLayer<T>(
-            inputDepth: outChannels,
-            inputHeight: outHeight,
-            inputWidth: outWidth,
             outputDepth: outChannels,
             kernelSize: 3,
             stride: 1,
@@ -172,9 +166,6 @@ public class BasicBlock<T> : LayerBase<T>
         if (_hasDownsample)
         {
             _downsampleConv = new ConvolutionalLayer<T>(
-                inputDepth: inChannels,
-                inputHeight: inputHeight,
-                inputWidth: inputWidth,
                 outputDepth: outChannels,
                 kernelSize: 1,
                 stride: stride,

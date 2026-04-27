@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 8, 8, 2, 3")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "2, 3")]
 public partial class ConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -384,51 +384,33 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// that will be improved during training.
     /// </para>
     /// </remarks>
-    public ConvolutionalLayer(int inputDepth, int inputHeight, int inputWidth, int outputDepth, int kernelSize, int stride = 1, int padding = 0,
+    public ConvolutionalLayer(int outputDepth, int kernelSize, int stride = 1, int padding = 0,
                               IActivationFunction<T>? activationFunction = null,
                               IInitializationStrategy<T>? initializationStrategy = null)
-        : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
-               CalculateOutputShape(outputDepth, CalculateOutputDimension(inputHeight, kernelSize, stride, padding),
-                   CalculateOutputDimension(inputWidth, kernelSize, stride, padding)), activationFunction ?? new ReLUActivation<T>())
+        : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 }, activationFunction ?? new ReLUActivation<T>())
     {
-        InputDepth = inputDepth;
+        if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth), "outputDepth must be positive.");
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize), "kernelSize must be positive.");
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride), "stride must be positive.");
+        if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding), "padding cannot be negative.");
+
         OutputDepth = outputDepth;
         KernelSize = kernelSize;
         Stride = stride;
         Padding = padding;
+        InputDepth = -1; // resolved in OnFirstForward from input.Shape
 
-        // Store the initialization strategy
+        // Store the initialization strategy (defaults to LazyInitializationStrategy semantics
+        // since shape is always deferred to first forward in this layer now).
         InitializationStrategy = initializationStrategy;
 
-        // Check if using lazy initialization
-        if (initializationStrategy is { IsLazy: true })
-        {
-            // Defer weight allocation until first Forward() call
-            _kernels = new Tensor<T>([0, 0, 0, 0]);
-            _biases = new Tensor<T>([0]);
-            _lastInput = new Tensor<T>([0, 0, 0, 0]);
-            _lastOutput = new Tensor<T>([0, 0, 0, 0]);
-            _random = RandomHelper.CreateSecureRandom();
-            _isInitialized = false;
-        }
-        else
-        {
-            // Eager initialization — use RentUninitialized for kernels since InitializeWeights
-            // overwrites all elements (skips zero-fill, saving ~117MB write at 1280 channels)
-            _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-            _biases = new Tensor<T>([OutputDepth]);
-            // Use correct input/output shapes as placeholders (batch=1, replaced in Forward())
-            _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
-            _lastOutput = new Tensor<T>([1, OutputShape[0], OutputShape[1], OutputShape[2]]);
-            _random = RandomHelper.CreateSecureRandom();
-
-            InitializeWeights();
-
-            // Register trainable parameters with the engine for GPU persistence
-            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
-            _isInitialized = true;
-        }
+        // Always start fully deferred: shape, channel count, and weights resolve on first Forward.
+        _kernels = new Tensor<T>([0, 0, 0, 0]);
+        _biases = new Tensor<T>([0]);
+        _lastInput = new Tensor<T>([0, 0, 0, 0]);
+        _lastOutput = new Tensor<T>([0, 0, 0, 0]);
+        _random = RandomHelper.CreateSecureRandom();
+        _isInitialized = false;
     }
 
     /// <summary>
@@ -461,51 +443,32 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// needs to be applied to groups of outputs rather than individual values.
     /// </para>
     /// </remarks>
-    public ConvolutionalLayer(int inputDepth, int inputHeight, int inputWidth, int outputDepth, int kernelSize, int stride, int padding,
+    public ConvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding,
                               IVectorActivationFunction<T> vectorActivationFunction,
                               IInitializationStrategy<T>? initializationStrategy = null)
-        : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
-               CalculateOutputShape(outputDepth, CalculateOutputDimension(inputHeight, kernelSize, stride, padding),
-                   CalculateOutputDimension(inputWidth, kernelSize, stride, padding)), vectorActivationFunction)
+        : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 }, vectorActivationFunction)
     {
-        InputDepth = inputDepth;
+        if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth), "outputDepth must be positive.");
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize), "kernelSize must be positive.");
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride), "stride must be positive.");
+        if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding), "padding cannot be negative.");
+
         OutputDepth = outputDepth;
         KernelSize = kernelSize;
         Stride = stride;
         Padding = padding;
+        InputDepth = -1; // resolved in OnFirstForward from input.Shape
 
         // Store the initialization strategy
         InitializationStrategy = initializationStrategy;
 
-        // Check if using lazy initialization
-        if (initializationStrategy is { IsLazy: true })
-        {
-            // Defer weight allocation until first Forward() call
-            _kernels = new Tensor<T>([0, 0, 0, 0]);
-            _biases = new Tensor<T>([0]);
-            _lastInput = new Tensor<T>([0, 0, 0, 0]);
-            _lastOutput = new Tensor<T>([0, 0, 0, 0]);
-            _random = RandomHelper.CreateSecureRandom();
-            _isInitialized = false;
-        }
-        else
-        {
-            // Eager initialization — use RentUninitialized for kernels since InitializeWeights
-            // overwrites all elements (skips zero-fill, saving ~117MB write at 1280 channels)
-            _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-            _biases = new Tensor<T>([OutputDepth]);
-            // Use correct input/output shapes as placeholders (batch=1, replaced in Forward())
-            _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
-            _lastOutput = new Tensor<T>([1, OutputShape[0], OutputShape[1], OutputShape[2]]);
-            _random = RandomHelper.CreateSecureRandom();
-
-            InitializeWeights();
-
-            // Register trainable parameters with the engine for GPU persistence
-            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
-            _isInitialized = true;
-        }
+        // Always start fully deferred: shape, channel count, and weights resolve on first Forward.
+        _kernels = new Tensor<T>([0, 0, 0, 0]);
+        _biases = new Tensor<T>([0]);
+        _lastInput = new Tensor<T>([0, 0, 0, 0]);
+        _lastOutput = new Tensor<T>([0, 0, 0, 0]);
+        _random = RandomHelper.CreateSecureRandom();
+        _isInitialized = false;
     }
 
     /// <summary>
@@ -552,9 +515,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         int inputWidth = inputShape[2];
 
         return new ConvolutionalLayer<T>(
-            inputDepth: inputDepth,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             outputDepth: numberOfFilters,
             kernelSize: kernelSize,
             stride: stride,
@@ -607,9 +567,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         if (vectorActivationFunction is not null)
         {
             return new ConvolutionalLayer<T>(
-                inputDepth: inputDepth,
-                inputHeight: inputHeight,
-                inputWidth: inputWidth,
                 outputDepth: numberOfFilters,
                 kernelSize: kernelSize,
                 stride: stride,
@@ -620,9 +577,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         else
         {
             return new ConvolutionalLayer<T>(
-                inputDepth: inputDepth,
-                inputHeight: inputHeight,
-                inputWidth: inputWidth,
                 outputDepth: numberOfFilters,
                 kernelSize: kernelSize,
                 stride: stride,
@@ -807,9 +761,68 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// <summary>
     /// Ensures that kernels are allocated and initialized for lazy initialization.
     /// </summary>
+    /// <summary>
+    /// Resolves spatial dims (H/W) and channel count from the actual input on the first forward
+    /// call (PyTorch <c>LazyConv2d</c>-style). Sets <see cref="InputDepth"/>, computes output H/W
+    /// via the standard convolution arithmetic, and propagates the resolved shapes to LayerBase.
+    /// Weight allocation still happens in <see cref="EnsureInitialized"/> immediately afterward.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        int inDepth, inH, inW;
+        if (rank == 4)
+        {
+            // Batched [B, C, H, W]
+            inDepth = input.Shape[1];
+            inH = input.Shape[2];
+            inW = input.Shape[3];
+        }
+        else if (rank == 3)
+        {
+            // Unbatched [C, H, W]
+            inDepth = input.Shape[0];
+            inH = input.Shape[1];
+            inW = input.Shape[2];
+        }
+        else
+        {
+            throw new ArgumentException(
+                $"ConvolutionalLayer expects rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {rank}.",
+                nameof(input));
+        }
+
+        if (inH + 2 * Padding < KernelSize || inW + 2 * Padding < KernelSize)
+        {
+            throw new ArgumentException(
+                $"Input spatial dims after padding ({inH}+2*{Padding}, {inW}+2*{Padding}) must be >= kernelSize ({KernelSize}).",
+                nameof(input));
+        }
+
+        InputDepth = inDepth;
+        int outH = CalculateOutputDimension(inH, KernelSize, Stride, Padding);
+        int outW = CalculateOutputDimension(inW, KernelSize, Stride, Padding);
+
+        ResolveShapes(
+            new[] { inDepth, inH, inW },
+            new[] { OutputDepth, outH, outW });
+    }
+
     protected override void EnsureInitialized()
     {
         if (_isInitialized) return;
+
+        // Cannot eager-initialize a lazy layer that has not yet seen any input — the
+        // PyTorch LazyConv2d contract is identical: GetParameters / SetParameters /
+        // ParameterCount on an uninitialized lazy module throws because the weight
+        // shapes aren't yet known. Callers must run a forward first.
+        if (!IsShapeResolved || InputDepth <= 0)
+        {
+            throw new InvalidOperationException(
+                "ConvolutionalLayer is in deferred-shape mode and has not yet seen any input. " +
+                "Run a Forward(input) before calling GetParameters / SetParameters / ParameterCount, " +
+                "or construct the layer with a concrete input shape.");
+        }
 
         lock (InitializationLock)
         {
@@ -923,8 +936,8 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Ensure kernels are initialized (for lazy initialization)
-        EnsureInitialized();
+        // Resolve deferred shape (PyTorch LazyConv2d-style) and allocate weights on first call.
+        EnsureInitializedFromInput(input);
 
         // Accept any rank and canonicalize to 4D [B, C, H, W]. The library's
         // design principle is rank-agnostic ops — a flat feature vector
@@ -1091,7 +1104,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
-        EnsureInitialized();
+        EnsureInitializedFromInput(inputs[0]);
 
         if (Engine is not DirectGpuTensorEngine gpuEngine)
         {
@@ -1346,7 +1359,9 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override int ParameterCount => _isInitialized
         ? _kernels.Length + _biases.Shape[0]
-        : OutputDepth * InputDepth * KernelSize * KernelSize + OutputDepth;
+        : InputDepth > 0
+            ? OutputDepth * InputDepth * KernelSize * KernelSize + OutputDepth
+            : 0; // Deferred: input channel count unknown until first Forward
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
@@ -1457,9 +1472,19 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached values from forward pass (CPU)
-        _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-        _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+        // Clear cached values from forward pass (CPU). Use zero-sized placeholders when
+        // the layer hasn't yet seen input (InputDepth still -1) — same lazy-init pattern
+        // as the constructor.
+        if (InputDepth > 0)
+        {
+            _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+            _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+        }
+        else
+        {
+            _lastInput = new Tensor<T>([0, 0, 0, 0]);
+            _lastOutput = new Tensor<T>([0, 0, 0, 0]);
+        }
         _addedBatchDimension = false;
 
         // Clear GPU-resident cached tensors

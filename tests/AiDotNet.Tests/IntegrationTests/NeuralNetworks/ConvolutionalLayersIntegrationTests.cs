@@ -23,7 +23,6 @@ public class ConvolutionalLayersIntegrationTests
     {
         // Arrange: 3 channels, 8x8 image, 16 filters, 3x3 kernel
         var layer = new ConvolutionalLayer<double>(
-            inputDepth: 3, inputHeight: 8, inputWidth: 8,
             outputDepth: 16, kernelSize: 3, stride: 1, padding: 1);
 
         // Create input: [channels, height, width]
@@ -46,7 +45,6 @@ public class ConvolutionalLayersIntegrationTests
     {
         // Arrange: stride=2 should halve the spatial dimensions
         var layer = new ConvolutionalLayer<double>(
-            inputDepth: 1, inputHeight: 8, inputWidth: 8,
             outputDepth: 4, kernelSize: 3, stride: 2, padding: 1);
 
         var input = Tensor<double>.CreateRandom(1, 8, 8);
@@ -66,7 +64,6 @@ public class ConvolutionalLayersIntegrationTests
     {
         // Arrange
         var original = new ConvolutionalLayer<double>(
-            inputDepth: 3, inputHeight: 8, inputWidth: 8,
             outputDepth: 8, kernelSize: 3);
         var input = Tensor<double>.CreateRandom(3, 8, 8);
 
@@ -89,7 +86,6 @@ public class ConvolutionalLayersIntegrationTests
     {
         // Arrange: 5x5 kernel
         var layer = new ConvolutionalLayer<double>(
-            inputDepth: 1, inputHeight: 16, inputWidth: 16,
             outputDepth: 8, kernelSize: 5, stride: 1, padding: 2);
 
         var input = Tensor<double>.CreateRandom(1, 16, 16);
@@ -269,7 +265,6 @@ public class ConvolutionalLayersIntegrationTests
     {
         // Arrange: minimal configuration
         var layer = new ConvolutionalLayer<double>(
-            inputDepth: 1, inputHeight: 4, inputWidth: 4,
             outputDepth: 1, kernelSize: 3, stride: 1, padding: 1);
 
         var input = Tensor<double>.CreateRandom(1, 4, 4);
@@ -289,7 +284,6 @@ public class ConvolutionalLayersIntegrationTests
     {
         // Arrange: without padding, 3x3 kernel reduces each dimension by 2
         var layer = new ConvolutionalLayer<double>(
-            inputDepth: 1, inputHeight: 8, inputWidth: 8,
             outputDepth: 4, kernelSize: 3, stride: 1, padding: 0);
 
         var input = Tensor<double>.CreateRandom(1, 8, 8);
@@ -308,7 +302,6 @@ public class ConvolutionalLayersIntegrationTests
     {
         // Arrange: 64 filters as commonly used in CNNs
         var layer = new ConvolutionalLayer<double>(
-            inputDepth: 3, inputHeight: 16, inputWidth: 16,
             outputDepth: 64, kernelSize: 3, stride: 1, padding: 1);
 
         var input = Tensor<double>.CreateRandom(3, 16, 16);
@@ -331,7 +324,6 @@ public class ConvolutionalLayersIntegrationTests
         // Arrange
         IActivationFunction<double> relu = new ReLUActivation<double>();
         var layer = new ConvolutionalLayer<double>(
-            inputDepth: 1, inputHeight: 8, inputWidth: 8,
             outputDepth: 4, kernelSize: 3, stride: 1, padding: 1, relu);
 
         var input = Tensor<double>.CreateRandom(1, 8, 8);
@@ -352,7 +344,6 @@ public class ConvolutionalLayersIntegrationTests
         // Arrange
         IActivationFunction<double> tanh = new TanhActivation<double>();
         var layer = new ConvolutionalLayer<double>(
-            inputDepth: 1, inputHeight: 8, inputWidth: 8,
             outputDepth: 4, kernelSize: 3, stride: 1, padding: 1, tanh);
 
         var input = Tensor<double>.CreateRandom(1, 8, 8);

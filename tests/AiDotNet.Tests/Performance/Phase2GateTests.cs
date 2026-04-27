@@ -468,7 +468,6 @@ public class Phase2GateTests
     public async Task ConvolutionalLayer_LazyInit_IsNotInitializedAfterConstruction()
     {
         var layer = new ConvolutionalLayer<float>(
-            inputDepth: 3, inputHeight: 32, inputWidth: 32,
             outputDepth: 16, kernelSize: 3,
             initializationStrategy: InitializationStrategies<float>.Lazy);
 
@@ -479,7 +478,6 @@ public class Phase2GateTests
     public async Task ConvolutionalLayer_LazyInit_IsInitializedAfterForward()
     {
         var layer = new ConvolutionalLayer<float>(
-            inputDepth: 3, inputHeight: 32, inputWidth: 32,
             outputDepth: 16, kernelSize: 3,
             initializationStrategy: InitializationStrategies<float>.Lazy);
 
@@ -496,7 +494,6 @@ public class Phase2GateTests
     public async Task ConvolutionalLayer_EagerInit_IsInitializedImmediately()
     {
         var layer = new ConvolutionalLayer<float>(
-            inputDepth: 3, inputHeight: 32, inputWidth: 32,
             outputDepth: 16, kernelSize: 3,
             initializationStrategy: InitializationStrategies<float>.Eager);
 
@@ -507,7 +504,6 @@ public class Phase2GateTests
     public async Task ConvolutionalLayer_DefaultInit_IsInitializedImmediately()
     {
         var layer = new ConvolutionalLayer<float>(
-            inputDepth: 3, inputHeight: 32, inputWidth: 32,
             outputDepth: 16, kernelSize: 3);
 
         Assert.True(layer.IsInitialized);
@@ -528,7 +524,7 @@ public class Phase2GateTests
         for (int i = 0; i < iterations; i++)
         {
             var layer = new ConvolutionalLayer<float>(
-                inputDepth, inputHeight, inputWidth, outputDepth, kernelSize,
+                outputDepth, kernelSize,
                 initializationStrategy: InitializationStrategies<float>.Eager);
         }
         swEager.Stop();
@@ -538,7 +534,7 @@ public class Phase2GateTests
         for (int i = 0; i < iterations; i++)
         {
             var layer = new ConvolutionalLayer<float>(
-                inputDepth, inputHeight, inputWidth, outputDepth, kernelSize,
+                outputDepth, kernelSize,
                 initializationStrategy: InitializationStrategies<float>.Lazy);
         }
         swLazy.Stop();
@@ -552,7 +548,6 @@ public class Phase2GateTests
     public async Task ConvolutionalLayer_LazyInit_ProducesValidOutput()
     {
         var layer = new ConvolutionalLayer<float>(
-            inputDepth: 3, inputHeight: 32, inputWidth: 32,
             outputDepth: 16, kernelSize: 3, stride: 1, padding: 1,
             initializationStrategy: InitializationStrategies<float>.Lazy);
 

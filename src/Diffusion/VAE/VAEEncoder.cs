@@ -189,11 +189,8 @@ public class VAEEncoder<T> : LayerBase<T>
 
         // Input convolution: [inputChannels] -> [baseChannels]
         _inputConv = new ConvolutionalLayer<T>(
-            inputDepth: inputChannels,
             outputDepth: baseChannels,
             kernelSize: 3,
-            inputHeight: inputSpatialSize,
-            inputWidth: inputSpatialSize,
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
@@ -236,32 +233,23 @@ public class VAEEncoder<T> : LayerBase<T>
 
         // Mean and log variance projections
         _meanConv = new ConvolutionalLayer<T>(
-            inputDepth: lastChannels,
             outputDepth: latentChannels,
             kernelSize: 3,
-            inputHeight: _bottleneckSize,
-            inputWidth: _bottleneckSize,
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
 
         _logVarConv = new ConvolutionalLayer<T>(
-            inputDepth: lastChannels,
             outputDepth: latentChannels,
             kernelSize: 3,
-            inputHeight: _bottleneckSize,
-            inputWidth: _bottleneckSize,
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
 
         // Quant conv for latent processing
         _quantConv = new ConvolutionalLayer<T>(
-            inputDepth: latentChannels,
             outputDepth: latentChannels,
             kernelSize: 1,
-            inputHeight: _bottleneckSize,
-            inputWidth: _bottleneckSize,
             stride: 1,
             padding: 0,
             activationFunction: new IdentityActivation<T>());

@@ -276,9 +276,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
         // Stage 0: Initial convolution (conv1)
         // 7x7 conv, 64, stride 2
         layers.Add(new ConvolutionalLayer<T>(
-            inputDepth: currentChannels,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
             outputDepth: 64,
             kernelSize: 7,
             stride: 2,

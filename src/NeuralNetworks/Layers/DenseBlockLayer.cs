@@ -66,22 +66,16 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>
 
         _bn1 = new BatchNormalizationLayer<T>(inputChannels);
         _conv1x1 = new ConvolutionalLayer<T>(
-            inputDepth: inputChannels,
             outputDepth: bottleneckChannels,
             kernelSize: 1,
-            inputHeight: height,
-            inputWidth: width,
             stride: 1,
             padding: 0,
             activationFunction: new IdentityActivation<T>());
 
         _bn2 = new BatchNormalizationLayer<T>(bottleneckChannels);
         _conv3x3 = new ConvolutionalLayer<T>(
-            inputDepth: bottleneckChannels,
             outputDepth: growthRate,
             kernelSize: 3,
-            inputHeight: height,
-            inputWidth: width,
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>());

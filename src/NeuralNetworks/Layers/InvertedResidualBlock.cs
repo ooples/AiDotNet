@@ -174,11 +174,8 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         if (_hasExpansion)
         {
             _expandConv = new ConvolutionalLayer<T>(
-                inputDepth: inChannels,
                 outputDepth: hiddenDim,
                 kernelSize: 1,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth,
                 stride: 1,
                 padding: 0,
                 activationFunction: new IdentityActivation<T>());
@@ -195,11 +192,8 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         // Here we use ConvolutionalLayer configured for depthwise operation
         int dwInputChannels = _hasExpansion ? hiddenDim : inChannels;
         _dwConv = new ConvolutionalLayer<T>(
-            inputDepth: dwInputChannels,
             outputDepth: dwInputChannels, // Same as input for depthwise
             kernelSize: 3,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
             stride: stride,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
@@ -218,11 +212,8 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
 
         // Projection layer (1x1 conv) - LINEAR (no activation)
         _projectConv = new ConvolutionalLayer<T>(
-            inputDepth: dwInputChannels,
             outputDepth: outChannels,
             kernelSize: 1,
-            inputHeight: dwOutputHeight,
-            inputWidth: dwOutputWidth,
             stride: 1,
             padding: 0,
             activationFunction: new IdentityActivation<T>());

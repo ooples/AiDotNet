@@ -190,11 +190,8 @@ public class VAEDecoder<T> : LayerBase<T>
 
         // Post-quant convolution
         _postQuantConv = new ConvolutionalLayer<T>(
-            inputDepth: latentChannels,
             outputDepth: latentChannels,
             kernelSize: 1,
-            inputHeight: _bottleneckSize,
-            inputWidth: _bottleneckSize,
             stride: 1,
             padding: 0,
             activationFunction: new IdentityActivation<T>());
@@ -202,11 +199,8 @@ public class VAEDecoder<T> : LayerBase<T>
         // Input convolution to expand latent to decoder channels
         int lastChannels = baseChannels * _channelMults[^1];
         _inputConv = new ConvolutionalLayer<T>(
-            inputDepth: latentChannels,
             outputDepth: lastChannels,
             kernelSize: 3,
-            inputHeight: _bottleneckSize,
-            inputWidth: _bottleneckSize,
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
@@ -249,11 +243,8 @@ public class VAEDecoder<T> : LayerBase<T>
 
         // Output convolution with tanh activation for [-1, 1] output
         _outputConv = new ConvolutionalLayer<T>(
-            inputDepth: baseChannels,
             outputDepth: outputChannels,
             kernelSize: 3,
-            inputHeight: outputSpatialSize,
-            inputWidth: outputSpatialSize,
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>());

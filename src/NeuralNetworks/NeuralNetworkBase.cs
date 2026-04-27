@@ -4657,7 +4657,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         throw new InvalidOperationException(
             "AddConvolutionalLayer requires additional parameters that are not provided in this method signature. " +
             "Use ConvolutionalLayer.Configure() with the full input shape, or create the layer directly with " +
-            "new ConvolutionalLayer<T>(inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, stride, padding, activation) " +
+            "new ConvolutionalLayer<T>(inputHeight, inputWidth, stride, padding, activation) " +
             "and add it to Layers manually.");
     }
 

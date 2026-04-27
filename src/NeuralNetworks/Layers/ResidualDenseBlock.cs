@@ -215,9 +215,6 @@ public class ResidualDenseBlock<T> : LayerBase<T>
 
         // Conv1: numFeatures -> growthChannels
         _convLayers[0] = new ConvolutionalLayer<T>(
-            inputDepth: numFeatures,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             outputDepth: growthChannels,
             kernelSize: 3,
             stride: 1,
@@ -226,9 +223,6 @@ public class ResidualDenseBlock<T> : LayerBase<T>
 
         // Conv2: numFeatures + growthChannels -> growthChannels
         _convLayers[1] = new ConvolutionalLayer<T>(
-            inputDepth: numFeatures + growthChannels,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             outputDepth: growthChannels,
             kernelSize: 3,
             stride: 1,
@@ -237,9 +231,6 @@ public class ResidualDenseBlock<T> : LayerBase<T>
 
         // Conv3: numFeatures + 2*growthChannels -> growthChannels
         _convLayers[2] = new ConvolutionalLayer<T>(
-            inputDepth: numFeatures + 2 * growthChannels,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             outputDepth: growthChannels,
             kernelSize: 3,
             stride: 1,
@@ -248,9 +239,6 @@ public class ResidualDenseBlock<T> : LayerBase<T>
 
         // Conv4: numFeatures + 3*growthChannels -> growthChannels
         _convLayers[3] = new ConvolutionalLayer<T>(
-            inputDepth: numFeatures + 3 * growthChannels,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             outputDepth: growthChannels,
             kernelSize: 3,
             stride: 1,
@@ -259,9 +247,6 @@ public class ResidualDenseBlock<T> : LayerBase<T>
 
         // Conv5: numFeatures + 4*growthChannels -> numFeatures (back to original channels)
         _convLayers[4] = new ConvolutionalLayer<T>(
-            inputDepth: numFeatures + 4 * growthChannels,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             outputDepth: numFeatures,
             kernelSize: 3,
             stride: 1,

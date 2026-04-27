@@ -117,34 +117,30 @@ public class EQVAEModel<T> : VAEModelBase<T>
 
         // Encoder with equivariance-aware residual blocks
         _encoderLayers.Add(new ConvolutionalLayer<T>(
-            inputDepth: _inputChannels, outputDepth: channels,
-            kernelSize: 3, inputHeight: 64, inputWidth: 64,
-            stride: 1, padding: 1,
+            outputDepth: channels,
+            kernelSize: 3, stride: 1, padding: 1,
             activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
 
         foreach (int mult in multipliers)
         {
             int outChannels = _baseChannels * mult;
             _encoderLayers.Add(new ConvolutionalLayer<T>(
-                inputDepth: channels, outputDepth: outChannels,
-                kernelSize: 3, inputHeight: 32, inputWidth: 32,
-                stride: 2, padding: 1,
+                outputDepth: outChannels,
+                kernelSize: 3, stride: 2, padding: 1,
                 activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
             channels = outChannels;
         }
 
         // Latent projection (mean only — equivariance regularization replaces KL)
         _encoderLayers.Add(new ConvolutionalLayer<T>(
-            inputDepth: channels, outputDepth: _latentChannels,
-            kernelSize: 1, inputHeight: 8, inputWidth: 8,
-            stride: 1, padding: 0,
+            outputDepth: _latentChannels,
+            kernelSize: 1, stride: 1, padding: 0,
             activationFunction: new IdentityActivation<T>()));
 
         // Decoder
         _decoderLayers.Add(new ConvolutionalLayer<T>(
-            inputDepth: _latentChannels, outputDepth: channels,
-            kernelSize: 1, inputHeight: 8, inputWidth: 8,
-            stride: 1, padding: 0,
+            outputDepth: channels,
+            kernelSize: 1, stride: 1, padding: 0,
             activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
 
         for (int i = multipliers.Length - 1; i >= 0; i--)
@@ -159,9 +155,8 @@ public class EQVAEModel<T> : VAEModelBase<T>
         }
 
         _decoderLayers.Add(new ConvolutionalLayer<T>(
-            inputDepth: channels, outputDepth: _inputChannels,
-            kernelSize: 3, inputHeight: 64, inputWidth: 64,
-            stride: 1, padding: 1,
+            outputDepth: _inputChannels,
+            kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new TanhActivation<T>()));
     }
 

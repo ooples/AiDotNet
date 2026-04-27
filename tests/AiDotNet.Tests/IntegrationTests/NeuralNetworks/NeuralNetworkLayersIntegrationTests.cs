@@ -143,7 +143,7 @@ public class NeuralNetworkLayersIntegrationTests
         int padding = 1;
 
         var layer = new ConvolutionalLayer<double>(
-            inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding);
+            outputDepth, kernelSize, stride, padding);
 
         // Create input tensor [batch, depth, height, width]
         var input = new Tensor<double>([1, inputDepth, inputHeight, inputWidth]);
@@ -173,7 +173,7 @@ public class NeuralNetworkLayersIntegrationTests
         int padding = 1;
 
         var layer = new ConvolutionalLayer<double>(
-            inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding);
+            outputDepth, kernelSize, stride, padding);
 
         var input = new Tensor<double>([1, inputDepth, inputHeight, inputWidth]);
         InitializeRandomTensor(input);
@@ -202,7 +202,7 @@ public class NeuralNetworkLayersIntegrationTests
         int padding = 1;
 
         var layer = new ConvolutionalLayer<double>(
-            inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding);
+            outputDepth, kernelSize, stride, padding);
 
         var input = new Tensor<double>([batchSize, inputDepth, inputHeight, inputWidth]);
         InitializeRandomTensor(input);
@@ -533,7 +533,7 @@ public class NeuralNetworkLayersIntegrationTests
 
         // Act & Assert - input too small for kernel should throw
         Assert.Throws<ArgumentException>(() =>
-            new ConvolutionalLayer<double>(inputDepth, inputHeight, inputWidth, outputDepth, kernelSize));
+            new ConvolutionalLayer<double>(outputDepth, kernelSize));
     }
 
     #endregion

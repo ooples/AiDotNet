@@ -97,9 +97,6 @@ public class SpyNetLayer<T> : LayerBase<T>
             // a single Conv(7x7) that maps [2*C + 2] input channels → 2 output channels (flow residual dx, dy).
             // The paper's 5-layer architecture is simplified here to a single conv for efficiency.
             var conv = new ConvolutionalLayer<T>(
-                moduleInputChannels,
-                inputHeight >> i,
-                inputWidth >> i,
                 2,  // outputDepth: 2 channels for (dx, dy) flow residual per the paper
                 7,  // kernelSize
                 1,  // stride

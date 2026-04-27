@@ -121,11 +121,8 @@ public class TransitionLayer<T> : LayerBase<T>
         _bn = new BatchNormalizationLayer<T>(inputChannels);
 
         _conv = new ConvolutionalLayer<T>(
-            inputDepth: inputChannels,
             outputDepth: OutputChannels,
             kernelSize: 1,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             stride: 1,
             padding: 0,
             activationFunction: new IdentityActivation<T>());

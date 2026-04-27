@@ -499,9 +499,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < convLayerCount; i++)
         {
             yield return new ConvolutionalLayer<T>(
-                inputDepth: i == 0 ? inputShape[0] : filterCount,
-                inputHeight: inputShape[1],
-                inputWidth: inputShape[2],
                 outputDepth: filterCount,
                 kernelSize: kernelSize,
                 stride: 1,
@@ -592,9 +589,6 @@ public static class LayerHelper<T>
                 // production defaults is ~1.1 GB of weights, and eager allocation at
                 // ctor time OOMs CI before tests even run.
                 yield return new ConvolutionalLayer<T>(
-                    inputDepth: currentChannels,
-                    inputHeight: currentHeight,
-                    inputWidth: currentWidth,
                     outputDepth: outputChannels,
                     kernelSize: 3,
                     stride: 1,
@@ -1013,9 +1007,6 @@ public static class LayerHelper<T>
         int pooledWidth = PoolingOutputSize(convOutputWidth, initialPoolSize, initialPoolStride);
         // Initial convolutional layer
         yield return new ConvolutionalLayer<T>(
-            inputDepth: inputDepth,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             outputDepth: 64,
             kernelSize: initialKernelSize,
             stride: initialStride,
@@ -1095,11 +1086,8 @@ public static class LayerHelper<T>
         if (isFirstInBlock && inputDepth != outputDepth)
         {
             innerLayer = new ConvolutionalLayer<T>(
-                inputDepth: inputDepth,
                 outputDepth: outputDepth,
                 kernelSize: 1,
-                inputHeight: height,
-                inputWidth: width,
                 stride: 1,
                 padding: 0,
                 activationFunction: new IdentityActivation<T>()
@@ -1113,22 +1101,16 @@ public static class LayerHelper<T>
          );
 
         yield return new ConvolutionalLayer<T>(
-            inputDepth: inputDepth,
             outputDepth: outputDepth,
             kernelSize: 3,
-            inputHeight: height,
-            inputWidth: width,
             stride: 1,
             padding: 1,
             activationFunction: new ReLUActivation<T>()
         );
 
         yield return new ConvolutionalLayer<T>(
-            inputDepth: outputDepth,
             outputDepth: outputDepth,
             kernelSize: 3,
-            inputHeight: height,
-            inputWidth: width,
             stride: 1,
             padding: 1,
             activationFunction: new ReLUActivation<T>()
@@ -1287,11 +1269,8 @@ public static class LayerHelper<T>
         // tensor (9×9×inputDepth×256 = ~150 KB per input channel) to first Forward().
         // CapsuleNetwork tests repeatedly instantiate this at production defaults.
         yield return new ConvolutionalLayer<T>(
-            inputDepth: inputDepth,
             outputDepth: 256,
             kernelSize: 9,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             stride: 1,
             padding: 0,
             activationFunction: new ReLUActivation<T>(),
@@ -4565,11 +4544,8 @@ public static class LayerHelper<T>
             stemChannels = 2 * configuration.GrowthRate; // Paper uses 2k or 16
             if (stemChannels < 16) stemChannels = 16;
             yield return new ConvolutionalLayer<T>(
-                inputDepth: configuration.InputChannels,
                 outputDepth: stemChannels,
                 kernelSize: 3,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth,
                 stride: 1,
                 padding: 1,
                 activationFunction: new IdentityActivation<T>());
@@ -4585,11 +4561,8 @@ public static class LayerHelper<T>
             // ImageNet variant per Huang et al. 2017: 7x7 conv stride 2, 64 filters, then MaxPool
             stemChannels = 64;
             yield return new ConvolutionalLayer<T>(
-                inputDepth: configuration.InputChannels,
                 outputDepth: stemChannels,
                 kernelSize: 7,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth,
                 stride: 2,
                 padding: 3,
                 activationFunction: new IdentityActivation<T>());
@@ -4699,11 +4672,8 @@ public static class LayerHelper<T>
         // Stem: 3x3 conv, stride 2
         int stemChannels = MakeScaledChannels(32, widthCoeff);
         yield return new ConvolutionalLayer<T>(
-            inputDepth: configuration.InputChannels,
             outputDepth: stemChannels,
             kernelSize: 3,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
             stride: 2,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
@@ -4774,11 +4744,8 @@ public static class LayerHelper<T>
         // Head: 1x1 conv
         int headChannels = MakeScaledChannels(1280, widthCoeff);
         yield return new ConvolutionalLayer<T>(
-            inputDepth: currentChannels,
             outputDepth: headChannels,
             kernelSize: 1,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
             stride: 1,
             padding: 0,
             activationFunction: new IdentityActivation<T>());
@@ -4832,11 +4799,8 @@ public static class LayerHelper<T>
         // Initial convolution: 3x3, stride 2
         int firstConvChannels = MakeScaledChannels(32, alpha);
         yield return new ConvolutionalLayer<T>(
-            inputDepth: configuration.InputChannels,
             outputDepth: firstConvChannels,
             kernelSize: 3,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
             stride: 2,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
@@ -4909,11 +4873,8 @@ public static class LayerHelper<T>
             _ => 1280  // For alpha <= 1.0, keep at 1280 for better accuracy
         };
         yield return new ConvolutionalLayer<T>(
-            inputDepth: currentChannels,
             outputDepth: finalConvChannels,
             kernelSize: 1,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
             stride: 1,
             padding: 0,
             activationFunction: new IdentityActivation<T>());
@@ -4968,11 +4929,8 @@ public static class LayerHelper<T>
         int stemStride = smallInput ? 1 : 2;
         int firstConvChannels = MakeScaledChannels(16, alpha);
         yield return new ConvolutionalLayer<T>(
-            inputDepth: configuration.InputChannels,
             outputDepth: firstConvChannels,
             kernelSize: 3,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
             stride: stemStride,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
@@ -5014,11 +4972,8 @@ public static class LayerHelper<T>
         // Final convolution layers
         int penultimateChannels = isLarge ? MakeScaledChannels(960, alpha) : MakeScaledChannels(576, alpha);
         yield return new ConvolutionalLayer<T>(
-            inputDepth: currentChannels,
             outputDepth: penultimateChannels,
             kernelSize: 1,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
             stride: 1,
             padding: 0,
             activationFunction: new IdentityActivation<T>());
@@ -5033,11 +4988,8 @@ public static class LayerHelper<T>
         // Final classification layers
         int finalChannels = isLarge ? 1280 : 1024;
         yield return new ConvolutionalLayer<T>(
-            inputDepth: penultimateChannels,
             outputDepth: finalChannels,
             kernelSize: 1,
-            inputHeight: 1,
-            inputWidth: 1,
             stride: 1,
             padding: 0,
             activationFunction: new IdentityActivation<T>());
@@ -7422,9 +7374,6 @@ public static class LayerHelper<T>
 
         // Initial feature extraction (no activation - will be followed by residual blocks)
         yield return new ConvolutionalLayer<T>(
-            inputDepth: currentChannels,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
             outputDepth: numFeatures,
             kernelSize: 3,
             stride: 1,
@@ -7436,9 +7385,6 @@ public static class LayerHelper<T>
         {
             // Each residual block: Conv -> ReLU -> Conv + Skip
             yield return new ConvolutionalLayer<T>(
-                inputDepth: currentChannels,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth,
                 outputDepth: numFeatures,
                 kernelSize: 3,
                 stride: 1,
@@ -7446,9 +7392,6 @@ public static class LayerHelper<T>
                 activationFunction: new ReLUActivation<T>() as IActivationFunction<T>);
 
             yield return new ConvolutionalLayer<T>(
-                inputDepth: numFeatures,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth,
                 outputDepth: numFeatures,
                 kernelSize: 3,
                 stride: 1,
@@ -7461,9 +7404,6 @@ public static class LayerHelper<T>
         if (useTemporalConsistency)
         {
             yield return new ConvolutionalLayer<T>(
-                inputDepth: currentChannels,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth,
                 outputDepth: numFeatures,
                 kernelSize: 3,
                 stride: 1,
@@ -7477,9 +7417,6 @@ public static class LayerHelper<T>
             // Each pixel shuffle doubles the resolution
             // Conv to expand channels for pixel shuffle (with ReLU activation)
             yield return new ConvolutionalLayer<T>(
-                inputDepth: currentChannels,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth,
                 outputDepth: numFeatures * 4,  // 4x channels for 2x spatial
                 kernelSize: 3,
                 stride: 1,
@@ -7500,9 +7437,6 @@ public static class LayerHelper<T>
 
         // Final reconstruction convolution (no activation - output should be in original range)
         yield return new ConvolutionalLayer<T>(
-            inputDepth: currentChannels,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
             outputDepth: inputChannels,
             kernelSize: 3,
             stride: 1,
@@ -7541,15 +7475,15 @@ public static class LayerHelper<T>
         int currentWidth = inputWidth;
 
         // Initial feature extraction
-        yield return new ConvolutionalLayer<T>(inputChannels, currentHeight, currentWidth, numFeatures, 5, 1, 2,
+        yield return new ConvolutionalLayer<T>(numFeatures, 5, 1, 2,
             new ReLUActivation<T>() as IActivationFunction<T>);
 
         // A few residual blocks
         for (int i = 0; i < 4; i++)
         {
-            yield return new ConvolutionalLayer<T>(numFeatures, currentHeight, currentWidth, numFeatures, 3, 1, 1,
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1,
                 new ReLUActivation<T>() as IActivationFunction<T>);
-            yield return new ConvolutionalLayer<T>(numFeatures, currentHeight, currentWidth, numFeatures, 3, 1, 1);
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
         }
 
         // Upsampling
@@ -7557,7 +7491,7 @@ public static class LayerHelper<T>
         while (scale > 1)
         {
             // Conv with ReLU before pixel shuffle
-            yield return new ConvolutionalLayer<T>(numFeatures, currentHeight, currentWidth, numFeatures * 4, 3, 1, 1,
+            yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1,
                 new ReLUActivation<T>() as IActivationFunction<T>);
 
             yield return new PixelShuffleLayer<T>(
@@ -7571,7 +7505,7 @@ public static class LayerHelper<T>
         }
 
         // Output (no activation)
-        yield return new ConvolutionalLayer<T>(numFeatures, currentHeight, currentWidth, inputChannels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
     }
 
     /// <summary>
@@ -7604,30 +7538,30 @@ public static class LayerHelper<T>
         int w = inputWidth;
 
         // Feature encoder (shared for both frames)
-        yield return new ConvolutionalLayer<T>(inputChannels, h, w, 64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
-        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
-        yield return new ConvolutionalLayer<T>(128, h, w, 256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
         // Context encoder (reset dimensions)
         h = inputHeight; w = inputWidth;
-        yield return new ConvolutionalLayer<T>(inputChannels, h, w, 64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
-        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
-        yield return new ConvolutionalLayer<T>(128, h, w, hiddenDim, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(hiddenDim, 3, 2, 1);
         h /= 2; w /= 2;
 
         // Flow head (produces 2-channel flow output)
-        yield return new ConvolutionalLayer<T>(hiddenDim, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(128, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(64, h, w, 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(2, 3, 1, 1);
     }
 
     /// <summary>
@@ -7661,23 +7595,23 @@ public static class LayerHelper<T>
 
         // Feature pyramid network (two frames concatenated = inputChannels * 2)
         // Level 1
-        yield return new ConvolutionalLayer<T>(inputChannels * 2, h, w, 32, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(32, h, w, 32, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(32, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(32, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
         // Level 2
-        yield return new ConvolutionalLayer<T>(32, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(64, h, w, 64, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
         // Level 3
-        yield return new ConvolutionalLayer<T>(64, h, w, 96, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(96, h, w, 96, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(96, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(96, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
         // Flow estimation head (outputs at downsampled resolution: h/8 x w/8)
-        yield return new ConvolutionalLayer<T>(96, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(64, h, w, 4, 3, 1, 1);  // 4 = 2 flows * 2 directions
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(4, 3, 1, 1);  // 4 = 2 flows * 2 directions
 
         // NOTE: The synthesis network below expects input at the ORIGINAL resolution.
         // Higher-level models (FILM, FLAVR, etc.) should:
@@ -7691,14 +7625,14 @@ public static class LayerHelper<T>
         // Input: [frames_concat (C*2), upsampled_flow (4)] = C*2 + 4 channels
         int synthH = inputHeight;
         int synthW = inputWidth;
-        yield return new ConvolutionalLayer<T>(inputChannels * 2 + 4, synthH, synthW, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         for (int i = 0; i < 4; i++)
         {
-            yield return new ConvolutionalLayer<T>(numFeatures, synthH, synthW, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         }
 
-        yield return new ConvolutionalLayer<T>(numFeatures, synthH, synthW, inputChannels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
     }
 
     /// <summary>
@@ -7730,17 +7664,17 @@ public static class LayerHelper<T>
         int inCh = inputChannels * temporalFrames;
 
         // Encoder
-        yield return new ConvolutionalLayer<T>(inCh, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures * 2, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
         // Bottleneck
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Decoder with upsampling to restore original resolution
         yield return new DeconvolutionalLayer<T>([1, numFeatures * 2, h, w], numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
@@ -7749,7 +7683,7 @@ public static class LayerHelper<T>
         h *= 2; w *= 2;
 
         // Output head (residual prediction at original resolution)
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
     }
 
     /// <summary>
@@ -7779,25 +7713,25 @@ public static class LayerHelper<T>
         int inCh = inputChannels + 1; // image + mask
 
         // Encoder
-        yield return new ConvolutionalLayer<T>(inCh, h, w, numFeatures, 5, 1, 2, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 5, 1, 2, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures * 2, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
         // Bottleneck with attention-like processing
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Decoder
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Output head
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
     }
 
     /// <summary>
@@ -7829,18 +7763,18 @@ public static class LayerHelper<T>
         int w = inputWidth;
 
         // Feature encoder
-        yield return new ConvolutionalLayer<T>(inputChannels, h, w, 64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
-        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
-        yield return new ConvolutionalLayer<T>(128, h, w, 256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
         // Motion estimation layers
-        yield return new ConvolutionalLayer<T>(256, h, w, 256, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(256, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(256, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Global average pooling to get fixed-size feature vector
         yield return new GlobalPoolingLayer<T>(
@@ -7895,23 +7829,23 @@ public static class LayerHelper<T>
         int patchW = inputWidth / patchSize;
 
         // Patch embedding: converts image to sequence of patch embeddings
-        yield return new ConvolutionalLayer<T>(inputChannels, inputHeight, inputWidth, embedDim, patchSize, patchSize, 0, new GELUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(embedDim, patchSize, patchSize, 0, new GELUActivation<T>() as IActivationFunction<T>);
 
         // Encoder layers with spatial and temporal attention
         for (int i = 0; i < numEncoderLayers; i++)
         {
             // Spatial self-attention (approximated as 1x1 conv for efficiency)
-            yield return new ConvolutionalLayer<T>(embedDim, patchH, patchW, embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
 
             // Temporal attention (every other layer for efficiency)
             if (i % 2 == 1)
             {
-                yield return new ConvolutionalLayer<T>(embedDim, patchH, patchW, embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+                yield return new ConvolutionalLayer<T>(embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
             }
 
             // FFN with expansion factor of 4
-            yield return new ConvolutionalLayer<T>(embedDim, patchH, patchW, embedDim * 4, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
-            yield return new ConvolutionalLayer<T>(embedDim * 4, patchH, patchW, embedDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(embedDim * 4, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(embedDim, 1, 1, 0);
         }
 
         // Global average pooling for CLS-like token
@@ -7973,7 +7907,7 @@ public static class LayerHelper<T>
         int w = inputWidth;
 
         // Shallow feature extraction
-        yield return new ConvolutionalLayer<T>(inputChannels, h, w, embedDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(embedDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
 
         // Multi-scale feature extraction with encoder structure
         int currentDim = embedDim;
@@ -7982,15 +7916,15 @@ public static class LayerHelper<T>
             // Temporal mutual self-attention approximated with conv blocks
             for (int j = 0; j < numBlocks / 4; j++)
             {
-                yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
-                yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+                yield return new ConvolutionalLayer<T>(currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+                yield return new ConvolutionalLayer<T>(currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
             }
 
             if (i < 2)
             {
                 // Downsample
                 currentDim *= 2;
-                yield return new ConvolutionalLayer<T>(currentDim / 2, h, w, currentDim, 4, 2, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+                yield return new ConvolutionalLayer<T>(currentDim, 4, 2, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
                 h /= 2; w /= 2;
             }
         }
@@ -7998,7 +7932,7 @@ public static class LayerHelper<T>
         // Bottleneck with deep features
         for (int i = 0; i < numBlocks / 2; i++)
         {
-            yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
         }
 
         // Decoder with upsampling for super-resolution
@@ -8007,27 +7941,27 @@ public static class LayerHelper<T>
             int prevDim = currentDim;
             currentDim /= 2;
             h *= 2; w *= 2;
-            yield return new ConvolutionalLayer<T>(prevDim, h / 2, w / 2, currentDim * 4, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(currentDim * 4, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
             yield return new PixelShuffleLayer<T>([currentDim * 4, h / 2, w / 2], 2);
         }
 
         // Upscaling for super-resolution (pixel shuffle for efficient upsampling)
         if (scaleFactor >= 2)
         {
-            yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim * 4, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(currentDim * 4, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
             yield return new PixelShuffleLayer<T>([currentDim * 4, h, w], 2);
             h *= 2; w *= 2;
         }
         if (scaleFactor >= 4)
         {
-            yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim * 4, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(currentDim * 4, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
             yield return new PixelShuffleLayer<T>([currentDim * 4, h, w], 2);
             h *= 2; w *= 2;
         }
 
         // Final reconstruction
-        yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(currentDim, h, w, inputChannels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
     }
 
     /// <summary>
@@ -8070,7 +8004,7 @@ public static class LayerHelper<T>
         int w = inputWidth;
 
         // Input projection for latent + timestep conditioning
-        yield return new ConvolutionalLayer<T>(inputChannels, h, w, embedDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(embedDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
 
         // Encoder (downsampling path)
         int currentDim = embedDim;
@@ -8081,15 +8015,15 @@ public static class LayerHelper<T>
             int outDim = embedDim * mult;
 
             // Two residual-style conv blocks per level
-            yield return new ConvolutionalLayer<T>(currentDim, h, w, outDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-            yield return new ConvolutionalLayer<T>(outDim, h, w, outDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(outDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(outDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
 
             currentDim = outDim;
 
             // Downsample (except last level)
             if (mult != channelMults[^1])
             {
-                yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 4, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+                yield return new ConvolutionalLayer<T>(currentDim, 4, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
                 h /= 2; w /= 2;
             }
         }
@@ -8098,12 +8032,12 @@ public static class LayerHelper<T>
         for (int i = 0; i < Math.Min(numLayers / 4, 6); i++)
         {
             // Spatial attention approximation
-            yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(currentDim, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
             // Temporal attention approximation
-            yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(currentDim, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
             // FFN
-            yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim * 4, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
-            yield return new ConvolutionalLayer<T>(currentDim * 4, h, w, currentDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(currentDim * 4, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(currentDim, 1, 1, 0);
         }
 
         // Decoder (upsampling path) - symmetric with encoder
@@ -8112,8 +8046,8 @@ public static class LayerHelper<T>
             int outDim = i > 0 ? embedDim * channelMults[i - 1] : embedDim;
 
             // Two residual-style conv blocks per level
-            yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-            yield return new ConvolutionalLayer<T>(currentDim, h, w, outDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(currentDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(outDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
 
             currentDim = outDim;
 
@@ -8121,15 +8055,15 @@ public static class LayerHelper<T>
             // This ensures symmetric encoder/decoder geometry for proper U-Net denoising
             if (i > 0 && channelMults[i - 1] != channelMults[^1])
             {
-                yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim * 4, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+                yield return new ConvolutionalLayer<T>(currentDim * 4, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
                 yield return new PixelShuffleLayer<T>([currentDim * 4, h, w], 2);
                 h *= 2; w *= 2;
             }
         }
 
         // Output projection back to latent channels
-        yield return new ConvolutionalLayer<T>(currentDim, h, w, currentDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(currentDim, h, w, inputChannels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(currentDim, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
     }
 
     /// <summary>
@@ -8171,17 +8105,17 @@ public static class LayerHelper<T>
         int w = inputWidth;
 
         // Input normalization and projection
-        yield return new ConvolutionalLayer<T>(inputChannels, h, w, inputChannels, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(inputChannels, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
 
         // Motion transformer layers with temporal attention
         for (int i = 0; i < numLayers; i++)
         {
             // Temporal self-attention (approximated with 1x1 conv for efficiency)
-            yield return new ConvolutionalLayer<T>(inputChannels, h, w, inputChannels, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(inputChannels, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
 
             // Position-wise FFN with expansion
-            yield return new ConvolutionalLayer<T>(inputChannels, h, w, inputChannels * 4, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
-            yield return new ConvolutionalLayer<T>(inputChannels * 4, h, w, inputChannels, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(inputChannels * 4, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(inputChannels, 1, 1, 0);
         }
 
         // Multi-scale temporal processing for different motion granularities
@@ -8193,13 +8127,13 @@ public static class LayerHelper<T>
             int outChannels = inputChannels * mult;
 
             // Downsample
-            yield return new ConvolutionalLayer<T>(currentChannels, h, w, outChannels, 4, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(outChannels, 4, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
             h /= 2; w /= 2;
             currentChannels = outChannels;
 
             // Temporal attention at this scale
-            yield return new ConvolutionalLayer<T>(currentChannels, h, w, currentChannels, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
-            yield return new ConvolutionalLayer<T>(currentChannels, h, w, currentChannels, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(currentChannels, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(currentChannels, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
         }
 
         // Upsample back to original resolution
@@ -8208,17 +8142,17 @@ public static class LayerHelper<T>
             int outChannels = i > 0 ? inputChannels * channelMults[i - 1] : inputChannels;
 
             // Upsample using pixel shuffle
-            yield return new ConvolutionalLayer<T>(currentChannels, h, w, outChannels * 4, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(outChannels * 4, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
             yield return new PixelShuffleLayer<T>([outChannels * 4, h, w], 2);
             h *= 2; w *= 2;
             currentChannels = outChannels;
 
             // Temporal processing at this scale
-            yield return new ConvolutionalLayer<T>(currentChannels, h, w, currentChannels, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(currentChannels, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
         }
 
         // Output projection with residual
-        yield return new ConvolutionalLayer<T>(currentChannels, h, w, inputChannels, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(inputChannels, 1, 1, 0);
     }
 
     /// <summary>
@@ -8260,48 +8194,48 @@ public static class LayerHelper<T>
         int w = inputWidth;
 
         // Image encoder (ResNet-like backbone)
-        yield return new ConvolutionalLayer<T>(inputChannels, h, w, 64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
         h = ConvOutSize(h, 7, 2, 3); w = ConvOutSize(w, 7, 2, 3);
-        yield return new ConvolutionalLayer<T>(64, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(128, h, w, 256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(256, h, w, numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
 
         // Object encoder (processes mask with image features)
         // Note: This takes numFeatures + 1 channels (features + mask)
-        yield return new ConvolutionalLayer<T>(numFeatures + 1, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Query/Key/Value projections for memory attention
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 1, 1, 0);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 1, 1, 0);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0);
 
         // Memory attention layers
         for (int i = 0; i < 4; i++)
         {
-            yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         }
 
         // Mask decoder with upsampling
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([128, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(128, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([64, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(64, h, w, 32, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(32, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([32, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(32, h, w, 16, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(16, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([16, h, w], 2);
         h *= 2; w *= 2;
 
         // Final mask head (outputs 1 channel for binary segmentation)
-        yield return new ConvolutionalLayer<T>(16, h, w, 1, 3, 1, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(1, 3, 1, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -8339,47 +8273,47 @@ public static class LayerHelper<T>
         int w = inputWidth;
 
         // Encoder
-        yield return new ConvolutionalLayer<T>(inputChannels, h, w, 64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
         h = ConvOutSize(h, 7, 2, 3); w = ConvOutSize(w, 7, 2, 3);
-        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(128, h, w, 256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(256, h, w, numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
 
         // Sensory memory network (high resolution, short-term)
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Working memory network (medium resolution)
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures / 2, h, w, numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Long-term memory network (compressed)
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures / 4, h, w, numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Memory fusion (combines sensory + working + long-term)
         int totalFusionChannels = numFeatures + numFeatures / 2 + numFeatures / 4;
-        yield return new ConvolutionalLayer<T>(totalFusionChannels, h, w, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Decoder with upsampling
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([128, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(128, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([64, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(64, h, w, 32, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(32, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([32, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(32, h, w, 16, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(16, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([16, h, w], 2);
         h *= 2; w *= 2;
 
         // Final mask head
-        yield return new ConvolutionalLayer<T>(16, h, w, 1, 3, 1, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(1, 3, 1, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -8413,31 +8347,31 @@ public static class LayerHelper<T>
         int w = inputWidth;
 
         // Stage 1: Initial patch embedding (4x downsample)
-        yield return new ConvolutionalLayer<T>(inputChannels, h, w, 64, 4, 4, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 4, 4, 0, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 4; w /= 4;
-        yield return new ConvolutionalLayer<T>(64, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(64, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Stage 2: 2x downsample
-        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(128, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(128, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Stage 3: 2x downsample
-        yield return new ConvolutionalLayer<T>(128, h, w, 256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(256, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(256, h, w, 256, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(256, h, w, 256, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(256, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(256, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Stage 4: 2x downsample (final encoder stage)
-        yield return new ConvolutionalLayer<T>(256, h, w, numFeatures * 2, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Neck (feature pyramid fusion)
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -8474,8 +8408,8 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(numFeatures, numFeatures, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Mask prompt encoder: input [1, maskHeight, maskWidth] -> [numFeatures/4, maskHeight/4, maskWidth/4]
-        yield return new ConvolutionalLayer<T>(1, maskHeight, maskWidth, numFeatures / 4, 4, 4, 0, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures / 4, maskHeight / 4, maskWidth / 4, numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures / 4, 4, 4, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -8500,13 +8434,13 @@ public static class LayerHelper<T>
         int w = featureWidth;
 
         // Memory attention: fuses current features with memory
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Memory projection
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -8537,8 +8471,8 @@ public static class LayerHelper<T>
         int w = featureWidth;
 
         // Mask decoder refinement - shared feature processing
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -8563,7 +8497,7 @@ public static class LayerHelper<T>
     {
         // Input: [numFeatures, h, w] from CreateSAM2MaskDecoderLayers
         // Output: [numMaskCandidates, h, w] mask probability maps
-        yield return new ConvolutionalLayer<T>(numFeatures, featureHeight, featureWidth, numMaskCandidates, 1, 1, 0, new SigmoidActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numMaskCandidates, 1, 1, 0, new SigmoidActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -8684,17 +8618,17 @@ public static class LayerHelper<T>
         int featW = inputWidth / patchSize;
 
         // 3D patch embedding (spatiotemporal)
-        yield return new ConvolutionalLayer<T>(inputChannels * tubeletSize, inputHeight, inputWidth, numFeatures, patchSize, patchSize, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, patchSize, patchSize, 0, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Transformer encoder blocks (12 blocks)
         for (int i = 0; i < 12; i++)
         {
-            yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         }
 
         // Classification head with global average pooling
         // First reduce features, then pool to 1x1, then classify
-        yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new GlobalPoolingLayer<T>([numFeatures, featH, featW], PoolingType.Average);
         // After global pooling, shape is [numFeatures, 1, 1] - use DenseLayer for final classification
         yield return new DenseLayer<T>(numFeatures, numClasses, new SoftmaxActivation<T>() as IActivationFunction<T>);
@@ -8705,12 +8639,12 @@ public static class LayerHelper<T>
         // full reconstruction with unpatching is handled by the VideoMAE model class.
         for (int i = 0; i < 4; i++)
         {
-            yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         }
 
         // Reconstruction head - outputs patch-sized predictions at feature resolution
         // The VideoMAE model handles reassembly back to video tubelet space
-        yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, inputChannels * tubeletSize * patchSize * patchSize, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(inputChannels * tubeletSize * patchSize * patchSize, 1, 1, 0);
     }
 
     /// <summary>
@@ -8750,12 +8684,12 @@ public static class LayerHelper<T>
         int featW = inputWidth / patchSize;
 
         // Patch embedding
-        yield return new ConvolutionalLayer<T>(inputChannels, inputHeight, inputWidth, numFeatures, patchSize, patchSize, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, patchSize, patchSize, 0, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Encoder transformer blocks
         for (int i = 0; i < numEncoderBlocks; i++)
         {
-            yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         }
 
         // Decoder blocks with progressive upsampling
@@ -8764,30 +8698,30 @@ public static class LayerHelper<T>
         int currentFeatures = numFeatures;
 
         // Stage 1 - no upsampling yet
-        yield return new ConvolutionalLayer<T>(currentFeatures, h, w, numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         currentFeatures = numFeatures / 2;
 
         // Stage 2 - 2x upsample
         yield return new UpsamplingLayer<T>([currentFeatures, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(currentFeatures, h, w, numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         currentFeatures = numFeatures / 4;
 
         // Stage 3 - 2x upsample
         yield return new UpsamplingLayer<T>([currentFeatures, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(currentFeatures, h, w, numFeatures / 8, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures / 8, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         currentFeatures = numFeatures / 8;
 
         // Stage 4 - 2x upsample
         yield return new UpsamplingLayer<T>([currentFeatures, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(currentFeatures, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Depth head - 2x upsample to original resolution
         yield return new UpsamplingLayer<T>([64, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(64, h, w, 1, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(1, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -8805,18 +8739,18 @@ public static class LayerHelper<T>
         int numPatches = (inputHeight / patchSize) * (inputWidth / patchSize);
 
         // Patch embedding
-        yield return new ConvolutionalLayer<T>(inputChannels, inputHeight, inputWidth, embedDim, patchSize, patchSize, 0);
+        yield return new ConvolutionalLayer<T>(embedDim, patchSize, patchSize, 0);
 
         // Transformer encoder blocks (divided space-time attention)
         for (int i = 0; i < numLayers; i++)
         {
             // Temporal attention
-            yield return new ConvolutionalLayer<T>(embedDim, 1, numPatches, embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
             // Spatial attention
-            yield return new ConvolutionalLayer<T>(embedDim, 1, numPatches, embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
             // MLP
-            yield return new ConvolutionalLayer<T>(embedDim, 1, numPatches, embedDim * 4, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
-            yield return new ConvolutionalLayer<T>(embedDim * 4, 1, numPatches, embedDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(embedDim * 4, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(embedDim, 1, 1, 0);
         }
 
         // Classification head
@@ -8854,13 +8788,13 @@ public static class LayerHelper<T>
         int w = inputWidth;
 
         // Slow pathway - processes fewer frames at higher channel capacity
-        yield return new ConvolutionalLayer<T>(inputChannels, h, w, slowChannels, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(slowChannels, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(slowChannels, h, w, slowChannels * 2, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(slowChannels * 2, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(slowChannels * 2, h, w, slowChannels * 4, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(slowChannels * 4, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(slowChannels * 4, h, w, slowChannels * 8, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(slowChannels * 8, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -8888,13 +8822,13 @@ public static class LayerHelper<T>
         int w = inputWidth;
 
         // Fast pathway - processes more frames at lower channel capacity
-        yield return new ConvolutionalLayer<T>(inputChannels, h, w, fastChannels, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(fastChannels, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(fastChannels, h, w, fastChannels * 2, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(fastChannels * 2, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(fastChannels * 2, h, w, fastChannels * 4, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(fastChannels * 4, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(fastChannels * 4, h, w, fastChannels * 8, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(fastChannels * 8, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -8928,7 +8862,7 @@ public static class LayerHelper<T>
         int w = featureWidth;
 
         // 1x1 conv to fuse concatenated features
-        yield return new ConvolutionalLayer<T>(fusedChannels, h, w, fusedChannels, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(fusedChannels, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Global average pooling
         yield return new GlobalPoolingLayer<T>([fusedChannels, h, w], PoolingType.Average);
@@ -8981,29 +8915,29 @@ public static class LayerHelper<T>
         int numPatches = (h / patchSize) * (w / patchSize);
 
         // Patch embedding (ViT-style)
-        yield return new ConvolutionalLayer<T>(inputChannels, h, w, embedDim, patchSize, patchSize, 0);
+        yield return new ConvolutionalLayer<T>(embedDim, patchSize, patchSize, 0);
 
         // Transformer encoder blocks
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new ConvolutionalLayer<T>(embedDim, 1, numPatches, embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
-            yield return new ConvolutionalLayer<T>(embedDim, 1, numPatches, embedDim * 4, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
-            yield return new ConvolutionalLayer<T>(embedDim * 4, 1, numPatches, embedDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(embedDim * 4, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(embedDim, 1, 1, 0);
         }
 
         // Decoder with reassemble and fusion
         h = inputHeight / 16; w = inputWidth / 16;
-        yield return new ConvolutionalLayer<T>(embedDim, h, w, 256, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(256, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(256, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(128, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(64, h, w, 32, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(32, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h *= 2; w *= 2;
 
         // Depth head (relative depth output)
-        yield return new ConvolutionalLayer<T>(32, h, w, 1, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(1, 1, 1, 0);
     }
 
     /// <summary>
@@ -9022,7 +8956,7 @@ public static class LayerHelper<T>
         int w = inputWidth;
 
         // Feature extraction
-        yield return new ConvolutionalLayer<T>(inputChannels * numFrames, h, w, numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
 
         // PCD (Pyramid Cascading and Deformable) alignment
         for (int level = 0; level < 3; level++)
@@ -9030,30 +8964,30 @@ public static class LayerHelper<T>
             int scale = (int)Math.Pow(2, level);
             int scaledH = h / scale;
             int scaledW = w / scale;
-            yield return new ConvolutionalLayer<T>(numFeatures, scaledH, scaledW, numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
         }
 
         // TSA (Temporal and Spatial Attention) fusion
-        yield return new ConvolutionalLayer<T>(numFeatures * numFrames, h, w, numFeatures, 1, 1, 0, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, new LeakyReLUActivation<T>() as IActivationFunction<T>);
 
         // Reconstruction with residual blocks
         for (int i = 0; i < numBlocks; i++)
         {
-            yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
-            yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1);
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
         }
 
         // Upsampling with PixelShuffle (sub-pixel convolution)
         // Conv produces numFeatures*4 channels, PixelShuffle rearranges to numFeatures channels at 2x resolution
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
         yield return new PixelShuffleLayer<T>([numFeatures * 4, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
         yield return new PixelShuffleLayer<T>([numFeatures * 4, h, w], 2);
         h *= 2; w *= 2;
 
         // Output
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
     }
 
     /// <summary>
@@ -9070,30 +9004,30 @@ public static class LayerHelper<T>
         int w = inputWidth;
 
         // Encoder (3D convolutions for spatiotemporal features)
-        yield return new ConvolutionalLayer<T>(inputChannels * numInputFrames, h, w, numFeatures, 7, 1, 3, new LeakyReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 2, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 7, 1, 3, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures * 4, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 8, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 8, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
         // Bottleneck
-        yield return new ConvolutionalLayer<T>(numFeatures * 8, h, w, numFeatures * 8, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 8, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
 
         // Decoder (flow-agnostic reconstruction) with upsampling
-        yield return new ConvolutionalLayer<T>(numFeatures * 8, h, w, numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([numFeatures * 4, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 2, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([numFeatures * 2, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([numFeatures, h, w], 2);
         h *= 2; w *= 2;
 
         // Output (single interpolated frame)
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
     }
 
     /// <summary>
@@ -9110,30 +9044,30 @@ public static class LayerHelper<T>
         int w = inputWidth;
 
         // CNN feature encoder (shared for both frames)
-        yield return new ConvolutionalLayer<T>(inputChannels * 2, h, w, 64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(128, h, w, embedDim, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(embedDim, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
         // Cost volume encoder
-        yield return new ConvolutionalLayer<T>(embedDim, h, w, embedDim, 3, 1, 1, new GELUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(embedDim, 3, 1, 1, new GELUActivation<T>() as IActivationFunction<T>);
 
         // Transformer blocks for cost aggregation
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new ConvolutionalLayer<T>(embedDim, h, w, embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
-            yield return new ConvolutionalLayer<T>(embedDim, h, w, embedDim * 4, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
-            yield return new ConvolutionalLayer<T>(embedDim * 4, h, w, embedDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(embedDim, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(embedDim * 4, 1, 1, 0, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(embedDim, 1, 1, 0);
         }
 
         // Flow decoder
-        yield return new ConvolutionalLayer<T>(embedDim, h, w, 128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(128, h, w, 64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Flow head (2 channels: horizontal and vertical flow)
-        yield return new ConvolutionalLayer<T>(64, h, w, 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(2, 3, 1, 1);
     }
 
     /// <summary>
@@ -9150,23 +9084,23 @@ public static class LayerHelper<T>
         int w = inputWidth;
 
         // Backbone (CSPDarknet-style)
-        yield return new ConvolutionalLayer<T>(inputChannels, h, w, 32, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(32, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(32, h, w, 64, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(64, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(64, h, w, 128, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(128, h, w, numFeatures, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 2, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
         // FPN neck for multi-scale features
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
 
         // Detection head (outputs: x, y, w, h, objectness, class)
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, 5 + numClasses, 1, 1, 0); // bbox + obj + classes
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(5 + numClasses, 1, 1, 0); // bbox + obj + classes
     }
 
     /// <summary>
@@ -9183,33 +9117,33 @@ public static class LayerHelper<T>
         int w = inputWidth;
 
         // Motion estimation encoder
-        yield return new ConvolutionalLayer<T>(inputChannels * 2, h, w, numFeatures, 7, 2, 3, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 7, 2, 3, new LeakyReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 2, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures * 4, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
         // Iterative refinement blocks
         for (int i = 0; i < numIterations; i++)
         {
-            yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
-            yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 4, 3, 1, 1);
+            yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1);
         }
 
         // Decoder for stabilized frame with upsampling
-        yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 2, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([numFeatures * 2, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([numFeatures, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([numFeatures, h, w], 2);
         h *= 2; w *= 2;
 
         // Output frame
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
     }
 
     /// <summary>
@@ -9225,35 +9159,35 @@ public static class LayerHelper<T>
         int w = inputWidth;
 
         // Encoder (MobileNetV3-style)
-        yield return new ConvolutionalLayer<T>(inputChannels, h, w, numFeatures, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 2, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures * 4, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 8, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 8, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
         h /= 2; w /= 2;
 
         // Recurrent module (GRU-style for temporal consistency)
-        yield return new ConvolutionalLayer<T>(numFeatures * 8, h, w, numFeatures * 8, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures * 8, h, w, numFeatures * 8, 3, 1, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 8, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 8, 3, 1, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
 
         // Decoder with upsampling
-        yield return new ConvolutionalLayer<T>(numFeatures * 8, h, w, numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([numFeatures * 4, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([numFeatures * 2, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([numFeatures, h, w], 2);
         h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new UpsamplingLayer<T>([numFeatures, h, w], 2);
         h *= 2; w *= 2;
 
         // Output heads: alpha matte (1 channel) + foreground (3 channels)
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, 4, 1, 1, 0); // RGBA output
+        yield return new ConvolutionalLayer<T>(4, 1, 1, 0); // RGBA output
     }
 
     /// <summary>
@@ -9271,19 +9205,19 @@ public static class LayerHelper<T>
 
         // Stage 1: Multi-frame denoising blocks (process frames in pairs)
         int stage1Input = inputChannels * 3 + 1; // 3 frames + noise map
-        yield return new ConvolutionalLayer<T>(stage1Input, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
 
         // Stage 2: Temporal fusion (combine stage 1 outputs)
         int stage2Input = inputChannels * 3 + 1; // 3 denoised frames + noise map
-        yield return new ConvolutionalLayer<T>(stage2Input, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
     }
 
 
@@ -9533,29 +9467,29 @@ public static class LayerHelper<T>
         int innerChannels = 256)
     {
         // ResNet-18 style backbone (simplified)
-        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, 64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>(64);
         yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
 
         // ResNet blocks (simplified to conv layers for demonstration)
-        yield return new ConvolutionalLayer<T>(64, imageSize / 4, imageSize / 4, 64, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>(64);
-        yield return new ConvolutionalLayer<T>(64, imageSize / 4, imageSize / 4, 128, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1);
         yield return new BatchNormalizationLayer<T>(128);
-        yield return new ConvolutionalLayer<T>(128, imageSize / 8, imageSize / 8, 256, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(256, 3, 2, 1);
         yield return new BatchNormalizationLayer<T>(256);
-        yield return new ConvolutionalLayer<T>(256, imageSize / 16, imageSize / 16, backboneChannels, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(backboneChannels, 3, 2, 1);
         yield return new BatchNormalizationLayer<T>(backboneChannels);
 
         // FPN neck - lateral connections
-        yield return new ConvolutionalLayer<T>(backboneChannels, imageSize / 32, imageSize / 32, innerChannels, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(innerChannels, 1, 1, 0);
 
         // Probability map head (outputs text probability at each pixel)
-        yield return new ConvolutionalLayer<T>(innerChannels, imageSize / 32, imageSize / 32, innerChannels / 4, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(innerChannels / 4, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>(innerChannels / 4);
 
         // Threshold map head (outputs adaptive threshold at each pixel)
-        yield return new ConvolutionalLayer<T>(innerChannels / 4, imageSize / 32, imageSize / 32, 1, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(1, 1, 1, 0);
     }
 
     #endregion
@@ -9611,7 +9545,7 @@ public static class LayerHelper<T>
     {
         // Patch embedding via convolution (converts image to sequence of patches)
         int numPatches = (imageSize / patchSize) * (imageSize / patchSize);
-        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, hiddenDim, patchSize, patchSize, 0);
+        yield return new ConvolutionalLayer<T>(hiddenDim, patchSize, patchSize, 0);
 
         // Layer normalization
         yield return new LayerNormalizationLayer<T>(hiddenDim);
@@ -9688,16 +9622,16 @@ public static class LayerHelper<T>
         int numStructureClasses = 7)
     {
         // ResNet-18 backbone (simplified)
-        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, 64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>(64);
         yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
 
         // Downsample to feature map size
-        yield return new ConvolutionalLayer<T>(64, imageSize / 4, imageSize / 4, 128, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1);
         yield return new BatchNormalizationLayer<T>(128);
-        yield return new ConvolutionalLayer<T>(128, imageSize / 8, imageSize / 8, 256, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(256, 3, 2, 1);
         yield return new BatchNormalizationLayer<T>(256);
-        yield return new ConvolutionalLayer<T>(256, imageSize / 16, imageSize / 16, hiddenDim, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(hiddenDim, 3, 2, 1);
         yield return new BatchNormalizationLayer<T>(hiddenDim);
 
         // Flatten spatial dimensions for transformer input
@@ -9753,29 +9687,29 @@ public static class LayerHelper<T>
         int hiddenDim = 256)
     {
         // ResNet-101 style backbone (simplified to ResNet-50-like)
-        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, 64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>(64);
         yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
 
         // Residual blocks (simplified as conv layers)
-        yield return new ConvolutionalLayer<T>(64, imageSize / 4, imageSize / 4, 256, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(256, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>(256);
-        yield return new ConvolutionalLayer<T>(256, imageSize / 4, imageSize / 4, 512, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(512, 3, 2, 1);
         yield return new BatchNormalizationLayer<T>(512);
-        yield return new ConvolutionalLayer<T>(512, imageSize / 8, imageSize / 8, 1024, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(1024, 3, 2, 1);
         yield return new BatchNormalizationLayer<T>(1024);
-        yield return new ConvolutionalLayer<T>(1024, imageSize / 16, imageSize / 16, backboneChannels, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(backboneChannels, 3, 2, 1);
         yield return new BatchNormalizationLayer<T>(backboneChannels);
 
         // FPN lateral connections
-        yield return new ConvolutionalLayer<T>(backboneChannels, imageSize / 32, imageSize / 32, hiddenDim, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0);
 
         // Segmentation head
-        yield return new ConvolutionalLayer<T>(hiddenDim, imageSize / 32, imageSize / 32, hiddenDim, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(hiddenDim, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>(hiddenDim);
 
         // Output layer (class predictions per pixel)
-        yield return new ConvolutionalLayer<T>(hiddenDim, imageSize / 32, imageSize / 32, numClasses, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0);
     }
 
     /// <summary>
@@ -9893,20 +9827,20 @@ public static class LayerHelper<T>
         // === VISUAL BACKBONE (ResNeXt-FPN style) ===
 
         // Initial convolution
-        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, 64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>(64);
 
         // Max pooling
         yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
 
         // ResNeXt-style stages (simplified)
-        yield return new ConvolutionalLayer<T>(64, imageSize / 4, imageSize / 4, 256, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(256, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>(256);
-        yield return new ConvolutionalLayer<T>(256, imageSize / 4, imageSize / 4, 512, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(512, 3, 2, 1);
         yield return new BatchNormalizationLayer<T>(512);
-        yield return new ConvolutionalLayer<T>(512, imageSize / 8, imageSize / 8, 1024, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(1024, 3, 2, 1);
         yield return new BatchNormalizationLayer<T>(1024);
-        yield return new ConvolutionalLayer<T>(1024, imageSize / 16, imageSize / 16, visualBackboneChannels, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(visualBackboneChannels, 1, 1, 0);
         yield return new BatchNormalizationLayer<T>(visualBackboneChannels);
 
         // Project visual features to hidden dimension
@@ -9991,13 +9925,13 @@ public static class LayerHelper<T>
 
         // === VISUAL ENCODER (ResNet-50 style) ===
 
-        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, 64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>(64);
         yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
 
-        yield return new ConvolutionalLayer<T>(64, imageSize / 4, imageSize / 4, 256, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(256, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>(256);
-        yield return new ConvolutionalLayer<T>(256, imageSize / 4, imageSize / 4, 512, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(512, 3, 2, 1);
         yield return new BatchNormalizationLayer<T>(512);
 
         // Project visual to hidden dim
@@ -10165,7 +10099,7 @@ public static class LayerHelper<T>
         int numPatches = (imageSize / patchSize) * (imageSize / patchSize);
 
         // Swin-style patch embedding
-        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, hiddenDim, patchSize, patchSize, 0);
+        yield return new ConvolutionalLayer<T>(hiddenDim, patchSize, patchSize, 0);
         yield return new LayerNormalizationLayer<T>(hiddenDim);
 
         // Transformer encoder
@@ -10246,7 +10180,7 @@ public static class LayerHelper<T>
         // Visual encoder (ViT-style)
         int patchSize = 16;
         int numPatches = (imageSize / patchSize) * (imageSize / patchSize);
-        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, hiddenDim, patchSize, patchSize, 0);
+        yield return new ConvolutionalLayer<T>(hiddenDim, patchSize, patchSize, 0);
         yield return new PositionalEncodingLayer<T>(numPatches, hiddenDim);
 
         // Text embeddings
@@ -10381,7 +10315,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < vggChannels.Length; i++)
         {
-            yield return new ConvolutionalLayer<T>(inputChannels, currentSize, currentSize, vggChannels[i], 3, 1, 1);
+            yield return new ConvolutionalLayer<T>(vggChannels[i], 3, 1, 1);
             yield return new BatchNormalizationLayer<T>(vggChannels[i]);
 
             inputChannels = vggChannels[i];
@@ -10395,22 +10329,22 @@ public static class LayerHelper<T>
         }
 
         // U-Net style upsampling
-        yield return new ConvolutionalLayer<T>(backboneChannels, currentSize, currentSize, upscaleChannels, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(upscaleChannels, 1, 1, 0);
 
         // Upscale layers
         for (int i = 0; i < 4; i++)
         {
-            yield return new ConvolutionalLayer<T>(upscaleChannels, currentSize, currentSize, upscaleChannels, 3, 1, 1);
+            yield return new ConvolutionalLayer<T>(upscaleChannels, 3, 1, 1);
             yield return new BatchNormalizationLayer<T>(upscaleChannels);
             currentSize *= 2;
         }
 
         // Output: 2 channels (character region + affinity)
-        yield return new ConvolutionalLayer<T>(upscaleChannels, currentSize, currentSize, 32, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(32, currentSize, currentSize, 32, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(32, currentSize, currentSize, 16, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(16, currentSize, currentSize, 16, 1, 1, 0);
-        yield return new ConvolutionalLayer<T>(16, currentSize, currentSize, 2, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(32, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(32, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(16, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(16, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(2, 1, 1, 0);
     }
 
     /// <summary>
@@ -10449,7 +10383,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < channels.Length; i++)
         {
-            yield return new ConvolutionalLayer<T>(inputChannels, currentHeight, currentWidth, channels[i], 3, 1, 1);
+            yield return new ConvolutionalLayer<T>(channels[i], 3, 1, 1);
             yield return new BatchNormalizationLayer<T>(channels[i]);
 
             inputChannels = channels[i];
@@ -10510,10 +10444,10 @@ public static class LayerHelper<T>
         int maxSequenceLength = 512;
 
         // Visual backbone (ResNet-style)
-        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, 64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>(64);
         yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
-        yield return new ConvolutionalLayer<T>(64, imageSize / 4, imageSize / 4, visualBackboneChannels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(visualBackboneChannels, 3, 1, 1);
 
         // Visual projection to hidden dim
         yield return new DenseLayer<T>(visualBackboneChannels * (imageSize / 4) * (imageSize / 4) / 256, hiddenDim, identityActivation);
@@ -10666,7 +10600,7 @@ public static class LayerHelper<T>
         int intermediateSize = hiddenDim * 4;
 
         // Patch embedding
-        yield return new ConvolutionalLayer<T>(3, 224, 224, hiddenDim, 16, 16, 0);
+        yield return new ConvolutionalLayer<T>(hiddenDim, 16, 16, 0);
         yield return new LayerNormalizationLayer<T>(hiddenDim);
 
         for (int i = 0; i < numLayers; i++)
@@ -10733,7 +10667,7 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int intermediateSize = hiddenDim * 4;
 
-        yield return new ConvolutionalLayer<T>(3, 64, 64, hiddenDim, 16, 16, 0);
+        yield return new ConvolutionalLayer<T>(hiddenDim, 16, 16, 0);
         yield return new LayerNormalizationLayer<T>(hiddenDim);
         yield return new PositionalEncodingLayer<T>(maxPatches, hiddenDim);
 
@@ -10793,7 +10727,7 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
         // Vision encoder (ViT-L style)
-        yield return new ConvolutionalLayer<T>(3, 224, 224, visionDim, 14, 14, 0);
+        yield return new ConvolutionalLayer<T>(visionDim, 14, 14, 0);
         yield return new LayerNormalizationLayer<T>(visionDim);
 
         for (int i = 0; i < Math.Min(visionLayers, 6); i++)
@@ -10849,7 +10783,7 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
         // Patch embedding: conv with kernel=16, stride=16 on full image → (imageSize/16)^2 patches
-        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, visionDim, 16, 16, 0);
+        yield return new ConvolutionalLayer<T>(visionDim, 16, 16, 0);
         yield return new LayerNormalizationLayer<T>(visionDim);
 
         for (int i = 0; i < Math.Min(visionLayers, 6); i++)
@@ -10966,10 +10900,10 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
         // Visual encoder (ResNet-style backbone)
-        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, 64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>(64);
         yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
-        yield return new ConvolutionalLayer<T>(64, imageSize / 4, imageSize / 4, visualDim, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(visualDim, 3, 1, 1);
 
         // Text encoder
         yield return new DenseLayer<T>(textDim, textDim, reluActivation);
@@ -11007,9 +10941,9 @@ public static class LayerHelper<T>
         int seqLen = imageWidth / 4;
 
         // Patch embedding
-        yield return new ConvolutionalLayer<T>(3, imageHeight, imageWidth, 64, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>(64);
-        yield return new ConvolutionalLayer<T>(64, imageHeight, imageWidth, hiddenDim, 4, 4, 0);
+        yield return new ConvolutionalLayer<T>(hiddenDim, 4, 4, 0);
         yield return new LayerNormalizationLayer<T>(hiddenDim);
 
         // Transformer layers
@@ -11049,13 +10983,13 @@ public static class LayerHelper<T>
         int seqLen = imageWidth / 4;
 
         // Vision encoder (ResNet-style)
-        yield return new ConvolutionalLayer<T>(3, imageHeight, imageWidth, 64, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>(64);
         yield return new MaxPoolingLayer<T>([64, imageHeight, imageWidth], 2, 2);
-        yield return new ConvolutionalLayer<T>(64, imageHeight / 2, imageWidth / 2, 128, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(128, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>(128);
         yield return new MaxPoolingLayer<T>([128, imageHeight / 2, imageWidth / 2], 2, 2);
-        yield return new ConvolutionalLayer<T>(128, imageHeight / 4, imageWidth / 4, visionDim, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(visionDim, 3, 1, 1);
 
         // Transformer for vision
         yield return new MultiHeadAttentionLayer<T>(seqLen, visionDim, 8, identityActivation);
@@ -11101,7 +11035,7 @@ public static class LayerHelper<T>
         int inputChannels = 3;
         foreach (int outChannels in channels)
         {
-            yield return new ConvolutionalLayer<T>(inputChannels, currentSize, currentSize, outChannels, 3, 1, 1);
+            yield return new ConvolutionalLayer<T>(outChannels, 3, 1, 1);
             yield return new BatchNormalizationLayer<T>(outChannels);
             yield return new MaxPoolingLayer<T>([outChannels, currentSize, currentSize], 2, 2);
             currentSize /= 2;
@@ -11109,14 +11043,14 @@ public static class LayerHelper<T>
         }
 
         // Feature merging (U-Net style upsampling)
-        yield return new ConvolutionalLayer<T>(backboneChannels, currentSize, currentSize, featureChannels, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(featureChannels, 1, 1, 0);
         yield return new BatchNormalizationLayer<T>(featureChannels);
-        yield return new ConvolutionalLayer<T>(featureChannels, currentSize, currentSize, featureChannels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(featureChannels, 3, 1, 1);
 
         // Output heads
         int geometryChannels = geometryType == "QUAD" ? 8 : 5;
-        yield return new ConvolutionalLayer<T>(featureChannels, currentSize, currentSize, 1, 1, 1, 0); // Score map
-        yield return new ConvolutionalLayer<T>(featureChannels, currentSize, currentSize, geometryChannels, 1, 1, 0); // Geometry
+        yield return new ConvolutionalLayer<T>(1, 1, 1, 0); // Score map
+        yield return new ConvolutionalLayer<T>(geometryChannels, 1, 1, 0); // Geometry
     }
 
     /// <summary>
@@ -11138,7 +11072,7 @@ public static class LayerHelper<T>
 
         // ResNet backbone
         int currentSize = imageSize;
-        yield return new ConvolutionalLayer<T>(3, currentSize, currentSize, 64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>(64);
         currentSize /= 2;
 
@@ -11149,7 +11083,7 @@ public static class LayerHelper<T>
         int inputChannels = 64;
         foreach (int outChannels in resnetChannels)
         {
-            yield return new ConvolutionalLayer<T>(inputChannels, currentSize, currentSize, outChannels, 3, 1, 1);
+            yield return new ConvolutionalLayer<T>(outChannels, 3, 1, 1);
             yield return new BatchNormalizationLayer<T>(outChannels);
             inputChannels = outChannels;
             if (outChannels != resnetChannels[^1])
@@ -11160,11 +11094,11 @@ public static class LayerHelper<T>
         }
 
         // FPN-style feature fusion
-        yield return new ConvolutionalLayer<T>(backboneChannels, currentSize, currentSize, featureChannels, 1, 1, 0);
-        yield return new ConvolutionalLayer<T>(featureChannels, currentSize, currentSize, featureChannels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(featureChannels, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(featureChannels, 3, 1, 1);
 
         // Multi-scale kernel output
-        yield return new ConvolutionalLayer<T>(featureChannels, currentSize, currentSize, numKernels, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(numKernels, 1, 1, 0);
     }
 
     /// <summary>
@@ -12233,9 +12167,6 @@ public static class LayerHelper<T>
         {
             // Inception-style convolution (using 1D conv to approximate 2D behavior)
             yield return new ConvolutionalLayer<T>(
-                inputDepth: modelDimension,
-                inputHeight: 1,
-                inputWidth: sequenceLength,
                 outputDepth: modelDimension,
                 kernelSize: convKernelSize,
                 stride: 1,
@@ -17925,42 +17856,42 @@ public static class LayerHelper<T>
         int headDim = hiddenDim / numHeads;
 
         // Patch embedding (2x2x2 spatiotemporal patches)
-        yield return new ConvolutionalLayer<T>(latentDim, latentH, latentW, hiddenDim, 2, 2, 0);
+        yield return new ConvolutionalLayer<T>(hiddenDim, 2, 2, 0);
 
         // DiT blocks with QKV, attention projection, and FFN layers
         for (int i = 0; i < numLayers; i++)
         {
             // QKV projection (combined Q, K, V projection)
-            yield return new ConvolutionalLayer<T>(hiddenDim, featH, featW, hiddenDim * 3, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(hiddenDim * 3, 1, 1, 0);
 
             // Attention output projection
-            yield return new ConvolutionalLayer<T>(hiddenDim, featH, featW, hiddenDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0);
 
             // FFN with expansion (4x hidden dim as per transformer standard)
-            yield return new ConvolutionalLayer<T>(hiddenDim, featH, featW, hiddenDim * 4, 1, 1, 0);
-            yield return new ConvolutionalLayer<T>(hiddenDim * 4, featH, featW, hiddenDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(hiddenDim * 4, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0);
         }
 
         // Text projection (from CLIP-like encoder)
-        yield return new ConvolutionalLayer<T>(768, 1, 1, hiddenDim, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0);
 
         // Time embedding
-        yield return new ConvolutionalLayer<T>(1, 1, 1, hiddenDim, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0);
 
         // Final layer (predict noise)
-        yield return new ConvolutionalLayer<T>(hiddenDim, featH, featW, latentDim * 4, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(latentDim * 4, 1, 1, 0);
 
         // VAE decoder
-        yield return new ConvolutionalLayer<T>(latentDim, latentH, latentW, 256, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(256, latentH * 2, latentW * 2, 128, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(128, latentH * 4, latentW * 4, 64, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(64, height, width, channels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(256, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(128, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channels, 3, 1, 1);
 
         // VAE encoder (reverse of decoder for learned image compression)
-        yield return new ConvolutionalLayer<T>(channels, height, width, 64, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 128, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(128, height / 4, width / 4, 256, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(256, latentH, latentW, latentDim, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(256, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(latentDim, 3, 1, 1);
     }
 
     /// <summary>
@@ -17996,9 +17927,9 @@ public static class LayerHelper<T>
         int numFeatures = 64)
     {
         // Multi-scale feature extractor (shared for both frames)
-        yield return new ConvolutionalLayer<T>(channels, height, width, numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, height, width, numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, height, width, numFeatures * 2, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1);
 
         // Pyramid layers for each scale
         int currentH = height / 2;
@@ -18007,7 +17938,7 @@ public static class LayerHelper<T>
 
         for (int s = 0; s < numScales - 1; s++)
         {
-            yield return new ConvolutionalLayer<T>(currentC, currentH, currentW, Math.Min(currentC * 2, 512), 3, 2, 1);
+            yield return new ConvolutionalLayer<T>(Math.Min(currentC * 2, 512), 3, 2, 1);
             currentH /= 2;
             currentW /= 2;
             currentC = Math.Min(currentC * 2, 512);
@@ -18016,23 +17947,23 @@ public static class LayerHelper<T>
 
         // Bi-directional flow estimator
         int flowInputC = numFeatures * 2 * 2; // Concatenated features from both frames
-        yield return new ConvolutionalLayer<T>(flowInputC, height / 2, width / 2, numFeatures * 2, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 2, width / 2, numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, height / 2, width / 2, 4, 3, 1, 1); // 4 = 2 flows x 2 coords
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(4, 3, 1, 1); // 4 = 2 flows x 2 coords
 
         // Flow refinement
-        yield return new ConvolutionalLayer<T>(4 + numFeatures, height / 2, width / 2, 4, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(4, 3, 1, 1);
 
         // Occlusion estimator
-        yield return new ConvolutionalLayer<T>(flowInputC + 4, height / 2, width / 2, 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(2, 3, 1, 1);
 
         // Feature fusion for synthesis
         int fusionInputC = numFeatures * 2 * 2 + 4 + 2; // Features + flow + occlusion
-        yield return new ConvolutionalLayer<T>(fusionInputC, height / 2, width / 2, numFeatures * 2, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 2, width / 2, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
 
         // Synthesis head
-        yield return new ConvolutionalLayer<T>(numFeatures, height, width, channels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channels, 3, 1, 1);
     }
 
     #endregion
@@ -24763,7 +24694,6 @@ public static class LayerHelper<T>
 
             // Overlapping patch embedding: Conv2D + LayerNorm equivalent
             yield return new ConvolutionalLayer<T>(
-                prevChannels, h, w,
                 embedDim,
                 patchKernels[stage],
                 patchStrides[stage],
@@ -24783,7 +24713,6 @@ public static class LayerHelper<T>
                 {
                     // Spatial reduction convolution
                     yield return new ConvolutionalLayer<T>(
-                        embedDim, h, w,
                         embedDim,
                         3, 1, 1,
                         relu);
@@ -24794,21 +24723,18 @@ public static class LayerHelper<T>
 
                 // Expand
                 yield return new ConvolutionalLayer<T>(
-                    embedDim, h, w,
                     ffnDim,
                     1, 1, 0,
                     relu);
 
                 // Depthwise-style conv for positional encoding
                 yield return new ConvolutionalLayer<T>(
-                    ffnDim, h, w,
                     ffnDim,
                     3, 1, 1,
                     relu);
 
                 // Project back
                 yield return new ConvolutionalLayer<T>(
-                    ffnDim, h, w,
                     embedDim,
                     1, 1, 0,
                     relu);
@@ -24853,21 +24779,18 @@ public static class LayerHelper<T>
 
         // Project encoder output to decoder hidden dimension
         yield return new ConvolutionalLayer<T>(
-            encoderOutputChannels, featureHeight, featureWidth,
             decoderDim,
             1, 1, 0,
             relu);
 
         // Spatial refinement with 3x3 conv
         yield return new ConvolutionalLayer<T>(
-            decoderDim, featureHeight, featureWidth,
             decoderDim,
             3, 1, 1,
             relu);
 
         // Final classifier: decoderDim → numClasses
         yield return new ConvolutionalLayer<T>(
-            decoderDim, featureHeight, featureWidth,
             numClasses,
             1, 1, 0,
             identity);
@@ -24926,7 +24849,6 @@ public static class LayerHelper<T>
 
             // Overlapping patch embedding (same downsampling strategy as SegFormer)
             yield return new ConvolutionalLayer<T>(
-                prevChannels, h, w,
                 channels,
                 patchKernels[stage],
                 patchStrides[stage],
@@ -24942,14 +24864,12 @@ public static class LayerHelper<T>
                 // Multi-scale depth-wise convolutions (strip convolutions at different scales)
                 // Approximated as 3x3 depth-wise conv for context aggregation
                 yield return new ConvolutionalLayer<T>(
-                    channels, h, w,
                     channels,
                     3, 1, 1,
                     relu);
 
                 // 1x1 attention weight projection
                 yield return new ConvolutionalLayer<T>(
-                    channels, h, w,
                     channels,
                     1, 1, 0,
                     relu);
@@ -24957,13 +24877,11 @@ public static class LayerHelper<T>
                 // Feed-forward network: expand → project back
                 int ffnDim = channels * 4;
                 yield return new ConvolutionalLayer<T>(
-                    channels, h, w,
                     ffnDim,
                     1, 1, 0,
                     relu);
 
                 yield return new ConvolutionalLayer<T>(
-                    ffnDim, h, w,
                     channels,
                     1, 1, 0,
                     relu);
@@ -25001,21 +24919,18 @@ public static class LayerHelper<T>
 
         // Project encoder output to decoder dimension
         yield return new ConvolutionalLayer<T>(
-            encoderOutputChannels, featureHeight, featureWidth,
             decoderDim,
             1, 1, 0,
             relu);
 
         // Hamburger module approximation: spatial refinement with 3x3 conv
         yield return new ConvolutionalLayer<T>(
-            decoderDim, featureHeight, featureWidth,
             decoderDim,
             3, 1, 1,
             relu);
 
         // Final classifier
         yield return new ConvolutionalLayer<T>(
-            decoderDim, featureHeight, featureWidth,
             numClasses,
             1, 1, 0,
             identity);
@@ -25073,7 +24988,6 @@ public static class LayerHelper<T>
 
             // Downsampling stem / patch embedding
             yield return new ConvolutionalLayer<T>(
-                prevChannels, h, w,
                 channels,
                 patchKernels[stage],
                 patchStrides[stage],
@@ -25088,7 +25002,6 @@ public static class LayerHelper<T>
             {
                 // Deformable convolution approximation
                 yield return new ConvolutionalLayer<T>(
-                    channels, h, w,
                     channels,
                     3, 1, 1,
                     relu);
@@ -25096,13 +25009,11 @@ public static class LayerHelper<T>
                 // Feed-forward network
                 int ffnDim = channels * 4;
                 yield return new ConvolutionalLayer<T>(
-                    channels, h, w,
                     ffnDim,
                     1, 1, 0,
                     relu);
 
                 yield return new ConvolutionalLayer<T>(
-                    ffnDim, h, w,
                     channels,
                     1, 1, 0,
                     relu);
@@ -25138,19 +25049,16 @@ public static class LayerHelper<T>
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
         yield return new ConvolutionalLayer<T>(
-            encoderOutputChannels, featureHeight, featureWidth,
             decoderDim,
             1, 1, 0,
             relu);
 
         yield return new ConvolutionalLayer<T>(
-            decoderDim, featureHeight, featureWidth,
             decoderDim,
             3, 1, 1,
             relu);
 
         yield return new ConvolutionalLayer<T>(
-            decoderDim, featureHeight, featureWidth,
             numClasses,
             1, 1, 0,
             identity);
@@ -25210,7 +25118,6 @@ public static class LayerHelper<T>
             int channels = stageChannels[stage];
 
             yield return new ConvolutionalLayer<T>(
-                prevChannels, h, w,
                 channels,
                 patchKernels[stage],
                 patchStrides[stage],
@@ -25224,7 +25131,6 @@ public static class LayerHelper<T>
             {
                 // Self-attention approximation + adapter interaction
                 yield return new ConvolutionalLayer<T>(
-                    channels, h, w,
                     channels,
                     3, 1, 1,
                     relu);
@@ -25232,13 +25138,11 @@ public static class LayerHelper<T>
                 // FFN
                 int ffnDim = channels * 4;
                 yield return new ConvolutionalLayer<T>(
-                    channels, h, w,
                     ffnDim,
                     1, 1, 0,
                     relu);
 
                 yield return new ConvolutionalLayer<T>(
-                    ffnDim, h, w,
                     channels,
                     1, 1, 0,
                     relu);
@@ -25274,19 +25178,16 @@ public static class LayerHelper<T>
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
         yield return new ConvolutionalLayer<T>(
-            encoderOutputChannels, featureHeight, featureWidth,
             decoderDim,
             1, 1, 0,
             relu);
 
         yield return new ConvolutionalLayer<T>(
-            decoderDim, featureHeight, featureWidth,
             decoderDim,
             3, 1, 1,
             relu);
 
         yield return new ConvolutionalLayer<T>(
-            decoderDim, featureHeight, featureWidth,
             numClasses,
             1, 1, 0,
             identity);
@@ -25346,7 +25247,6 @@ public static class LayerHelper<T>
 
             // Patch embedding / downsample
             yield return new ConvolutionalLayer<T>(
-                prevChannels, h, w,
                 channels,
                 patchKernels[stage],
                 patchStrides[stage],
@@ -25360,14 +25260,12 @@ public static class LayerHelper<T>
             {
                 // CNN branch: local feature extraction
                 yield return new ConvolutionalLayer<T>(
-                    channels, h, w,
                     channels,
                     3, 1, 1,
                     relu);
 
                 // Transformer branch approximation: self-attention via conv
                 yield return new ConvolutionalLayer<T>(
-                    channels, h, w,
                     channels,
                     1, 1, 0,
                     relu);
@@ -25375,13 +25273,11 @@ public static class LayerHelper<T>
                 // FFN
                 int ffnDim = channels * 4;
                 yield return new ConvolutionalLayer<T>(
-                    channels, h, w,
                     ffnDim,
                     1, 1, 0,
                     relu);
 
                 yield return new ConvolutionalLayer<T>(
-                    ffnDim, h, w,
                     channels,
                     1, 1, 0,
                     relu);
@@ -25417,19 +25313,16 @@ public static class LayerHelper<T>
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
         yield return new ConvolutionalLayer<T>(
-            encoderOutputChannels, featureHeight, featureWidth,
             decoderDim,
             1, 1, 0,
             relu);
 
         yield return new ConvolutionalLayer<T>(
-            decoderDim, featureHeight, featureWidth,
             decoderDim,
             3, 1, 1,
             relu);
 
         yield return new ConvolutionalLayer<T>(
-            decoderDim, featureHeight, featureWidth,
             numClasses,
             1, 1, 0,
             identity);
@@ -25486,7 +25379,6 @@ public static class LayerHelper<T>
             int channels = channelDims[stage];
 
             yield return new ConvolutionalLayer<T>(
-                prevChannels, h, w,
                 channels,
                 patchKernels[stage],
                 patchStrides[stage],
@@ -25500,13 +25392,11 @@ public static class LayerHelper<T>
             {
                 // UNet-style residual block approximation
                 yield return new ConvolutionalLayer<T>(
-                    channels, h, w,
                     channels,
                     3, 1, 1,
                     relu);
 
                 yield return new ConvolutionalLayer<T>(
-                    channels, h, w,
                     channels,
                     3, 1, 1,
                     relu);
@@ -25542,19 +25432,16 @@ public static class LayerHelper<T>
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
         yield return new ConvolutionalLayer<T>(
-            encoderOutputChannels, featureHeight, featureWidth,
             decoderDim,
             1, 1, 0,
             relu);
 
         yield return new ConvolutionalLayer<T>(
-            decoderDim, featureHeight, featureWidth,
             decoderDim,
             3, 1, 1,
             relu);
 
         yield return new ConvolutionalLayer<T>(
-            decoderDim, featureHeight, featureWidth,
             numClasses,
             1, 1, 0,
             identity);
@@ -25611,7 +25498,6 @@ public static class LayerHelper<T>
             int channels = channelDims[stage];
 
             yield return new ConvolutionalLayer<T>(
-                prevChannels, h, w,
                 channels,
                 patchKernels[stage],
                 patchStrides[stage],
@@ -25625,7 +25511,6 @@ public static class LayerHelper<T>
             {
                 // Self-attention feature extraction (diffusion attention map merging)
                 yield return new ConvolutionalLayer<T>(
-                    channels, h, w,
                     channels,
                     3, 1, 1,
                     relu);
@@ -25633,13 +25518,11 @@ public static class LayerHelper<T>
                 // FFN
                 int ffnDim = channels * 4;
                 yield return new ConvolutionalLayer<T>(
-                    channels, h, w,
                     ffnDim,
                     1, 1, 0,
                     relu);
 
                 yield return new ConvolutionalLayer<T>(
-                    ffnDim, h, w,
                     channels,
                     1, 1, 0,
                     relu);
@@ -25675,19 +25558,16 @@ public static class LayerHelper<T>
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
         yield return new ConvolutionalLayer<T>(
-            encoderOutputChannels, featureHeight, featureWidth,
             decoderDim,
             1, 1, 0,
             relu);
 
         yield return new ConvolutionalLayer<T>(
-            decoderDim, featureHeight, featureWidth,
             decoderDim,
             3, 1, 1,
             relu);
 
         yield return new ConvolutionalLayer<T>(
-            decoderDim, featureHeight, featureWidth,
             numClasses,
             1, 1, 0,
             identity);
@@ -25732,18 +25612,18 @@ public static class LayerHelper<T>
         for (int stage = 0; stage < 4; stage++)
         {
             int channels = channelDims[stage];
-            yield return new ConvolutionalLayer<T>(prevChannels, h, w, channels, patchKernels[stage], patchStrides[stage], patchPaddings[stage], relu);
+            yield return new ConvolutionalLayer<T>(channels, patchKernels[stage], patchStrides[stage], patchPaddings[stage], relu);
             h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
             w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
 
             for (int block = 0; block < depths[stage]; block++)
             {
                 // Window attention approximation
-                yield return new ConvolutionalLayer<T>(channels, h, w, channels, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(channels, 3, 1, 1, relu);
                 // FFN
                 int ffnDim = channels * 4;
-                yield return new ConvolutionalLayer<T>(channels, h, w, ffnDim, 1, 1, 0, relu);
-                yield return new ConvolutionalLayer<T>(ffnDim, h, w, channels, 1, 1, 0, relu);
+                yield return new ConvolutionalLayer<T>(ffnDim, 1, 1, 0, relu);
+                yield return new ConvolutionalLayer<T>(channels, 1, 1, 0, relu);
             }
             prevChannels = channels;
         }
@@ -25771,9 +25651,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -25814,16 +25694,16 @@ public static class LayerHelper<T>
         for (int stage = 0; stage < 4; stage++)
         {
             int channels = channelDims[stage];
-            yield return new ConvolutionalLayer<T>(prevChannels, h, w, channels, patchKernels[stage], patchStrides[stage], patchPaddings[stage], relu);
+            yield return new ConvolutionalLayer<T>(channels, patchKernels[stage], patchStrides[stage], patchPaddings[stage], relu);
             h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
             w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
 
             for (int block = 0; block < depths[stage]; block++)
             {
-                yield return new ConvolutionalLayer<T>(channels, h, w, channels, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(channels, 3, 1, 1, relu);
                 int ffnDim = channels * 4;
-                yield return new ConvolutionalLayer<T>(channels, h, w, ffnDim, 1, 1, 0, relu);
-                yield return new ConvolutionalLayer<T>(ffnDim, h, w, channels, 1, 1, 0, relu);
+                yield return new ConvolutionalLayer<T>(ffnDim, 1, 1, 0, relu);
+                yield return new ConvolutionalLayer<T>(channels, 1, 1, 0, relu);
             }
             prevChannels = channels;
         }
@@ -25851,9 +25731,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -25870,7 +25750,7 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
 
         // Patch embedding: 16x16 non-overlapping patches
-        yield return new ConvolutionalLayer<T>(inputChannels, inputHeight, inputWidth, channelDims[0], 16, 16, 0, relu);
+        yield return new ConvolutionalLayer<T>(channelDims[0], 16, 16, 0, relu);
 
         // ViT transformer blocks
         int patchH = inputHeight / 16;
@@ -25878,7 +25758,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < depths[0]; i++)
         {
             yield return new BatchNormalizationLayer<T>(channelDims[0], patchH, patchW);
-            yield return new ConvolutionalLayer<T>(channelDims[0], patchH, patchW, channelDims[0], 1, 1, 0, relu);
+            yield return new ConvolutionalLayer<T>(channelDims[0], 1, 1, 0, relu);
         }
     }
 
@@ -25892,9 +25772,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -25919,14 +25799,14 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inCh, h, w, outCh, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outCh, kernel, stride, pad, relu);
             h = (h + 2 * pad - kernel) / stride + 1;
             w = (w + 2 * pad - kernel) / stride + 1;
 
             for (int d = 0; d < depths[stage]; d++)
             {
                 yield return new BatchNormalizationLayer<T>(outCh, h, w);
-                yield return new ConvolutionalLayer<T>(outCh, h, w, outCh, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outCh, 3, 1, 1, relu);
             }
         }
     }
@@ -25941,9 +25821,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -25968,14 +25848,14 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inCh, h, w, outCh, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outCh, kernel, stride, pad, relu);
             h = (h + 2 * pad - kernel) / stride + 1;
             w = (w + 2 * pad - kernel) / stride + 1;
 
             for (int d = 0; d < depths[stage]; d++)
             {
                 yield return new BatchNormalizationLayer<T>(outCh, h, w);
-                yield return new ConvolutionalLayer<T>(outCh, h, w, outCh, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outCh, 3, 1, 1, relu);
             }
         }
     }
@@ -25990,9 +25870,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26009,7 +25889,7 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
 
         // Patch embedding: 16x16 patches
-        yield return new ConvolutionalLayer<T>(inputChannels, inputHeight, inputWidth, embedDim, 16, 16, 0, relu);
+        yield return new ConvolutionalLayer<T>(embedDim, 16, 16, 0, relu);
 
         int patchH = inputHeight / 16;
         int patchW = inputWidth / 16;
@@ -26018,7 +25898,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < depths[0]; i++)
         {
             yield return new BatchNormalizationLayer<T>(embedDim, patchH, patchW);
-            yield return new ConvolutionalLayer<T>(embedDim, patchH, patchW, embedDim, 1, 1, 0, relu);
+            yield return new ConvolutionalLayer<T>(embedDim, 1, 1, 0, relu);
         }
     }
 
@@ -26032,9 +25912,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(embedDim, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26059,14 +25939,14 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inCh, h, w, outCh, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outCh, kernel, stride, pad, relu);
             h = (h + 2 * pad - kernel) / stride + 1;
             w = (w + 2 * pad - kernel) / stride + 1;
 
             for (int d = 0; d < depths[stage]; d++)
             {
                 yield return new BatchNormalizationLayer<T>(outCh, h, w);
-                yield return new ConvolutionalLayer<T>(outCh, h, w, outCh, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outCh, 3, 1, 1, relu);
             }
         }
     }
@@ -26081,9 +25961,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26108,14 +25988,14 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inCh, h, w, outCh, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outCh, kernel, stride, pad, relu);
             h = (h + 2 * pad - kernel) / stride + 1;
             w = (w + 2 * pad - kernel) / stride + 1;
 
             for (int d = 0; d < depths[stage]; d++)
             {
                 yield return new BatchNormalizationLayer<T>(outCh, h, w);
-                yield return new ConvolutionalLayer<T>(outCh, h, w, outCh, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outCh, 3, 1, 1, relu);
             }
         }
     }
@@ -26130,9 +26010,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26157,14 +26037,14 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inCh, h, w, outCh, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outCh, kernel, stride, pad, relu);
             h = (h + 2 * pad - kernel) / stride + 1;
             w = (w + 2 * pad - kernel) / stride + 1;
 
             for (int d = 0; d < depths[stage]; d++)
             {
                 yield return new BatchNormalizationLayer<T>(outCh, h, w);
-                yield return new ConvolutionalLayer<T>(outCh, h, w, outCh, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outCh, 3, 1, 1, relu);
             }
         }
     }
@@ -26179,9 +26059,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26206,14 +26086,14 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inCh, h, w, outCh, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outCh, kernel, stride, pad, relu);
             h = (h + 2 * pad - kernel) / stride + 1;
             w = (w + 2 * pad - kernel) / stride + 1;
 
             for (int d = 0; d < depths[stage]; d++)
             {
                 yield return new BatchNormalizationLayer<T>(outCh, h, w);
-                yield return new ConvolutionalLayer<T>(outCh, h, w, outCh, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outCh, 3, 1, 1, relu);
             }
         }
     }
@@ -26228,9 +26108,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26254,13 +26134,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -26278,9 +26158,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26304,13 +26184,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -26328,9 +26208,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26353,13 +26233,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -26377,9 +26257,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26402,13 +26282,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -26426,9 +26306,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26451,13 +26331,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -26475,9 +26355,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26500,13 +26380,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -26524,9 +26404,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26549,13 +26429,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -26573,9 +26453,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26598,13 +26478,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -26622,9 +26502,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26647,13 +26527,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -26671,9 +26551,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26696,13 +26576,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -26720,9 +26600,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26745,13 +26625,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -26769,9 +26649,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26794,13 +26674,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -26818,9 +26698,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26843,13 +26723,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -26867,9 +26747,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26892,13 +26772,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -26916,9 +26796,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26941,13 +26821,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -26965,9 +26845,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -26990,13 +26870,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27014,9 +26894,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27039,13 +26919,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27063,9 +26943,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27088,13 +26968,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27127,8 +27007,8 @@ public static class LayerHelper<T>
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
         // Bottleneck refinement at H/32, W/32: project encoder output to decoderDim.
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
 
         // Five 2× upsampling stages: H/32 → H/16 → H/8 → H/4 → H/2 → H.
         // Channel halving each stage (decoderDim → decoderDim/2 → ... → decoderDim/16),
@@ -27140,15 +27020,15 @@ public static class LayerHelper<T>
         {
             yield return new UpsamplingLayer<T>([curC, curH, curW], 2);
             int nextC = stage < 4 ? Math.Max(curC / 2, 16) : curC;
-            yield return new ConvolutionalLayer<T>(curC, curH * 2, curW * 2, nextC, 3, 1, 1, relu);
-            yield return new ConvolutionalLayer<T>(nextC, curH * 2, curW * 2, nextC, 3, 1, 1, relu);
+            yield return new ConvolutionalLayer<T>(nextC, 3, 1, 1, relu);
+            yield return new ConvolutionalLayer<T>(nextC, 3, 1, 1, relu);
             curC = nextC;
             curH *= 2;
             curW *= 2;
         }
 
         // Final 1×1 segmentation head: project to per-pixel class logits at full resolution.
-        yield return new ConvolutionalLayer<T>(curC, curH, curW, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27171,13 +27051,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27195,9 +27075,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27220,13 +27100,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27244,9 +27124,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27269,13 +27149,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27293,9 +27173,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27318,13 +27198,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27342,9 +27222,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27367,13 +27247,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27391,9 +27271,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27416,13 +27296,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27440,9 +27320,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27465,13 +27345,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27489,9 +27369,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27514,13 +27394,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27538,9 +27418,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27563,13 +27443,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27587,9 +27467,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27612,13 +27492,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27636,9 +27516,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27661,13 +27541,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27685,9 +27565,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27710,13 +27590,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27734,9 +27614,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27759,13 +27639,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27783,9 +27663,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27808,13 +27688,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27832,9 +27712,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27857,13 +27737,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27881,9 +27761,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27906,13 +27786,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27930,9 +27810,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -27955,13 +27835,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -27979,9 +27859,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -28004,13 +27884,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -28028,9 +27908,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -28053,13 +27933,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -28077,9 +27957,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -28102,13 +27982,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -28126,9 +28006,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -28151,13 +28031,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -28175,9 +28055,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -28200,13 +28080,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -28224,9 +28104,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -28249,13 +28129,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -28273,9 +28153,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -28298,13 +28178,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -28322,9 +28202,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -28347,13 +28227,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -28371,9 +28251,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -28396,13 +28276,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -28420,9 +28300,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -28457,13 +28337,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -28481,9 +28361,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -28506,13 +28386,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -28530,9 +28410,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -28555,13 +28435,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -28579,9 +28459,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -28604,13 +28484,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -28628,9 +28508,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -28653,13 +28533,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -28677,9 +28557,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -28702,13 +28582,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -28726,9 +28606,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -28797,7 +28677,7 @@ public static class LayerHelper<T>
 
         // Input convolution: [inputChannels] -> [baseChannels]
         yield return new ConvolutionalLayer<T>(
-            inputChannels, inputHeight, inputWidth, baseChannels, 3, 1, 1, identity);
+            baseChannels, 3, 1, 1, identity);
 
         // Encoder blocks with progressive downsampling
         int inC = baseChannels;
@@ -28818,7 +28698,7 @@ public static class LayerHelper<T>
             if (level < mults.Length - 1)
             {
                 yield return new ConvolutionalLayer<T>(
-                    outC, h, w, outC, 3, 2, 1, identity);
+                    outC, 3, 2, 1, identity);
                 h /= 2;
                 w /= 2;
             }
@@ -28827,15 +28707,15 @@ public static class LayerHelper<T>
         // Mean convolution for latent distribution
         int lastChannels = baseChannels * mults[^1];
         yield return new ConvolutionalLayer<T>(
-            lastChannels, latentH, latentW, latentChannels, 3, 1, 1, identity);
+            latentChannels, 3, 1, 1, identity);
 
         // Log variance convolution for latent distribution
         yield return new ConvolutionalLayer<T>(
-            lastChannels, latentH, latentW, latentChannels, 3, 1, 1, identity);
+            latentChannels, 3, 1, 1, identity);
 
         // Quant convolution for latent processing (1x1 conv)
         yield return new ConvolutionalLayer<T>(
-            latentChannels, latentH, latentW, latentChannels, 1, 1, 0, identity);
+            latentChannels, 1, 1, 0, identity);
     }
 
     /// <summary>
@@ -28879,7 +28759,7 @@ public static class LayerHelper<T>
 
         // Post-quant convolution: [latentChannels] -> [lastChannels]
         yield return new ConvolutionalLayer<T>(
-            latentChannels, latentH, latentW, lastChannels, 3, 1, 1, identity);
+            lastChannels, 3, 1, 1, identity);
 
         // Decoder blocks (mirror of encoder, reversed order)
         int inC = lastChannels;
@@ -28908,7 +28788,7 @@ public static class LayerHelper<T>
 
         // Output convolution: [baseChannels] -> [inputChannels] with Tanh for [-1, 1] output
         yield return new ConvolutionalLayer<T>(
-            baseChannels, inputHeight, inputWidth, inputChannels, 3, 1, 1,
+            inputChannels, 3, 1, 1,
             (IActivationFunction<T>)new TanhActivation<T>());
     }
 
@@ -28954,7 +28834,7 @@ public static class LayerHelper<T>
 
         // Input convolution: [inputChannels] -> [baseChannels]
         yield return new ConvolutionalLayer<T>(
-            inputChannels, inputHeight, inputWidth, baseChannels, 3, 1, 1, identity);
+            baseChannels, 3, 1, 1, identity);
 
         // Encoder spatial blocks with downsampling
         int inC = baseChannels;
@@ -28972,7 +28852,7 @@ public static class LayerHelper<T>
             if (level < mults.Length - 1)
             {
                 yield return new ConvolutionalLayer<T>(
-                    outC, h, w, outC, 3, 2, 1, identity);
+                    outC, 3, 2, 1, identity);
                 h /= 2;
                 w /= 2;
             }
@@ -28981,11 +28861,11 @@ public static class LayerHelper<T>
         // Latent projection layers
         int lastChannels = baseChannels * mults[^1];
         yield return new ConvolutionalLayer<T>(
-            lastChannels, latentH, latentW, latentChannels, 3, 1, 1, identity);
+            latentChannels, 3, 1, 1, identity);
         yield return new ConvolutionalLayer<T>(
-            lastChannels, latentH, latentW, latentChannels, 3, 1, 1, identity);
+            latentChannels, 3, 1, 1, identity);
         yield return new ConvolutionalLayer<T>(
-            latentChannels, latentH, latentW, latentChannels, 1, 1, 0, identity);
+            latentChannels, 1, 1, 0, identity);
     }
 
     /// <summary>
@@ -29019,7 +28899,7 @@ public static class LayerHelper<T>
 
         // Post-quant convolution: [latentChannels] -> [lastChannels]
         yield return new ConvolutionalLayer<T>(
-            latentChannels, latentH, latentW, lastChannels, 3, 1, 1, identity);
+            lastChannels, 3, 1, 1, identity);
 
         // Decoder spatial blocks (mirror of encoder)
         int inC = lastChannels;
@@ -29043,7 +28923,7 @@ public static class LayerHelper<T>
 
         // Output convolution: [baseChannels] -> [inputChannels] with Tanh
         yield return new ConvolutionalLayer<T>(
-            baseChannels, inputHeight, inputWidth, inputChannels, 3, 1, 1,
+            inputChannels, 3, 1, 1,
             (IActivationFunction<T>)new TanhActivation<T>());
     }
 
@@ -29144,7 +29024,7 @@ public static class LayerHelper<T>
 
         // Input convolution: [inputChannels] -> [baseChannels]
         yield return new ConvolutionalLayer<T>(
-            inputChannels, inputHeight, inputWidth, baseChannels, 3, 1, 1, identity);
+            baseChannels, 3, 1, 1, identity);
 
         // Time embedding MLP
         yield return new DenseLayer<T>(timeEmbeddingDim / 4, timeEmbeddingDim, relu);
@@ -29166,7 +29046,7 @@ public static class LayerHelper<T>
             if (level < mults.Length - 1)
             {
                 yield return new ConvolutionalLayer<T>(
-                    channels, h, w, channels, 3, 2, 1, identity);
+                    channels, 3, 2, 1, identity);
                 h /= 2;
                 w /= 2;
             }
@@ -29221,7 +29101,7 @@ public static class LayerHelper<T>
 
         // Output convolution: [baseChannels] -> [outputChannels]
         yield return new ConvolutionalLayer<T>(
-            baseChannels, inputHeight, inputWidth, outputChannels, 3, 1, 1, identity);
+            outputChannels, 3, 1, 1, identity);
     }
 
     /// <summary>
@@ -29491,7 +29371,7 @@ public static class LayerHelper<T>
 
         // Input convolution
         yield return new ConvolutionalLayer<T>(
-            inputChannels, inputHeight, inputWidth, baseChannels, 3, 1, 1, identity);
+            baseChannels, 3, 1, 1, identity);
 
         // Time embedding MLP
         yield return new DenseLayer<T>(timeEmbeddingDim / 4, timeEmbeddingDim, relu);
@@ -29512,7 +29392,7 @@ public static class LayerHelper<T>
             if (level < mults.Length - 1)
             {
                 yield return new ConvolutionalLayer<T>(
-                    channels, h, w, channels, 3, 2, 1, identity);
+                    channels, 3, 2, 1, identity);
                 h /= 2;
                 w /= 2;
             }
@@ -29555,7 +29435,7 @@ public static class LayerHelper<T>
         }
 
         yield return new ConvolutionalLayer<T>(
-            baseChannels, inputHeight, inputWidth, outputChannels, 3, 1, 1, identity);
+            outputChannels, 3, 1, 1, identity);
     }
 
     /// <summary>
@@ -29942,9 +29822,6 @@ public static class LayerHelper<T>
         {
             int inputFilters = stage == 0 ? 1 : currentFilters / 2;
             yield return new ConvolutionalLayer<T>(
-                inputDepth: inputFilters,
-                inputHeight: currentFreqDim,
-                inputWidth: 1,
                 outputDepth: currentFilters,
                 kernelSize: convKernelSize,
                 stride: convStride,
@@ -30032,13 +29909,13 @@ public static class LayerHelper<T>
             int currentFreqBins = freqBins / (int)Math.Pow(stride, i);
 
             yield return new ConvolutionalLayer<T>(
-                currentInChannels, currentFreqBins, timeDim, outChannels, kernelSize, stride, kernelSize / 2,
+                outChannels, kernelSize, stride, kernelSize / 2,
                 (IActivationFunction<T>)new LeakyReLUActivation<T>());
             yield return new BatchNormalizationLayer<T>(outChannels);
 
             // Skip connection layer
             yield return new ConvolutionalLayer<T>(
-                outChannels, currentFreqBins / stride, timeDim, outChannels, 1, 1, 0);
+                outChannels, 1, 1, 0);
 
             currentInChannels = outChannels;
         }
@@ -30106,21 +29983,18 @@ public static class LayerHelper<T>
 
         // First conv
         yield return new ConvolutionalLayer<T>(
-            inputDepth: 1, inputHeight: 1, inputWidth: frameSize,
             outputDepth: convFilters, kernelSize: conv1KernelSize,
             stride: conv1Stride, padding: conv1Padding,
             activationFunction: new LeakyReLUActivation<T>());
 
         // Second conv
         yield return new ConvolutionalLayer<T>(
-            inputDepth: convFilters, inputHeight: 1, inputWidth: seqLen1,
             outputDepth: convFilters, kernelSize: conv2KernelSize,
             stride: conv2Stride, padding: conv2Padding,
             activationFunction: new LeakyReLUActivation<T>());
 
         // Third conv
         yield return new ConvolutionalLayer<T>(
-            inputDepth: convFilters, inputHeight: 1, inputWidth: seqLen2,
             outputDepth: convFilters, kernelSize: conv2KernelSize,
             stride: conv2Stride, padding: conv2Padding,
             activationFunction: new LeakyReLUActivation<T>());
@@ -30168,7 +30042,6 @@ public static class LayerHelper<T>
             int outputDepth = currentFilters;
 
             yield return new ConvolutionalLayer<T>(
-                inputDepth: inputDepth, inputHeight: currentHeight, inputWidth: currentWidth,
                 outputDepth: outputDepth, kernelSize: convKernelSize,
                 stride: convStride, padding: convPadding,
                 activationFunction: new ReLUActivation<T>());
@@ -30220,36 +30093,36 @@ public static class LayerHelper<T>
         int ffnDim = hiddenDim * 4;
 
         // Video encoder: patch embedding + spatial transformer
-        yield return new ConvolutionalLayer<T>(channels, height, width, hiddenDim, 16, 16, 0);
+        yield return new ConvolutionalLayer<T>(hiddenDim, 16, 16, 0);
         for (int i = 0; i < numSpatialBlocks; i++)
         {
-            yield return new ConvolutionalLayer<T>(hiddenDim, featH, featW, hiddenDim, 1, 1, 0);
-            yield return new ConvolutionalLayer<T>(hiddenDim, featH, featW, hiddenDim, 3, 1, 1);
+            yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(hiddenDim, 3, 1, 1);
         }
 
         // Temporal transformer
         for (int i = 0; i < numTemporalBlocks; i++)
         {
-            yield return new ConvolutionalLayer<T>(hiddenDim, 1, numFrames, hiddenDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0);
         }
 
         // Video projection
-        yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, embeddingDim, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(embeddingDim, 1, 1, 0);
 
         // Text transformer: QKV + AttnProj + FFN1 + FFN2 per block
         for (int i = 0; i < numTextBlocks; i++)
         {
-            yield return new ConvolutionalLayer<T>(hiddenDim, 1, textMaxLength, hiddenDim * 3, 1, 1, 0);
-            yield return new ConvolutionalLayer<T>(hiddenDim, 1, textMaxLength, hiddenDim, 1, 1, 0);
-            yield return new ConvolutionalLayer<T>(hiddenDim, 1, textMaxLength, ffnDim, 1, 1, 0);
-            yield return new ConvolutionalLayer<T>(ffnDim, 1, textMaxLength, hiddenDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(hiddenDim * 3, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(ffnDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0);
         }
 
         // Text projection
-        yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, embeddingDim, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(embeddingDim, 1, 1, 0);
 
         // Logit scale
-        yield return new ConvolutionalLayer<T>(1, 1, 1, 1, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(1, 1, 1, 0);
     }
 
     /// <summary>
@@ -30264,35 +30137,35 @@ public static class LayerHelper<T>
         int featWidth = width / 8;
 
         // Feature encoder (5 layers)
-        yield return new ConvolutionalLayer<T>(channels, height, width, 64, 7, 2, 3);
-        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 64, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 96, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(96, height / 4, width / 4, 128, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(128, featHeight, featWidth, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(96, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
 
         // Context encoder (5 layers)
-        yield return new ConvolutionalLayer<T>(channels, height, width, 64, 7, 2, 3);
-        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 64, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 96, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(96, height / 4, width / 4, 128, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(128, featHeight, featWidth, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(96, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
 
         // Correlation conv
         int corrDim = correlationLevels * (2 * correlationRadius + 1) * (2 * correlationRadius + 1);
-        yield return new ConvolutionalLayer<T>(corrDim, featHeight, featWidth, numFeatures, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0);
 
         // GRU update block
         int gruInputDim = numFeatures + numFeatures + 2;
-        yield return new ConvolutionalLayer<T>(gruInputDim, featHeight, featWidth, numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(gruInputDim, featHeight, featWidth, numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(gruInputDim, featHeight, featWidth, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
 
         // Flow heads
-        yield return new ConvolutionalLayer<T>(numFeatures, featHeight, featWidth, numFeatures / 2, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures / 2, featHeight, featWidth, 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures / 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(2, 3, 1, 1);
 
         // Upsample conv
-        yield return new ConvolutionalLayer<T>(numFeatures, featHeight, featWidth, 64 * 9, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64 * 9, 3, 1, 1);
     }
 
     /// <summary>
@@ -30307,33 +30180,33 @@ public static class LayerHelper<T>
         int featW = width / 8;
 
         // Feature encoder (6 layers)
-        yield return new ConvolutionalLayer<T>(channels, height, width, 64, 7, 2, 3);
-        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 64, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 96, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(96, height / 4, width / 4, 96, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(96, height / 4, width / 4, numFeatures, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(96, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(96, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
 
         // Transformer layers: self-attention (2 per layer) + cross-attention (2 per layer)
         for (int i = 0; i < numTransformerLayers; i++)
         {
-            yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 1, 1, 0);
-            yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 1, 1, 0);
-            yield return new ConvolutionalLayer<T>(numFeatures * 2, featH, featW, numFeatures, 1, 1, 0);
-            yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0);
         }
 
         // Flow decoder (2 layers)
-        yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, 128, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(128, featH, featW, 64, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(128, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
 
         // Flow head
-        yield return new ConvolutionalLayer<T>(64, featH, featW, 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(2, 3, 1, 1);
 
         // Refinement (3 layers)
-        yield return new ConvolutionalLayer<T>(channels * 2 + 2, height, width, 64, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(64, height, width, 32, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(32, height, width, 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(32, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(2, 3, 1, 1);
     }
 
     /// <summary>
@@ -30348,31 +30221,31 @@ public static class LayerHelper<T>
         int decoderW = width / 4;
 
         // Encoder (3 layers)
-        yield return new ConvolutionalLayer<T>(channels * 2, height, width, numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, height, width, numFeatures * 2, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 2, width / 2, numFeatures * 4, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 2, 1);
 
         // Flow decoder (3 layers)
-        yield return new ConvolutionalLayer<T>(numFeatures * 4, decoderH, decoderW, numFeatures * 2, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, decoderH * 2, decoderW * 2, numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, decoderH * 4, decoderW * 4, 4, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(4, 3, 1, 1);
 
         // Context encoder (2 layers)
-        yield return new ConvolutionalLayer<T>(channels * 2, height, width, numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, height, width, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
 
         // Flow refinement blocks
         for (int i = 0; i < numFlowBlocks; i++)
         {
-            yield return new ConvolutionalLayer<T>(numFeatures + 4, height, width, numFeatures, 3, 1, 1);
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
         }
 
         // Fusion layer
         int fusionInputChannels = channels * 2 + numFeatures + 4;
-        yield return new ConvolutionalLayer<T>(fusionInputChannels, height, width, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
 
         // Output convolution
-        yield return new ConvolutionalLayer<T>(numFeatures, height, width, channels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channels, 3, 1, 1);
     }
 
     /// <summary>
@@ -30384,9 +30257,9 @@ public static class LayerHelper<T>
         int numScales = 7, int numFeatures = 64)
     {
         // Feature extractor (3 layers)
-        yield return new ConvolutionalLayer<T>(channels, height, width, numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, height, width, numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, height, width, numFeatures * 2, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1);
 
         // Pyramid layers (variable count based on scale)
         int currentH = height / 2;
@@ -30397,7 +30270,7 @@ public static class LayerHelper<T>
         {
             if (currentH < 4 || currentW < 4) break;
             int nextC = Math.Min(currentC * 2, 512);
-            yield return new ConvolutionalLayer<T>(currentC, currentH, currentW, nextC, 3, 2, 1);
+            yield return new ConvolutionalLayer<T>(nextC, 3, 2, 1);
             currentH /= 2;
             currentW /= 2;
             currentC = nextC;
@@ -30406,23 +30279,23 @@ public static class LayerHelper<T>
 
         // Flow estimator (3 layers)
         int flowInputC = numFeatures * 2 * 2;
-        yield return new ConvolutionalLayer<T>(flowInputC, height / 2, width / 2, numFeatures * 2, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 2, width / 2, numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, height / 2, width / 2, 4, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(4, 3, 1, 1);
 
         // Flow refinement
-        yield return new ConvolutionalLayer<T>(4 + numFeatures, height / 2, width / 2, 4, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(4, 3, 1, 1);
 
         // Occlusion estimator
-        yield return new ConvolutionalLayer<T>(flowInputC + 4, height / 2, width / 2, 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(2, 3, 1, 1);
 
         // Fusion layers (2 layers)
         int fusionInputC = numFeatures * 2 * 2 + 4 + 2;
-        yield return new ConvolutionalLayer<T>(fusionInputC, height / 2, width / 2, numFeatures * 2, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 2, width / 2, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
 
         // Synthesis head
-        yield return new ConvolutionalLayer<T>(numFeatures, height, width, channels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channels, 3, 1, 1);
     }
 
     /// <summary>
@@ -30437,34 +30310,34 @@ public static class LayerHelper<T>
         int featW = width / 4;
 
         // Flow network (3 layers)
-        yield return new ConvolutionalLayer<T>(channels * 2, height, width, 64, 7, 2, 3);
-        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 128, 5, 2, 2);
-        yield return new ConvolutionalLayer<T>(128, featH, featW, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(128, 5, 2, 2);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
 
         // Flow head
-        yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, 4, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(4, 3, 1, 1);
 
         // Content encoder (3 layers)
-        yield return new ConvolutionalLayer<T>(channels + 1, height, width, 64, 7, 2, 3);
-        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 128, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(128, featH, featW, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
 
         // Transformer layers
         for (int i = 0; i < numTransformerBlocks; i++)
         {
-            yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 3, 1, 1);
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
         }
 
         // Propagation (2 layers)
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, featH, featW, numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
 
         // Decoder (2 layers)
-        yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, 128, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(128, featH * 2, featW * 2, 64, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(128, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
 
         // Output head
-        yield return new ConvolutionalLayer<T>(64, height, width, channels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channels, 3, 1, 1);
     }
 
     /// <summary>
@@ -30480,36 +30353,36 @@ public static class LayerHelper<T>
         int featChannels = numFeatures * 4;
 
         // Flow encoder (3 layers)
-        yield return new ConvolutionalLayer<T>(4, height, width, numFeatures, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, height / 2, width / 2, numFeatures * 2, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 4, width / 4, numFeatures * 4, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 2, 1);
 
         // Flow decoder (3 layers)
-        yield return new ConvolutionalLayer<T>(numFeatures * 4, height / 8, width / 8, numFeatures * 2, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 4, width / 4, numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, height / 2, width / 2, 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(2, 3, 1, 1);
 
         // Image encoder (3 layers)
-        yield return new ConvolutionalLayer<T>(channels + 1, height, width, numFeatures, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, height / 2, width / 2, numFeatures * 2, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 4, width / 4, numFeatures * 4, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 2, 1);
 
         // Transformer blocks: QKV + Proj + FFN (2 per block)
         for (int i = 0; i < numTransformerBlocks; i++)
         {
-            yield return new ConvolutionalLayer<T>(featChannels, featH, featW, featChannels * 3, 1, 1, 0);
-            yield return new ConvolutionalLayer<T>(featChannels, featH, featW, featChannels, 1, 1, 0);
-            yield return new ConvolutionalLayer<T>(featChannels, featH, featW, featChannels * 4, 1, 1, 0);
-            yield return new ConvolutionalLayer<T>(featChannels * 4, featH, featW, featChannels, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(featChannels * 3, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(featChannels, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(featChannels * 4, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(featChannels, 1, 1, 0);
         }
 
         // Image decoder (3 layers)
-        yield return new ConvolutionalLayer<T>(numFeatures * 4, featH, featW, numFeatures * 2, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 4, width / 4, numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, height / 2, width / 2, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
 
         // Output convolution
-        yield return new ConvolutionalLayer<T>(numFeatures, height, width, channels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channels, 3, 1, 1);
     }
 
     /// <summary>
@@ -30526,7 +30399,7 @@ public static class LayerHelper<T>
         yield return new SpyNetLayer<T>(height, width, channels, numLevels: numLevels);
 
         // Feature extraction
-        yield return new ConvolutionalLayer<T>(channels, height, width, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
 
         // Residual blocks
         for (int i = 0; i < numResidualBlocks; i++)
@@ -30545,8 +30418,8 @@ public static class LayerHelper<T>
             yield return new DeformableConvolutionalLayer<T>(
                 height, width, numFeatures * 2, numFeatures,
                 kernelSize: 3, padding: 1, deformGroups: deformGroups);
-            yield return new ConvolutionalLayer<T>(numFeatures * 2, height, width, numFeatures, 3, 1, 1);
-            yield return new ConvolutionalLayer<T>(numFeatures * 2, height, width, numFeatures, 3, 1, 1);
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
         }
 
         // Upsampling layers
@@ -30562,7 +30435,7 @@ public static class LayerHelper<T>
         }
 
         // Output conv
-        yield return new ConvolutionalLayer<T>(numFeatures, currentHeight, currentWidth, channels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channels, 3, 1, 1);
     }
 
     /// <summary>
@@ -30581,61 +30454,61 @@ public static class LayerHelper<T>
         int textFFNDim = textEncoderDim * 4;
 
         // VAE Encoder (4 layers)
-        yield return new ConvolutionalLayer<T>(channels, height, width, vaeChannels, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(vaeChannels, height / 2, width / 2, vaeChannels * 2, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(vaeChannels * 2, height / 4, width / 4, vaeChannels * 4, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(vaeChannels * 4, latentH, latentW, latentDim, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(vaeChannels, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(vaeChannels * 2, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(vaeChannels * 4, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(latentDim, 3, 1, 1);
 
         // VAE Decoder (4 layers)
-        yield return new ConvolutionalLayer<T>(latentDim, latentH, latentW, vaeChannels * 4, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(vaeChannels * 4, latentH, latentW, vaeChannels * 2, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(vaeChannels * 2, latentH, latentW, vaeChannels, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(vaeChannels, latentH, latentW, channels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(vaeChannels * 4, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(vaeChannels * 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(vaeChannels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channels, 3, 1, 1);
 
         // Down blocks (4 layers)
-        yield return new ConvolutionalLayer<T>(latentDim, latentH, latentW, channelMult[0], 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(channelMult[0], latentH, latentW, channelMult[1], 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(channelMult[1], latentH / 2, latentW / 2, channelMult[2], 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(channelMult[2], latentH / 4, latentW / 4, channelMult[3], 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(channelMult[0], 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channelMult[1], 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(channelMult[2], 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(channelMult[3], 3, 2, 1);
 
         // Middle block
-        yield return new ConvolutionalLayer<T>(channelMult[3], latentH / 8, latentW / 8, channelMult[3], 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channelMult[3], 3, 1, 1);
 
         // Up blocks (4 layers)
-        yield return new ConvolutionalLayer<T>(channelMult[3] * 2, latentH / 8, latentW / 8, channelMult[2], 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(channelMult[2] * 2, latentH / 4, latentW / 4, channelMult[1], 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(channelMult[1] * 2, latentH / 2, latentW / 2, channelMult[0], 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(channelMult[0] * 2, latentH, latentW, latentDim, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channelMult[2], 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channelMult[1], 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channelMult[0], 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(latentDim, 3, 1, 1);
 
         // Temporal attention (4 layers)
         for (int i = 0; i < 4; i++)
         {
-            yield return new ConvolutionalLayer<T>(channelMult[Math.Min(i, 3)], 1, numFrames, channelMult[Math.Min(i, 3)], 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(channelMult[Math.Min(i, 3)], 1, 1, 0);
         }
 
         // Text encoder: embed projection
-        yield return new ConvolutionalLayer<T>(textEncoderDim, 1, 1, textEncoderDim, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(textEncoderDim, 1, 1, 0);
 
         // Text encoder transformer layers
         for (int i = 0; i < textEncoderLayers; i++)
         {
-            yield return new ConvolutionalLayer<T>(textEncoderDim, 1, 1, textEncoderDim * 3, 1, 1, 0);
-            yield return new ConvolutionalLayer<T>(textEncoderDim, 1, 1, textEncoderDim, 1, 1, 0);
-            yield return new ConvolutionalLayer<T>(textEncoderDim, 1, 1, textFFNDim, 1, 1, 0);
-            yield return new ConvolutionalLayer<T>(textFFNDim, 1, 1, textEncoderDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(textEncoderDim * 3, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(textEncoderDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(textFFNDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(textEncoderDim, 1, 1, 0);
         }
 
         // Text final projection
-        yield return new ConvolutionalLayer<T>(textEncoderDim, 1, 1, channelMult[3], 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(channelMult[3], 1, 1, 0);
 
         // Image conditioner
-        yield return new ConvolutionalLayer<T>(latentDim, latentH, latentW, channelMult[0], 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channelMult[0], 3, 1, 1);
 
         // Time embedding
-        yield return new ConvolutionalLayer<T>(1, 1, 1, channelMult[0], 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(channelMult[0], 1, 1, 0);
 
         // Noise predictor
-        yield return new ConvolutionalLayer<T>(channelMult[0], latentH, latentW, latentDim, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(latentDim, 3, 1, 1);
     }
 
     /// <summary>
@@ -31695,7 +31568,7 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
 
         // Patch embedding: 16x16 non-overlapping patches
-        yield return new ConvolutionalLayer<T>(inputChannels, inputHeight, inputWidth, channelDims[0], 16, 16, 0, relu);
+        yield return new ConvolutionalLayer<T>(channelDims[0], 16, 16, 0, relu);
 
         // ViT transformer blocks
         int patchH = inputHeight / 16;
@@ -31703,7 +31576,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < depths[0]; i++)
         {
             yield return new BatchNormalizationLayer<T>(channelDims[0], patchH, patchW);
-            yield return new ConvolutionalLayer<T>(channelDims[0], patchH, patchW, channelDims[0], 1, 1, 0, relu);
+            yield return new ConvolutionalLayer<T>(channelDims[0], 1, 1, 0, relu);
         }
     }
 
@@ -31717,9 +31590,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -31818,13 +31691,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -31842,9 +31715,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion
@@ -31870,13 +31743,13 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
             yield return new BatchNormalizationLayer<T>(outC, h, w);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
                 yield return new BatchNormalizationLayer<T>(outC, h, w);
             }
 
@@ -31894,9 +31767,9 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion

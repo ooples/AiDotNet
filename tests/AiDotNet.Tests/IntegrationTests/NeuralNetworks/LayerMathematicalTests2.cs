@@ -21,7 +21,7 @@ public class LayerMathematicalTests2
     public async Task Conv2DLayer_OutputSize_WithPadding()
     {
         // inputDepth=1, inputHeight=8, inputWidth=8, outputDepth=4, kernelSize=3, stride=1, padding=1
-        var layer = new ConvolutionalLayer<double>(1, 8, 8, 4, 3, 1, 1);
+        var layer = new ConvolutionalLayer<double>(4, 3, 1, 1);
 
         // Input: [batch=1, channels=1, height=8, width=8]
         var input = new Tensor<double>(new double[64], [1, 1, 8, 8]);
@@ -37,7 +37,7 @@ public class LayerMathematicalTests2
     public async Task Conv2DLayer_Stride2_HalvesSize()
     {
         // stride=2, padding=1
-        var layer = new ConvolutionalLayer<double>(1, 8, 8, 4, 3, 2, 1);
+        var layer = new ConvolutionalLayer<double>(4, 3, 2, 1);
 
         var input = new Tensor<double>(new double[64], [1, 1, 8, 8]);
         var output = layer.Forward(input);
@@ -51,7 +51,7 @@ public class LayerMathematicalTests2
     public async Task Conv2DLayer_ZeroInput_ProducesBiasOutput()
     {
         // With zero input, output should be just the convolution bias
-        var layer = new ConvolutionalLayer<double>(1, 4, 4, 2, 3, 1, 1);
+        var layer = new ConvolutionalLayer<double>(2, 3, 1, 1);
         var input = new Tensor<double>(new double[16], [1, 1, 4, 4]); // all zeros
         var output = layer.Forward(input);
 

@@ -482,7 +482,7 @@ public class NormalizationLayersIntegrationTests
         int inputWidth = 8;
         int outputChannels = 8;
         int kernelSize = 3;
-        var convLayer = new ConvolutionalLayer<float>(inputChannels, inputHeight, inputWidth, outputChannels, kernelSize);
+        var convLayer = new ConvolutionalLayer<float>(outputChannels, kernelSize);
         var layer = new SpectralNormalizationLayer<float>(convLayer);
         var input = CreateRandomTensor([2, inputChannels, inputHeight, inputWidth]);
 

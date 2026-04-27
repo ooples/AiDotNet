@@ -294,7 +294,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         int padding = 0,
         IActivationFunction<T>? activation = null)
         => new ConvolutionalLayer<T>(
-            inputDepth, inputHeight, inputWidth, outputDepth,
+            outputDepth,
             kernelSize, stride, padding, activation, InitializationStrategies<T>.Lazy);
 
     /// <summary>

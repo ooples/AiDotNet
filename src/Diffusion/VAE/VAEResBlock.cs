@@ -175,21 +175,15 @@ public class VAEResBlock<T> : LayerBase<T>
 
         // Convolutional layers (3x3 with padding=1 preserves spatial dimensions)
         _conv1 = new ConvolutionalLayer<T>(
-            inputDepth: inChannels,
             outputDepth: outChannels,
             kernelSize: 3,
-            inputHeight: spatialSize,
-            inputWidth: spatialSize,
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
 
         _conv2 = new ConvolutionalLayer<T>(
-            inputDepth: outChannels,
             outputDepth: outChannels,
             kernelSize: 3,
-            inputHeight: spatialSize,
-            inputWidth: spatialSize,
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
@@ -198,11 +192,8 @@ public class VAEResBlock<T> : LayerBase<T>
         if (inChannels != outChannels)
         {
             _skipConv = new ConvolutionalLayer<T>(
-                inputDepth: inChannels,
                 outputDepth: outChannels,
                 kernelSize: 1,
-                inputHeight: spatialSize,
-                inputWidth: spatialSize,
                 stride: 1,
                 padding: 0,
                 activationFunction: new IdentityActivation<T>());

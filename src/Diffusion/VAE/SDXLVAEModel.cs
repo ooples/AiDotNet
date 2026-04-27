@@ -121,9 +121,8 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
 
         // Input convolution
         _inputConv = new ConvolutionalLayer<T>(
-            inputDepth: _inputChannels, outputDepth: channels,
-            kernelSize: 3, inputHeight: 128, inputWidth: 128,
-            stride: 1, padding: 1,
+            outputDepth: channels,
+            kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new IdentityActivation<T>());
 
         // Encoder blocks with progressive downsampling
@@ -143,9 +142,8 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
             if (level < _channelMultipliers.Length - 1)
             {
                 _encoderLayers.Add(new ConvolutionalLayer<T>(
-                    inputDepth: channels, outputDepth: channels,
-                    kernelSize: 3, inputHeight: 32, inputWidth: 32,
-                    stride: 2, padding: 1,
+                    outputDepth: channels,
+                    kernelSize: 3, stride: 2, padding: 1,
                     activationFunction: new IdentityActivation<T>()));
             }
         }
@@ -153,22 +151,19 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
         // Mean and log-var projections
         int lastChannels = _baseChannels * _channelMultipliers[^1];
         _meanConv = new ConvolutionalLayer<T>(
-            inputDepth: lastChannels, outputDepth: _latentChannels,
-            kernelSize: 3, inputHeight: 16, inputWidth: 16,
-            stride: 1, padding: 1,
+            outputDepth: _latentChannels,
+            kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new IdentityActivation<T>());
 
         _logVarConv = new ConvolutionalLayer<T>(
-            inputDepth: lastChannels, outputDepth: _latentChannels,
-            kernelSize: 3, inputHeight: 16, inputWidth: 16,
-            stride: 1, padding: 1,
+            outputDepth: _latentChannels,
+            kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new IdentityActivation<T>());
 
         // Decoder: improved SDXL decoder with higher fidelity
         _postQuantConv = new ConvolutionalLayer<T>(
-            inputDepth: _latentChannels, outputDepth: lastChannels,
-            kernelSize: 3, inputHeight: 16, inputWidth: 16,
-            stride: 1, padding: 1,
+            outputDepth: lastChannels,
+            kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new IdentityActivation<T>());
 
         channels = lastChannels;
@@ -194,9 +189,8 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
         }
 
         _outputConv = new ConvolutionalLayer<T>(
-            inputDepth: _baseChannels, outputDepth: _inputChannels,
-            kernelSize: 3, inputHeight: 128, inputWidth: 128,
-            stride: 1, padding: 1,
+            outputDepth: _inputChannels,
+            kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new TanhActivation<T>());
     }
 

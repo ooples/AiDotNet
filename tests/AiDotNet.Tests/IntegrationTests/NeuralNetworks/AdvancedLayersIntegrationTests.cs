@@ -615,7 +615,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] convInputShape = [1, 4, 16, 16]; // batch, channels, height, width
-        var conv = new ConvolutionalLayer<float>(4, 16, 16, 8, 3, 2, 1); // Downsample
+        var conv = new ConvolutionalLayer<float>(8, 3, 2, 1); // Downsample
 
         var convOutput = conv.Forward(Tensor<float>.CreateRandom(convInputShape));
         int[] deconvInputShape = [convOutput.Shape[0], convOutput.Shape[1], convOutput.Shape[2], convOutput.Shape[3]];
@@ -2037,7 +2037,7 @@ public class AdvancedLayersIntegrationTests
         int inputWidth = 28;
         int outputDepth = 16;
         int kernelSize = 3;
-        var layer = new ConvolutionalLayer<float>(inputDepth, inputHeight, inputWidth, outputDepth, kernelSize);
+        var layer = new ConvolutionalLayer<float>(outputDepth, kernelSize);
 
         var input = Tensor<float>.CreateRandom([2, inputDepth, inputHeight, inputWidth]);
 
@@ -2060,7 +2060,7 @@ public class AdvancedLayersIntegrationTests
         int inputWidth = 8;
         int outputDepth = 4;
         int kernelSize = 3;
-        var original = new ConvolutionalLayer<float>(inputDepth, inputHeight, inputWidth, outputDepth, kernelSize);
+        var original = new ConvolutionalLayer<float>(outputDepth, kernelSize);
         var input = Tensor<float>.CreateRandom([1, inputDepth, inputHeight, inputWidth]);
 
         // Act
@@ -2083,7 +2083,7 @@ public class AdvancedLayersIntegrationTests
         int inputWidth = 16;
         int outputDepth = 8;
         int kernelSize = 3;
-        var layer = new ConvolutionalLayer<float>(inputDepth, inputHeight, inputWidth, outputDepth, kernelSize);
+        var layer = new ConvolutionalLayer<float>(outputDepth, kernelSize);
 
         // Act
         int paramCount = layer.ParameterCount;

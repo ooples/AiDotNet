@@ -96,9 +96,6 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
 
         // Projection: Conv with kernel=stride=patchSize creates non-overlapping patches
         _projection = new ConvolutionalLayer<T>(
-            inputChannels,
-            inputHeight,
-            inputWidth,
             embedDim,
             kernelSize: patchSize,
             stride: patchSize,
