@@ -184,6 +184,15 @@ public class LicenseE2ETests : IDisposable
         Directory.CreateDirectory(testTrialDir);
         string testTrialFile = Path.Combine(testTrialDir, "trial.json");
 
+        // Redirect the production guard's EnforceCore path to read/write
+        // testTrialFile (the SAME file the local trialManager writes to).
+        // Without this, builder.SerializeModel below reaches
+        // ModelPersistenceGuard.EnforceBeforeSerialize, which uses the
+        // REAL ~/.aidotnet/trial.json — divorced from testTrialFile.
+        // That divergence made trialManager.GetStatus().OperationsUsed
+        // read 0 even after a successful production serialize, tripping
+        // the "Trial operation should be counted" assertion below.
+        using (ModelPersistenceGuard.SetTestTrialFilePathOverride(testTrialFile))
         try
         {
             var trialManager = new TrialStateManager(testTrialFile);

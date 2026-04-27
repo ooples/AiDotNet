@@ -84,14 +84,32 @@ internal sealed class LicenseValidator
 
         if (explicitOfflineOnly)
         {
-            // Explicit offline mode — only signed keys (aidn.{id}.{sig}) are accepted
+            // Explicit offline mode — only signed keys (aidn.{id}.{sig}) are accepted.
+            // Return the cached result on repeat calls so reference equality
+            // holds: the public LicenseValidationResult API surfaces a
+            // defensive-copy DecryptionToken / Capabilities, and tests
+            // (and consumers) rely on Assert.Same(result1, result2) to
+            // distinguish "fresh validation" from "cache hit". Without
+            // this short-circuit, every call would re-run ValidateOffline
+            // and return a new instance even though nothing changed.
+            lock (_cacheLock)
+            {
+                if (_cached is not null)
+                {
+                    return _cached;
+                }
+            }
+
             var offlineResult = ValidateOffline();
             lock (_cacheLock)
             {
-                _cached = offlineResult;
+                // Double-checked locking: another thread may have
+                // populated the cache while we were validating. Honour
+                // their instance to keep reference equality stable
+                // across concurrent first calls.
+                _cached ??= offlineResult;
+                return _cached;
             }
-
-            return offlineResult;
         }
 
         // Check cache: if still within the grace period, return cached result
@@ -324,13 +342,22 @@ internal sealed class LicenseValidator
     /// <summary>
     /// Builds the request body for the license validation endpoint.
     /// Includes machine_id_hash (always) and optional hostname/os_description (when telemetry is enabled).
+    /// Also tags the request with <c>package=AiDotNet</c> so server-side analytics
+    /// can break validation traffic down by client SDK origin (issue #1195 §2d).
+    /// AiDotNet.Tensors sends <c>package=AiDotNet.Tensors</c> from its own validator.
     /// </summary>
     internal Dictionary<string, string?> BuildRequestBody()
     {
         var body = new Dictionary<string, string?>
         {
             ["license_key"] = _licenseKey.Key,
-            ["machine_id_hash"] = GetMachineIdHash()
+            ["machine_id_hash"] = GetMachineIdHash(),
+            // Issue #1195 §2d: tag this request with the package name so the
+            // server's analytics can attribute validation calls to AiDotNet
+            // vs AiDotNet.Tensors. The server does NOT gate on this field —
+            // it always returns the full capability set the user's tier
+            // authorises, regardless of which package asked.
+            ["package"] = "AiDotNet"
         };
 
         if (_licenseKey.EnableTelemetry)
@@ -485,8 +512,16 @@ internal sealed class LicenseValidator
     /// <summary>
     /// Parses the JSON response from the Supabase Edge Function validate-license endpoint.
     /// The response schema is: { valid: bool, tier?: string, error?: string, message?: string,
-    /// license_id?: string, activation_id?: string, current_activations?: int, max_activations?: int }
+    /// license_id?: string, activation_id?: string, current_activations?: int, max_activations?: int,
+    /// capabilities?: string[] }
     /// </summary>
+    /// <remarks>
+    /// <para>The <c>capabilities</c> field was introduced in issue #1195. Older
+    /// server deployments don't include it; this parser tolerates both shapes
+    /// and surfaces an empty list rather than failing — that way a stale
+    /// server doesn't break validation, it just doesn't grant any tensor-side
+    /// capabilities until it's updated.</para>
+    /// </remarks>
     internal static LicenseValidationResult ParseResponse(string responseJson, int httpStatusCode)
     {
         var obj = JsonConvert.DeserializeAnonymousType(responseJson, new
@@ -498,7 +533,8 @@ internal sealed class LicenseValidator
             license_id = (string?)null,
             activation_id = (string?)null,
             current_activations = (int?)null,
-            max_activations = (int?)null
+            max_activations = (int?)null,
+            capabilities = (string[]?)null
         });
 
         if (obj is null)
@@ -534,6 +570,7 @@ internal sealed class LicenseValidator
             seatsUsed: obj.current_activations ?? 0,
             seatsMax: obj.max_activations,
             validatedAt: DateTimeOffset.UtcNow,
-            message: obj.message);
+            message: obj.message,
+            capabilities: obj.capabilities);
     }
 }

@@ -44,6 +44,14 @@ internal static class ModelPersistenceGuard
     /// <see cref="EnforceBeforeDeserialize"/> will not count operations.
     /// Supports nesting — only the outermost scope's disposal re-enables enforcement.
     /// </summary>
+    /// <remarks>
+    /// Issue #1195 §2c: also enters the tensor-layer's
+    /// <c>PersistenceGuard.InternalOperation()</c> when the tensor licensing
+    /// API is present, so an upstream save/load that internally invokes a
+    /// tensor reader/writer (e.g., <c>.gguf</c> / <c>.safetensors</c>) ticks
+    /// the trial counter exactly once at the upstream layer rather than
+    /// double-counting through the tensor layer too.
+    /// </remarks>
     /// <returns>An <see cref="IDisposable"/> that decrements the depth counter when disposed.</returns>
     /// <example>
     /// <code>
@@ -56,19 +64,38 @@ internal static class ModelPersistenceGuard
     internal static IDisposable InternalOperation()
     {
         _internalOperationDepth.Value++;
-        return new InternalOperationScope();
+        // Acquire the tensor-side scope FIRST so a partial failure (the
+        // tensor scope acquisition throws) leaves the upstream depth
+        // counter consistent — the local InternalOperationScope will still
+        // decrement on dispose. Using a composite ensures the two scopes
+        // are released in LIFO order.
+        IDisposable tensorScope = TensorLicenseFlow.InternalOperation();
+        return new InternalOperationScope(tensorScope);
     }
 
     /// <summary>
     /// Enforces trial/license requirements before a save operation.
     /// Must be called at the start of every SaveModel() implementation.
     /// </summary>
+    /// <remarks>
+    /// Save/Load are the user-facing persistence entry points and ALWAYS
+    /// enforce — they are not suppressed by an outer
+    /// <see cref="InternalOperation"/> scope. Only
+    /// <see cref="EnforceBeforeSerialize"/> and
+    /// <see cref="EnforceBeforeDeserialize"/> are suppressed when nested
+    /// inside <see cref="InternalOperation"/> (those are the byte-level
+    /// helpers that an already-guarded Save/Load may call into; suppressing
+    /// them avoids double-counting). Suppressing Save/Load itself would
+    /// bypass licensing entirely on every nested save chain.
+    /// </remarks>
     /// <exception cref="LicenseRequiredException">
     /// Thrown when the free trial has expired and no valid license is configured.
     /// </exception>
     internal static void EnforceBeforeSave()
     {
-        if (_internalOperationDepth.Value > 0) return;
+        // Intentionally NOT short-circuiting on _internalOperationDepth.
+        // See the remarks above — the scope is for byte-level Serialize/
+        // Deserialize calls, not for user-facing Save/Load entry points.
         EnforceCore();
     }
 
@@ -76,12 +103,16 @@ internal static class ModelPersistenceGuard
     /// Enforces trial/license requirements before a load operation.
     /// Must be called at the start of every LoadModel()/Deserialize() file-based implementation.
     /// </summary>
+    /// <remarks>
+    /// Load is a user-facing entry point and is NOT suppressed by an outer
+    /// <see cref="InternalOperation"/> scope. See
+    /// <see cref="EnforceBeforeSave"/> for the rationale.
+    /// </remarks>
     /// <exception cref="LicenseRequiredException">
     /// Thrown when the free trial has expired and no valid license is configured.
     /// </exception>
     internal static void EnforceBeforeLoad()
     {
-        if (_internalOperationDepth.Value > 0) return;
         EnforceCore();
     }
 
@@ -171,18 +202,38 @@ internal static class ModelPersistenceGuard
     /// Sets the active builder license key for the current logical call context.
     /// Called by AiModelBuilder at the start of BuildAsync.
     /// </summary>
+    /// <remarks>
+    /// Issue #1195 §2b: also flows the key into the tensor layer when the
+    /// tensor licensing API is present. Both layers' <c>AsyncLocal</c>-backed
+    /// scopes flow with the call context, so inner build code transparently
+    /// sees both keys and the disposal at the end of <c>BuildAsync</c>
+    /// releases both.
+    /// </remarks>
     internal static IDisposable SetActiveLicenseKey(AiDotNet.Models.AiDotNetLicenseKey? key)
     {
         AiDotNet.Models.AiDotNetLicenseKey? previous = _activeBuilderLicenseKey.Value;
         _activeBuilderLicenseKey.Value = key;
-        return new ActiveLicenseKeyScope(previous);
+        IDisposable tensorScope = TensorLicenseFlow.SetActiveLicenseKey(key);
+        return new ActiveLicenseKeyScope(previous, tensorScope);
     }
 
     private sealed class ActiveLicenseKeyScope : IDisposable
     {
         private readonly AiDotNet.Models.AiDotNetLicenseKey? _previous;
-        public ActiveLicenseKeyScope(AiDotNet.Models.AiDotNetLicenseKey? previous) => _previous = previous;
-        public void Dispose() => _activeBuilderLicenseKey.Value = _previous;
+        private readonly IDisposable _tensorScope;
+        public ActiveLicenseKeyScope(AiDotNet.Models.AiDotNetLicenseKey? previous, IDisposable tensorScope)
+        {
+            _previous = previous;
+            _tensorScope = tensorScope;
+        }
+        public void Dispose()
+        {
+            // LIFO: release the tensor-side scope before clearing the
+            // upstream value so any tensor-side teardown that consults the
+            // upstream key still finds it.
+            try { _tensorScope.Dispose(); }
+            finally { _activeBuilderLicenseKey.Value = _previous; }
+        }
     }
 
     /// <summary>
@@ -300,16 +351,32 @@ internal static class ModelPersistenceGuard
     }
 
     /// <summary>
-    /// Disposable scope that decrements the internal operation depth on dispose.
+    /// Disposable scope that decrements the internal operation depth on dispose
+    /// AND releases the tensor-layer InternalOperation scope acquired in
+    /// <see cref="InternalOperation"/>. The two are paired so a single user-
+    /// facing save/load yields exactly one trial-counter tick (issue #1195).
     /// </summary>
     private sealed class InternalOperationScope : IDisposable
     {
+        private readonly IDisposable _tensorScope;
+        public InternalOperationScope(IDisposable tensorScope) => _tensorScope = tensorScope;
+
         public void Dispose()
         {
-            int current = _internalOperationDepth.Value;
-            if (current > 0)
+            // Release tensor side first so any tensor-side teardown that
+            // peeks at the upstream depth counter still sees the active
+            // value. Then decrement the upstream counter.
+            try
             {
-                _internalOperationDepth.Value = current - 1;
+                _tensorScope.Dispose();
+            }
+            finally
+            {
+                int current = _internalOperationDepth.Value;
+                if (current > 0)
+                {
+                    _internalOperationDepth.Value = current - 1;
+                }
             }
         }
     }
