@@ -212,7 +212,7 @@ public class LoRAValidationTests
         // Layers without trainable weights should pass through unchanged
         // Arrange
         var config = new DefaultLoRAConfiguration<double>(rank: 4);
-        var poolingLayer = new MaxPoolingLayer<double>(inputShape: new[] { 28, 28, 1 }, poolSize: 2, stride: 2);
+        var poolingLayer = new MaxPoolingLayer<double>(poolSize: 2, stride: 2);
 
         // Act
         var result = config.ApplyLoRA(poolingLayer);

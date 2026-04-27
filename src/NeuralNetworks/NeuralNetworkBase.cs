@@ -4702,7 +4702,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <param name="strides">The step size when moving the pooling window (default: same as poolSize).</param>
     public virtual void AddPoolingLayer(int[] inputShape, PoolingType poolingType, int poolSize, int? strides = null)
     {
-        var layer = new MaxPoolingLayer<T>(inputShape, poolSize, strides ?? poolSize);
+        // inputShape is now ignored (lazy ctor resolves it on first forward); kept on the
+        // signature for backwards compatibility with existing callers.
+        var layer = new MaxPoolingLayer<T>(poolSize, strides ?? poolSize);
         AddLayerToCollection(layer);
     }
 

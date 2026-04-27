@@ -296,7 +296,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
 
         // Max pooling: 3x3 pool, stride 2
         layers.Add(new MaxPoolingLayer<T>(
-            inputShape: [currentChannels, currentHeight, currentWidth],
             poolSize: 3,
             stride: 2));
 

@@ -21,7 +21,7 @@ public class PoolingLayersIntegrationTests
         int[] inputShape = [3, 8, 8];
         int poolSize = 2;
         int stride = 2;
-        var layer = new MaxPoolingLayer<float>(inputShape, poolSize, stride);
+        var layer = new MaxPoolingLayer<float>(poolSize, stride);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act
@@ -42,7 +42,7 @@ public class PoolingLayersIntegrationTests
         int[] inputShape = [3, 8, 8]; // layer expects CHW
         int poolSize = 2;
         int stride = 2;
-        var layer = new MaxPoolingLayer<float>(inputShape, poolSize, stride);
+        var layer = new MaxPoolingLayer<float>(poolSize, stride);
         var input = CreateRandomTensor<float>([2, 3, 8, 8]); // NCHW input
 
         // Act
@@ -63,7 +63,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [3, 8, 8];
-        var original = new MaxPoolingLayer<float>(inputShape, 2, 2);
+        var original = new MaxPoolingLayer<float>(2, 2);
         var input = CreateRandomTensor<float>(inputShape);
         var originalOutput = original.Forward(input);
 
@@ -312,7 +312,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [3, 8, 8];
-        var layer = new MaxPoolingLayer<float>(inputShape, 2, 2);
+        var layer = new MaxPoolingLayer<float>(2, 2);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act - Training mode
@@ -356,7 +356,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange - single channel input
         int[] inputShape = [1, 8, 8];
-        var layer = new MaxPoolingLayer<float>(inputShape, 2, 2);
+        var layer = new MaxPoolingLayer<float>(2, 2);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act
@@ -390,7 +390,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange - non-square input
         int[] inputShape = [3, 8, 12];
-        var layer = new MaxPoolingLayer<float>(inputShape, 2, 2);
+        var layer = new MaxPoolingLayer<float>(2, 2);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act

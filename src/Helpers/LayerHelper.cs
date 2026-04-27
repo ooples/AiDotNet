@@ -506,7 +506,6 @@ public static class LayerHelper<T>
                 activationFunction: new ReLUActivation<T>()
             );
             yield return new MaxPoolingLayer<T>(
-                inputShape: [filterCount, inputShape[1], inputShape[2]],
                 poolSize: 2,
                 stride: 2
             );
@@ -610,7 +609,6 @@ public static class LayerHelper<T>
 
             // Max pooling after each block (2x2, stride 2)
             yield return new MaxPoolingLayer<T>(
-                inputShape: [currentChannels, currentHeight, currentWidth],
                 poolSize: 2,
                 stride: 2
             );
@@ -1015,7 +1013,6 @@ public static class LayerHelper<T>
         );
 
         yield return new MaxPoolingLayer<T>(
-            inputShape: [64, convOutputHeight, convOutputWidth],
             poolSize: initialPoolSize,
             stride: initialPoolStride
         );
@@ -1042,7 +1039,6 @@ public static class LayerHelper<T>
                 int nextWidth = PoolingOutputSize(currentWidth, 2, 2);
 
                 yield return new MaxPoolingLayer<T>(
-                    inputShape: [currentDepth, currentHeight, currentWidth],
                     poolSize: 2,
                     stride: 2
                 );
@@ -4576,7 +4572,6 @@ public static class LayerHelper<T>
 
             // MaxPool 3x3, stride 2
             yield return new MaxPoolingLayer<T>(
-                inputShape: [stemChannels, currentHeight, currentWidth],
                 poolSize: 3,
                 stride: 2);
 
@@ -9469,7 +9464,7 @@ public static class LayerHelper<T>
         // ResNet-18 style backbone (simplified)
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>();
-        yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
+        yield return new MaxPoolingLayer<T>(3, 2);
 
         // ResNet blocks (simplified to conv layers for demonstration)
         yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
@@ -9624,7 +9619,7 @@ public static class LayerHelper<T>
         // ResNet-18 backbone (simplified)
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>();
-        yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
+        yield return new MaxPoolingLayer<T>(3, 2);
 
         // Downsample to feature map size
         yield return new ConvolutionalLayer<T>(128, 3, 2, 1);
@@ -9689,7 +9684,7 @@ public static class LayerHelper<T>
         // ResNet-101 style backbone (simplified to ResNet-50-like)
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>();
-        yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
+        yield return new MaxPoolingLayer<T>(3, 2);
 
         // Residual blocks (simplified as conv layers)
         yield return new ConvolutionalLayer<T>(256, 3, 1, 1);
@@ -9831,7 +9826,7 @@ public static class LayerHelper<T>
         yield return new BatchNormalizationLayer<T>();
 
         // Max pooling
-        yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
+        yield return new MaxPoolingLayer<T>(3, 2);
 
         // ResNeXt-style stages (simplified)
         yield return new ConvolutionalLayer<T>(256, 3, 1, 1);
@@ -9927,7 +9922,7 @@ public static class LayerHelper<T>
 
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>();
-        yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
+        yield return new MaxPoolingLayer<T>(3, 2);
 
         yield return new ConvolutionalLayer<T>(256, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>();
@@ -10323,7 +10318,7 @@ public static class LayerHelper<T>
             // Pooling after certain layers
             if (i == 1 || i == 3 || i == 6 || i == 9 || i == 12)
             {
-                yield return new MaxPoolingLayer<T>([inputChannels, currentSize, currentSize], 2, 2);
+                yield return new MaxPoolingLayer<T>(2, 2);
                 currentSize /= 2;
             }
         }
@@ -10391,13 +10386,13 @@ public static class LayerHelper<T>
             // Pool with (2,2) for first 3 layers, (2,1) for rest
             if (i < 3)
             {
-                yield return new MaxPoolingLayer<T>([inputChannels, currentHeight, currentWidth], 2, 2);
+                yield return new MaxPoolingLayer<T>(2, 2);
                 currentHeight /= 2;
                 currentWidth /= 2;
             }
             else if (i < 5)
             {
-                yield return new MaxPoolingLayer<T>([inputChannels, currentHeight, currentWidth], 2, 1);
+                yield return new MaxPoolingLayer<T>(2, 1);
                 currentHeight /= 2;
             }
         }
@@ -10446,7 +10441,7 @@ public static class LayerHelper<T>
         // Visual backbone (ResNet-style)
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>();
-        yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
+        yield return new MaxPoolingLayer<T>(3, 2);
         yield return new ConvolutionalLayer<T>(visualBackboneChannels, 3, 1, 1);
 
         // Visual projection to hidden dim
@@ -10902,7 +10897,7 @@ public static class LayerHelper<T>
         // Visual encoder (ResNet-style backbone)
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>();
-        yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
+        yield return new MaxPoolingLayer<T>(3, 2);
         yield return new ConvolutionalLayer<T>(visualDim, 3, 1, 1);
 
         // Text encoder
@@ -10985,10 +10980,10 @@ public static class LayerHelper<T>
         // Vision encoder (ResNet-style)
         yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>();
-        yield return new MaxPoolingLayer<T>([64, imageHeight, imageWidth], 2, 2);
+        yield return new MaxPoolingLayer<T>(2, 2);
         yield return new ConvolutionalLayer<T>(128, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>();
-        yield return new MaxPoolingLayer<T>([128, imageHeight / 2, imageWidth / 2], 2, 2);
+        yield return new MaxPoolingLayer<T>(2, 2);
         yield return new ConvolutionalLayer<T>(visionDim, 3, 1, 1);
 
         // Transformer for vision
@@ -11037,7 +11032,7 @@ public static class LayerHelper<T>
         {
             yield return new ConvolutionalLayer<T>(outChannels, 3, 1, 1);
             yield return new BatchNormalizationLayer<T>();
-            yield return new MaxPoolingLayer<T>([outChannels, currentSize, currentSize], 2, 2);
+            yield return new MaxPoolingLayer<T>(2, 2);
             currentSize /= 2;
             inputChannels = outChannels;
         }
@@ -11076,7 +11071,7 @@ public static class LayerHelper<T>
         yield return new BatchNormalizationLayer<T>();
         currentSize /= 2;
 
-        yield return new MaxPoolingLayer<T>([64, currentSize, currentSize], 3, 2);
+        yield return new MaxPoolingLayer<T>(3, 2);
         currentSize /= 2;
 
         int[] resnetChannels = [64, 128, backboneChannels, backboneChannels];
@@ -11088,7 +11083,7 @@ public static class LayerHelper<T>
             inputChannels = outChannels;
             if (outChannels != resnetChannels[^1])
             {
-                yield return new MaxPoolingLayer<T>([outChannels, currentSize, currentSize], 2, 2);
+                yield return new MaxPoolingLayer<T>(2, 2);
                 currentSize /= 2;
             }
         }
@@ -30051,7 +30046,6 @@ public static class LayerHelper<T>
             if (block < numConvBlocks - 1)
             {
                 yield return new MaxPoolingLayer<T>(
-                    [outputDepth, currentHeight, currentWidth],
                     poolSize: poolSize, stride: poolStride);
                 currentHeight /= poolStride;
                 currentWidth /= poolStride;

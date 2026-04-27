@@ -70,7 +70,7 @@ public class LayerMathematicalTests2
     public async Task MaxPool2D_OutputSize()
     {
         // inputShape=[1, 4, 4], poolSize=2, stride=2
-        var layer = new MaxPoolingLayer<double>([1, 4, 4], 2, 2);
+        var layer = new MaxPoolingLayer<double>(2, 2);
 
         var data = new double[16];
         for (int i = 0; i < 16; i++) data[i] = i;
@@ -85,7 +85,7 @@ public class LayerMathematicalTests2
     [Fact(Timeout = 120000)]
     public async Task MaxPool2D_SelectsMaximum()
     {
-        var layer = new MaxPoolingLayer<double>([1, 2, 2], 2, 2);
+        var layer = new MaxPoolingLayer<double>(2, 2);
 
         // Input: [[1, 3], [2, 4]]
         var data = new double[] { 1.0, 3.0, 2.0, 4.0 };
@@ -100,7 +100,7 @@ public class LayerMathematicalTests2
     public async Task MaxPool2D_Idempotent_ForConstantInput()
     {
         // If all values are the same, max pooling should preserve the value
-        var layer = new MaxPoolingLayer<double>([1, 4, 4], 2, 2);
+        var layer = new MaxPoolingLayer<double>(2, 2);
 
         var data = new double[16];
         for (int i = 0; i < 16; i++) data[i] = 7.0;

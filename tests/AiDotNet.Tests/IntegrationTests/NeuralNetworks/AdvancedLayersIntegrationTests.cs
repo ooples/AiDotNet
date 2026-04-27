@@ -2159,7 +2159,7 @@ public class AdvancedLayersIntegrationTests
         int[] inputShape = [3, 28, 28];
         int poolSize = 2;
         int stride = 2;
-        var layer = new MaxPoolingLayer<float>(inputShape, poolSize, stride);
+        var layer = new MaxPoolingLayer<float>(poolSize, stride);
 
         // Input tensor = [B, C, H, W] format
         var input = Tensor<float>.CreateRandom([4, 3, 28, 28]);
@@ -2184,7 +2184,7 @@ public class AdvancedLayersIntegrationTests
         int[] inputShape = [1, 8, 8];
         int poolSize = 2;
         int stride = 2;
-        var original = new MaxPoolingLayer<float>(inputShape, poolSize, stride);
+        var original = new MaxPoolingLayer<float>(poolSize, stride);
         // Input tensor = [B, C, H, W] format
         var input = Tensor<float>.CreateRandom([1, 1, 8, 8]);
 

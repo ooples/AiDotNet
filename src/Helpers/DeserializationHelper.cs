@@ -752,21 +752,16 @@ public static class DeserializationHelper
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.MaxPoolingLayer<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.MaxPoolingLayer`1")))
         {
-            // MaxPoolingLayer(int[] inputShape, int poolSize, int strides)
+            // MaxPoolingLayer(int poolSize, int strides) — lazy ctor; spatial dims resolved on first Forward.
             int poolSize = TryGetInt(additionalParams, "PoolSize") ?? 2;
             int strides = TryGetInt(additionalParams, "Strides") ?? 2;
-            // inputShape format for MaxPoolingLayer: [channels, height, width]
-            int channels = inputShape.Length > 1 ? inputShape[1] : inputShape[0];
-            int height = inputShape.Length > 2 ? inputShape[2] : 1;
-            int width = inputShape.Length > 3 ? inputShape[3] : 1;
-            int[] layerInputShape = new int[] { channels, height, width };
 
-            var ctor = type.GetConstructor(new Type[] { typeof(int[]), typeof(int), typeof(int) });
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int) });
             if (ctor is null)
             {
                 throw new InvalidOperationException($"Cannot find MaxPoolingLayer constructor.");
             }
-            instance = ctor.Invoke(new object[] { layerInputShape, poolSize, strides });
+            instance = ctor.Invoke(new object[] { poolSize, strides });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.DenseBlock<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.DenseBlock`1")))
