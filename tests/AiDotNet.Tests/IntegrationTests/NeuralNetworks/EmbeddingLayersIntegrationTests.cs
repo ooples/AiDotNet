@@ -109,7 +109,7 @@ public class EmbeddingLayersIntegrationTests
         int channels = 3;
         int patchSize = 8;
         int embeddingDim = 64;
-        var layer = new PatchEmbeddingLayer<float>(imageHeight, imageWidth, channels, patchSize, embeddingDim);
+        var layer = new PatchEmbeddingLayer<float>(patchSize, embeddingDim);
 
         // Input: [batch, channels, height, width]
         var input = CreateRandomTensor<float>([2, channels, imageHeight, imageWidth]);
@@ -135,7 +135,7 @@ public class EmbeddingLayersIntegrationTests
         int channels = 3;
         int patchSize = 4;
         int embeddingDim = 32;
-        var layer = new PatchEmbeddingLayer<float>(imageHeight, imageWidth, channels, patchSize, embeddingDim);
+        var layer = new PatchEmbeddingLayer<float>(patchSize, embeddingDim);
         var input = CreateRandomTensor<float>([channels, imageHeight, imageWidth]);
 
         // Act
@@ -159,11 +159,11 @@ public class EmbeddingLayersIntegrationTests
         int channels = 3;
         int patchSize = 4;
         int embeddingDim = 32;
-        var layer = new PatchEmbeddingLayer<float>(imageHeight, imageWidth, channels, patchSize, embeddingDim);
+        var layer = new PatchEmbeddingLayer<float>(patchSize, embeddingDim);
         var originalParams = layer.GetParameters();
 
         // Act
-        var newLayer = new PatchEmbeddingLayer<float>(imageHeight, imageWidth, channels, patchSize, embeddingDim);
+        var newLayer = new PatchEmbeddingLayer<float>(patchSize, embeddingDim);
         newLayer.SetParameters(originalParams);
         var restoredParams = newLayer.GetParameters();
 
@@ -406,7 +406,7 @@ public class EmbeddingLayersIntegrationTests
         int channels = 3;
         int patchSize = 16;
         int embeddingDim = 128;
-        var layer = new PatchEmbeddingLayer<float>(size, size, channels, patchSize, embeddingDim);
+        var layer = new PatchEmbeddingLayer<float>(patchSize, embeddingDim);
         var input = CreateRandomTensor<float>([1, channels, size, size]);
 
         // Act

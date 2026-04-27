@@ -9266,7 +9266,7 @@ public static class LayerHelper<T>
 
         // Image patch embedding layer (ViT-style)
         int numPatches = (imageSize / patchSize) * (imageSize / patchSize);
-        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, 3, patchSize, hiddenDim);
+        yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
 
         // Transformer encoder layers (unified for text and image)
         for (int i = 0; i < numLayers; i++)
@@ -10497,7 +10497,7 @@ public static class LayerHelper<T>
         int numPatches = (imageSize / patchSize) * (imageSize / patchSize);
 
         // Patch embedding: [B, 3, imageSize, imageSize] -> [B, numPatches, hiddenDim]
-        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, 3, patchSize, hiddenDim);
+        yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
 
         // Position embeddings
         yield return new PositionalEncodingLayer<T>(numPatches + 1, hiddenDim);
@@ -11267,7 +11267,7 @@ public static class LayerHelper<T>
     {
         // 1. Vision encoder: Patch embedding
         yield return new PatchEmbeddingLayer<T>(
-            imageSize, imageSize, channels, patchSize, visionHiddenDim);
+            patchSize, visionHiddenDim);
 
         // 2. Q-Former layers (self-attention, cross-attention, feed-forward)
         int feedForwardDim = qformerHiddenDim * 4;
@@ -23082,7 +23082,7 @@ public static class LayerHelper<T>
         // start saw raw [C, H, W] image with last-dim=W and threw "Gamma
         // shape (embeddingDim) does not match last dim (W)" on every
         // forward — affecting SAM, MobileSAM, etc. that share this helper.
-        yield return new PatchEmbeddingLayer<T>(imageHeight, imageWidth, imageChannels, patchSize, embeddingDim);
+        yield return new PatchEmbeddingLayer<T>(patchSize, embeddingDim);
 
         // Initial layer norm (pre-norm architecture)
         yield return new LayerNormalizationLayer<T>();
@@ -24178,7 +24178,7 @@ public static class LayerHelper<T>
         // first layer the original chain started with LayerNorm(visionDim)
         // on raw [F, C, H, W] and threw "Gamma shape (visionDim) does not
         // match last dim (W)" on every forward.
-        yield return new PatchEmbeddingLayer<T>(imageHeight, imageWidth, imageChannels, patchSize, visionDim);
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim);
 
         // === Vision Encoder (per-frame ViT) ===
         yield return new LayerNormalizationLayer<T>();
@@ -30556,7 +30556,7 @@ public static class LayerHelper<T>
         int numClasses = 1000)
     {
         // Patch embedding layer
-        yield return new PatchEmbeddingLayer<T>(imageHeight, imageWidth, channels, patchSize, hiddenDim);
+        yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
 
         // Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
@@ -30610,7 +30610,7 @@ public static class LayerHelper<T>
         int lmFfnDim = lmHiddenDim * 4;
 
         // Patch embedding
-        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, channels, patchSize, visionHiddenDim);
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionHiddenDim);
 
         // Vision encoder transformer layers
         for (int i = 0; i < numVisionLayers; i++)
@@ -30662,7 +30662,7 @@ public static class LayerHelper<T>
         int textFfnDim = textHiddenDim * 4;
 
         // Vision frame encoder (shared across frames)
-        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, channels, patchSize, visionHiddenDim);
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionHiddenDim);
 
         for (int i = 0; i < numFrameEncoderLayers; i++)
         {
@@ -30716,7 +30716,7 @@ public static class LayerHelper<T>
         int ffnDim = hiddenDim * 4;
 
         // Image encoder
-        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, channels, patchSize, hiddenDim);
+        yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
         for (int i = 0; i < numEncoderLayers; i++)
             yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
         yield return new DenseLayer<T>(hiddenDim, embeddingDimension, (IActivationFunction<T>?)null);
@@ -30732,19 +30732,19 @@ public static class LayerHelper<T>
         int audioSeqLen = (audioSampleRate * audioMaxDuration) / 160;
         audioSeqLen = (audioSeqLen / audioPatchSize) * audioPatchSize;
         if (audioSeqLen < audioPatchSize) audioSeqLen = audioPatchSize;
-        yield return new PatchEmbeddingLayer<T>(128, audioSeqLen, 1, audioPatchSize, hiddenDim);
+        yield return new PatchEmbeddingLayer<T>(audioPatchSize, hiddenDim);
         for (int i = 0; i < numEncoderLayers; i++)
             yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
         yield return new DenseLayer<T>(hiddenDim, embeddingDimension, (IActivationFunction<T>?)null);
 
         // Thermal encoder
-        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, 1, patchSize, hiddenDim);
+        yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
         for (int i = 0; i < numEncoderLayers; i++)
             yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
         yield return new DenseLayer<T>(hiddenDim, embeddingDimension, (IActivationFunction<T>?)null);
 
         // Depth encoder
-        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, 1, patchSize, hiddenDim);
+        yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
         for (int i = 0; i < numEncoderLayers; i++)
             yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
         yield return new DenseLayer<T>(hiddenDim, embeddingDimension, (IActivationFunction<T>?)null);
@@ -30931,7 +30931,7 @@ public static class LayerHelper<T>
         int vocabularySize = 30524)
     {
         // Vision encoder: PatchEmbed + numLayers × TransformerEncoder + projection
-        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, 3, patchSize, hiddenDim);
+        yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
         for (int i = 0; i < numLayers; i++)
             yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, mlpDim);
         yield return new DenseLayer<T>(hiddenDim, embeddingDimension, (IActivationFunction<T>?)null);
@@ -30976,7 +30976,7 @@ public static class LayerHelper<T>
         int feedForwardDim = qformerHiddenDim * 4;
 
         // Vision encoder: PatchEmbed
-        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, channels, patchSize, visionHiddenDim);
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionHiddenDim);
 
         // Q-Former layers: (self-attn + cross-attn + FFN) × numQformerLayers
         for (int i = 0; i < numQformerLayers; i++)
@@ -31393,7 +31393,7 @@ public static class LayerHelper<T>
         int lmFfnDim = lmHiddenDim * 4;
 
         // Patch embedding
-        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, channels, patchSize, visionHiddenDim);
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionHiddenDim);
 
         // Vision encoder transformer layers
         for (int i = 0; i < numVisionLayers; i++)
@@ -31442,7 +31442,7 @@ public static class LayerHelper<T>
         int ffnDim = hiddenDim * 4;
 
         // Vision encoder: PatchEmbed + TransformerEncoder × numVisionLayers + LayerNorm
-        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, 3, patchSize, visionEmbeddingDim);
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionEmbeddingDim);
         for (int i = 0; i < numVisionLayers; i++)
             yield return new TransformerEncoderLayer<T>(visionEmbeddingDim, numHeads, ffnDim);
         yield return new LayerNormalizationLayer<T>();

@@ -14,9 +14,6 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         {
             // Arrange & Act
             var layer = new PatchEmbeddingLayer<double>(
-                imageHeight: 32,
-                imageWidth: 32,
-                channels: 3,
                 patchSize: 8,
                 embeddingDim: 64);
 
@@ -31,9 +28,6 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new PatchEmbeddingLayer<double>(
-                imageHeight: 30,
-                imageWidth: 32,
-                channels: 3,
                 patchSize: 8,
                 embeddingDim: 64));
         }
@@ -43,9 +37,6 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new PatchEmbeddingLayer<double>(
-                imageHeight: 32,
-                imageWidth: 30,
-                channels: 3,
                 patchSize: 8,
                 embeddingDim: 64));
         }
@@ -55,9 +46,6 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         {
             // Arrange
             var layer = new PatchEmbeddingLayer<double>(
-                imageHeight: 32,
-                imageWidth: 32,
-                channels: 3,
                 patchSize: 8,
                 embeddingDim: 64);
 
@@ -84,9 +72,6 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         {
             // Arrange
             var layer = new PatchEmbeddingLayer<double>(
-                imageHeight: 64,
-                imageWidth: 64,
-                channels: 3,
                 patchSize: 16,
                 embeddingDim: 128);
 
@@ -106,9 +91,6 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         {
             // Arrange
             var layer = new PatchEmbeddingLayer<double>(
-                imageHeight: 16,
-                imageWidth: 16,
-                channels: 3,
                 patchSize: 4,
                 embeddingDim: 32);
 
@@ -126,9 +108,6 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         {
             // Arrange
             var layer = new PatchEmbeddingLayer<double>(
-                imageHeight: 16,
-                imageWidth: 16,
-                channels: 3,
                 patchSize: 4,
                 embeddingDim: 32);
 
@@ -155,9 +134,6 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         {
             // Arrange
             var layer = new PatchEmbeddingLayer<double>(
-                imageHeight: 16,
-                imageWidth: 16,
-                channels: 3,
                 patchSize: 4,
                 embeddingDim: 32);
 
@@ -172,9 +148,6 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         {
             // Arrange
             var layer = new PatchEmbeddingLayer<double>(
-                imageHeight: 16,
-                imageWidth: 16,
-                channels: 3,
                 patchSize: 4,
                 embeddingDim: 32);
 
@@ -193,9 +166,6 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         {
             // Arrange
             var layer = new PatchEmbeddingLayer<double>(
-                imageHeight: 16,
-                imageWidth: 16,
-                channels: 3,
                 patchSize: 4,
                 embeddingDim: 32);
 
@@ -221,9 +191,6 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         {
             // Arrange
             var layer = new PatchEmbeddingLayer<double>(
-                imageHeight: 32,
-                imageWidth: 32,
-                channels: 3,
                 patchSize: 8,
                 embeddingDim: 64);
 

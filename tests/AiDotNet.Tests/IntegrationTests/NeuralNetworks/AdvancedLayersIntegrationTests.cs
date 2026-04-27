@@ -3855,7 +3855,7 @@ public class AdvancedLayersIntegrationTests
         int channels = 3;
         int patchSize = 7;
         int embeddingDim = 64;
-        var layer = new PatchEmbeddingLayer<float>(imageHeight, imageWidth, channels, patchSize, embeddingDim);
+        var layer = new PatchEmbeddingLayer<float>(patchSize, embeddingDim);
 
         // Input: [batch, channels, height, width]
         var input = Tensor<float>.CreateRandom([2, channels, imageHeight, imageWidth]);
@@ -3877,7 +3877,7 @@ public class AdvancedLayersIntegrationTests
         int channels = 1;
         int patchSize = 4;
         int embeddingDim = 32;
-        var original = new PatchEmbeddingLayer<float>(imageHeight, imageWidth, channels, patchSize, embeddingDim);
+        var original = new PatchEmbeddingLayer<float>(patchSize, embeddingDim);
         var input = Tensor<float>.CreateRandom([1, channels, imageHeight, imageWidth]);
 
         // Act
