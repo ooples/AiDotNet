@@ -794,19 +794,52 @@ public class LossFunctionsMathematicalTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task CategoricalCrossEntropy_Derivative_MatchesSoftmaxCombinedFormula()
+    public async Task CategoricalCrossEntropy_Derivative_MatchesStandaloneAnalyticalFormula()
     {
-        // CCE derivative when used with softmax simplifies to (predicted - actual)
+        // CategoricalCrossEntropyLoss<T> documents its input as
+        // probabilities (post-softmax), and CalculateLoss implements
+        // the *standalone* formula  L = -Σ actual_i * log(predicted_i).
+        // The analytical derivative of that standalone formula w.r.t.
+        // predicted_i is -actual_i / predicted_i.
+        //
+        // The often-cited simplification (predicted - actual) is the
+        // gradient of the *combined* softmax+CCE function with respect
+        // to its pre-softmax logits — i.e. the *chained* gradient, not
+        // the standalone derivative of CalculateLoss. That combined
+        // form lives in CrossEntropyWithLogitsLoss<T>.CalculateDerivative,
+        // which takes logits as input.
+        //
+        // Verify against the analytical formula and cross-check numerically.
         var cce = new CategoricalCrossEntropyLoss<double>();
         var predicted = new Vector<double>(new[] { 0.5, 0.3, 0.2 });
         var actual = new Vector<double>(new[] { 1.0, 0.0, 0.0 });
 
         var gradient = cce.CalculateDerivative(predicted, actual);
 
-        // Expected: (predicted - actual) - not averaged for CCE
-        Assert.Equal(0.5 - 1.0, gradient[0], Tolerance);
-        Assert.Equal(0.3 - 0.0, gradient[1], Tolerance);
-        Assert.Equal(0.2 - 0.0, gradient[2], Tolerance);
+        // Analytical: dL/dp_i = -a_i / p_i.
+        Assert.Equal(-1.0 / 0.5, gradient[0], Tolerance); // = -2
+        Assert.Equal(-0.0 / 0.3, gradient[1], Tolerance); // =  0
+        Assert.Equal(-0.0 / 0.2, gradient[2], Tolerance); // =  0
+
+        // Cross-check against finite differences on the actual forward
+        // formula. This pins the derivative to the same function the
+        // forward path computes — if either forward or derivative
+        // implementation drifts away from the standalone formula in the
+        // future, this catches it independently of the analytical
+        // assertion above.
+        for (int i = 0; i < predicted.Length; i++)
+        {
+            var predictedPlus = predicted.Clone();
+            var predictedMinus = predicted.Clone();
+            predictedPlus[i] = Math.Min(0.999, predictedPlus[i] + NumericalEpsilon);
+            predictedMinus[i] = Math.Max(0.001, predictedMinus[i] - NumericalEpsilon);
+
+            double lossPlus = cce.CalculateLoss(predictedPlus, actual);
+            double lossMinus = cce.CalculateLoss(predictedMinus, actual);
+            double numericalGradient = (lossPlus - lossMinus) / (2 * NumericalEpsilon);
+
+            Assert.Equal(numericalGradient, gradient[i], GradientTolerance);
+        }
     }
 
     [Fact(Timeout = 120000)]
