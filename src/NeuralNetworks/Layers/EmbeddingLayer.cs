@@ -560,17 +560,17 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             // The upstream tape-tracking fix for
             // Engine.TensorEmbeddingLookup landed in
             // AiDotNet.Tensors 0.58.1 (ooples/AiDotNet.Tensors#255),
-            // but pre-existing tape-chaining issues elsewhere in the
-            // backward path mean dL/d_embeddingTensor still doesn't
-            // accumulate when the lookup output flows through the
-            // standard Reshape → encoder → loss pipeline. Until the
-            // remaining tape-chain bugs are addressed upstream
-            // (3 of 4 MultiHeadAttention [16,16] weights miss
-            // gradient lookup with the same symptom — see the
-            // tracking discussion in #255), keep the
-            // training-time one-hot @ E matmul workaround so the
-            // EmbeddingLayer's gradient flows through a path that
-            // is verified end-to-end.
+            // but a deeper tape-chaining defect remains: the
+            // resulting gradient is computed by the backward function
+            // but accumulated under a Tensor<T> reference that
+            // doesn't match the user-facing _embeddingTensor — so
+            // grads[_embeddingTensor] in TrainWithTape misses every
+            // step. Same defect affects 3 of 4 MultiHeadAttention
+            // weights. Tracked at ooples/AiDotNet.Tensors#257 with
+            // full repro + instrumentation evidence. Until the audit
+            // recommended in #257 lands, route the embedding gradient
+            // through Engine.TensorMatMul (verified end-to-end to key
+            // correctly) so the model trains.
             //
             //     out = OneHot(indices, V) @ E
             //     dL/dE = OneHot^T @ dL/d(out)
