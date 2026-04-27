@@ -89,6 +89,27 @@ public static class OnnxExporter
             throw new NotSupportedException("Model has no exportable layers.");
         }
 
+        // Lazy-shape contract (issue #1209): layers constructed PyTorch-LazyConv2d-style
+        // resolve their input/output dims from the actual input on the first Forward.
+        // ONNX export requires concrete shapes — symbolic-axis ONNX is tracked as a
+        // follow-up under issue #1211. Until then, callers must run a warm-up forward
+        // (Predict / EncodeImage / etc.) so every layer reports IsShapeResolved=true
+        // before exporting; otherwise we'd serialize -1 placeholder dims that produce
+        // an unrunnable ONNX graph.
+        foreach (var layer in layers)
+        {
+            // ILayer<T> closed-generic — read IsShapeResolved via reflection since
+            // GetLayers returns object instances from a non-generic property.
+            var isResolvedProp = layer.GetType().GetProperty("IsShapeResolved");
+            if (isResolvedProp is not null && isResolvedProp.GetValue(layer) is bool resolved && !resolved)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot export to ONNX: layer '{layer.GetType().Name}' has unresolved shape. " +
+                    "Run a warm-up forward pass (model.Predict / EncodeImage / etc.) on a representative input " +
+                    "so every layer resolves its dims before calling Export. Symbolic-axis ONNX export is tracked under issue #1211.");
+            }
+        }
+
         // Determine input shape
         var effectiveInputShape = inputShape ?? InferInputShape(layers) ?? new[] { 1, 1 };
 
