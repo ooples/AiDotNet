@@ -23102,11 +23102,25 @@ public static class LayerHelper<T>
         int embeddingDim = 768,
         int numLayers = 12,
         int numHeads = 12,
-        double dropoutRate = 0.0)
+        double dropoutRate = 0.0,
+        int imageHeight = 224,
+        int imageWidth = 224,
+        int imageChannels = 3,
+        int patchSize = 16)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int ffnDim = embeddingDim * 4;
+
+        // === Patch Embedding (paper-faithful ViT front end) ===
+        // Per Dosovitskiy et al. 2021 ("An Image is Worth 16x16 Words"): raw
+        // image [B, C, H, W] is patchified into (H/P)·(W/P) patches and
+        // linearly projected into the embedding dimension before the first
+        // transformer block. Without this layer, the bare LayerNorm at the
+        // start saw raw [C, H, W] image with last-dim=W and threw "Gamma
+        // shape (embeddingDim) does not match last dim (W)" on every
+        // forward — affecting SAM, MobileSAM, etc. that share this helper.
+        yield return new PatchEmbeddingLayer<T>(imageHeight, imageWidth, imageChannels, patchSize, embeddingDim);
 
         // Initial layer norm (pre-norm architecture)
         yield return new LayerNormalizationLayer<T>(embeddingDim);
@@ -32012,12 +32026,32 @@ public static class LayerHelper<T>
         int numFlowLayers = 4,
         int numDecoderLayers = 4,
         int numHeads = 2,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int inputFeatures = 192)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         IActivationFunction<T> tanhActivation = new TanhActivation<T>();
         int encoderFfnDim = encoderDim * 4;
+
+        // Lazy weight init keeps construction cheap — VITS / NaturalSpeech /
+        // E3TTS at paper defaults (encoderDim=192, decoderDim=512, 6+4+4
+        // layers) already fit, but consistency with the video VLM helper
+        // makes auto-generated tests behave the same way across families.
+        var lazy = Initialization.InitializationStrategies<T>.Lazy;
+
+        // === Input projection (continuous-feature → encoderDim) ===
+        // Per Kim et al. 2021 ("VITS: Conditional Variational Autoencoder
+        // with Adversarial Learning for End-to-End Text-to-Speech"), the
+        // text encoder operates on already-embedded phoneme tokens of
+        // dim=encoderDim. Test scaffolds feed continuous random tensors
+        // whose last dim does not match encoderDim, so the original
+        // `LayerNorm(encoderDim)` first layer threw "Gamma shape mismatch"
+        // before any forward could run. Project from the actual input
+        // dim up to encoderDim when they differ — this is a no-op for
+        // the paper-default (embedded input is already at encoderDim).
+        if (inputFeatures != encoderDim)
+            yield return new DenseLayer<T>(inputFeatures, encoderDim, identityActivation, lazy);
 
         // === Text Encoder (relative positional transformer) ===
         yield return new LayerNormalizationLayer<T>(encoderDim);
@@ -32123,12 +32157,24 @@ public static class LayerHelper<T>
         int numEncoderLayers = 4,
         int numFlowLayers = 6,
         int numHeads = 4,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int inputFeatures = 256)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int encoderFfnDim = encoderDim * 4;
         int flowFfnDim = flowDim * 4;
+        var lazy = Initialization.InitializationStrategies<T>.Lazy;
+
+        // === Input projection (continuous-feature → encoderDim) ===
+        // Per the E3TTS / flow-matching TTS family, the encoder operates on
+        // already-embedded phoneme tokens of dim=encoderDim. Test scaffolds
+        // feed continuous tensors with last-dim != encoderDim, so the bare
+        // LayerNorm(encoderDim) first layer threw "Gamma shape mismatch".
+        // No-op when inputFeatures == encoderDim (paper-default embedded
+        // input).
+        if (inputFeatures != encoderDim)
+            yield return new DenseLayer<T>(inputFeatures, encoderDim, identityActivation, lazy);
 
         // === Text Encoder ===
         yield return new LayerNormalizationLayer<T>(encoderDim);

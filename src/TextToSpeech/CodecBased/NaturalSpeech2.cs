@@ -163,7 +163,8 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultFlowMatchingTTSLayers(
                 _options.HiddenDim, _options.DiffusionDim, _options.MelChannels,
                 _options.NumEncoderLayers, _options.NumDiffusionSteps,
-                _options.NumHeads, _options.DropoutRate));
+                _options.NumHeads, _options.DropoutRate,
+                inputFeatures: _options.MelChannels));
     }
 
     /// <inheritdoc />

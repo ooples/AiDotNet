@@ -172,7 +172,8 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultVITSLayers(
                 _options.HiddenDim, _options.InterChannels, _options.FilterChannels,
                 _options.NumEncoderLayers, _options.NumFlowSteps,
-                _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate));
+                _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate,
+                inputFeatures: _options.MelChannels));
     }
 
     /// <inheritdoc />
