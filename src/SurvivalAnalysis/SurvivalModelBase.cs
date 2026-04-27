@@ -29,7 +29,7 @@ namespace AiDotNet.SurvivalAnalysis;
 /// - Managing trained model state
 /// </para>
 /// </remarks>
-public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape
+public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IParameterizable<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// Numeric operations helper for generic math.

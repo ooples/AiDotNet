@@ -521,7 +521,57 @@ public class RandomSurvivalForest<T> : SurvivalModelBase<T>
         return new RandomSurvivalForest<T>(NumTrees, MaxDepth, MinSamplesLeaf, MaxFeatures);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Creates a deep copy of this Random Survival Forest, preserving the
+    /// trained tree ensemble. The base <see cref="SurvivalModelBase{T}.DeepCopy"/>
+    /// only serializes <c>NumFeatures</c> and <c>IsFitted</c>, so without this
+    /// override the cloned forest would have no trees and predict zero. Per
+    /// Ishwaran et al. 2008 the trees are the model — preserving them is
+    /// required for any clone to reproduce the original's predictions.
+    /// </summary>
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
+    {
+        var copy = new RandomSurvivalForest<T>(NumTrees, MaxDepth, MinSamplesLeaf, MaxFeatures);
+        copy.NumFeatures = NumFeatures;
+        copy.IsFitted = IsFitted;
+        copy.MaxFeatures = MaxFeatures;
+        if (_trees is not null)
+        {
+            copy._trees = new List<SurvivalTree>(_trees.Count);
+            foreach (var tree in _trees)
+            {
+                copy._trees.Add(CloneTree(tree));
+            }
+        }
+        if (TrainedEventTimes is not null)
+        {
+            var times = new Vector<T>(TrainedEventTimes.Length);
+            for (int i = 0; i < TrainedEventTimes.Length; i++) times[i] = TrainedEventTimes[i];
+            copy.TrainedEventTimes = times;
+        }
+        if (BaselineSurvivalFunction is not null)
+        {
+            var baseline = new Vector<T>(BaselineSurvivalFunction.Length);
+            for (int i = 0; i < BaselineSurvivalFunction.Length; i++) baseline[i] = BaselineSurvivalFunction[i];
+            copy.BaselineSurvivalFunction = baseline;
+        }
+        return copy;
+    }
+
+    private static SurvivalTree CloneTree(SurvivalTree tree)
+    {
+        var copy = new SurvivalTree
+        {
+            IsLeaf = tree.IsLeaf,
+            SplitFeature = tree.SplitFeature,
+            SplitThreshold = tree.SplitThreshold,
+            SurvivalTimes = tree.SurvivalTimes is null ? null : (double[])tree.SurvivalTimes.Clone(),
+            SurvivalProbs = tree.SurvivalProbs is null ? null : (double[])tree.SurvivalProbs.Clone(),
+        };
+        if (tree.Left is not null) copy.Left = CloneTree(tree.Left);
+        if (tree.Right is not null) copy.Right = CloneTree(tree.Right);
+        return copy;
+    }
 
     /// <summary>
     /// Internal survival tree node.
