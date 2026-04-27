@@ -142,7 +142,7 @@ public class BasicBlock<T> : LayerBase<T>
         int outHeight = inputHeight / stride;
         int outWidth = inputWidth / stride;
 
-        _bn1 = new BatchNormalizationLayer<T>(outChannels);
+        _bn1 = new BatchNormalizationLayer<T>();
 
         // Second conv: 3x3, stride = 1
         _conv2 = new ConvolutionalLayer<T>(
@@ -152,7 +152,7 @@ public class BasicBlock<T> : LayerBase<T>
             padding: 1,
             activationFunction: new IdentityActivation<T>());
 
-        _bn2 = new BatchNormalizationLayer<T>(outChannels);
+        _bn2 = new BatchNormalizationLayer<T>();
 
         // Zero-init residual: initialize last BN's gamma to zero so residual blocks
         // start as identity mappings, improving training stability
@@ -172,7 +172,7 @@ public class BasicBlock<T> : LayerBase<T>
                 padding: 0,
                 activationFunction: new IdentityActivation<T>());
 
-            _downsampleBn = new BatchNormalizationLayer<T>(outChannels);
+            _downsampleBn = new BatchNormalizationLayer<T>();
         }
 
         RegisterSubLayer(_conv1);

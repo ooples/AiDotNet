@@ -232,7 +232,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
                 int layerInput = i == 0 ? inputDim : dims[i - 1] + inputDim;
                 var fcLayer = new FullyConnectedLayer<T>(layerInput, dims[i], identity);
                 Layers.Add(fcLayer);
-                _dataGenBNLayers.Add(new BatchNormalizationLayer<T>(dims[i]));
+                _dataGenBNLayers.Add(new BatchNormalizationLayer<T>());
             }
 
             int lastHidden = dims.Length > 0 ? dims[^1] + inputDim : inputDim;
@@ -279,7 +279,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         {
             int layerInput = i == 0 ? inputDim : dims[i - 1] + inputDim;
             _maskGenLayers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-            _maskGenBNLayers.Add(new BatchNormalizationLayer<T>(dims[i]));
+            _maskGenBNLayers.Add(new BatchNormalizationLayer<T>());
         }
 
         int lastHidden = dims.Length > 0 ? dims[^1] + inputDim : inputDim;
@@ -335,7 +335,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             {
                 int layerInput = i == 0 ? inputDim : dims[i - 1] + inputDim;
                 Layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-                _dataGenBNLayers.Add(new BatchNormalizationLayer<T>(dims[i]));
+                _dataGenBNLayers.Add(new BatchNormalizationLayer<T>());
             }
 
             int lastHidden = dims.Length > 0 ? dims[^1] + inputDim : inputDim;

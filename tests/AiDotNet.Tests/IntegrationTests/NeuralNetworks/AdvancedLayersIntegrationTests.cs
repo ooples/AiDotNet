@@ -2101,7 +2101,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int numFeatures = 64;
-        var layer = new BatchNormalizationLayer<float>(numFeatures);
+        var layer = new BatchNormalizationLayer<float>();
 
         var input = Tensor<float>.CreateRandom([4, numFeatures]);
 
@@ -2119,7 +2119,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int numFeatures = 16;
-        var original = new BatchNormalizationLayer<float>(numFeatures);
+        var original = new BatchNormalizationLayer<float>();
         var input = Tensor<float>.CreateRandom([2, numFeatures]);
 
         // Act
@@ -2138,7 +2138,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int numFeatures = 64;
-        var layer = new BatchNormalizationLayer<float>(numFeatures);
+        var layer = new BatchNormalizationLayer<float>();
 
         // Act
         int paramCount = layer.ParameterCount;
@@ -2331,7 +2331,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int featureSize = 64;
-        var layer = new LayerNormalizationLayer<float>(featureSize);
+        var layer = new LayerNormalizationLayer<float>();
 
         var input = Tensor<float>.CreateRandom([4, featureSize]);
 
@@ -2349,7 +2349,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int featureSize = 16;
-        var original = new LayerNormalizationLayer<float>(featureSize);
+        var original = new LayerNormalizationLayer<float>();
         var input = Tensor<float>.CreateRandom([2, featureSize]);
 
         // Act
@@ -2368,7 +2368,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int featureSize = 64;
-        var layer = new LayerNormalizationLayer<float>(featureSize);
+        var layer = new LayerNormalizationLayer<float>();
 
         // Act
         int paramCount = layer.ParameterCount;

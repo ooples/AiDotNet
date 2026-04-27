@@ -226,17 +226,17 @@ public static class LayerHelper<T>
         {
             // Masked self-attention (standard MultiHeadAttention handles masking via causal mask)
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenSize, numAttentionHeads, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>(hiddenSize);
+            yield return new LayerNormalizationLayer<T>();
 
             // Feed-forward
             yield return new DenseLayer<T>(hiddenSize, hiddenSize * 4, new GELUActivation<T>() as IActivationFunction<T>);
             yield return new DenseLayer<T>(hiddenSize * 4, hiddenSize);
-            yield return new LayerNormalizationLayer<T>(hiddenSize);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DropoutLayer<T>(dropoutProbability);
         }
 
         // 3. Final Norm
-        yield return new LayerNormalizationLayer<T>(hiddenSize);
+        yield return new LayerNormalizationLayer<T>();
 
         // 4. Output Head (predict next token from vocabulary)
         yield return new DenseLayer<T>(hiddenSize, vocabularySize);
@@ -277,17 +277,17 @@ public static class LayerHelper<T>
         // Type embeddings
         yield return new EmbeddingLayer<T>(2, hiddenSize);
         
-        yield return new LayerNormalizationLayer<T>(hiddenSize);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutProbability);
 
         for (int i = 0; i < numHiddenLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenSize, numAttentionHeads, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>(hiddenSize);
+            yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(hiddenSize, hiddenSize * 4, new GELUActivation<T>() as IActivationFunction<T>);
             yield return new DenseLayer<T>(hiddenSize * 4, hiddenSize);
-            yield return new LayerNormalizationLayer<T>(hiddenSize);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DropoutLayer<T>(dropoutProbability);
         }
 
@@ -374,7 +374,7 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(2, hiddenSize);
         
         // Add & Norm for embeddings
-        yield return new LayerNormalizationLayer<T>(hiddenSize);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutProbability);
 
         // 2. Transformer Blocks
@@ -382,12 +382,12 @@ public static class LayerHelper<T>
         {
             // Self-attention
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenSize, numAttentionHeads, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>(hiddenSize);
+            yield return new LayerNormalizationLayer<T>();
 
             // Feed-forward
             yield return new DenseLayer<T>(hiddenSize, hiddenSize * 4, new GELUActivation<T>() as IActivationFunction<T>);
             yield return new DenseLayer<T>(hiddenSize * 4, hiddenSize);
-            yield return new LayerNormalizationLayer<T>(hiddenSize);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DropoutLayer<T>(dropoutProbability);
         }
 
@@ -602,7 +602,7 @@ public static class LayerHelper<T>
                 // are handled dynamically in the forward pass via Engine.BatchNorm
                 if (configuration.UseBatchNormalization)
                 {
-                    yield return new BatchNormalizationLayer<T>(outputChannels);
+                    yield return new BatchNormalizationLayer<T>();
                 }
 
                 currentChannels = outputChannels;
@@ -726,11 +726,11 @@ public static class LayerHelper<T>
 
         // Dense layers for further processing
         yield return new DenseLayer<T>(historyWindowSize * 32, 64, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new BatchNormalizationLayer<T>(64);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.3f);
 
         yield return new DenseLayer<T>(64, 32, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new BatchNormalizationLayer<T>(32);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.2f);
 
         // Output layer
@@ -803,11 +803,11 @@ public static class LayerHelper<T>
 
         // Dense layers for processing input features
         yield return new DenseLayer<T>(inputFeatures, 64, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new BatchNormalizationLayer<T>(64);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.3f);
 
         yield return new DenseLayer<T>(64, 32, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new BatchNormalizationLayer<T>(32);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.2f);
 
         yield return new DenseLayer<T>(32, 16, new ReLUActivation<T>() as IActivationFunction<T>);
@@ -1154,12 +1154,12 @@ public static class LayerHelper<T>
         {
             yield return new MultiHeadAttentionLayer<T>(sequenceLength, embeddingSize, headCount, new GELUActivation<T>() as IActivationFunction<T>);
 
-            yield return new LayerNormalizationLayer<T>(embeddingSize);
+            yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(embeddingSize, embeddingSize * 4, new ReLUActivation<T>() as IActivationFunction<T>);
             yield return new DenseLayer<T>(embeddingSize * 4, embeddingSize, new ReLUActivation<T>() as IActivationFunction<T>);
 
-            yield return new LayerNormalizationLayer<T>(embeddingSize);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         yield return new DenseLayer<T>(embeddingSize, architecture.OutputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
@@ -1649,7 +1649,7 @@ public static class LayerHelper<T>
                 activationFunction: new IdentityActivation<T>());
 
             // Add normalization
-            yield return new LayerNormalizationLayer<T>(modelDimension);
+            yield return new LayerNormalizationLayer<T>();
 
             // Add dropout if specified
             if (dropoutRate > 0)
@@ -1662,7 +1662,7 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(feedForwardDimension, modelDimension, new IdentityActivation<T>() as IActivationFunction<T>);
 
             // Add normalization
-            yield return new LayerNormalizationLayer<T>(modelDimension);
+            yield return new LayerNormalizationLayer<T>();
 
             // Add dropout if specified
             if (dropoutRate > 0)
@@ -1684,7 +1684,7 @@ public static class LayerHelper<T>
                     activationFunction: new IdentityActivation<T>());
 
                 // Add normalization
-                yield return new LayerNormalizationLayer<T>(modelDimension);
+                yield return new LayerNormalizationLayer<T>();
 
                 // Add dropout if specified
                 if (dropoutRate > 0)
@@ -1700,7 +1700,7 @@ public static class LayerHelper<T>
                     activationFunction: new IdentityActivation<T>());
 
                 // Add normalization
-                yield return new LayerNormalizationLayer<T>(modelDimension);
+                yield return new LayerNormalizationLayer<T>();
 
                 // Add dropout if specified
                 if (dropoutRate > 0)
@@ -1713,7 +1713,7 @@ public static class LayerHelper<T>
                 yield return new DenseLayer<T>(feedForwardDimension, modelDimension, new IdentityActivation<T>() as IActivationFunction<T>);
 
                 // Add normalization
-                yield return new LayerNormalizationLayer<T>(modelDimension);
+                yield return new LayerNormalizationLayer<T>();
 
                 // Add dropout if specified
                 if (dropoutRate > 0)
@@ -1860,7 +1860,7 @@ public static class LayerHelper<T>
             // Add normalization layer to stabilize spiking activity
             if (useLayerNormalization)
             {
-                yield return new LayerNormalizationLayer<T>(nextSize);
+                yield return new LayerNormalizationLayer<T>();
             }
         }
 
@@ -4461,7 +4461,7 @@ public static class LayerHelper<T>
             // Optional batch normalization
             if (useBatchNorm)
             {
-                yield return new BatchNormalizationLayer<T>(currentChannels);
+                yield return new BatchNormalizationLayer<T>();
             }
         }
 
@@ -4551,7 +4551,7 @@ public static class LayerHelper<T>
                 activationFunction: new IdentityActivation<T>());
             // No spatial reduction for CIFAR stem (stride 1, padding 1 preserves dims)
 
-            yield return new BatchNormalizationLayer<T>(stemChannels);
+            yield return new BatchNormalizationLayer<T>();
             yield return new ActivationLayer<T>([stemChannels, currentHeight, currentWidth],
                 activationFunction: new ReLUActivation<T>());
             // NO MaxPool for CIFAR per paper
@@ -4570,7 +4570,7 @@ public static class LayerHelper<T>
             currentHeight = (currentHeight + 2 * 3 - 7) / 2 + 1;
             currentWidth = (currentWidth + 2 * 3 - 7) / 2 + 1;
 
-            yield return new BatchNormalizationLayer<T>(stemChannels);
+            yield return new BatchNormalizationLayer<T>();
             yield return new ActivationLayer<T>([stemChannels, currentHeight, currentWidth],
                 activationFunction: new ReLUActivation<T>());
 
@@ -4619,7 +4619,7 @@ public static class LayerHelper<T>
         }
 
         // Final BN and ReLU
-        yield return new BatchNormalizationLayer<T>(currentChannels);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ActivationLayer<T>([currentChannels, currentHeight, currentWidth],
             activationFunction: new ReLUActivation<T>());
 
@@ -4681,7 +4681,7 @@ public static class LayerHelper<T>
         currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1;
         currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
 
-        var stemBn = new BatchNormalizationLayer<T>(stemChannels);
+        var stemBn = new BatchNormalizationLayer<T>();
         stemBn.SetTrainingMode(false); // Eval mode: batch_size=1 in training mode normalizes to zero
         yield return stemBn;
         yield return new ActivationLayer<T>([stemChannels, currentHeight, currentWidth],
@@ -4750,7 +4750,7 @@ public static class LayerHelper<T>
             padding: 0,
             activationFunction: new IdentityActivation<T>());
 
-        var headBn = new BatchNormalizationLayer<T>(headChannels);
+        var headBn = new BatchNormalizationLayer<T>();
         headBn.SetTrainingMode(false); // Eval mode: batch_size=1 in training mode normalizes to zero
         yield return headBn;
         yield return new ActivationLayer<T>([headChannels, currentHeight, currentWidth],
@@ -4808,7 +4808,7 @@ public static class LayerHelper<T>
         currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1;
         currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
 
-        yield return new BatchNormalizationLayer<T>(firstConvChannels);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ActivationLayer<T>([firstConvChannels, currentHeight, currentWidth],
             activationFunction: new ReLU6Activation<T>());
 
@@ -4879,7 +4879,7 @@ public static class LayerHelper<T>
             padding: 0,
             activationFunction: new IdentityActivation<T>());
 
-        yield return new BatchNormalizationLayer<T>(finalConvChannels);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ActivationLayer<T>([finalConvChannels, currentHeight, currentWidth],
             activationFunction: new ReLU6Activation<T>());
 
@@ -4938,7 +4938,7 @@ public static class LayerHelper<T>
         currentHeight = (currentHeight + 2 * 1 - 3) / stemStride + 1;
         currentWidth = (currentWidth + 2 * 1 - 3) / stemStride + 1;
 
-        yield return new BatchNormalizationLayer<T>(firstConvChannels);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ActivationLayer<T>([firstConvChannels, currentHeight, currentWidth],
             activationFunction: new HardSwishActivation<T>());
 
@@ -4978,7 +4978,7 @@ public static class LayerHelper<T>
             padding: 0,
             activationFunction: new IdentityActivation<T>());
 
-        yield return new BatchNormalizationLayer<T>(penultimateChannels);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ActivationLayer<T>([penultimateChannels, currentHeight, currentWidth],
             activationFunction: new HardSwishActivation<T>());
 
@@ -5211,22 +5211,22 @@ public static class LayerHelper<T>
 
         // Initial TDNN layer
         yield return new DenseLayer<T>(inputDim, tdnnChannels, reluActivation);
-        yield return new BatchNormalizationLayer<T>(tdnnChannels);
+        yield return new BatchNormalizationLayer<T>();
 
         // SE-Res2Net blocks for each dilation
         foreach (int dilation in dilations)
         {
             // 1x1 reduction
             yield return new DenseLayer<T>(tdnnChannels, tdnnChannels / 4, reluActivation);
-            yield return new BatchNormalizationLayer<T>(tdnnChannels / 4);
+            yield return new BatchNormalizationLayer<T>();
 
             // Dilated conv (simulated)
             yield return new DenseLayer<T>(tdnnChannels / 4, tdnnChannels / 4, reluActivation);
-            yield return new BatchNormalizationLayer<T>(tdnnChannels / 4);
+            yield return new BatchNormalizationLayer<T>();
 
             // 1x1 expansion
             yield return new DenseLayer<T>(tdnnChannels / 4, tdnnChannels, reluActivation);
-            yield return new BatchNormalizationLayer<T>(tdnnChannels);
+            yield return new BatchNormalizationLayer<T>();
 
             // Squeeze-Excitation block
             int seReduction = 8;
@@ -5239,7 +5239,7 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(mfaOutputDim, embeddingDimension * 2);
 
         // Final batch normalization
-        yield return new BatchNormalizationLayer<T>(embeddingDimension);
+        yield return new BatchNormalizationLayer<T>();
 
         // Classification layer
         yield return new DenseLayer<T>(embeddingDimension, numLanguages);
@@ -5285,7 +5285,7 @@ public static class LayerHelper<T>
         {
             int outputDim = channels[i];
             yield return new DenseLayer<T>(inputDim * kernelSizes[i], outputDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(outputDim);
+            yield return new LayerNormalizationLayer<T>();
             inputDim = outputDim;
         }
 
@@ -5301,12 +5301,12 @@ public static class LayerHelper<T>
         {
             // Self-attention (simplified as dense)
             yield return new DenseLayer<T>(hiddenSize, hiddenSize);
-            yield return new LayerNormalizationLayer<T>(hiddenSize);
+            yield return new LayerNormalizationLayer<T>();
 
             // Feed-forward
             yield return new DenseLayer<T>(hiddenSize, intermediateSize, geluActivation);
             yield return new DenseLayer<T>(intermediateSize, hiddenSize);
-            yield return new LayerNormalizationLayer<T>(hiddenSize);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -5421,14 +5421,14 @@ public static class LayerHelper<T>
                 headCount: numHeads);
 
             // Layer norm
-            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Feedforward
             yield return new DenseLayer<T>(textHiddenDim, textHiddenDim * 4, geluActivation);
             yield return new DenseLayer<T>(textHiddenDim * 4, textHiddenDim, identityActivation);
 
             // Layer norm
-            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -5471,7 +5471,7 @@ public static class LayerHelper<T>
         }
 
         // Final layer norm
-        yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === OUTPUT PROJECTION ===
 
@@ -5545,7 +5545,7 @@ public static class LayerHelper<T>
                 headCount: 12,
                 activationFunction: identityActivation);
 
-            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -5555,7 +5555,7 @@ public static class LayerHelper<T>
             // Feed-forward network
             yield return new DenseLayer<T>(textHiddenDim, textHiddenDim * 4, geluActivation);
             yield return new DenseLayer<T>(textHiddenDim * 4, textHiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -5591,7 +5591,7 @@ public static class LayerHelper<T>
                 headCount: numHeads,
                 activationFunction: identityActivation);
 
-            yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -5605,7 +5605,7 @@ public static class LayerHelper<T>
                 headCount: numHeads,
                 activationFunction: identityActivation);
 
-            yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -5615,7 +5615,7 @@ public static class LayerHelper<T>
             // Feed-forward network
             yield return new DenseLayer<T>(lmHiddenDim, lmHiddenDim * 4, geluActivation);
             yield return new DenseLayer<T>(lmHiddenDim * 4, lmHiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -5624,7 +5624,7 @@ public static class LayerHelper<T>
         }
 
         // Final layer normalization
-        yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === OUTPUT PROJECTION ===
 
@@ -5694,11 +5694,11 @@ public static class LayerHelper<T>
                 headCount: 12,
                 activationFunction: identityActivation);
 
-            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(textHiddenDim, textHiddenDim * 4, siluActivation);
             yield return new DenseLayer<T>(textHiddenDim * 4, textHiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // === VAE ENCODER ===
@@ -5717,7 +5717,7 @@ public static class LayerHelper<T>
             for (int r = 0; r < numResBlocks; r++)
             {
                 yield return new DenseLayer<T>(currentChannels, outChannels, siluActivation);
-                yield return new LayerNormalizationLayer<T>(outChannels);
+                yield return new LayerNormalizationLayer<T>();
                 currentChannels = outChannels;
             }
 
@@ -5749,7 +5749,7 @@ public static class LayerHelper<T>
             for (int r = 0; r < numResBlocks; r++)
             {
                 yield return new DenseLayer<T>(currentChannels, outChannels, siluActivation);
-                yield return new LayerNormalizationLayer<T>(outChannels);
+                yield return new LayerNormalizationLayer<T>();
 
                 // Cross-attention at specified resolutions
                 if (attentionResolutions.Contains(mult))
@@ -5759,7 +5759,7 @@ public static class LayerHelper<T>
                         embeddingDimension: outChannels,
                         headCount: numHeads,
                         activationFunction: identityActivation);
-                    yield return new LayerNormalizationLayer<T>(outChannels);
+                    yield return new LayerNormalizationLayer<T>();
                 }
 
                 currentChannels = outChannels;
@@ -5784,7 +5784,7 @@ public static class LayerHelper<T>
             for (int r = 0; r < numResBlocks + 1; r++)
             {
                 yield return new DenseLayer<T>(currentChannels, outChannels, siluActivation);
-                yield return new LayerNormalizationLayer<T>(outChannels);
+                yield return new LayerNormalizationLayer<T>();
 
                 if (attentionResolutions.Contains(mult))
                 {
@@ -5793,7 +5793,7 @@ public static class LayerHelper<T>
                         embeddingDimension: outChannels,
                         headCount: numHeads,
                         activationFunction: identityActivation);
-                    yield return new LayerNormalizationLayer<T>(outChannels);
+                    yield return new LayerNormalizationLayer<T>();
                 }
 
                 currentChannels = outChannels;
@@ -5807,7 +5807,7 @@ public static class LayerHelper<T>
         }
 
         // Output projection to latent
-        yield return new LayerNormalizationLayer<T>(currentChannels);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(currentChannels, latentDim, identityActivation);
 
         // === VAE DECODER ===
@@ -5825,7 +5825,7 @@ public static class LayerHelper<T>
             for (int r = 0; r < numResBlocks + 1; r++)
             {
                 yield return new DenseLayer<T>(currentChannels, outChannels, siluActivation);
-                yield return new LayerNormalizationLayer<T>(outChannels);
+                yield return new LayerNormalizationLayer<T>();
                 currentChannels = outChannels;
             }
 
@@ -5837,7 +5837,7 @@ public static class LayerHelper<T>
         }
 
         // Output projection to mel spectrogram
-        yield return new LayerNormalizationLayer<T>(currentChannels);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(currentChannels, numMels, identityActivation);
     }
 
@@ -5903,11 +5903,11 @@ public static class LayerHelper<T>
                 headCount: 12,
                 activationFunction: identityActivation);
 
-            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(textHiddenDim, textHiddenDim * 4, geluActivation);
             yield return new DenseLayer<T>(textHiddenDim * 4, textHiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -5954,7 +5954,7 @@ public static class LayerHelper<T>
                 headCount: numHeads,
                 activationFunction: identityActivation);
 
-            yield return new LayerNormalizationLayer<T>(ditHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -5968,7 +5968,7 @@ public static class LayerHelper<T>
                 headCount: numHeads,
                 activationFunction: identityActivation);
 
-            yield return new LayerNormalizationLayer<T>(ditHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -5978,7 +5978,7 @@ public static class LayerHelper<T>
             // Feed-forward network with GELU
             yield return new DenseLayer<T>(ditHiddenDim, ditHiddenDim * 4, geluActivation);
             yield return new DenseLayer<T>(ditHiddenDim * 4, ditHiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(ditHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -5987,7 +5987,7 @@ public static class LayerHelper<T>
         }
 
         // Final layer normalization
-        yield return new LayerNormalizationLayer<T>(ditHiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Output projection to latent space
         yield return new DenseLayer<T>(ditHiddenDim, latentDim, identityActivation);
@@ -6070,14 +6070,14 @@ public static class LayerHelper<T>
                 headCount: numHeads);
 
             // Layer normalization (pre-LN architecture)
-            yield return new LayerNormalizationLayer<T>(modelDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Feed-forward network
             yield return new DenseLayer<T>(modelDim, ffDim, geluActivation);
             yield return new DenseLayer<T>(ffDim, modelDim, identityActivation);
 
             // Layer normalization
-            yield return new LayerNormalizationLayer<T>(modelDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -6086,7 +6086,7 @@ public static class LayerHelper<T>
         }
 
         // Final encoder layer normalization
-        yield return new LayerNormalizationLayer<T>(modelDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === TEXT DECODER ===
 
@@ -6118,7 +6118,7 @@ public static class LayerHelper<T>
         }
 
         // Final decoder layer normalization
-        yield return new LayerNormalizationLayer<T>(modelDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Output projection to vocabulary logits
         yield return new DenseLayer<T>(modelDim, vocabSize, identityActivation);
@@ -6189,12 +6189,12 @@ public static class LayerHelper<T>
                 embeddingDimension: textHiddenDim,
                 headCount: numHeads);
 
-            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(textHiddenDim, textHiddenDim * 4, reluActivation);
             yield return new DenseLayer<T>(textHiddenDim * 4, textHiddenDim, identityActivation);
 
-            yield return new LayerNormalizationLayer<T>(textHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -6283,7 +6283,7 @@ public static class LayerHelper<T>
 
         // Initial feature projection
         yield return new DenseLayer<T>(numMels, hiddenDim, reluActivation);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         if (dropoutRate > 0)
         {
@@ -6299,13 +6299,13 @@ public static class LayerHelper<T>
                 embeddingDimension: hiddenDim,
                 headCount: 8);
 
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Feed-forward with residual-like structure
             yield return new DenseLayer<T>(hiddenDim, hiddenDim * 2, reluActivation);
             yield return new DenseLayer<T>(hiddenDim * 2, hiddenDim, identityActivation);
 
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -6357,7 +6357,7 @@ public static class LayerHelper<T>
 
         // Feature projection
         yield return new DenseLayer<T>(numMels, hiddenDim, reluActivation);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         if (dropoutRate > 0)
         {
@@ -6375,12 +6375,12 @@ public static class LayerHelper<T>
                 embeddingDimension: hiddenDim,
                 headCount: 8);
 
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(hiddenDim, hiddenDim * 4, reluActivation);
             yield return new DenseLayer<T>(hiddenDim * 4, hiddenDim, identityActivation);
 
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -6552,7 +6552,7 @@ public static class LayerHelper<T>
         // 2. Pre-Layer Normalization
         // BEATs uses Pre-LN Transformer (normalize before attention, not after), which provides
         // more stable gradients during training and faster convergence than Post-LN.
-        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         if (dropoutRate > 0)
         {
@@ -6576,7 +6576,7 @@ public static class LayerHelper<T>
                 embeddingDimension: embeddingDim,
                 headCount: numAttentionHeads);
 
-            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Position-wise Feed-Forward Network (FFN):
             // Expand to feedForwardDim (4x), apply GELU, then project back.
@@ -6584,7 +6584,7 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(embeddingDim, feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(feedForwardDim, embeddingDim, identityActivation);
 
-            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -6595,7 +6595,7 @@ public static class LayerHelper<T>
         // 5. Post-Layer Normalization
         // Final normalization before the classification head to stabilize the distribution
         // of features across different input lengths and content.
-        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // 6. Classification Head
         // Two-layer MLP: embedding_dim -> embedding_dim -> num_classes
@@ -6648,7 +6648,7 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(patchFeatureSize, embeddingDim, identityActivation);
 
         // 2. Pre-Layer Normalization
-        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         if (dropoutRate > 0)
         {
@@ -6666,12 +6666,12 @@ public static class LayerHelper<T>
                 embeddingDimension: embeddingDim,
                 headCount: numAttentionHeads);
 
-            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(embeddingDim, feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(feedForwardDim, embeddingDim, identityActivation);
 
-            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -6680,7 +6680,7 @@ public static class LayerHelper<T>
         }
 
         // 5. Post-Layer Normalization
-        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // 6. Classification Head: [CLS] token output -> class logits
         yield return new DenseLayer<T>(embeddingDim, embeddingDim, reluActivation);
@@ -6717,7 +6717,7 @@ public static class LayerHelper<T>
 
         // 1. Initial Patch Embedding
         yield return new DenseLayer<T>(patchFeatureSize, embeddingDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // 2. Hierarchical Swin Transformer Stages
         int currentDim = embeddingDim;
@@ -6733,10 +6733,10 @@ public static class LayerHelper<T>
                     sequenceLength: seqLen,
                     embeddingDimension: currentDim,
                     headCount: numHeads);
-                yield return new LayerNormalizationLayer<T>(currentDim);
+                yield return new LayerNormalizationLayer<T>();
                 yield return new DenseLayer<T>(currentDim, ffDim, reluActivation);
                 yield return new DenseLayer<T>(ffDim, currentDim, identityActivation);
-                yield return new LayerNormalizationLayer<T>(currentDim);
+                yield return new LayerNormalizationLayer<T>();
             }
 
             // Patch merging: double channels, halve sequence at stage boundary (except last stage)
@@ -6744,14 +6744,14 @@ public static class LayerHelper<T>
             {
                 int nextDim = currentDim * 2;
                 yield return new DenseLayer<T>(currentDim, nextDim, identityActivation);
-                yield return new LayerNormalizationLayer<T>(nextDim);
+                yield return new LayerNormalizationLayer<T>();
                 currentDim = nextDim;
                 seqLen = Math.Max(1, seqLen / 2);
             }
         }
 
         // 3. Final normalization and classification head
-        yield return new LayerNormalizationLayer<T>(currentDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(currentDim, currentDim, reluActivation);
         if (dropoutRate > 0)
         {
@@ -6786,7 +6786,7 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
         yield return new DenseLayer<T>(patchFeatureSize, embeddingDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new LayerNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
 
@@ -6796,14 +6796,14 @@ public static class LayerHelper<T>
                 sequenceLength: maxSequenceLength,
                 embeddingDimension: embeddingDim,
                 headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(embeddingDim, feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(feedForwardDim, embeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(embeddingDim, embeddingDim, reluActivation);
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         yield return new DenseLayer<T>(embeddingDim, numClasses, identityActivation);
@@ -6835,7 +6835,7 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
         yield return new DenseLayer<T>(patchFeatureSize, embeddingDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
 
         for (int i = 0; i < numEncoderLayers; i++)
@@ -6844,13 +6844,13 @@ public static class LayerHelper<T>
                 sequenceLength: maxSequenceLength,
                 embeddingDimension: embeddingDim,
                 headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(embeddingDim, feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(feedForwardDim, embeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
-        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(embeddingDim, embeddingDim, reluActivation);
         yield return new DenseLayer<T>(embeddingDim, numClasses, identityActivation);
     }
@@ -6885,9 +6885,9 @@ public static class LayerHelper<T>
         for (int block = 0; block < numBlocks; block++)
         {
             yield return new DenseLayer<T>(inputDim, channels, reluActivation);
-            yield return new LayerNormalizationLayer<T>(channels);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(channels, channels, reluActivation);
-            yield return new LayerNormalizationLayer<T>(channels);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
@@ -6930,7 +6930,7 @@ public static class LayerHelper<T>
 
         // Audio encoder (HTS-AT style)
         yield return new DenseLayer<T>(patchFeatureSize, embeddingDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new LayerNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
 
@@ -6940,15 +6940,15 @@ public static class LayerHelper<T>
                 sequenceLength: maxSequenceLength,
                 embeddingDimension: embeddingDim,
                 headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(embeddingDim, feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(feedForwardDim, embeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Projection to joint space
-        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(embeddingDim, projectionDim, reluActivation);
 
         // Classification head (for fine-tuned mode)
@@ -6979,27 +6979,27 @@ public static class LayerHelper<T>
 
         // Full-band path: processes all frequency bins together
         yield return new DenseLayer<T>(numFreqBins, fullBandHiddenSize, reluActivation);
-        yield return new LayerNormalizationLayer<T>(fullBandHiddenSize);
+        yield return new LayerNormalizationLayer<T>();
         for (int i = 0; i < fullBandLayers; i++)
         {
             yield return new DenseLayer<T>(fullBandHiddenSize, fullBandHiddenSize, reluActivation);
-            yield return new LayerNormalizationLayer<T>(fullBandHiddenSize);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Sub-band path: processes sub-band features
         yield return new DenseLayer<T>(fullBandHiddenSize, subBandHiddenSize, reluActivation);
-        yield return new LayerNormalizationLayer<T>(subBandHiddenSize);
+        yield return new LayerNormalizationLayer<T>();
         for (int i = 0; i < subBandLayers; i++)
         {
             yield return new DenseLayer<T>(subBandHiddenSize, subBandHiddenSize, reluActivation);
-            yield return new LayerNormalizationLayer<T>(subBandHiddenSize);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Fusion and mask estimation
         yield return new DenseLayer<T>(subBandHiddenSize, numFreqBins * 2, identityActivation);
-        yield return new LayerNormalizationLayer<T>(numFreqBins * 2);
+        yield return new LayerNormalizationLayer<T>();
 
         // Output: complex mask (real + imaginary for each frequency bin)
         yield return new DenseLayer<T>(numFreqBins * 2, numFreqBins * 2, sigmoidActivation);
@@ -7028,7 +7028,7 @@ public static class LayerHelper<T>
 
         // U-Net encoder
         yield return new DenseLayer<T>(numFreqBins, conformerDim, reluActivation);
-        yield return new LayerNormalizationLayer<T>(conformerDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Conformer blocks in bottleneck
         for (int i = 0; i < numConformerLayers; i++)
@@ -7036,7 +7036,7 @@ public static class LayerHelper<T>
             // Feed-forward module
             yield return new DenseLayer<T>(conformerDim, feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(feedForwardDim, conformerDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(conformerDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
             // Self-attention module
@@ -7044,18 +7044,18 @@ public static class LayerHelper<T>
                 sequenceLength: numFreqBins,
                 embeddingDimension: conformerDim,
                 headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(conformerDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
             // Second feed-forward module
             yield return new DenseLayer<T>(conformerDim, feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(feedForwardDim, conformerDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(conformerDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // U-Net decoder with mask estimation
         yield return new DenseLayer<T>(conformerDim, numFreqBins * 2, identityActivation);
-        yield return new LayerNormalizationLayer<T>(numFreqBins * 2);
+        yield return new LayerNormalizationLayer<T>();
 
         // Output: magnitude mask + phase correction
         yield return new DenseLayer<T>(numFreqBins * 2, numFreqBins * 2, sigmoidActivation);
@@ -7085,7 +7085,7 @@ public static class LayerHelper<T>
 
         // Input embedding: map complex STFT to embedding space
         yield return new DenseLayer<T>(numFreqBins * 2, embeddingDim * numFreqBins > 4096 ? 4096 : embeddingDim * 4, reluActivation);
-        yield return new LayerNormalizationLayer<T>(embeddingDim * numFreqBins > 4096 ? 4096 : embeddingDim * 4);
+        yield return new LayerNormalizationLayer<T>();
 
         // Grid blocks: alternating intra-frame (frequency) and inter-frame (time) processing
         for (int b = 0; b < numBlocks; b++)
@@ -7094,16 +7094,16 @@ public static class LayerHelper<T>
 
             // Intra-frame (frequency-axis) processing
             yield return new DenseLayer<T>(dim, hiddenDim, reluActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, dim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(dim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
             // Inter-frame (time-axis) processing
             yield return new DenseLayer<T>(dim, hiddenDim, reluActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, dim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(dim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -7131,11 +7131,11 @@ public static class LayerHelper<T>
 
         // Band-split embedding: map each band to embedding space
         yield return new DenseLayer<T>(numFreqBins, numBands * bandEmbeddingDim, reluActivation);
-        yield return new LayerNormalizationLayer<T>(numBands * bandEmbeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Project to transformer dim
         yield return new DenseLayer<T>(numBands * bandEmbeddingDim, transformerDim, reluActivation);
-        yield return new LayerNormalizationLayer<T>(transformerDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Transformer blocks with rotary embeddings
         for (int i = 0; i < numTransformerLayers; i++)
@@ -7144,10 +7144,10 @@ public static class LayerHelper<T>
                 sequenceLength: numBands,
                 embeddingDimension: transformerDim,
                 headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(transformerDim, feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(feedForwardDim, transformerDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -7174,10 +7174,10 @@ public static class LayerHelper<T>
 
         // Mel-band embedding
         yield return new DenseLayer<T>(numFreqBins, numMelBands * bandEmbeddingDim, reluActivation);
-        yield return new LayerNormalizationLayer<T>(numMelBands * bandEmbeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         yield return new DenseLayer<T>(numMelBands * bandEmbeddingDim, transformerDim, reluActivation);
-        yield return new LayerNormalizationLayer<T>(transformerDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numTransformerLayers; i++)
         {
@@ -7185,10 +7185,10 @@ public static class LayerHelper<T>
                 sequenceLength: numMelBands,
                 embeddingDimension: transformerDim,
                 headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(transformerDim, feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(feedForwardDim, transformerDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -7212,7 +7212,7 @@ public static class LayerHelper<T>
 
         // Spectral encoder
         yield return new DenseLayer<T>(numFreqBins, transformerDim, reluActivation);
-        yield return new LayerNormalizationLayer<T>(transformerDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Cross-domain Transformer
         for (int i = 0; i < numTransformerLayers; i++)
@@ -7221,10 +7221,10 @@ public static class LayerHelper<T>
                 sequenceLength: numFreqBins / 4,
                 embeddingDimension: transformerDim,
                 headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(transformerDim, feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(feedForwardDim, transformerDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -7270,11 +7270,11 @@ public static class LayerHelper<T>
 
         // Initial feature extraction
         yield return new DenseLayer<T>(numMels, baseChannels * 4, reluActivation);
-        yield return new LayerNormalizationLayer<T>(baseChannels * 4);
+        yield return new LayerNormalizationLayer<T>();
 
         // Encoder level 1
         yield return new DenseLayer<T>(baseChannels * 4, baseChannels * 8, reluActivation);
-        yield return new LayerNormalizationLayer<T>(baseChannels * 8);
+        yield return new LayerNormalizationLayer<T>();
 
         if (dropoutRate > 0)
         {
@@ -7283,7 +7283,7 @@ public static class LayerHelper<T>
 
         // Encoder level 2
         yield return new DenseLayer<T>(baseChannels * 8, baseChannels * 16, reluActivation);
-        yield return new LayerNormalizationLayer<T>(baseChannels * 16);
+        yield return new LayerNormalizationLayer<T>();
 
         // === BOTTLENECK ===
 
@@ -7293,19 +7293,19 @@ public static class LayerHelper<T>
             embeddingDimension: baseChannels * 16,
             headCount: 8);
 
-        yield return new LayerNormalizationLayer<T>(baseChannels * 16);
+        yield return new LayerNormalizationLayer<T>();
 
         // LSTM-like temporal modeling (using attention + dense)
         yield return new DenseLayer<T>(baseChannels * 16, baseChannels * 16, reluActivation);
         yield return new DenseLayer<T>(baseChannels * 16, baseChannels * 16, identityActivation);
 
-        yield return new LayerNormalizationLayer<T>(baseChannels * 16);
+        yield return new LayerNormalizationLayer<T>();
 
         // === DECODER PATH ===
 
         // Decoder level 2
         yield return new DenseLayer<T>(baseChannels * 16, baseChannels * 8, reluActivation);
-        yield return new LayerNormalizationLayer<T>(baseChannels * 8);
+        yield return new LayerNormalizationLayer<T>();
 
         if (dropoutRate > 0)
         {
@@ -7314,7 +7314,7 @@ public static class LayerHelper<T>
 
         // Decoder level 1
         yield return new DenseLayer<T>(baseChannels * 8, baseChannels * 4, reluActivation);
-        yield return new LayerNormalizationLayer<T>(baseChannels * 4);
+        yield return new LayerNormalizationLayer<T>();
 
         // === OUTPUT LAYER ===
 
@@ -9468,25 +9468,25 @@ public static class LayerHelper<T>
     {
         // ResNet-18 style backbone (simplified)
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
-        yield return new BatchNormalizationLayer<T>(64);
+        yield return new BatchNormalizationLayer<T>();
         yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
 
         // ResNet blocks (simplified to conv layers for demonstration)
         yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
-        yield return new BatchNormalizationLayer<T>(64);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ConvolutionalLayer<T>(128, 3, 2, 1);
-        yield return new BatchNormalizationLayer<T>(128);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ConvolutionalLayer<T>(256, 3, 2, 1);
-        yield return new BatchNormalizationLayer<T>(256);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ConvolutionalLayer<T>(backboneChannels, 3, 2, 1);
-        yield return new BatchNormalizationLayer<T>(backboneChannels);
+        yield return new BatchNormalizationLayer<T>();
 
         // FPN neck - lateral connections
         yield return new ConvolutionalLayer<T>(innerChannels, 1, 1, 0);
 
         // Probability map head (outputs text probability at each pixel)
         yield return new ConvolutionalLayer<T>(innerChannels / 4, 3, 1, 1);
-        yield return new BatchNormalizationLayer<T>(innerChannels / 4);
+        yield return new BatchNormalizationLayer<T>();
 
         // Threshold map head (outputs adaptive threshold at each pixel)
         yield return new ConvolutionalLayer<T>(1, 1, 1, 0);
@@ -9548,7 +9548,7 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(hiddenDim, patchSize, patchSize, 0);
 
         // Layer normalization
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // ViT encoder blocks
         for (int i = 0; i < numLayers; i++)
@@ -9557,7 +9557,7 @@ public static class LayerHelper<T>
         }
 
         // Final layer norm
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
     }
 
     private static IEnumerable<ILayer<T>> CreateTrOCRDecoderLayers(
@@ -9583,7 +9583,7 @@ public static class LayerHelper<T>
         }
 
         // Final layer norm
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Output projection to vocabulary
         yield return new DenseLayer<T>(hiddenDim, vocabSize);
@@ -9623,16 +9623,16 @@ public static class LayerHelper<T>
     {
         // ResNet-18 backbone (simplified)
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
-        yield return new BatchNormalizationLayer<T>(64);
+        yield return new BatchNormalizationLayer<T>();
         yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
 
         // Downsample to feature map size
         yield return new ConvolutionalLayer<T>(128, 3, 2, 1);
-        yield return new BatchNormalizationLayer<T>(128);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ConvolutionalLayer<T>(256, 3, 2, 1);
-        yield return new BatchNormalizationLayer<T>(256);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ConvolutionalLayer<T>(hiddenDim, 3, 2, 1);
-        yield return new BatchNormalizationLayer<T>(hiddenDim);
+        yield return new BatchNormalizationLayer<T>();
 
         // Flatten spatial dimensions for transformer input
         int featureMapSize = imageSize / 32;
@@ -9688,25 +9688,25 @@ public static class LayerHelper<T>
     {
         // ResNet-101 style backbone (simplified to ResNet-50-like)
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
-        yield return new BatchNormalizationLayer<T>(64);
+        yield return new BatchNormalizationLayer<T>();
         yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
 
         // Residual blocks (simplified as conv layers)
         yield return new ConvolutionalLayer<T>(256, 3, 1, 1);
-        yield return new BatchNormalizationLayer<T>(256);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ConvolutionalLayer<T>(512, 3, 2, 1);
-        yield return new BatchNormalizationLayer<T>(512);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ConvolutionalLayer<T>(1024, 3, 2, 1);
-        yield return new BatchNormalizationLayer<T>(1024);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ConvolutionalLayer<T>(backboneChannels, 3, 2, 1);
-        yield return new BatchNormalizationLayer<T>(backboneChannels);
+        yield return new BatchNormalizationLayer<T>();
 
         // FPN lateral connections
         yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0);
 
         // Segmentation head
         yield return new ConvolutionalLayer<T>(hiddenDim, 3, 1, 1);
-        yield return new BatchNormalizationLayer<T>(hiddenDim);
+        yield return new BatchNormalizationLayer<T>();
 
         // Output layer (class predictions per pixel)
         yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0);
@@ -9751,7 +9751,7 @@ public static class LayerHelper<T>
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
 
         // LayerNorm after embeddings
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.1);
 
         // Transformer encoder layers (BERT-style)
@@ -9764,12 +9764,12 @@ public static class LayerHelper<T>
                 headCount: numHeads,
                 activationFunction: identityActivation);
 
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Feed-forward network
             yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
             yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (i < numLayers - 1)
             {
@@ -9828,20 +9828,20 @@ public static class LayerHelper<T>
 
         // Initial convolution
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
-        yield return new BatchNormalizationLayer<T>(64);
+        yield return new BatchNormalizationLayer<T>();
 
         // Max pooling
         yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
 
         // ResNeXt-style stages (simplified)
         yield return new ConvolutionalLayer<T>(256, 3, 1, 1);
-        yield return new BatchNormalizationLayer<T>(256);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ConvolutionalLayer<T>(512, 3, 2, 1);
-        yield return new BatchNormalizationLayer<T>(512);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ConvolutionalLayer<T>(1024, 3, 2, 1);
-        yield return new BatchNormalizationLayer<T>(1024);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ConvolutionalLayer<T>(visualBackboneChannels, 1, 1, 0);
-        yield return new BatchNormalizationLayer<T>(visualBackboneChannels);
+        yield return new BatchNormalizationLayer<T>();
 
         // Project visual features to hidden dimension
         yield return new DenseLayer<T>(visualBackboneChannels, hiddenDim, reluActivation);
@@ -9855,7 +9855,7 @@ public static class LayerHelper<T>
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
 
         // LayerNorm after embeddings
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.1);
 
         // === MULTI-MODAL TRANSFORMER ENCODER ===
@@ -9869,12 +9869,12 @@ public static class LayerHelper<T>
                 headCount: numHeads,
                 activationFunction: identityActivation);
 
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Feed-forward network
             yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
             yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (i < numLayers - 1)
             {
@@ -9926,13 +9926,13 @@ public static class LayerHelper<T>
         // === VISUAL ENCODER (ResNet-50 style) ===
 
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
-        yield return new BatchNormalizationLayer<T>(64);
+        yield return new BatchNormalizationLayer<T>();
         yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
 
         yield return new ConvolutionalLayer<T>(256, 3, 1, 1);
-        yield return new BatchNormalizationLayer<T>(256);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ConvolutionalLayer<T>(512, 3, 2, 1);
-        yield return new BatchNormalizationLayer<T>(512);
+        yield return new BatchNormalizationLayer<T>();
 
         // Project visual to hidden dim
         yield return new DenseLayer<T>(512, hiddenDim, reluActivation);
@@ -9948,7 +9948,7 @@ public static class LayerHelper<T>
 
         // === MULTI-MODAL TRANSFORMER ===
 
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.1);
 
         for (int i = 0; i < numLayers; i++)
@@ -9959,10 +9959,10 @@ public static class LayerHelper<T>
                 headCount: numHeads,
                 activationFunction: identityActivation);
 
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
             yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (i < numLayers - 1)
             {
@@ -10018,7 +10018,7 @@ public static class LayerHelper<T>
         // Patch embedding
         yield return new DenseLayer<T>(patchSize * patchSize * 3, hiddenDim, identityActivation);
         yield return new PositionalEncodingLayer<T>(maxPatches, hiddenDim);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Transformer encoder
         for (int i = 0; i < numLayers; i++)
@@ -10028,10 +10028,10 @@ public static class LayerHelper<T>
                 embeddingDimension: hiddenDim,
                 headCount: numHeads,
                 activationFunction: identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, hiddenDim * 4, geluActivation);
             yield return new DenseLayer<T>(hiddenDim * 4, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
     }
 
@@ -10054,7 +10054,7 @@ public static class LayerHelper<T>
                 ffnActivation: geluActivation);
         }
 
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(hiddenDim, vocabSize, identityActivation);
     }
 
@@ -10100,7 +10100,7 @@ public static class LayerHelper<T>
 
         // Swin-style patch embedding
         yield return new ConvolutionalLayer<T>(hiddenDim, patchSize, patchSize, 0);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Transformer encoder
         for (int i = 0; i < numLayers; i++)
@@ -10110,10 +10110,10 @@ public static class LayerHelper<T>
                 embeddingDimension: hiddenDim,
                 headCount: numHeads,
                 activationFunction: identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, hiddenDim * 4, geluActivation);
             yield return new DenseLayer<T>(hiddenDim * 4, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
     }
 
@@ -10136,7 +10136,7 @@ public static class LayerHelper<T>
                 ffnActivation: geluActivation);
         }
 
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(hiddenDim, vocabSize, identityActivation);
     }
 
@@ -10188,7 +10188,7 @@ public static class LayerHelper<T>
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
 
         // Unified encoder
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numLayers; i++)
         {
@@ -10197,10 +10197,10 @@ public static class LayerHelper<T>
                 embeddingDimension: hiddenDim,
                 headCount: numHeads,
                 activationFunction: identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, hiddenDim * 4, geluActivation);
             yield return new DenseLayer<T>(hiddenDim * 4, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
     }
 
@@ -10223,7 +10223,7 @@ public static class LayerHelper<T>
                 ffnActivation: geluActivation);
         }
 
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(hiddenDim, vocabSize, identityActivation);
     }
 
@@ -10256,7 +10256,7 @@ public static class LayerHelper<T>
         // Text encoder (BERT-style)
         yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Transformer layers for text encoding
         for (int i = 0; i < 4; i++)
@@ -10266,17 +10266,17 @@ public static class LayerHelper<T>
                 embeddingDimension: hiddenDim,
                 headCount: numHeads,
                 activationFunction: identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, hiddenDim * 4, reluActivation);
             yield return new DenseLayer<T>(hiddenDim * 4, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Graph Convolutional Network layers (simplified as dense)
         for (int i = 0; i < numGcnLayers; i++)
         {
             yield return new DenseLayer<T>(hiddenDim, hiddenDim, reluActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DropoutLayer<T>(0.1);
         }
 
@@ -10316,7 +10316,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < vggChannels.Length; i++)
         {
             yield return new ConvolutionalLayer<T>(vggChannels[i], 3, 1, 1);
-            yield return new BatchNormalizationLayer<T>(vggChannels[i]);
+            yield return new BatchNormalizationLayer<T>();
 
             inputChannels = vggChannels[i];
 
@@ -10335,7 +10335,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < 4; i++)
         {
             yield return new ConvolutionalLayer<T>(upscaleChannels, 3, 1, 1);
-            yield return new BatchNormalizationLayer<T>(upscaleChannels);
+            yield return new BatchNormalizationLayer<T>();
             currentSize *= 2;
         }
 
@@ -10384,7 +10384,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < channels.Length; i++)
         {
             yield return new ConvolutionalLayer<T>(channels[i], 3, 1, 1);
-            yield return new BatchNormalizationLayer<T>(channels[i]);
+            yield return new BatchNormalizationLayer<T>();
 
             inputChannels = channels[i];
 
@@ -10445,7 +10445,7 @@ public static class LayerHelper<T>
 
         // Visual backbone (ResNet-style)
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
-        yield return new BatchNormalizationLayer<T>(64);
+        yield return new BatchNormalizationLayer<T>();
         yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
         yield return new ConvolutionalLayer<T>(visualBackboneChannels, 3, 1, 1);
 
@@ -10455,17 +10455,17 @@ public static class LayerHelper<T>
         // XLM-RoBERTa embeddings
         yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.1);
 
         // Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
             yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (i < numLayers - 1) yield return new DropoutLayer<T>(0.1);
         }
 
@@ -10501,21 +10501,21 @@ public static class LayerHelper<T>
 
         // Position embeddings
         yield return new PositionalEncodingLayer<T>(numPatches + 1, hiddenDim);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.1);
 
         // ViT transformer encoder
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(numPatches + 1, hiddenDim, numHeads, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
             yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Classification head (from CLS token)
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(hiddenDim, numClasses, identityActivation);
     }
 
@@ -10548,23 +10548,23 @@ public static class LayerHelper<T>
 
         // Layout embeddings stream (2D position encoding)
         yield return new DenseLayer<T>(4, layoutDim, identityActivation); // x, y, w, h
-        yield return new LayerNormalizationLayer<T>(layoutDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Dual-stream transformer with BiACM
         for (int i = 0; i < numLayers; i++)
         {
             // Text stream attention
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Layout stream attention
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, layoutDim, numHeads, identityActivation);
-            yield return new LayerNormalizationLayer<T>(layoutDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Feed-forward
             yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
             yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         yield return new DropoutLayer<T>(0.1);
@@ -10601,15 +10601,15 @@ public static class LayerHelper<T>
 
         // Patch embedding
         yield return new ConvolutionalLayer<T>(hiddenDim, 16, 16, 0);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(196, hiddenDim, numHeads, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
             yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
     }
 
@@ -10626,12 +10626,12 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
             yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         yield return new DenseLayer<T>(hiddenDim, vocabSize, identityActivation);
@@ -10668,16 +10668,16 @@ public static class LayerHelper<T>
         int intermediateSize = hiddenDim * 4;
 
         yield return new ConvolutionalLayer<T>(hiddenDim, 16, 16, 0);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new PositionalEncodingLayer<T>(maxPatches, hiddenDim);
 
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(Math.Min(maxPatches, 256), hiddenDim, numHeads, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
             yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
     }
 
@@ -10694,12 +10694,12 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
             yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         yield return new DenseLayer<T>(hiddenDim, vocabSize, identityActivation);
@@ -10728,15 +10728,15 @@ public static class LayerHelper<T>
 
         // Vision encoder (ViT-L style)
         yield return new ConvolutionalLayer<T>(visionDim, 14, 14, 0);
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < Math.Min(visionLayers, 6); i++)
         {
             yield return new MultiHeadAttentionLayer<T>(256, visionDim, numHeads, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionDim * 4, siluActivation);
             yield return new DenseLayer<T>(visionDim * 4, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Visual abstractor projection
@@ -10748,10 +10748,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < Math.Min(textLayers, 6); i++)
         {
             yield return new MultiHeadAttentionLayer<T>(512, textDim, numHeads, identityActivation);
-            yield return new LayerNormalizationLayer<T>(textDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textDim, textDim * 4, siluActivation);
             yield return new DenseLayer<T>(textDim * 4, textDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(textDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         yield return new DenseLayer<T>(textDim, vocabSize, identityActivation);
@@ -10784,30 +10784,30 @@ public static class LayerHelper<T>
 
         // Patch embedding: conv with kernel=16, stride=16 on full image → (imageSize/16)^2 patches
         yield return new ConvolutionalLayer<T>(visionDim, 16, 16, 0);
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < Math.Min(visionLayers, 6); i++)
         {
             yield return new MultiHeadAttentionLayer<T>(64, visionDim, numHeads, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionDim * 4, geluActivation);
             yield return new DenseLayer<T>(visionDim * 4, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Text encoder
         yield return new EmbeddingLayer<T>(vocabSize, textDim);
         yield return new PositionalEncodingLayer<T>(512, textDim);
-        yield return new LayerNormalizationLayer<T>(textDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Fusion layers
         for (int i = 0; i < fusionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(512, fusionDim, numHeads, identityActivation);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(fusionDim, fusionDim * 4, geluActivation);
             yield return new DenseLayer<T>(fusionDim * 4, fusionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         yield return new DenseLayer<T>(fusionDim, vocabSize, identityActivation);
@@ -10864,13 +10864,13 @@ public static class LayerHelper<T>
 
         // Node feature encoder
         yield return new DenseLayer<T>(inputDim, hiddenDim, reluActivation);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Graph layers with hierarchical structure
         for (int i = 0; i < numGraphLayers; i++)
         {
             yield return new DenseLayer<T>(hiddenDim, hiddenDim, reluActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DropoutLayer<T>(0.3);
         }
 
@@ -10901,7 +10901,7 @@ public static class LayerHelper<T>
 
         // Visual encoder (ResNet-style backbone)
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
-        yield return new BatchNormalizationLayer<T>(64);
+        yield return new BatchNormalizationLayer<T>();
         yield return new MaxPoolingLayer<T>([64, imageSize / 2, imageSize / 2], 3, 2);
         yield return new ConvolutionalLayer<T>(visualDim, 3, 1, 1);
 
@@ -10942,18 +10942,18 @@ public static class LayerHelper<T>
 
         // Patch embedding
         yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
-        yield return new BatchNormalizationLayer<T>(64);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ConvolutionalLayer<T>(hiddenDim, 4, 4, 0);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Transformer layers
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(seqLen, hiddenDim, numHeads, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, intermediateSize, geluActivation);
             yield return new DenseLayer<T>(intermediateSize, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // CTC output
@@ -10984,27 +10984,27 @@ public static class LayerHelper<T>
 
         // Vision encoder (ResNet-style)
         yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
-        yield return new BatchNormalizationLayer<T>(64);
+        yield return new BatchNormalizationLayer<T>();
         yield return new MaxPoolingLayer<T>([64, imageHeight, imageWidth], 2, 2);
         yield return new ConvolutionalLayer<T>(128, 3, 1, 1);
-        yield return new BatchNormalizationLayer<T>(128);
+        yield return new BatchNormalizationLayer<T>();
         yield return new MaxPoolingLayer<T>([128, imageHeight / 2, imageWidth / 2], 2, 2);
         yield return new ConvolutionalLayer<T>(visionDim, 3, 1, 1);
 
         // Transformer for vision
         yield return new MultiHeadAttentionLayer<T>(seqLen, visionDim, 8, identityActivation);
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Language model
         yield return new EmbeddingLayer<T>(charsetSize, languageDim);
         yield return new MultiHeadAttentionLayer<T>(seqLen, languageDim, 8, identityActivation);
-        yield return new LayerNormalizationLayer<T>(languageDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Fusion with iterative refinement
         for (int i = 0; i < numIterations; i++)
         {
             yield return new DenseLayer<T>(visionDim + languageDim, visionDim, reluActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         yield return new DenseLayer<T>(visionDim, charsetSize, identityActivation);
@@ -11036,7 +11036,7 @@ public static class LayerHelper<T>
         foreach (int outChannels in channels)
         {
             yield return new ConvolutionalLayer<T>(outChannels, 3, 1, 1);
-            yield return new BatchNormalizationLayer<T>(outChannels);
+            yield return new BatchNormalizationLayer<T>();
             yield return new MaxPoolingLayer<T>([outChannels, currentSize, currentSize], 2, 2);
             currentSize /= 2;
             inputChannels = outChannels;
@@ -11044,7 +11044,7 @@ public static class LayerHelper<T>
 
         // Feature merging (U-Net style upsampling)
         yield return new ConvolutionalLayer<T>(featureChannels, 1, 1, 0);
-        yield return new BatchNormalizationLayer<T>(featureChannels);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ConvolutionalLayer<T>(featureChannels, 3, 1, 1);
 
         // Output heads
@@ -11073,7 +11073,7 @@ public static class LayerHelper<T>
         // ResNet backbone
         int currentSize = imageSize;
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
-        yield return new BatchNormalizationLayer<T>(64);
+        yield return new BatchNormalizationLayer<T>();
         currentSize /= 2;
 
         yield return new MaxPoolingLayer<T>([64, currentSize, currentSize], 3, 2);
@@ -11084,7 +11084,7 @@ public static class LayerHelper<T>
         foreach (int outChannels in resnetChannels)
         {
             yield return new ConvolutionalLayer<T>(outChannels, 3, 1, 1);
-            yield return new BatchNormalizationLayer<T>(outChannels);
+            yield return new BatchNormalizationLayer<T>();
             inputChannels = outChannels;
             if (outChannels != resnetChannels[^1])
             {
@@ -11455,7 +11455,7 @@ public static class LayerHelper<T>
         }
 
         // BGE often uses an additional normalization/projection head for retrieval
-        yield return new LayerNormalizationLayer<T>(embeddingDimension);
+        yield return new LayerNormalizationLayer<T>();
     }
 
     /// <summary>
@@ -11565,7 +11565,7 @@ public static class LayerHelper<T>
         }
 
         // Final layer normalization
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Output projection: maps from (numPatches * modelDimension) to predictionHorizon
         yield return new DenseLayer<T>(
@@ -11645,7 +11645,7 @@ public static class LayerHelper<T>
         }
 
         // Final layer normalization
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Output projection: maps from model dimension to prediction horizon
         // Each variable token produces its own forecast
@@ -11734,7 +11734,7 @@ public static class LayerHelper<T>
         }
 
         // Final layer normalization
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Output projection
         yield return new DenseLayer<T>(
@@ -11819,7 +11819,7 @@ public static class LayerHelper<T>
         }
 
         // Final layer normalization
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Output projection
         yield return new DenseLayer<T>(
@@ -11904,7 +11904,7 @@ public static class LayerHelper<T>
         }
 
         // Final layer normalization
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Output projection
         yield return new DenseLayer<T>(
@@ -12011,7 +12011,7 @@ public static class LayerHelper<T>
             feedForwardDim: hiddenSize * 4);
 
         // Final layer normalization
-        yield return new LayerNormalizationLayer<T>(hiddenSize);
+        yield return new LayerNormalizationLayer<T>();
 
         // Output projection: maps to prediction horizon
         yield return new DenseLayer<T>(
@@ -12098,7 +12098,7 @@ public static class LayerHelper<T>
         }
 
         // Final layer normalization
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Output projection to prediction horizon
         yield return new DenseLayer<T>(
@@ -12187,11 +12187,11 @@ public static class LayerHelper<T>
             yield return new DropoutLayer<T>(dropout);
 
             // Layer normalization
-            yield return new LayerNormalizationLayer<T>(modelDimension);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Final layer normalization
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Output projection per Wu et al. 2023 §3.2 ("TimesNet"): a linear
         // head d_model → c_out (= numFeatures, the variate count), applied
@@ -12267,7 +12267,7 @@ public static class LayerHelper<T>
                 headCount: numHeads);
 
             // Layer normalization
-            yield return new LayerNormalizationLayer<T>(modelDimension);
+            yield return new LayerNormalizationLayer<T>();
 
             // Feedforward network
             yield return new DenseLayer<T>(
@@ -12284,7 +12284,7 @@ public static class LayerHelper<T>
             yield return new DropoutLayer<T>(dropout);
 
             // Layer normalization
-            yield return new LayerNormalizationLayer<T>(modelDimension);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Decoder layers
@@ -12297,7 +12297,7 @@ public static class LayerHelper<T>
                 headCount: numHeads);
 
             // Layer normalization
-            yield return new LayerNormalizationLayer<T>(modelDimension);
+            yield return new LayerNormalizationLayer<T>();
 
             // Feedforward network
             yield return new DenseLayer<T>(
@@ -12314,7 +12314,7 @@ public static class LayerHelper<T>
             yield return new DropoutLayer<T>(dropout);
 
             // Layer normalization
-            yield return new LayerNormalizationLayer<T>(modelDimension);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Output projection: maps to prediction horizon
@@ -12394,7 +12394,7 @@ public static class LayerHelper<T>
                 headCount: numHeads);
 
             // Layer normalization
-            yield return new LayerNormalizationLayer<T>(modelDimension);
+            yield return new LayerNormalizationLayer<T>();
 
             // Feedforward network
             yield return new DenseLayer<T>(
@@ -12411,7 +12411,7 @@ public static class LayerHelper<T>
             yield return new DropoutLayer<T>(dropout);
 
             // Layer normalization
-            yield return new LayerNormalizationLayer<T>(modelDimension);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Decoder layers
@@ -12424,7 +12424,7 @@ public static class LayerHelper<T>
                 headCount: numHeads);
 
             // Layer normalization
-            yield return new LayerNormalizationLayer<T>(modelDimension);
+            yield return new LayerNormalizationLayer<T>();
 
             // Cross-attention for encoder-decoder connection
             yield return new MultiHeadAttentionLayer<T>(
@@ -12433,7 +12433,7 @@ public static class LayerHelper<T>
                 headCount: numHeads);
 
             // Layer normalization
-            yield return new LayerNormalizationLayer<T>(modelDimension);
+            yield return new LayerNormalizationLayer<T>();
 
             // Feedforward network
             yield return new DenseLayer<T>(
@@ -12450,7 +12450,7 @@ public static class LayerHelper<T>
             yield return new DropoutLayer<T>(dropout);
 
             // Layer normalization
-            yield return new LayerNormalizationLayer<T>(modelDimension);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Output projection: maps to prediction horizon
@@ -12515,7 +12515,7 @@ public static class LayerHelper<T>
         {
             // Time-mixing MLP (operates across time dimension)
             // Layer normalization before time mixing
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Time-mixing feedforward: expand
             yield return new DenseLayer<T>(
@@ -12534,7 +12534,7 @@ public static class LayerHelper<T>
 
             // Feature-mixing MLP (operates across feature dimension)
             // Layer normalization before feature mixing
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Feature-mixing feedforward: expand
             yield return new DenseLayer<T>(
@@ -12553,7 +12553,7 @@ public static class LayerHelper<T>
         }
 
         // Final layer normalization
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Temporal projection: maps sequence length to prediction horizon
         yield return new DenseLayer<T>(
@@ -12652,7 +12652,7 @@ public static class LayerHelper<T>
         }
 
         // Layer normalization for stable training
-        yield return new LayerNormalizationLayer<T>(hiddenSize);
+        yield return new LayerNormalizationLayer<T>();
 
         // Distribution parameter layers - outputs mu and sigma for Gaussian distribution
         // Mu (mean) projection
@@ -13854,7 +13854,7 @@ public static class LayerHelper<T>
         }
 
         // === Final Norm ===
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Distribution Output Head ===
         // Student-t distribution: output mu, sigma, nu (3 params per forecast step)
@@ -13942,7 +13942,7 @@ public static class LayerHelper<T>
         }
 
         // === Final Layer Norm ===
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Language Model Head: project hiddenDim → numTokens (per-position logits) ===
         yield return new FeedForwardLayer<T>(hiddenDim, numTokens, (IActivationFunction<T>?)null);
@@ -14002,7 +14002,7 @@ public static class LayerHelper<T>
         }
 
         // === Final Layer Norm ===
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Mixture Distribution Output Head ===
         // Per paper: predict mixture params per position (weight, mean, variance per mixture)
@@ -14059,7 +14059,7 @@ public static class LayerHelper<T>
 
         // === Patch Embedding: per-patch projection ===
         yield return new FeedForwardLayer<T>(numFeatures * patchLength, llmDim, (IActivationFunction<T>?)null);
-        yield return new LayerNormalizationLayer<T>(llmDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Reprogramming Transformer ===
         for (int i = 0; i < numLayers; i++)
@@ -14076,7 +14076,7 @@ public static class LayerHelper<T>
         }
 
         // === Final Layer Norm + Output Projection ===
-        yield return new LayerNormalizationLayer<T>(llmDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new FeedForwardLayer<T>(llmDim, llmDim / 4, (IActivationFunction<T>)new GELUActivation<T>());
         yield return new FeedForwardLayer<T>(llmDim / 4, forecastHorizon, (IActivationFunction<T>?)null);
     }
@@ -14145,7 +14145,7 @@ public static class LayerHelper<T>
         for (int scale = 0; scale < numScales; scale++)
         {
             yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim, gelu);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // === Scale Aggregation: fuse multi-scale features ===
@@ -14161,7 +14161,7 @@ public static class LayerHelper<T>
         }
 
         // === Final Normalization ===
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Task-Specific Output Heads ===
         // Per paper: output heads project from hiddenDim (per-token), not from flattened seqLen*hiddenDim.
@@ -14261,7 +14261,7 @@ public static class LayerHelper<T>
         }
 
         // === Final Norm + Forecast Head ===
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new FeedForwardLayer<T>(hiddenDim, forecastHorizon, (IActivationFunction<T>?)null);
     }
 
@@ -14321,7 +14321,7 @@ public static class LayerHelper<T>
         }
 
         // === Final Norm + Forecast Head ===
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new FeedForwardLayer<T>(hiddenDim, forecastHorizon, (IActivationFunction<T>?)null);
     }
 
@@ -14521,7 +14521,7 @@ public static class LayerHelper<T>
             outputSize: modelDim * contextLength,
             activationFunction: new GELUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(modelDim * contextLength);
+        yield return new LayerNormalizationLayer<T>();
 
         // === S4 Layers ===
         for (int layer = 0; layer < numLayers; layer++)
@@ -14572,7 +14572,7 @@ public static class LayerHelper<T>
                 activationFunction: new GELUActivation<T>());
 
             // Layer normalization
-            yield return new LayerNormalizationLayer<T>(modelDim * contextLength);
+            yield return new LayerNormalizationLayer<T>();
 
             // Dropout for regularization
             yield return new DropoutLayer<T>(0.1);
@@ -14589,7 +14589,7 @@ public static class LayerHelper<T>
             outputSize: modelDim * contextLength,
             activationFunction: null);
 
-        yield return new LayerNormalizationLayer<T>(modelDim * contextLength);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Output Projection ===
         yield return new DenseLayer<T>(
@@ -14657,7 +14657,7 @@ public static class LayerHelper<T>
             activationFunction: new GELUActivation<T>());
 
         // Layer normalization (simulates RevIN mean/variance tracking)
-        yield return new LayerNormalizationLayer<T>(modelDim * contextLength);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Multi-Scale SSM Blocks (4 Mambas) ===
         // Each scale processes at different temporal granularity
@@ -14676,7 +14676,7 @@ public static class LayerHelper<T>
                 outputSize: scaleDim,
                 activationFunction: new GELUActivation<T>());
 
-            yield return new LayerNormalizationLayer<T>(scaleDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // === SSM Layers for this scale ===
             for (int layer = 0; layer < numLayers; layer++)
@@ -14720,7 +14720,7 @@ public static class LayerHelper<T>
                     activationFunction: null);
 
                 // Layer normalization and dropout
-                yield return new LayerNormalizationLayer<T>(scaleDim);
+                yield return new LayerNormalizationLayer<T>();
                 yield return new DropoutLayer<T>(0.1);
             }
 
@@ -14757,7 +14757,7 @@ public static class LayerHelper<T>
                 activationFunction: null);
         }
 
-        yield return new LayerNormalizationLayer<T>(modelDim * contextLength);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Reversible De-normalization ===
         // (Learned affine transformation to restore original scale)
@@ -14834,7 +14834,7 @@ public static class LayerHelper<T>
 
         if (useNormalization)
         {
-            yield return new LayerNormalizationLayer<T>(modelDim * contextLength);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // === HiPPO Layers ===
@@ -14886,7 +14886,7 @@ public static class LayerHelper<T>
             // Normalization and dropout
             if (useNormalization)
             {
-                yield return new LayerNormalizationLayer<T>(modelDim * contextLength);
+                yield return new LayerNormalizationLayer<T>();
             }
             yield return new DropoutLayer<T>(0.1);
         }
@@ -14906,7 +14906,7 @@ public static class LayerHelper<T>
 
         if (useNormalization)
         {
-            yield return new LayerNormalizationLayer<T>(modelDim * contextLength);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // === Output Projection ===
@@ -14960,7 +14960,7 @@ public static class LayerHelper<T>
             outputSize: hiddenDim * contextLength,
             activationFunction: new GELUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(hiddenDim * contextLength);
+        yield return new LayerNormalizationLayer<T>();
 
         // === RNN Encoder ===
         // Simulated with dense layers (actual LSTM would need special handling)
@@ -14990,7 +14990,7 @@ public static class LayerHelper<T>
                 outputSize: hiddenDim * contextLength,
                 activationFunction: null);
 
-            yield return new LayerNormalizationLayer<T>(hiddenDim * contextLength);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DropoutLayer<T>(0.1);
         }
 
@@ -15015,7 +15015,7 @@ public static class LayerHelper<T>
             outputSize: denoisingDim * 4,
             activationFunction: new SiLUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(denoisingDim * 4);
+        yield return new LayerNormalizationLayer<T>();
 
         // Up path
         yield return new DenseLayer<T>(
@@ -15028,7 +15028,7 @@ public static class LayerHelper<T>
             outputSize: denoisingDim,
             activationFunction: new SiLUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(denoisingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Noise Prediction Head ===
         yield return new DenseLayer<T>(
@@ -15090,7 +15090,7 @@ public static class LayerHelper<T>
             outputSize: hiddenDim * flatSize / numFeatures,
             activationFunction: new GELUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(hiddenDim * flatSize / numFeatures);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Time Embedding Network ===
         // Process diffusion timestep through sinusoidal embedding + MLP
@@ -15136,7 +15136,7 @@ public static class LayerHelper<T>
                 outputSize: hiddenDim,
                 activationFunction: null); // Output projection
 
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DropoutLayer<T>(0.1);
 
             // Feedforward network
@@ -15150,7 +15150,7 @@ public static class LayerHelper<T>
                 outputSize: hiddenDim,
                 activationFunction: null);
 
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DropoutLayer<T>(0.1);
         }
 
@@ -15176,7 +15176,7 @@ public static class LayerHelper<T>
                 outputSize: hiddenDim,
                 activationFunction: null);
 
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // === Score/Noise Prediction Head ===
@@ -15234,7 +15234,7 @@ public static class LayerHelper<T>
             outputSize: hiddenDim,
             activationFunction: new SiLUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Time Embedding Network ===
         // Process diffusion timestep
@@ -15259,7 +15259,7 @@ public static class LayerHelper<T>
                 activationFunction: new SiLUActivation<T>());
 
             // Group normalization simulation
-            yield return new LayerNormalizationLayer<T>(currentDim);
+            yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(
                 inputSize: currentDim,
@@ -15301,7 +15301,7 @@ public static class LayerHelper<T>
             outputSize: currentDim,
             activationFunction: null); // Output projection
 
-        yield return new LayerNormalizationLayer<T>(currentDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Middle residual block
         yield return new DenseLayer<T>(
@@ -15309,7 +15309,7 @@ public static class LayerHelper<T>
             outputSize: currentDim,
             activationFunction: new SiLUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(currentDim);
+        yield return new LayerNormalizationLayer<T>();
 
         yield return new DenseLayer<T>(
             inputSize: currentDim,
@@ -15335,7 +15335,7 @@ public static class LayerHelper<T>
                 outputSize: currentDim,
                 activationFunction: new SiLUActivation<T>());
 
-            yield return new LayerNormalizationLayer<T>(currentDim);
+            yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(
                 inputSize: currentDim,
@@ -15400,7 +15400,7 @@ public static class LayerHelper<T>
             outputSize: hiddenDim,
             activationFunction: new GELUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Trend Network (smooth, low capacity) ===
         // Trend should be smooth, so use fewer parameters
@@ -15409,7 +15409,7 @@ public static class LayerHelper<T>
             outputSize: trendHiddenDim,
             activationFunction: new GELUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(trendHiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         yield return new DenseLayer<T>(
             inputSize: trendHiddenDim,
@@ -15429,7 +15429,7 @@ public static class LayerHelper<T>
             outputSize: seasonalHiddenDim,
             activationFunction: new GELUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(seasonalHiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Fourier-like feature extraction (Tanh for bounded periodic-like output)
         yield return new DenseLayer<T>(
@@ -15442,7 +15442,7 @@ public static class LayerHelper<T>
             outputSize: seasonalHiddenDim,
             activationFunction: new GELUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(seasonalHiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Seasonal output
         yield return new DenseLayer<T>(
@@ -15457,7 +15457,7 @@ public static class LayerHelper<T>
             outputSize: hiddenDim,
             activationFunction: new SiLUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.1);
 
         yield return new DenseLayer<T>(
@@ -15465,7 +15465,7 @@ public static class LayerHelper<T>
             outputSize: hiddenDim,
             activationFunction: new SiLUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Residual output
         yield return new DenseLayer<T>(
@@ -15481,7 +15481,7 @@ public static class LayerHelper<T>
             outputSize: hiddenDim,
             activationFunction: new GELUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         yield return new DenseLayer<T>(
             inputSize: hiddenDim,
@@ -15548,7 +15548,7 @@ public static class LayerHelper<T>
             outputSize: hiddenDim,
             activationFunction: new GELUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Score Network Core (Residual Blocks) ===
         // Multiple dense blocks that learn the score function
@@ -15566,7 +15566,7 @@ public static class LayerHelper<T>
                 outputSize: hiddenDim,
                 activationFunction: new GELUActivation<T>());
 
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // === Score Output Head ===
@@ -15639,7 +15639,7 @@ public static class LayerHelper<T>
             outputSize: numNodes * hiddenDim,
             activationFunction: new GELUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(numNodes * hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === ST-Conv Blocks ===
         // Each block: Temporal -> Spatial -> Temporal
@@ -15665,7 +15665,7 @@ public static class LayerHelper<T>
                 outputSize: numNodes * hiddenDim,
                 activationFunction: new GELUActivation<T>());
 
-            yield return new LayerNormalizationLayer<T>(numNodes * hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // === Output Projection ===
@@ -15737,7 +15737,7 @@ public static class LayerHelper<T>
                 outputSize: numNodes * hiddenDim,
                 activationFunction: new ReLUActivation<T>());
 
-            yield return new LayerNormalizationLayer<T>(numNodes * hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Dropout for regularization
             yield return new DropoutLayer<T>(0.3);
@@ -15760,7 +15760,7 @@ public static class LayerHelper<T>
                 outputSize: numNodes * hiddenDim,
                 activationFunction: new SigmoidActivation<T>());
 
-            yield return new LayerNormalizationLayer<T>(numNodes * hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // === Spatio-Temporal Fusion ===
@@ -15770,7 +15770,7 @@ public static class LayerHelper<T>
             outputSize: numNodes * hiddenDim,
             activationFunction: new ReLUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(numNodes * hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Output Projection ===
         // Project to forecast horizon
@@ -15830,7 +15830,7 @@ public static class LayerHelper<T>
             outputSize: numNodes * hiddenDim,
             activationFunction: new ReLUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(numNodes * hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Node Embedding Layer ===
         // Create learnable node embeddings for adaptive graph learning
@@ -15865,7 +15865,7 @@ public static class LayerHelper<T>
                 outputSize: numNodes * hiddenDim,
                 activationFunction: new SigmoidActivation<T>());
 
-            yield return new LayerNormalizationLayer<T>(numNodes * hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DropoutLayer<T>(0.3);
         }
 
@@ -15929,7 +15929,7 @@ public static class LayerHelper<T>
             outputSize: numNodes * residualChannels,
             activationFunction: new ReLUActivation<T>());
 
-        yield return new LayerNormalizationLayer<T>(numNodes * residualChannels);
+        yield return new LayerNormalizationLayer<T>();
 
         // === WaveNet-style Blocks ===
         for (int block = 0; block < numBlocks; block++)
@@ -15954,7 +15954,7 @@ public static class LayerHelper<T>
                     outputSize: numNodes * residualChannels,
                     activationFunction: new ReLUActivation<T>());
 
-                yield return new LayerNormalizationLayer<T>(numNodes * residualChannels);
+                yield return new LayerNormalizationLayer<T>();
 
                 // Skip connection projection
                 yield return new DenseLayer<T>(
@@ -16244,7 +16244,7 @@ public static class LayerHelper<T>
         // === Layer Normalization ===
         // Normalizes embeddings before transformer layers
         yield return new LayerNormalizationLayer<T>(
-            featureSize: hiddenDimension);
+            );
 
         // === Dropout ===
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
@@ -16261,7 +16261,7 @@ public static class LayerHelper<T>
 
             // Add & Norm after attention
             yield return new LayerNormalizationLayer<T>(
-                featureSize: hiddenDimension);
+                );
 
             // Feed-forward network
             yield return new DenseLayer<T>(
@@ -16279,7 +16279,7 @@ public static class LayerHelper<T>
 
             // Add & Norm after feed-forward
             yield return new LayerNormalizationLayer<T>(
-                featureSize: hiddenDimension);
+                );
         }
 
         // === Pooler ===
@@ -16364,7 +16364,7 @@ public static class LayerHelper<T>
         // === Layer Normalization ===
         // Normalizes embeddings before transformer layers
         yield return new LayerNormalizationLayer<T>(
-            featureSize: hiddenDimension);
+            );
 
         // === Dropout ===
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
@@ -16381,7 +16381,7 @@ public static class LayerHelper<T>
 
             // Add & Norm after attention
             yield return new LayerNormalizationLayer<T>(
-                featureSize: hiddenDimension);
+                );
 
             // Feed-forward network for regulatory language understanding
             yield return new DenseLayer<T>(
@@ -16399,7 +16399,7 @@ public static class LayerHelper<T>
 
             // Add & Norm after feed-forward
             yield return new LayerNormalizationLayer<T>(
-                featureSize: hiddenDimension);
+                );
         }
 
         // === Task-Specific Output Head ===
@@ -16510,7 +16510,7 @@ public static class LayerHelper<T>
 
         // === Layer Normalization ===
         yield return new LayerNormalizationLayer<T>(
-            featureSize: hiddenDimension);
+            );
 
         // === Dropout ===
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
@@ -16524,7 +16524,7 @@ public static class LayerHelper<T>
                 headCount: numAttentionHeads);
 
             yield return new LayerNormalizationLayer<T>(
-                featureSize: hiddenDimension);
+                );
 
             yield return new DenseLayer<T>(
                 inputSize: hiddenDimension,
@@ -16539,7 +16539,7 @@ public static class LayerHelper<T>
             yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
             yield return new LayerNormalizationLayer<T>(
-                featureSize: hiddenDimension);
+                );
         }
 
         // === Task-Specific Output Head ===
@@ -16608,7 +16608,7 @@ public static class LayerHelper<T>
 
         // === Layer Normalization ===
         yield return new LayerNormalizationLayer<T>(
-            featureSize: hiddenDimension);
+            );
 
         // === Dropout ===
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
@@ -16622,7 +16622,7 @@ public static class LayerHelper<T>
                 headCount: numAttentionHeads);
 
             yield return new LayerNormalizationLayer<T>(
-                featureSize: hiddenDimension);
+                );
 
             yield return new DenseLayer<T>(
                 inputSize: hiddenDimension,
@@ -16637,7 +16637,7 @@ public static class LayerHelper<T>
             yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
             yield return new LayerNormalizationLayer<T>(
-                featureSize: hiddenDimension);
+                );
         }
 
         // === Tone Classification Head ===
@@ -16686,15 +16686,15 @@ public static class LayerHelper<T>
         // GPT transformer blocks
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+            yield return new LayerNormalizationLayer<T>();
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDimension, numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDimension, intermediateDimension, (IActivationFunction<T>)new GELUActivation<T>());
             yield return new DenseLayer<T>(intermediateDimension, hiddenDimension, (IActivationFunction<T>?)null);
             yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
         }
 
-        yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Classification head
         yield return new DenseLayer<T>(hiddenDimension, numClasses, (IActivationFunction<T>?)null);
@@ -16730,15 +16730,15 @@ public static class LayerHelper<T>
         // Transformer blocks
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+            yield return new LayerNormalizationLayer<T>();
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDimension, numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDimension, intermediateDimension, (IActivationFunction<T>)new GELUActivation<T>());
             yield return new DenseLayer<T>(intermediateDimension, hiddenDimension, (IActivationFunction<T>?)null);
             yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
         }
 
-        yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Classification head
         yield return new DenseLayer<T>(hiddenDimension, numClasses, (IActivationFunction<T>?)null);
@@ -16769,18 +16769,18 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
         yield return new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension);
 
-        yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
         // Shared transformer backbone
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDimension, numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDimension, intermediateDimension, (IActivationFunction<T>)new GELUActivation<T>());
             yield return new DenseLayer<T>(intermediateDimension, hiddenDimension, (IActivationFunction<T>?)null);
             yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Multi-agent classification head (primary output)
@@ -16814,18 +16814,18 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
         yield return new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension);
 
-        yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
         // Transformer blocks
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDimension, numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDimension, intermediateDimension, (IActivationFunction<T>)new GELUActivation<T>());
             yield return new DenseLayer<T>(intermediateDimension, hiddenDimension, (IActivationFunction<T>?)null);
             yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Investment recommendation head
@@ -16866,17 +16866,17 @@ public static class LayerHelper<T>
     {
         // Feature encoder
         yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
         // Hidden layer
         yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
         // Factor extractor
         yield return new DenseLayer<T>(hiddenDimension, numFactors, (IActivationFunction<T>)new TanhActivation<T>());
-        yield return new BatchNormalizationLayer<T>(numFactors);
+        yield return new BatchNormalizationLayer<T>();
 
         // Alpha predictor
         yield return new DenseLayer<T>(numFactors, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
@@ -16910,11 +16910,11 @@ public static class LayerHelper<T>
     {
         // Encoder
         yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
         yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new BatchNormalizationLayer<T>();
 
         // Latent space (mean and log-variance)
         yield return new DenseLayer<T>(hiddenDimension, latentDimension * 2, (IActivationFunction<T>?)null);
@@ -16925,7 +16925,7 @@ public static class LayerHelper<T>
 
         // Decoder
         yield return new DenseLayer<T>(latentDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new BatchNormalizationLayer<T>();
 
         yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new DenseLayer<T>(hiddenDimension, numFeatures, (IActivationFunction<T>?)null);
@@ -16964,7 +16964,7 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
 
         // Positional encoding is handled inside transformer, add layer norm
-        yield return new LayerNormalizationLayer<T>(hiddenDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
@@ -16974,13 +16974,13 @@ public static class LayerHelper<T>
                 sequenceLength: sequenceLength,
                 embeddingDimension: hiddenDimension,
                 headCount: headCount);
-            yield return new LayerNormalizationLayer<T>(hiddenDimension);
+            yield return new LayerNormalizationLayer<T>();
 
             // Feed-forward network
             yield return new DenseLayer<T>(hiddenDimension, hiddenDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
             yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
             yield return new DenseLayer<T>(hiddenDimension * 4, hiddenDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>(hiddenDimension);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Factor extraction head
@@ -17017,11 +17017,11 @@ public static class LayerHelper<T>
 
         // Dense layers for risk estimation
         yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
         yield return new DenseLayer<T>(hiddenDimension, hiddenDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>(hiddenDimension / 2);
+        yield return new BatchNormalizationLayer<T>();
 
         // Output layer for VaR estimate
         yield return new DenseLayer<T>(hiddenDimension / 2, 1, (IActivationFunction<T>?)null);
@@ -17048,7 +17048,7 @@ public static class LayerHelper<T>
 
         // Dense layers
         yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
         yield return new DenseLayer<T>(hiddenDimension, hiddenDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
@@ -17070,13 +17070,13 @@ public static class LayerHelper<T>
     {
         // Feature transformer (shared)
         yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new BatchNormalizationLayer<T>();
 
         // Decision steps
         for (int i = 0; i < numSteps; i++)
         {
             yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-            yield return new BatchNormalizationLayer<T>(hiddenDimension);
+            yield return new BatchNormalizationLayer<T>();
             yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
         }
 
@@ -17099,7 +17099,7 @@ public static class LayerHelper<T>
     {
         // Input embedding
         yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>(hiddenDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Transformer layers with inter-sample attention
         for (int i = 0; i < numLayers; i++)
@@ -17108,12 +17108,12 @@ public static class LayerHelper<T>
                 sequenceLength: sequenceLength,
                 embeddingDimension: hiddenDimension,
                 headCount: numHeads);
-            yield return new LayerNormalizationLayer<T>(hiddenDimension);
+            yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(hiddenDimension, hiddenDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
             yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
             yield return new DenseLayer<T>(hiddenDimension * 4, hiddenDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>(hiddenDimension);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Classification head
@@ -17136,7 +17136,7 @@ public static class LayerHelper<T>
     {
         // Column embedding
         yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>(hiddenDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Transformer encoder for categorical columns
         for (int i = 0; i < numLayers; i++)
@@ -17145,12 +17145,12 @@ public static class LayerHelper<T>
                 sequenceLength: sequenceLength,
                 embeddingDimension: hiddenDimension,
                 headCount: numHeads);
-            yield return new LayerNormalizationLayer<T>(hiddenDimension);
+            yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(hiddenDimension, hiddenDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
             yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
             yield return new DenseLayer<T>(hiddenDimension * 4, hiddenDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>(hiddenDimension);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // MLP head
@@ -17219,7 +17219,7 @@ public static class LayerHelper<T>
 
             if (useBatchNorm)
             {
-                yield return new BatchNormalizationLayer<T>(gatingHiddenDim);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             if (dropoutRate > 0)
@@ -17284,7 +17284,7 @@ public static class LayerHelper<T>
         // Optional input batch normalization
         if (useBatchNorm)
         {
-            yield return new BatchNormalizationLayer<T>(numFeatures);
+            yield return new BatchNormalizationLayer<T>();
         }
 
         // Feature preprocessing layer
@@ -17292,7 +17292,7 @@ public static class LayerHelper<T>
 
         if (useBatchNorm)
         {
-            yield return new BatchNormalizationLayer<T>(numFeatures * 2);
+            yield return new BatchNormalizationLayer<T>();
         }
 
         // Soft tree ensemble (using SoftTreeLayer)
@@ -17333,7 +17333,7 @@ public static class LayerHelper<T>
     {
         // Feature embedding layer
         yield return new DenseLayer<T>(numFeatures, numFeatures * embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>(numFeatures * embeddingDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Multi-head self-attention layers for feature interactions
         for (int i = 0; i < numLayers; i++)
@@ -17342,7 +17342,7 @@ public static class LayerHelper<T>
                 sequenceLength: numFeatures,
                 embeddingDimension: embeddingDimension,
                 headCount: numHeads);
-            yield return new LayerNormalizationLayer<T>(numFeatures * embeddingDimension);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -17378,7 +17378,7 @@ public static class LayerHelper<T>
     {
         // Feature embedding
         yield return new DenseLayer<T>(numFeatures, embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>(embeddingDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Mamba-style layers (approximated with dense + gating)
         for (int i = 0; i < numLayers; i++)
@@ -17391,7 +17391,7 @@ public static class LayerHelper<T>
 
             // Contract back
             yield return new DenseLayer<T>(embeddingDimension * 2, embeddingDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>(embeddingDimension);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -17427,7 +17427,7 @@ public static class LayerHelper<T>
     {
         // Input projection
         yield return new DenseLayer<T>(numFeatures, embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>(embeddingDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
@@ -17436,12 +17436,12 @@ public static class LayerHelper<T>
                 sequenceLength: 1,
                 embeddingDimension: embeddingDimension,
                 headCount: numHeads);
-            yield return new LayerNormalizationLayer<T>(embeddingDimension);
+            yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(embeddingDimension, embeddingDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
             yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
             yield return new DenseLayer<T>(embeddingDimension * 4, embeddingDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>(embeddingDimension);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Output head
@@ -17471,7 +17471,7 @@ public static class LayerHelper<T>
     {
         // Input projection
         yield return new DenseLayer<T>(numFeatures, embeddingDimension, (IActivationFunction<T>)new GELUActivation<T>());
-        yield return new LayerNormalizationLayer<T>(embeddingDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Deep transformer encoder (TabPFN uses many layers)
         for (int i = 0; i < numLayers; i++)
@@ -17480,7 +17480,7 @@ public static class LayerHelper<T>
                 sequenceLength: 1,
                 embeddingDimension: embeddingDimension,
                 headCount: numHeads);
-            yield return new LayerNormalizationLayer<T>(embeddingDimension);
+            yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(embeddingDimension, embeddingDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
             if (dropoutRate > 0)
@@ -17488,7 +17488,7 @@ public static class LayerHelper<T>
                 yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
             }
             yield return new DenseLayer<T>(embeddingDimension * 4, embeddingDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>(embeddingDimension);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Output head
@@ -17520,7 +17520,7 @@ public static class LayerHelper<T>
         foreach (int hiddenDim in hiddenDimensions)
         {
             yield return new DenseLayer<T>(prevDim, hiddenDim, (IActivationFunction<T>)new ReLUActivation<T>());
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0)
             {
                 yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
@@ -17554,7 +17554,7 @@ public static class LayerHelper<T>
     {
         // Feature tokenization (embedding each feature)
         yield return new DenseLayer<T>(numFeatures, embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>(embeddingDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
@@ -17563,13 +17563,13 @@ public static class LayerHelper<T>
                 sequenceLength: 1,
                 embeddingDimension: embeddingDimension,
                 headCount: numHeads);
-            yield return new LayerNormalizationLayer<T>(embeddingDimension);
+            yield return new LayerNormalizationLayer<T>();
 
             // ReGLU-style feed-forward (using GELU approximation)
             yield return new DenseLayer<T>(embeddingDimension, embeddingDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
             yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
             yield return new DenseLayer<T>(embeddingDimension * 4, embeddingDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>(embeddingDimension);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // CLS token aggregation and classification head
@@ -17602,7 +17602,7 @@ public static class LayerHelper<T>
         {
             int nextDim = i == 0 ? embeddingDimension : embeddingDimension;
             yield return new DenseLayer<T>(prevDim, nextDim, (IActivationFunction<T>)new ReLUActivation<T>());
-            yield return new LayerNormalizationLayer<T>(nextDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0)
             {
                 yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
@@ -17612,7 +17612,7 @@ public static class LayerHelper<T>
 
         // Context encoding (simplified - full implementation would include retrieval)
         yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>(embeddingDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Classification head
         yield return new DenseLayer<T>(embeddingDimension, embeddingDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
@@ -17631,11 +17631,11 @@ public static class LayerHelper<T>
     {
         // Scenario encoder
         yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
         yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
         // Impact predictor
@@ -17659,11 +17659,11 @@ public static class LayerHelper<T>
     {
         // Feature encoder
         yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
         yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
         // Portfolio weights output with softmax for valid allocation
@@ -17682,10 +17682,10 @@ public static class LayerHelper<T>
     {
         // Covariance estimation network
         yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new BatchNormalizationLayer<T>();
 
         yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new BatchNormalizationLayer<T>();
 
         // Weight prediction
         yield return new DenseLayer<T>(hiddenDimension, numAssets, (IActivationFunction<T>)new SoftmaxActivation<T>());
@@ -17705,19 +17705,19 @@ public static class LayerHelper<T>
     {
         // Input embedding
         yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>(hiddenDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Attention for cross-asset relationships
         yield return new MultiHeadAttentionLayer<T>(
             sequenceLength: sequenceLength,
             embeddingDimension: hiddenDimension,
             headCount: numHeads);
-        yield return new LayerNormalizationLayer<T>(hiddenDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         yield return new DenseLayer<T>(hiddenDimension, hiddenDimension * 2, (IActivationFunction<T>)new GELUActivation<T>());
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
         yield return new DenseLayer<T>(hiddenDimension * 2, hiddenDimension, (IActivationFunction<T>?)null);
-        yield return new LayerNormalizationLayer<T>(hiddenDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // Allocation output
         yield return new DenseLayer<T>(hiddenDimension, numAssets, (IActivationFunction<T>)new SoftmaxActivation<T>());
@@ -17735,11 +17735,11 @@ public static class LayerHelper<T>
     {
         // View generator network
         yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
         yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new BatchNormalizationLayer<T>();
 
         // Output: expected returns and confidence
         yield return new DenseLayer<T>(hiddenDimension, numAssets * 2, (IActivationFunction<T>?)null);
@@ -17793,7 +17793,7 @@ public static class LayerHelper<T>
 
         // Input projection
         yield return new DenseLayer<T>(inputSize, hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>(hiddenSize);
+        yield return new LayerNormalizationLayer<T>();
 
         // Transformer encoder for temporal patterns
         for (int i = 0; i < layers; i++)
@@ -17802,7 +17802,7 @@ public static class LayerHelper<T>
                 sequenceLength: sequenceLength,
                 embeddingDimension: hiddenSize,
                 headCount: numHeads);
-            yield return new LayerNormalizationLayer<T>(hiddenSize);
+            yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(hiddenSize, hiddenSize * 4, (IActivationFunction<T>)new GELUActivation<T>());
             yield return new DenseLayer<T>(hiddenSize * 4, hiddenSize, (IActivationFunction<T>?)null);
@@ -18106,7 +18106,7 @@ public static class LayerHelper<T>
 
             if (useBatchNorm)
             {
-                yield return new BatchNormalizationLayer<T>(hiddenDims[i]);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             if (dropoutRate > 0)
@@ -18522,7 +18522,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numTransformerLayers; i++)
         {
             yield return new SelfAttentionLayer<T>(maxSeqLen, embeddingDim, numHeads, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
             {
@@ -18531,7 +18531,7 @@ public static class LayerHelper<T>
 
             yield return new DenseLayer<T>(embeddingDim, ffnDim, (IActivationFunction<T>)new GELUActivation<T>());
             yield return new DenseLayer<T>(ffnDim, embeddingDim, (IActivationFunction<T>)new IdentityActivation<T>());
-            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Output projection to vocabulary
@@ -18598,7 +18598,7 @@ public static class LayerHelper<T>
         {
             int layerInput = i == encoderDims.Length - 1 ? latentDim : encoderDims[i + 1];
             yield return new FullyConnectedLayer<T>(layerInput, encoderDims[i], identity);
-            yield return new BatchNormalizationLayer<T>(encoderDims[i]);
+            yield return new BatchNormalizationLayer<T>();
         }
 
         // Decoder output
@@ -19421,18 +19421,18 @@ public static class LayerHelper<T>
 
         // Initial TDNN layer: mel features -> channels
         yield return new DenseLayer<T>(numMels, channels, reluActivation);
-        yield return new BatchNormalizationLayer<T>(channels);
+        yield return new BatchNormalizationLayer<T>();
 
         // SE-Res2Net TDNN blocks with increasing dilation
         for (int i = 0; i < numBlocks; i++)
         {
             // Bottleneck down
             yield return new DenseLayer<T>(channels, channels, reluActivation);
-            yield return new BatchNormalizationLayer<T>(channels);
+            yield return new BatchNormalizationLayer<T>();
 
             // Res2Net-style multi-scale processing (simplified as dense layers)
             yield return new DenseLayer<T>(channels, channels, reluActivation);
-            yield return new BatchNormalizationLayer<T>(channels);
+            yield return new BatchNormalizationLayer<T>();
 
             // SE block: squeeze -> excite
             yield return new DenseLayer<T>(channels, seBottleneckDim, reluActivation);
@@ -19443,7 +19443,7 @@ public static class LayerHelper<T>
 
         // Multi-layer feature aggregation (MFA): concat all block outputs
         yield return new DenseLayer<T>(channels, poolingDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(poolingDim);
+        yield return new BatchNormalizationLayer<T>();
 
         // Attentive statistics pooling (simplified)
         yield return new DenseLayer<T>(poolingDim, poolingDim, (IActivationFunction<T>)new TanhActivation<T>());
@@ -19451,7 +19451,7 @@ public static class LayerHelper<T>
 
         // Final embedding projection
         yield return new DenseLayer<T>(poolingDim, embeddingDim, identityActivation);
-        yield return new BatchNormalizationLayer<T>(embeddingDim);
+        yield return new BatchNormalizationLayer<T>();
     }
 
     /// <summary>
@@ -19490,14 +19490,14 @@ public static class LayerHelper<T>
 
         // Prolog: mel features -> encoder dimension
         yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>();
 
         // Body: depth-wise separable conv blocks with SE (simplified as dense + SE)
         for (int i = 0; i < numBlocks; i++)
         {
             // Depth-wise separable convolution (simplified as dense)
             yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
-            yield return new BatchNormalizationLayer<T>(encoderDim);
+            yield return new BatchNormalizationLayer<T>();
 
             // SE block
             int seDim = encoderDim / 8;
@@ -19509,7 +19509,7 @@ public static class LayerHelper<T>
 
         // Epilog: final projection
         yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>();
 
         // Attentive statistics pooling
         yield return new DenseLayer<T>(encoderDim, attentivePoolingDim, (IActivationFunction<T>)new TanhActivation<T>());
@@ -19517,7 +19517,7 @@ public static class LayerHelper<T>
 
         // Embedding projection
         yield return new DenseLayer<T>(encoderDim, embeddingDim, identityActivation);
-        yield return new BatchNormalizationLayer<T>(embeddingDim);
+        yield return new BatchNormalizationLayer<T>();
     }
 
     /// <summary>
@@ -19554,9 +19554,9 @@ public static class LayerHelper<T>
 
         // SincNet-style front-end (simplified as dense layers)
         yield return new DenseLayer<T>(numMels, 60, reluActivation);
-        yield return new BatchNormalizationLayer<T>(60);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DenseLayer<T>(60, 60, reluActivation);
-        yield return new BatchNormalizationLayer<T>(60);
+        yield return new BatchNormalizationLayer<T>();
 
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
@@ -19567,7 +19567,7 @@ public static class LayerHelper<T>
             // Bidirectional LSTM (simplified as dense with double hidden for bidirectional)
             int biDirDim = lstmHiddenSize * 2;
             yield return new DenseLayer<T>(prevDim, biDirDim, (IActivationFunction<T>)new TanhActivation<T>());
-            yield return new LayerNormalizationLayer<T>(biDirDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             prevDim = biDirDim;
         }
@@ -19603,7 +19603,7 @@ public static class LayerHelper<T>
 
         // Feature projection
         yield return new DenseLayer<T>(numMels, transformerDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(transformerDim);
+        yield return new LayerNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         // Transformer encoder
@@ -19613,10 +19613,10 @@ public static class LayerHelper<T>
                 sequenceLength: 500,
                 embeddingDimension: transformerDim,
                 headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(transformerDim, feedForwardDim, geluActivation);
             yield return new DenseLayer<T>(feedForwardDim, transformerDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -19645,9 +19645,9 @@ public static class LayerHelper<T>
 
         // CNN feature encoder (simplified as dense)
         yield return new DenseLayer<T>(numMels, 512, geluActivation);
-        yield return new LayerNormalizationLayer<T>(512);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(512, transformerDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(transformerDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Transformer encoder
         for (int i = 0; i < numTransformerLayers; i++)
@@ -19656,10 +19656,10 @@ public static class LayerHelper<T>
                 sequenceLength: 500,
                 embeddingDimension: transformerDim,
                 headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(transformerDim, feedForwardDim, geluActivation);
             yield return new DenseLayer<T>(feedForwardDim, transformerDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -19708,7 +19708,7 @@ public static class LayerHelper<T>
         {
             int filters = filterMultipliers[i] * capacityMultiplier;
             yield return new DenseLayer<T>(prevDim, filters, reluActivation);
-            yield return new BatchNormalizationLayer<T>(filters);
+            yield return new BatchNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             prevDim = filters;
         }
@@ -19752,7 +19752,7 @@ public static class LayerHelper<T>
         {
             int filters = encoderFilters * (1 << Math.Min(i, 3)); // 32, 64, 128, 256, 256, 256
             yield return new DenseLayer<T>(prevDim, filters, reluActivation);
-            yield return new BatchNormalizationLayer<T>(filters);
+            yield return new BatchNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             prevDim = filters;
         }
@@ -19760,7 +19760,7 @@ public static class LayerHelper<T>
         // Shared intermediate representation
         int sharedDim = prevDim;
         yield return new DenseLayer<T>(sharedDim, 256, reluActivation);
-        yield return new BatchNormalizationLayer<T>(256);
+        yield return new BatchNormalizationLayer<T>();
 
         // Combined output: note + onset + contour heads concatenated
         // note: 88 + onset: 88 + contour: 88 = 264
@@ -19801,9 +19801,9 @@ public static class LayerHelper<T>
 
         // CNN acoustic model
         yield return new DenseLayer<T>(numMels, 256, reluActivation);
-        yield return new BatchNormalizationLayer<T>(256);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DenseLayer<T>(256, acousticDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(acousticDim);
+        yield return new BatchNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         // Onset stack: LSTM layers for onset detection
@@ -19812,14 +19812,14 @@ public static class LayerHelper<T>
         {
             int biDirDim = lstmHiddenSize * 2;
             yield return new DenseLayer<T>(prevDim, biDirDim, (IActivationFunction<T>)new TanhActivation<T>());
-            yield return new LayerNormalizationLayer<T>(biDirDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             prevDim = biDirDim;
         }
 
         // Frame stack: uses onset output + acoustic features
         yield return new DenseLayer<T>(prevDim + numMidiNotes, lstmHiddenSize * 2, (IActivationFunction<T>)new TanhActivation<T>());
-        yield return new LayerNormalizationLayer<T>(lstmHiddenSize * 2);
+        yield return new LayerNormalizationLayer<T>();
 
         // Combined onset + frame output: 88 + 88 = 176
         yield return new DenseLayer<T>(lstmHiddenSize * 2, numMidiNotes * 2, identityActivation);
@@ -19863,7 +19863,7 @@ public static class LayerHelper<T>
         {
             int filters = baseFilters * (1 << i); // 32, 64, 128, 256
             yield return new DenseLayer<T>(prevDim, filters, reluActivation);
-            yield return new BatchNormalizationLayer<T>(filters);
+            yield return new BatchNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             prevDim = filters;
         }
@@ -19891,7 +19891,7 @@ public static class LayerHelper<T>
         foreach (int ch in encoderChannels)
         {
             yield return new DenseLayer<T>(prevDim, ch, reluActivation);
-            yield return new BatchNormalizationLayer<T>(ch);
+            yield return new BatchNormalizationLayer<T>();
             yield return new DenseLayer<T>(ch, ch, reluActivation);
             yield return new DenseLayer<T>(ch, ch, identityActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
@@ -19907,7 +19907,7 @@ public static class LayerHelper<T>
         {
             int ch = encoderChannels[i];
             yield return new DenseLayer<T>(prevDim, ch, reluActivation);
-            yield return new BatchNormalizationLayer<T>(ch);
+            yield return new BatchNormalizationLayer<T>();
             yield return new DenseLayer<T>(ch, ch, reluActivation);
             yield return new DenseLayer<T>(ch, ch, identityActivation);
             prevDim = ch;
@@ -19931,7 +19931,7 @@ public static class LayerHelper<T>
         foreach (int ch in encoderChannels)
         {
             yield return new DenseLayer<T>(prevDim, ch, reluActivation);
-            yield return new BatchNormalizationLayer<T>(ch);
+            yield return new BatchNormalizationLayer<T>();
             for (int r = 0; r < numResBlocks; r++)
             {
                 yield return new DenseLayer<T>(ch, ch, reluActivation);
@@ -19949,7 +19949,7 @@ public static class LayerHelper<T>
         {
             int ch = encoderChannels[i];
             yield return new DenseLayer<T>(prevDim, ch, reluActivation);
-            yield return new BatchNormalizationLayer<T>(ch);
+            yield return new BatchNormalizationLayer<T>();
             for (int r = 0; r < numResBlocks; r++)
             {
                 yield return new DenseLayer<T>(ch, ch, reluActivation);
@@ -19996,7 +19996,7 @@ public static class LayerHelper<T>
         foreach (int ch in cnnChannels)
         {
             yield return new DenseLayer<T>(prevDim, ch, geluActivation);
-            yield return new BatchNormalizationLayer<T>(ch);
+            yield return new BatchNormalizationLayer<T>();
             prevDim = ch;
         }
 
@@ -20005,7 +20005,7 @@ public static class LayerHelper<T>
         if (featureEncoderDim != hiddenDim)
         {
             yield return new DenseLayer<T>(featureEncoderDim, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
@@ -20020,14 +20020,14 @@ public static class LayerHelper<T>
                 embeddingDimension: hiddenDim,
                 headCount: numAttentionHeads);
 
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Position-wise feed-forward network
             yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
 
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
@@ -20059,9 +20059,9 @@ public static class LayerHelper<T>
         // --- Conv Subsampling (stride 4) ---
         // Two conv layers with stride 2 each reduce frame rate 4x.
         yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>();
 
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
@@ -20073,32 +20073,32 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(encoderDim, ffDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(ffDim, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Multi-head self-attention module
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: maxSequenceLength,
                 embeddingDimension: encoderDim,
                 headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Convolution module (approximated with dense layers)
             yield return new DenseLayer<T>(encoderDim, encoderDim * 2, geluActivation);
-            yield return new BatchNormalizationLayer<T>(encoderDim * 2);
+            yield return new BatchNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim * 2, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Second feed-forward module (half-step)
             yield return new DenseLayer<T>(encoderDim, ffDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(ffDim, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // --- CTC Output Head ---
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(encoderDim, vocabSize, identityActivation);
     }
 
@@ -20121,7 +20121,7 @@ public static class LayerHelper<T>
 
         // --- Input Projection ---
         yield return new DenseLayer<T>(numMels, encoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         // --- Transformer Encoder ---
@@ -20131,18 +20131,18 @@ public static class LayerHelper<T>
                 sequenceLength: maxSequenceLength,
                 embeddingDimension: encoderDim,
                 headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(encoderDim, feedForwardDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(feedForwardDim, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // --- CTC Output Head ---
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(encoderDim, vocabSize, identityActivation);
     }
 
@@ -20170,7 +20170,7 @@ public static class LayerHelper<T>
 
         // --- Text Encoder (Transformer) ---
         yield return new DenseLayer<T>(256, textEncoderDim, geluActivation); // char embedding projection
-        yield return new LayerNormalizationLayer<T>(textEncoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numTextEncoderLayers; i++)
         {
@@ -20178,18 +20178,18 @@ public static class LayerHelper<T>
                 sequenceLength: maxSequenceLength,
                 embeddingDimension: textEncoderDim,
                 headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(textEncoderDim, ffDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(ffDim, textEncoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // --- Style Predictor ---
         yield return new DenseLayer<T>(textEncoderDim, prosodyDim, geluActivation);
         yield return new DenseLayer<T>(prosodyDim, styleDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>(styleDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // --- Decoder (mel-spectrogram generation) ---
         yield return new DenseLayer<T>(textEncoderDim + styleDim, prosodyDim, geluActivation);
@@ -20261,18 +20261,18 @@ public static class LayerHelper<T>
 
         // Input projection (complex spectrogram: 2x freq bins for real+imag)
         yield return new DenseLayer<T>(numFreqBins * 2, hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Dual-path Transformer blocks
         for (int i = 0; i < numLayers; i++)
         {
             // Magnitude path
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Cross-domain fusion
             yield return new DenseLayer<T>(hiddenDim, hiddenDim, geluActivation);
@@ -20299,7 +20299,7 @@ public static class LayerHelper<T>
         for (int s = 0; s < numStages; s++)
         {
             yield return new DenseLayer<T>(prevCh, ch, reluActivation);
-            yield return new BatchNormalizationLayer<T>(ch);
+            yield return new BatchNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             prevCh = ch;
             ch = Math.Min(ch * 2, 512);
@@ -20316,7 +20316,7 @@ public static class LayerHelper<T>
             int outCh = s > 0 ? encoderChannels * (int)Math.Pow(2, s - 1) : numFreqBins;
             if (outCh > 512) outCh = 512;
             yield return new DenseLayer<T>(prevCh, outCh, reluActivation);
-            yield return new BatchNormalizationLayer<T>(outCh);
+            yield return new BatchNormalizationLayer<T>();
             prevCh = outCh;
         }
 
@@ -20338,19 +20338,19 @@ public static class LayerHelper<T>
         // Band split: project freq bins into band features
         int binsPerBand = (numFreqBins + numBands - 1) / numBands;
         yield return new DenseLayer<T>(numFreqBins, numBands * bandRnnHiddenSize, reluActivation);
-        yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+        yield return new LayerNormalizationLayer<T>();
 
         // Band-wise RNN processing (approximated with dense layers)
         for (int layer = 0; layer < numRnnLayers; layer++)
         {
             // Intra-band processing
             yield return new DenseLayer<T>(numBands * bandRnnHiddenSize, numBands * bandRnnHiddenSize, reluActivation);
-            yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+            yield return new LayerNormalizationLayer<T>();
 
             // Inter-band fusion
             yield return new DenseLayer<T>(numBands * bandRnnHiddenSize, fusionDim, reluActivation);
             yield return new DenseLayer<T>(fusionDim, numBands * bandRnnHiddenSize, identityActivation);
-            yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
@@ -20373,21 +20373,21 @@ public static class LayerHelper<T>
 
         // Input projection: freq bins -> compression dim
         yield return new DenseLayer<T>(numFreqBins, compressionDim, reluActivation);
-        yield return new LayerNormalizationLayer<T>(compressionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Sparse compression: reduce to clusters
         yield return new DenseLayer<T>(compressionDim, numClusters, reluActivation);
-        yield return new LayerNormalizationLayer<T>(numClusters);
+        yield return new LayerNormalizationLayer<T>();
 
         // Encoder: attention blocks on compressed representation
         for (int i = 0; i < numEncoderBlocks; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: numClusters, embeddingDimension: attentionDim, headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(attentionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(attentionDim, feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(feedForwardDim, attentionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(attentionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -20396,10 +20396,10 @@ public static class LayerHelper<T>
         {
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: numClusters, embeddingDimension: attentionDim, headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(attentionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(attentionDim, feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(feedForwardDim, attentionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(attentionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -20421,13 +20421,13 @@ public static class LayerHelper<T>
 
         // Band split: project freq bins into per-band embeddings
         yield return new DenseLayer<T>(numFreqBins, numBands * bandRnnHiddenSize, reluActivation);
-        yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+        yield return new LayerNormalizationLayer<T>();
 
         // Band-level RNN layers: process each band independently
         for (int i = 0; i < numBandRnnLayers; i++)
         {
             yield return new FullyConnectedLayer<T>(numBands * bandRnnHiddenSize, numBands * bandRnnHiddenSize, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -20437,7 +20437,7 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(numBands * bandRnnHiddenSize, fusionDim, reluActivation);
             yield return new DenseLayer<T>(fusionDim, sequenceRnnHiddenSize, reluActivation);
             yield return new DenseLayer<T>(sequenceRnnHiddenSize, numBands * bandRnnHiddenSize, identityActivation);
-            yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -20458,23 +20458,23 @@ public static class LayerHelper<T>
 
         // Feature encoder: CNN layers for raw waveform
         yield return new DenseLayer<T>(featureEncoderDim, hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
             yield return new DenseLayer<T>(feedForwardDim, hiddenDim, (IActivationFunction<T>)new IdentityActivation<T>());
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Speaker embedding head: statistics pooling + projection
         yield return new DenseLayer<T>(hiddenDim * 2, embeddingDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(embeddingDim);
+        yield return new BatchNormalizationLayer<T>();
     }
 
     /// <summary>
@@ -20490,7 +20490,7 @@ public static class LayerHelper<T>
 
         // Input projection
         yield return new DenseLayer<T>(numMels, initialChannels, reluActivation);
-        yield return new BatchNormalizationLayer<T>(initialChannels);
+        yield return new BatchNormalizationLayer<T>();
 
         // D-TDNN blocks with dense connections
         int currentDim = initialChannels;
@@ -20498,11 +20498,11 @@ public static class LayerHelper<T>
         {
             // Bottleneck
             yield return new DenseLayer<T>(currentDim, bottleneckDim, reluActivation);
-            yield return new BatchNormalizationLayer<T>(bottleneckDim);
+            yield return new BatchNormalizationLayer<T>();
 
             // TDNN layer
             yield return new DenseLayer<T>(bottleneckDim, growthRate, reluActivation);
-            yield return new BatchNormalizationLayer<T>(growthRate);
+            yield return new BatchNormalizationLayer<T>();
 
             currentDim += growthRate;
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
@@ -20514,9 +20514,9 @@ public static class LayerHelper<T>
 
         // Pooling and embedding projection
         yield return new DenseLayer<T>(currentDim * 2, poolingDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(poolingDim);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DenseLayer<T>(poolingDim, embeddingDim, identityActivation);
-        yield return new BatchNormalizationLayer<T>(embeddingDim);
+        yield return new BatchNormalizationLayer<T>();
     }
 
     /// <summary>
@@ -20533,19 +20533,19 @@ public static class LayerHelper<T>
 
         // Compact feature encoder
         yield return new DenseLayer<T>(numMels, featureEncoderDim, reluActivation);
-        yield return new LayerNormalizationLayer<T>(featureEncoderDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(featureEncoderDim, hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Small Transformer encoder
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
             yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -20566,17 +20566,17 @@ public static class LayerHelper<T>
 
         // Feature encoder
         yield return new DenseLayer<T>(featureEncoderDim, hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // WavLM Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
             yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -20603,17 +20603,17 @@ public static class LayerHelper<T>
 
         // Mel spectrogram projection
         yield return new DenseLayer<T>(numMels, encoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // T5-style encoder layers
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: encoderDim, embeddingDimension: encoderDim, headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, encoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(encoderDim * 4, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -20622,10 +20622,10 @@ public static class LayerHelper<T>
         {
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: decoderDim, embeddingDimension: decoderDim, headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderDim, decoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(decoderDim * 4, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -20646,13 +20646,13 @@ public static class LayerHelper<T>
 
         // Spectrogram feature projection
         yield return new DenseLayer<T>(numBands, rnnHiddenSize, reluActivation);
-        yield return new BatchNormalizationLayer<T>(rnnHiddenSize);
+        yield return new BatchNormalizationLayer<T>();
 
         // Bidirectional RNN stack (simulated as FC + LayerNorm)
         for (int i = 0; i < numRnnLayers; i++)
         {
             yield return new FullyConnectedLayer<T>(rnnHiddenSize, rnnHiddenSize * 2, reluActivation);
-            yield return new LayerNormalizationLayer<T>(rnnHiddenSize * 2);
+            yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(rnnHiddenSize * 2, rnnHiddenSize, reluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
@@ -20674,13 +20674,13 @@ public static class LayerHelper<T>
 
         // Spectrogram feature extraction
         yield return new DenseLayer<T>(fftSize, onsetHiddenDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(onsetHiddenDim);
+        yield return new BatchNormalizationLayer<T>();
 
         // Onset detection layers
         for (int i = 0; i < numOnsetLayers; i++)
         {
             yield return new FullyConnectedLayer<T>(onsetHiddenDim, onsetHiddenDim, reluActivation);
-            yield return new LayerNormalizationLayer<T>(onsetHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -20702,17 +20702,17 @@ public static class LayerHelper<T>
 
         // Mel projection
         yield return new DenseLayer<T>(numMels, hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Self-similarity Transformer encoder
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, hiddenDim * 4, geluActivation);
             yield return new DenseLayer<T>(hiddenDim * 4, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -20734,13 +20734,13 @@ public static class LayerHelper<T>
 
         // Mel feature projection
         yield return new DenseLayer<T>(numMels, hiddenDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(hiddenDim);
+        yield return new BatchNormalizationLayer<T>();
 
         // Encoder layers
         for (int i = 0; i < numLayers; i++)
         {
             yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * 2, reluActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim * 2);
+            yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(hiddenDim * 2, hiddenDim, reluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
@@ -20764,17 +20764,17 @@ public static class LayerHelper<T>
 
         // Mel feature projection
         yield return new DenseLayer<T>(numMels, hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
             yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -20800,7 +20800,7 @@ public static class LayerHelper<T>
 
         // Initial projection
         yield return new DenseLayer<T>(numMels, baseFilters * 2, reluActivation);
-        yield return new BatchNormalizationLayer<T>(baseFilters * 2);
+        yield return new BatchNormalizationLayer<T>();
 
         // Peak-enhanced convolutional encoder blocks
         int filters = baseFilters * 2;
@@ -20808,7 +20808,7 @@ public static class LayerHelper<T>
         {
             int nextFilters = Math.Min(filters * 2, 512);
             yield return new FullyConnectedLayer<T>(filters, nextFilters, reluActivation);
-            yield return new BatchNormalizationLayer<T>(nextFilters);
+            yield return new BatchNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             filters = nextFilters;
         }
@@ -20830,17 +20830,17 @@ public static class LayerHelper<T>
 
         // Node feature projection
         yield return new DenseLayer<T>(numMels, gnnHiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(gnnHiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Graph attention layers (simulated as attention + FC)
         for (int i = 0; i < numGnnLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: gnnHiddenDim, embeddingDimension: gnnHiddenDim, headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(gnnHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(gnnHiddenDim, gnnHiddenDim * 2, geluActivation);
             yield return new DenseLayer<T>(gnnHiddenDim * 2, gnnHiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(gnnHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -20862,7 +20862,7 @@ public static class LayerHelper<T>
 
         // Feature projection
         yield return new DenseLayer<T>(numMels, hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Conformer blocks: FFN + MHSA + Conv + FFN + LayerNorm
         for (int i = 0; i < numLayers; i++)
@@ -20870,22 +20870,22 @@ public static class LayerHelper<T>
             // First FFN (half-step)
             yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
             yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Multi-head self-attention
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Convolution module (simulated as FC + activation + FC)
             yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * 2, geluActivation);
             yield return new FullyConnectedLayer<T>(hiddenDim * 2, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Second FFN (half-step)
             yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
             yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
@@ -20911,13 +20911,13 @@ public static class LayerHelper<T>
 
         // Input projection
         yield return new FullyConnectedLayer<T>(frameSize, hiddenDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(hiddenDim);
+        yield return new BatchNormalizationLayer<T>();
 
         // Lightweight encoder layers
         for (int i = 0; i < numLayers; i++)
         {
             yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim, reluActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -20938,7 +20938,7 @@ public static class LayerHelper<T>
 
         // Initial conv (prologue)
         yield return new DenseLayer<T>(numMels, initialFilters, reluActivation);
-        yield return new BatchNormalizationLayer<T>(initialFilters);
+        yield return new BatchNormalizationLayer<T>();
 
         // Jasper-style separable conv blocks
         int filters = initialFilters;
@@ -20948,7 +20948,7 @@ public static class LayerHelper<T>
             {
                 // Depth-wise + point-wise (simulated as FC pairs)
                 yield return new FullyConnectedLayer<T>(filters, filters, reluActivation);
-                yield return new BatchNormalizationLayer<T>(filters);
+                yield return new BatchNormalizationLayer<T>();
                 if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             }
         }
@@ -20977,10 +20977,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numSemanticLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(semanticDim, semanticDim, numSemanticHeads);
-            yield return new LayerNormalizationLayer<T>(semanticDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(semanticDim, semanticDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(semanticDim * 4, semanticDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(semanticDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -21036,10 +21036,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(hiddenDim, hiddenDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(hiddenDim * 4, hiddenDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -21062,10 +21062,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numARLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(arHiddenDim, arHiddenDim, numARHeads);
-            yield return new LayerNormalizationLayer<T>(arHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(arHiddenDim, arHiddenDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(arHiddenDim * 4, arHiddenDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(arHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -21088,10 +21088,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numSemanticLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(semanticDim, semanticDim, numSemanticHeads);
-            yield return new LayerNormalizationLayer<T>(semanticDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(semanticDim, semanticDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(semanticDim * 4, semanticDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(semanticDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -21114,10 +21114,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numSemanticLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(semanticDim, semanticDim, numSemanticHeads);
-            yield return new LayerNormalizationLayer<T>(semanticDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(semanticDim, semanticDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(semanticDim * 4, semanticDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(semanticDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -21141,16 +21141,16 @@ public static class LayerHelper<T>
         for (int i = 0; i < numAudioEncoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(audioEncoderDim, audioEncoderDim, numAudioEncoderHeads);
-            yield return new LayerNormalizationLayer<T>(audioEncoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(audioEncoderDim, audioEncoderDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(audioEncoderDim * 4, audioEncoderDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(audioEncoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Perceiver adapter: project audio to LM space
         yield return new FullyConnectedLayer<T>(audioEncoderDim, lmHiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Output projection
         yield return new FullyConnectedLayer<T>(lmHiddenDim, lmHiddenDim, (IActivationFunction<T>?)null);
@@ -21166,26 +21166,26 @@ public static class LayerHelper<T>
 
         // Speech encoder projection (Whisper output -> common dim)
         yield return new FullyConnectedLayer<T>(speechEncoderDim, qFormerDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(qFormerDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Audio encoder projection (BEATs output -> common dim)
         yield return new FullyConnectedLayer<T>(audioEncoderDim, qFormerDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(qFormerDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Window-level Q-Former layers
         for (int i = 0; i < numQFormerLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(qFormerDim, qFormerDim, 12);
-            yield return new LayerNormalizationLayer<T>(qFormerDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(qFormerDim, qFormerDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(qFormerDim * 4, qFormerDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(qFormerDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Project Q-Former output to LM input space
         yield return new FullyConnectedLayer<T>(qFormerDim, lmHiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Output projection
         yield return new FullyConnectedLayer<T>(lmHiddenDim, lmHiddenDim, (IActivationFunction<T>?)null);
@@ -21205,16 +21205,16 @@ public static class LayerHelper<T>
 
         // Convolutional feature extractor (simplified)
         yield return new FullyConnectedLayer<T>(512, hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(hiddenDim, hiddenDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(hiddenDim, feedForwardDim, geluActivation);
             yield return new FullyConnectedLayer<T>(feedForwardDim, hiddenDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -21232,16 +21232,16 @@ public static class LayerHelper<T>
 
         // Convolutional feature extractor (tuned for music at 24kHz)
         yield return new FullyConnectedLayer<T>(512, hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Transformer encoder layers with music-aware attention
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(hiddenDim, hiddenDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(hiddenDim, feedForwardDim, geluActivation);
             yield return new FullyConnectedLayer<T>(feedForwardDim, hiddenDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -21265,16 +21265,16 @@ public static class LayerHelper<T>
 
         // Conv subsampling front-end (mel features -> encoder dim)
         yield return new FullyConnectedLayer<T>(numMels, encoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Conformer-style encoder layers
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numEncoderHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(encoderDim, encoderDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(encoderDim * 4, encoderDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -21283,7 +21283,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numPredictionLayers; i++)
         {
             yield return new FullyConnectedLayer<T>(predictionDim, predictionDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(predictionDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Joint network (combines encoder + predictor)
@@ -21302,7 +21302,7 @@ public static class LayerHelper<T>
 
         // Conv subsampling front-end
         yield return new FullyConnectedLayer<T>(numMels, encoderDims[0], geluActivation);
-        yield return new LayerNormalizationLayer<T>(encoderDims[0]);
+        yield return new LayerNormalizationLayer<T>();
 
         // U-Net encoder stacks (each at different temporal resolution)
         int prevDim = encoderDims[0];
@@ -21316,17 +21316,17 @@ public static class LayerHelper<T>
             if (dim != prevDim)
             {
                 yield return new FullyConnectedLayer<T>(prevDim, dim, geluActivation);
-                yield return new LayerNormalizationLayer<T>(dim);
+                yield return new LayerNormalizationLayer<T>();
             }
 
             // Conformer-style layers within each stack
             for (int i = 0; i < layers; i++)
             {
                 yield return new MultiHeadAttentionLayer<T>(dim, dim, heads);
-                yield return new LayerNormalizationLayer<T>(dim);
+                yield return new LayerNormalizationLayer<T>();
                 yield return new FullyConnectedLayer<T>(dim, dim * 4, geluActivation);
                 yield return new FullyConnectedLayer<T>(dim * 4, dim, geluActivation);
-                yield return new LayerNormalizationLayer<T>(dim);
+                yield return new LayerNormalizationLayer<T>();
                 if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             }
 
@@ -21349,9 +21349,9 @@ public static class LayerHelper<T>
 
         // 8x depthwise-separable convolution downsampling front-end
         yield return new FullyConnectedLayer<T>(numMels, encoderDim / 2, geluActivation);
-        yield return new LayerNormalizationLayer<T>(encoderDim / 2);
+        yield return new LayerNormalizationLayer<T>();
         yield return new FullyConnectedLayer<T>(encoderDim / 2, encoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Conformer encoder layers (macaron-style: FF / Attention / Conv / FF)
         for (int i = 0; i < numLayers; i++)
@@ -21359,16 +21359,16 @@ public static class LayerHelper<T>
             // First half-step feed-forward
             yield return new FullyConnectedLayer<T>(encoderDim, feedForwardDim, geluActivation);
             yield return new FullyConnectedLayer<T>(feedForwardDim, encoderDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Multi-head self-attention
             yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Second half-step feed-forward
             yield return new FullyConnectedLayer<T>(encoderDim, feedForwardDim, geluActivation);
             yield return new FullyConnectedLayer<T>(feedForwardDim, encoderDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
@@ -21392,14 +21392,14 @@ public static class LayerHelper<T>
 
         // Text encoder (transformer-based)
         yield return new FullyConnectedLayer<T>(numMels, textEncoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(textEncoderDim);
+        yield return new LayerNormalizationLayer<T>();
         for (int i = 0; i < numTextEncoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(textEncoderDim, textEncoderDim, numTextEncoderHeads);
-            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(textEncoderDim, textEncoderDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(textEncoderDim * 4, textEncoderDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -21412,9 +21412,9 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new FullyConnectedLayer<T>(decoderDim, decoderDim * 2, geluActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim * 2);
+            yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(decoderDim * 2, decoderDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Output projection to mel-spectrogram
@@ -21442,13 +21442,13 @@ public static class LayerHelper<T>
 
             // Transposed convolution approximated by FC upsample
             yield return new FullyConnectedLayer<T>(ch, nextCh, geluActivation);
-            yield return new LayerNormalizationLayer<T>(nextCh);
+            yield return new LayerNormalizationLayer<T>();
 
             // Multi-Receptive Field Fusion (MRF) blocks
             for (int b = 0; b < numResBlocks; b++)
             {
                 yield return new FullyConnectedLayer<T>(nextCh, nextCh, geluActivation);
-                yield return new LayerNormalizationLayer<T>(nextCh);
+                yield return new LayerNormalizationLayer<T>();
             }
 
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
@@ -21469,14 +21469,14 @@ public static class LayerHelper<T>
 
         // Input projection (mel or codec tokens to hidden)
         yield return new FullyConnectedLayer<T>(numMels, hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // ConvNeXt backbone blocks
         for (int i = 0; i < numBackboneBlocks; i++)
         {
             yield return new FullyConnectedLayer<T>(hiddenDim, intermediateDim, geluActivation);
             yield return new FullyConnectedLayer<T>(intermediateDim, hiddenDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -21502,13 +21502,13 @@ public static class LayerHelper<T>
 
         // Input projection from frequency bins to encoder dimension
         yield return new FullyConnectedLayer<T>(numFreqBins, encoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Encoder layers (spectral feature extraction)
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new FullyConnectedLayer<T>(encoderDim, encoderDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -21534,7 +21534,7 @@ public static class LayerHelper<T>
         {
             int outChannels = currentChannels * channelGrowth;
             yield return new FullyConnectedLayer<T>(currentChannels, outChannels, geluActivation);
-            yield return new LayerNormalizationLayer<T>(outChannels);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentChannels = outChannels;
         }
@@ -21543,7 +21543,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLSTMLayers; i++)
         {
             yield return new FullyConnectedLayer<T>(lstmHiddenSize, lstmHiddenSize, geluActivation);
-            yield return new LayerNormalizationLayer<T>(lstmHiddenSize);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Decoder: progressive upsampling with decreasing channels
@@ -21551,7 +21551,7 @@ public static class LayerHelper<T>
         {
             int outChannels = d > 0 ? hiddenChannels * (int)Math.Pow(channelGrowth, d) : hiddenChannels;
             yield return new FullyConnectedLayer<T>(currentChannels, outChannels, geluActivation);
-            yield return new LayerNormalizationLayer<T>(outChannels);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentChannels = outChannels;
         }
@@ -21573,14 +21573,14 @@ public static class LayerHelper<T>
 
         // Input projection
         yield return new FullyConnectedLayer<T>(1, hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Residual blocks for feature extraction
         for (int i = 0; i < numResBlocks; i++)
         {
             yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * 2, geluActivation);
             yield return new FullyConnectedLayer<T>(hiddenDim * 2, hiddenDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -21588,12 +21588,12 @@ public static class LayerHelper<T>
         for (int i = 0; i < numAttentionLayers; i++)
         {
             yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Upsample projection: expand output dimension by upsample factor
         yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * upsampleFactor, geluActivation);
-        yield return new LayerNormalizationLayer<T>(hiddenDim * upsampleFactor);
+        yield return new LayerNormalizationLayer<T>();
 
         // Output projection to waveform
         yield return new FullyConnectedLayer<T>(hiddenDim * upsampleFactor, upsampleFactor, (IActivationFunction<T>?)null);
@@ -21615,7 +21615,7 @@ public static class LayerHelper<T>
         foreach (int ch in encoderChannels)
         {
             yield return new FullyConnectedLayer<T>(currentDim, ch, geluActivation);
-            yield return new LayerNormalizationLayer<T>(ch);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentDim = ch;
         }
@@ -21630,7 +21630,7 @@ public static class LayerHelper<T>
         for (int i = encoderChannels.Length - 1; i >= 0; i--)
         {
             yield return new FullyConnectedLayer<T>(currentDim, encoderChannels[i], geluActivation);
-            yield return new LayerNormalizationLayer<T>(encoderChannels[i]);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentDim = encoderChannels[i];
         }
@@ -21660,7 +21660,7 @@ public static class LayerHelper<T>
         foreach (int ch in cnnChannels)
         {
             yield return new FullyConnectedLayer<T>(currentDim, ch, reluActivation);
-            yield return new BatchNormalizationLayer<T>(ch);
+            yield return new BatchNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentDim = ch;
         }
@@ -21671,7 +21671,7 @@ public static class LayerHelper<T>
         {
             int inputDim = i == 0 ? currentDim : rnnOutputDim;
             yield return new FullyConnectedLayer<T>(inputDim, rnnOutputDim, reluActivation);
-            yield return new LayerNormalizationLayer<T>(rnnOutputDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -21702,14 +21702,14 @@ public static class LayerHelper<T>
                 yield return new FullyConnectedLayer<T>(currentDim / numFrequencyGroups,
                     ch / numFrequencyGroups, reluActivation);
             }
-            yield return new BatchNormalizationLayer<T>(ch);
+            yield return new BatchNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentDim = ch;
         }
 
         // Embedding projection
         yield return new FullyConnectedLayer<T>(currentDim, embeddingDim, reluActivation);
-        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Bidirectional GRU layers
         int rnnOutputDim = rnnHiddenSize * 2;
@@ -21717,7 +21717,7 @@ public static class LayerHelper<T>
         {
             int inputDim = i == 0 ? embeddingDim : rnnOutputDim;
             yield return new FullyConnectedLayer<T>(inputDim, rnnOutputDim, reluActivation);
-            yield return new LayerNormalizationLayer<T>(rnnOutputDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -21743,7 +21743,7 @@ public static class LayerHelper<T>
         foreach (int ch in encoderChannels)
         {
             yield return new FullyConnectedLayer<T>(currentDim, ch, geluActivation);
-            yield return new LayerNormalizationLayer<T>(ch);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentDim = ch;
         }
@@ -21756,7 +21756,7 @@ public static class LayerHelper<T>
         {
             int inputDim = i == 0 ? currentDim : separationDim;
             yield return new FullyConnectedLayer<T>(inputDim, separationDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(separationDim);
+            yield return new LayerNormalizationLayer<T>();
             // Self-attention (simulated)
             yield return new FullyConnectedLayer<T>(separationDim, separationDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
@@ -21779,28 +21779,28 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         // Full-band encoder with self-attention for band interaction
         yield return new DenseLayer<T>(numFreqBins, fullBandHiddenSize, geluActivation);
-        yield return new LayerNormalizationLayer<T>(fullBandHiddenSize);
+        yield return new LayerNormalizationLayer<T>();
         for (int i = 1; i < fullBandLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: fullBandHiddenSize, headCount: 4);
-            yield return new LayerNormalizationLayer<T>(fullBandHiddenSize);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(fullBandHiddenSize, fullBandHiddenSize * 2, geluActivation);
             yield return new DenseLayer<T>(fullBandHiddenSize * 2, fullBandHiddenSize, identityActivation);
-            yield return new LayerNormalizationLayer<T>(fullBandHiddenSize);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
         // Sub-band processing with feed-forward blocks
         yield return new DenseLayer<T>(fullBandHiddenSize, subBandHiddenSize, geluActivation);
-        yield return new LayerNormalizationLayer<T>(subBandHiddenSize);
+        yield return new LayerNormalizationLayer<T>();
         for (int i = 1; i < subBandLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: subBandHiddenSize, headCount: 4);
-            yield return new LayerNormalizationLayer<T>(subBandHiddenSize);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(subBandHiddenSize, subBandHiddenSize * 2, geluActivation);
             yield return new DenseLayer<T>(subBandHiddenSize * 2, subBandHiddenSize, identityActivation);
-            yield return new LayerNormalizationLayer<T>(subBandHiddenSize);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
         // Mask output
@@ -21816,24 +21816,24 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         // Encoder projection
         yield return new DenseLayer<T>(numFreqBins, encoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
         // Dual-path blocks (intra-chunk + inter-chunk attention)
         for (int i = 0; i < numDualPathBlocks; i++)
         {
             // Intra-chunk (time) self-attention
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: encoderDim, headCount: numHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, encoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(encoderDim * 4, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Inter-chunk (frequency) self-attention
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: encoderDim, headCount: numHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, encoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(encoderDim * 4, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
         // Multi-source mask estimation
@@ -21849,9 +21849,9 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         // Audio encoder
         yield return new DenseLayer<T>(numMels, embeddingDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(embeddingDim, embeddingDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new LayerNormalizationLayer<T>();
         // Projection to LM dimension
         yield return new DenseLayer<T>(embeddingDim, lmHiddenDim, geluActivation);
         // Transformer decoder layers
@@ -21859,10 +21859,10 @@ public static class LayerHelper<T>
         {
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: lmHiddenDim, headCount: numHeads);
-            yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(lmHiddenDim, lmHiddenDim * 4, geluActivation);
             yield return new DenseLayer<T>(lmHiddenDim * 4, lmHiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
         // Embedding projection
@@ -21878,23 +21878,23 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         // Diffusion latent feature extractor with cross-attention
         yield return new DenseLayer<T>(numMels, latentDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(latentDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new MultiHeadAttentionLayer<T>(
             sequenceLength: 1, embeddingDimension: latentDim, headCount: 4);
-        yield return new LayerNormalizationLayer<T>(latentDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(latentDim, latentDim * 2, geluActivation);
         yield return new DenseLayer<T>(latentDim * 2, latentDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>(latentDim);
+        yield return new LayerNormalizationLayer<T>();
         // Classifier head with attention pooling
         yield return new DenseLayer<T>(latentDim, classifierDim, geluActivation);
         for (int i = 1; i < numClassifierLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: classifierDim, headCount: 4);
-            yield return new LayerNormalizationLayer<T>(classifierDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(classifierDim, classifierDim * 2, geluActivation);
             yield return new DenseLayer<T>(classifierDim * 2, classifierDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(classifierDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
         yield return new DenseLayer<T>(classifierDim, numClasses, (IActivationFunction<T>?)null);
@@ -21912,12 +21912,12 @@ public static class LayerHelper<T>
         for (int i = 0; i < numCNNLayers; i++)
         {
             yield return new DenseLayer<T>(currentDim, hiddenDim, reluActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             currentDim = hiddenDim;
         }
         // Recurrent processing (Tanh-gated dense layer simulating GRU)
         yield return new DenseLayer<T>(currentDim, rnnHiddenSize, (IActivationFunction<T>)new TanhActivation<T>());
-        yield return new LayerNormalizationLayer<T>(rnnHiddenSize);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(rnnHiddenSize, rnnHiddenSize, (IActivationFunction<T>)new TanhActivation<T>());
         // Output: single speech probability
         yield return new DenseLayer<T>(rnnHiddenSize, 1, (IActivationFunction<T>?)null);
@@ -21932,22 +21932,22 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         // Text conditioning encoder
         yield return new DenseLayer<T>(textEncoderDim + latentDim, uNetDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(uNetDim);
+        yield return new LayerNormalizationLayer<T>();
         // U-Net encoder path with cross-attention conditioning
         for (int i = 0; i < numUNetLayers; i++)
         {
             // Self-attention
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: uNetDim, headCount: 8);
-            yield return new LayerNormalizationLayer<T>(uNetDim);
+            yield return new LayerNormalizationLayer<T>();
             // Cross-attention for text conditioning
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: uNetDim, headCount: 8);
-            yield return new LayerNormalizationLayer<T>(uNetDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(uNetDim, uNetDim * 4, geluActivation);
             yield return new DenseLayer<T>(uNetDim * 4, uNetDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(uNetDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
         // U-Net decoder path with cross-attention conditioning
@@ -21955,10 +21955,10 @@ public static class LayerHelper<T>
         {
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: uNetDim, headCount: 8);
-            yield return new LayerNormalizationLayer<T>(uNetDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(uNetDim, uNetDim * 4, geluActivation);
             yield return new DenseLayer<T>(uNetDim * 4, uNetDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(uNetDim);
+            yield return new LayerNormalizationLayer<T>();
         }
         // Latent output
         yield return new DenseLayer<T>(uNetDim, latentDim, (IActivationFunction<T>?)null);
@@ -21975,37 +21975,37 @@ public static class LayerHelper<T>
         // Conformer text encoder with speaker conditioning
         int inputDim = textEncoderDim + speakerEmbeddingDim;
         yield return new DenseLayer<T>(inputDim, textEncoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(textEncoderDim);
+        yield return new LayerNormalizationLayer<T>();
         for (int i = 1; i < numTextEncoderLayers; i++)
         {
             // Feed-forward (first half)
             yield return new DenseLayer<T>(textEncoderDim, textEncoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(textEncoderDim * 4, textEncoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Multi-head self-attention
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: textEncoderDim, headCount: 8);
-            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Convolution module (approximated with dense)
             yield return new DenseLayer<T>(textEncoderDim, textEncoderDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward (second half)
             yield return new DenseLayer<T>(textEncoderDim, textEncoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(textEncoderDim * 4, textEncoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
         // Flow-matching decoder with attention
         yield return new DenseLayer<T>(textEncoderDim, decoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(decoderDim);
+        yield return new LayerNormalizationLayer<T>();
         for (int i = 1; i < numDecoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: decoderDim, headCount: 8);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderDim, decoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(decoderDim * 4, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
         // Mel output projection
@@ -22021,18 +22021,18 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         // Audio encoder projection
         yield return new DenseLayer<T>(audioEncoderDim, llmHiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(llmHiddenDim);
+        yield return new LayerNormalizationLayer<T>();
         // Perceiver cross-attention layers
         for (int i = 0; i < numPerceiverLayers; i++)
         {
             // Cross-attention (latent queries attend to audio features)
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: llmHiddenDim, headCount: 8);
-            yield return new LayerNormalizationLayer<T>(llmHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward network
             yield return new DenseLayer<T>(llmHiddenDim, llmHiddenDim * 4, geluActivation);
             yield return new DenseLayer<T>(llmHiddenDim * 4, llmHiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(llmHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
         // LLM output
@@ -22048,18 +22048,18 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         // Music encoder projection
         yield return new DenseLayer<T>(musicEncoderDim, llmHiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(llmHiddenDim);
+        yield return new LayerNormalizationLayer<T>();
         // Perceiver cross-attention layers
         for (int i = 0; i < numPerceiverLayers; i++)
         {
             // Cross-attention (latent queries attend to music features)
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: llmHiddenDim, headCount: 8);
-            yield return new LayerNormalizationLayer<T>(llmHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward network
             yield return new DenseLayer<T>(llmHiddenDim, llmHiddenDim * 4, geluActivation);
             yield return new DenseLayer<T>(llmHiddenDim * 4, llmHiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(llmHiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
         // LLM output
@@ -22080,9 +22080,9 @@ public static class LayerHelper<T>
             int outDim = i == numProjectionLayers - 1 ? llmHiddenDim : (audioEncoderDim + llmHiddenDim) / 2;
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: currentDim, headCount: Math.Max(1, currentDim / 64));
-            yield return new LayerNormalizationLayer<T>(currentDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(currentDim, outDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(outDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentDim = outDim;
         }
@@ -22104,37 +22104,37 @@ public static class LayerHelper<T>
             // Feed-forward module (first half)
             yield return new DenseLayer<T>(encoderDim, encoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(encoderDim * 4, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Multi-head self-attention
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: encoderDim, headCount: numHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Convolution module (approximated with dense)
             yield return new DenseLayer<T>(encoderDim, encoderDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward module (second half)
             yield return new DenseLayer<T>(encoderDim, encoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(encoderDim * 4, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0 && i % 4 == 0) yield return new DropoutLayer<T>(dropoutRate);
         }
         // Multi-task decoder with cross-attention
         yield return new DenseLayer<T>(encoderDim, decoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(decoderDim);
+        yield return new LayerNormalizationLayer<T>();
         for (int i = 1; i < numDecoderLayers; i++)
         {
             // Self-attention
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: decoderDim, headCount: numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Cross-attention to encoder
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: decoderDim, headCount: numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(decoderDim, decoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(decoderDim * 4, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
         // Vocabulary projection
@@ -22151,23 +22151,23 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         // Spectral encoder with self-attention
         yield return new DenseLayer<T>(numFrequencyBins, encoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
         for (int i = 1; i < numEncoderLayers; i++)
         {
             // Spectral self-attention
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: 1, embeddingDimension: encoderDim, headCount: numHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(encoderDim, encoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(encoderDim * 4, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
         // RIR decoder - project to temporal domain
         int intermediateSize = Math.Min(rirLength, 4096);
         yield return new DenseLayer<T>(encoderDim, intermediateSize, geluActivation);
-        yield return new LayerNormalizationLayer<T>(intermediateSize);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(intermediateSize, rirLength, (IActivationFunction<T>?)null);
     }
 
@@ -22195,9 +22195,9 @@ public static class LayerHelper<T>
 
         // Conv subsampling (stride 4)
         yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         // Branchformer blocks: parallel self-attention + cgMLP branches, then concat-merge
@@ -22208,22 +22208,22 @@ public static class LayerHelper<T>
                 sequenceLength: maxSequenceLength,
                 embeddingDimension: encoderDim,
                 headCount: numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Branch 2: Convolutional Gating MLP (cgMLP)
             yield return new DenseLayer<T>(encoderDim, cgmlpDim, geluActivation);
             yield return new DenseLayer<T>(cgmlpDim, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Concat merge projection (2*dim -> dim)
             yield return new DenseLayer<T>(encoderDim * 2, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // CTC output head
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(encoderDim, vocabSize, identityActivation);
     }
 
@@ -22248,16 +22248,16 @@ public static class LayerHelper<T>
 
         // Conv subsampling
         yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         // Squeezeformer blocks with temporal U-Net (micro-macro structure)
         for (int i = 0; i < numLayers; i++)
         {
             // Pre-norm MHA
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: maxSequenceLength,
                 embeddingDimension: encoderDim,
@@ -22265,22 +22265,22 @@ public static class LayerHelper<T>
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
             // Depthwise separable convolution module
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, encoderDim * 2, geluActivation);
-            yield return new BatchNormalizationLayer<T>(encoderDim * 2);
+            yield return new BatchNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim * 2, encoderDim, identityActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
             // Feed-forward
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, ffDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(ffDim, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // CTC output head
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(encoderDim, vocabSize, identityActivation);
     }
 
@@ -22307,9 +22307,9 @@ public static class LayerHelper<T>
 
         // Conv subsampling
         yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         // Conformer encoder blocks
@@ -22318,24 +22318,24 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(encoderDim, ffDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(ffDim, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, encoderDim * 2, geluActivation);
-            yield return new BatchNormalizationLayer<T>(encoderDim * 2);
+            yield return new BatchNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim * 2, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, ffDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(ffDim, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // Prediction network (label predictor, LSTM-like)
         yield return new DenseLayer<T>(vocabSize, predictionDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(predictionDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(predictionDim, predictionDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(predictionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Joint network (combines encoder + prediction)
         yield return new DenseLayer<T>(encoderDim + predictionDim, jointDim, reluActivation);
@@ -22368,14 +22368,14 @@ public static class LayerHelper<T>
         // Transformer encoder
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, feedForwardDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(feedForwardDim, encoderDim, identityActivation);
         }
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Encoder-to-decoder projection (if dims differ)
         if (encoderDim != decoderDim)
@@ -22385,18 +22385,18 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             // Self-attention
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, decoderDim, numAttentionHeads);
             // Cross-attention
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, decoderDim, numAttentionHeads);
             // Feed-forward
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderDim, feedForwardDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(feedForwardDim, decoderDim, identityActivation);
         }
-        yield return new LayerNormalizationLayer<T>(decoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Vocabulary projection
         yield return new DenseLayer<T>(decoderDim, vocabSize, identityActivation);
@@ -22445,9 +22445,9 @@ public static class LayerHelper<T>
 
         // Audio encoder (Conformer-style)
         yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         for (int i = 0; i < numEncoderLayers; i++)
@@ -22455,34 +22455,34 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(encoderDim, encoderDim * 4, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(encoderDim * 4, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
         }
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Adapter MLP (projects audio features to LLM embedding space)
         for (int i = 0; i < numAdapterLayers; i++)
         {
             int inDim = i == 0 ? encoderDim : adapterDim;
             yield return new DenseLayer<T>(inDim, adapterDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(adapterDim);
+            yield return new LayerNormalizationLayer<T>();
         }
         yield return new DenseLayer<T>(adapterDim, llmDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>(llmDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // LLM decoder (lightweight Transformer decoder)
         int llmHeads = Math.Max(1, llmDim / 128);
         for (int i = 0; i < numLLMLayers; i++)
         {
-            yield return new LayerNormalizationLayer<T>(llmDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, llmDim, llmHeads);
-            yield return new LayerNormalizationLayer<T>(llmDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(llmDim, llmDim * 4, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(llmDim * 4, llmDim, identityActivation);
         }
-        yield return new LayerNormalizationLayer<T>(llmDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(llmDim, vocabSize, identityActivation);
     }
 
@@ -22505,20 +22505,20 @@ public static class LayerHelper<T>
 
         // Conv feature extractor (7 conv layers for raw waveform, approximated with dense)
         yield return new DenseLayer<T>(featureDim, encoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         // Transformer encoder
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, feedForwardDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(feedForwardDim, encoderDim, identityActivation);
         }
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // CTC fine-tuning head
         yield return new DenseLayer<T>(encoderDim, vocabSize, identityActivation);
@@ -22546,9 +22546,9 @@ public static class LayerHelper<T>
 
         // Conv subsampling
         yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         // Conformer encoder
@@ -22557,19 +22557,19 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(encoderDim, feedForwardDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(feedForwardDim, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, encoderDim * 2, geluActivation);
-            yield return new BatchNormalizationLayer<T>(encoderDim * 2);
+            yield return new BatchNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim * 2, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
         }
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // CIF (Continuous Integrate-and-Fire) alignment module
         yield return new DenseLayer<T>(encoderDim, 1, identityActivation);
-        yield return new LayerNormalizationLayer<T>(1);
+        yield return new LayerNormalizationLayer<T>();
 
         // Paraformer decoder (non-autoregressive)
         if (encoderDim != decoderDim)
@@ -22577,16 +22577,16 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, decoderDim, numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, decoderDim, numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderDim, feedForwardDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(feedForwardDim, decoderDim, identityActivation);
         }
-        yield return new LayerNormalizationLayer<T>(decoderDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(decoderDim, vocabSize, identityActivation);
     }
 
@@ -22608,16 +22608,16 @@ public static class LayerHelper<T>
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
 
         yield return new DenseLayer<T>(numMels, encoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, feedForwardDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(feedForwardDim, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         yield return new DenseLayer<T>(encoderDim, vocabSize, identityActivation);
@@ -22640,7 +22640,7 @@ public static class LayerHelper<T>
 
         // Input projection
         yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         // Residual CNN blocks (each with sub-blocks of Conv + BN + ReLU)
@@ -22649,14 +22649,14 @@ public static class LayerHelper<T>
             for (int s = 0; s < numSubBlocks; s++)
             {
                 yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
-                yield return new BatchNormalizationLayer<T>(encoderDim);
+                yield return new BatchNormalizationLayer<T>();
                 if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             }
         }
 
         // CTC head
         yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>();
         yield return new DenseLayer<T>(encoderDim, vocabSize, identityActivation);
     }
 
@@ -22705,16 +22705,16 @@ public static class LayerHelper<T>
 
         // === Vision Encoder ===
         // Pre-norm before vision transformer stack
-        yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Vision transformer layers
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionEmbeddingDim, visionEmbeddingDim, numVisionHeads);
-            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionEmbeddingDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionEmbeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -22723,7 +22723,7 @@ public static class LayerHelper<T>
 
         // === Text Encoder ===
         // Pre-norm before text transformer stack
-        yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Text transformer layers (causal attention for autoregressive text encoding)
         for (int i = 0; i < numTextLayers; i++)
@@ -22731,10 +22731,10 @@ public static class LayerHelper<T>
             var textAttention = new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
             textAttention.UseCausalMask = true;
             yield return textAttention;
-            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textEmbeddingDim, textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textFfnDim, textEmbeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -22777,15 +22777,15 @@ public static class LayerHelper<T>
         int textFfnDim = textEmbeddingDim * 4;
 
         // === Vision Encoder ===
-        yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionEmbeddingDim, visionEmbeddingDim, numVisionHeads);
-            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionEmbeddingDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionEmbeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -22793,17 +22793,17 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(visionEmbeddingDim, projectionDim, identityActivation);
 
         // === Text Encoder ===
-        yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numTextLayers; i++)
         {
             var textAttention = new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
             textAttention.UseCausalMask = true;
             yield return textAttention;
-            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textEmbeddingDim, textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textFfnDim, textEmbeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -22851,17 +22851,17 @@ public static class LayerHelper<T>
         int textFfnDim = textEmbeddingDim * 4;
 
         // === Vision Encoder (same architecture as SigLIP) ===
-        yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             // Multi-head self-attention
             yield return new MultiHeadAttentionLayer<T>(visionEmbeddingDim, visionEmbeddingDim, numVisionHeads);
-            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward network
             yield return new DenseLayer<T>(visionEmbeddingDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionEmbeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -22869,15 +22869,15 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(visionEmbeddingDim, projectionDim, identityActivation);
 
         // === Text Encoder (multilingual, same transformer architecture) ===
-        yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numTextLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
-            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textEmbeddingDim, textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textFfnDim, textEmbeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -22893,14 +22893,14 @@ public static class LayerHelper<T>
             {
                 // Cross-attention to vision encoder features
                 yield return new MultiHeadAttentionLayer<T>(captioningDecoderDim, captioningDecoderDim, numCaptioningDecoderHeads);
-                yield return new LayerNormalizationLayer<T>(captioningDecoderDim);
+                yield return new LayerNormalizationLayer<T>();
                 // Causal self-attention for autoregressive decoding
                 yield return new MultiHeadAttentionLayer<T>(captioningDecoderDim, captioningDecoderDim, numCaptioningDecoderHeads);
-                yield return new LayerNormalizationLayer<T>(captioningDecoderDim);
+                yield return new LayerNormalizationLayer<T>();
                 // Feed-forward network
                 yield return new DenseLayer<T>(captioningDecoderDim, captFfnDim, geluActivation);
                 yield return new DenseLayer<T>(captFfnDim, captioningDecoderDim, identityActivation);
-                yield return new LayerNormalizationLayer<T>(captioningDecoderDim);
+                yield return new LayerNormalizationLayer<T>();
             }
 
             // Vocabulary projection for next-token prediction
@@ -22913,7 +22913,7 @@ public static class LayerHelper<T>
         {
             int outDim = (i == numMimDecoderLayers - 1) ? mimDecoderDim : visionEmbeddingDim;
             yield return new DenseLayer<T>(mimInputDim, outDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(outDim);
+            yield return new LayerNormalizationLayer<T>();
             mimInputDim = outDim;
         }
 
@@ -22944,15 +22944,15 @@ public static class LayerHelper<T>
         // === Vision Encoder (Dense approximation of EfficientNet-B7 MBConv blocks) ===
         // Note: Real EfficientNet uses depthwise separable convolutions + squeeze-and-excitation.
         // This approximation uses Dense expand-project blocks for the forward/backward pipeline.
-        yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             // Dense expand-project block (approximates MBConv inverted bottleneck)
             yield return new DenseLayer<T>(visionEmbeddingDim, visionFfnDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(visionFfnDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, visionEmbeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -22960,15 +22960,15 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(visionEmbeddingDim, projectionDim, identityActivation);
 
         // === Text Encoder (Transformer) ===
-        yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numTextLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
-            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textEmbeddingDim, textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textFfnDim, textEmbeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -22998,16 +22998,16 @@ public static class LayerHelper<T>
         // === Vision Encoder (CoAtNet: Dense approximation of CNN stages, then Transformer stages) ===
         // Note: Real CoAtNet uses depthwise convolutions + relative attention in early stages.
         // CNN stages here use Dense expand-project blocks as a simplified approximation.
-        yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // First half: Dense expand-project blocks (approximates MBConv CNN stages)
         int cnnStages = numVisionLayers / 2;
         for (int i = 0; i < cnnStages; i++)
         {
             yield return new DenseLayer<T>(visionEmbeddingDim, visionFfnDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(visionFfnDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, visionEmbeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23016,10 +23016,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < transformerStages; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionEmbeddingDim, visionEmbeddingDim, numVisionHeads);
-            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionEmbeddingDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionEmbeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23027,15 +23027,15 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(visionEmbeddingDim, projectionDim, identityActivation);
 
         // === Text Encoder (Transformer) ===
-        yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numTextLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
-            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textEmbeddingDim, textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textFfnDim, textEmbeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23085,17 +23085,17 @@ public static class LayerHelper<T>
         yield return new PatchEmbeddingLayer<T>(imageHeight, imageWidth, imageChannels, patchSize, embeddingDim);
 
         // Initial layer norm (pre-norm architecture)
-        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numLayers; i++)
         {
             // Multi-head self-attention
             yield return new MultiHeadAttentionLayer<T>(embeddingDim, embeddingDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward network
             yield return new DenseLayer<T>(embeddingDim, ffnDim, geluActivation);
             yield return new DenseLayer<T>(ffnDim, embeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -23120,16 +23120,16 @@ public static class LayerHelper<T>
         // === DaViT Vision Encoder (simplified: standard MHA approximation) ===
         // Note: Real DaViT alternates spatial window attention (odd layers) and channel group
         // attention (even layers). This uses standard MHA as a simplified approximation.
-        yield return new LayerNormalizationLayer<T>(encoderEmbeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
             // Standard multi-head attention (approximates DaViT dual attention)
             yield return new MultiHeadAttentionLayer<T>(encoderEmbeddingDim, encoderEmbeddingDim, numEncoderHeads);
-            yield return new LayerNormalizationLayer<T>(encoderEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderEmbeddingDim, encoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(encoderFfnDim, encoderEmbeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23144,14 +23144,14 @@ public static class LayerHelper<T>
             var decoderSelfAttn = new MultiHeadAttentionLayer<T>(decoderEmbeddingDim, decoderEmbeddingDim, numDecoderHeads);
             decoderSelfAttn.UseCausalMask = true;
             yield return decoderSelfAttn;
-            yield return new LayerNormalizationLayer<T>(decoderEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             // Cross-attention to encoder features (query from decoder, key/value from encoder)
             yield return new CrossAttentionLayer<T>(decoderEmbeddingDim, encoderEmbeddingDim, numDecoderHeads);
-            yield return new LayerNormalizationLayer<T>(decoderEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(decoderEmbeddingDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderEmbeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderEmbeddingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -23177,15 +23177,15 @@ public static class LayerHelper<T>
         int fusionFfnDim = fusionDim * 4;
 
         // === Vision Stream (transformer encoder) ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23194,15 +23194,15 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(visionDim, fusionDim, identityActivation);
 
         // === Text Stream (transformer encoder) ===
-        yield return new LayerNormalizationLayer<T>(textDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numTextLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(textDim, textDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(textDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textDim, textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textFfnDim, textDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(textDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23215,14 +23215,14 @@ public static class LayerHelper<T>
         {
             // Vision-to-text cross-attention (vision queries attend to text keys/values)
             yield return new CrossAttentionLayer<T>(fusionDim, fusionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
             // Text-to-vision cross-attention (text queries attend to vision keys/values)
             yield return new CrossAttentionLayer<T>(fusionDim, fusionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(fusionDim, fusionFfnDim, geluActivation);
             yield return new DenseLayer<T>(fusionFfnDim, fusionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -23248,28 +23248,28 @@ public static class LayerHelper<T>
         if (visionDim != fusionDim)
         {
             yield return new DenseLayer<T>(visionDim, fusionDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // === Text Embedding Projection ===
         if (textDim != fusionDim)
         {
             yield return new DenseLayer<T>(textDim, fusionDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // === Joint Transformer Encoder (BERT-style) ===
-        yield return new LayerNormalizationLayer<T>(fusionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numFusionLayers; i++)
         {
             // Multi-head self-attention over concatenated vision+text tokens
             yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward network
             yield return new DenseLayer<T>(fusionDim, fusionFfnDim, geluActivation);
             yield return new DenseLayer<T>(fusionFfnDim, fusionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -23296,19 +23296,19 @@ public static class LayerHelper<T>
         if (visionDim != fusionDim)
         {
             yield return new DenseLayer<T>(visionDim, fusionDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // === Object Relationship Encoder (vision self-attention) ===
-        yield return new LayerNormalizationLayer<T>(fusionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numRelationshipLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(fusionDim, fusionFfnDim, geluActivation);
             yield return new DenseLayer<T>(fusionFfnDim, fusionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23317,16 +23317,16 @@ public static class LayerHelper<T>
         if (textDim != fusionDim)
         {
             yield return new DenseLayer<T>(textDim, fusionDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         for (int i = 0; i < numTextLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(fusionDim, fusionFfnDim, geluActivation);
             yield return new DenseLayer<T>(fusionFfnDim, fusionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23335,14 +23335,14 @@ public static class LayerHelper<T>
         {
             // Language-to-vision cross-attention (language queries attend to vision keys/values)
             yield return new CrossAttentionLayer<T>(fusionDim, fusionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
             // Vision-to-language cross-attention (vision queries attend to language keys/values)
             yield return new CrossAttentionLayer<T>(fusionDim, fusionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward for fused representation
             yield return new DenseLayer<T>(fusionDim, fusionFfnDim, geluActivation);
             yield return new DenseLayer<T>(fusionFfnDim, fusionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -23368,7 +23368,7 @@ public static class LayerHelper<T>
         int fusionFfnDim = fusionDim * 4;
 
         // === Vision Encoder with Bridge Points ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Determine at which vision layers bridges connect (evenly spaced)
         int bridgeInterval = numBridgeLayers > 0 && numVisionLayers > numBridgeLayers ? numVisionLayers / numBridgeLayers : 1;
@@ -23377,10 +23377,10 @@ public static class LayerHelper<T>
         {
             // Vision self-attention block
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
             // Bridge cross-attention at designated layers
@@ -23388,7 +23388,7 @@ public static class LayerHelper<T>
             {
                 // Cross-attention bridge: vision queries attend to text keys/values
                 yield return new CrossAttentionLayer<T>(visionDim, textDim, numHeads);
-                yield return new LayerNormalizationLayer<T>(visionDim);
+                yield return new LayerNormalizationLayer<T>();
             }
         }
 
@@ -23397,7 +23397,7 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(visionDim, fusionDim, identityActivation);
 
         // === Text Encoder with Bridge Points ===
-        yield return new LayerNormalizationLayer<T>(textDim);
+        yield return new LayerNormalizationLayer<T>();
 
         int textBridgeInterval = numBridgeLayers > 0 && numTextLayers > numBridgeLayers ? numTextLayers / numBridgeLayers : 1;
 
@@ -23405,10 +23405,10 @@ public static class LayerHelper<T>
         {
             // Text self-attention block
             yield return new MultiHeadAttentionLayer<T>(textDim, textDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(textDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textDim, textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textFfnDim, textDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(textDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
             // Bridge cross-attention at designated layers
@@ -23416,7 +23416,7 @@ public static class LayerHelper<T>
             {
                 // Cross-attention bridge: text queries attend to vision keys/values
                 yield return new CrossAttentionLayer<T>(textDim, visionDim, numHeads);
-                yield return new LayerNormalizationLayer<T>(textDim);
+                yield return new LayerNormalizationLayer<T>();
             }
         }
 
@@ -23426,10 +23426,10 @@ public static class LayerHelper<T>
 
         // === Final Cross-Modal Fusion ===
         yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
-        yield return new LayerNormalizationLayer<T>(fusionDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(fusionDim, fusionFfnDim, geluActivation);
         yield return new DenseLayer<T>(fusionFfnDim, fusionDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>(fusionDim);
+        yield return new LayerNormalizationLayer<T>();
     }
 
     /// <summary>
@@ -23456,15 +23456,15 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (ViT) ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23476,14 +23476,14 @@ public static class LayerHelper<T>
         {
             // Cross-attention: learned queries attend to visual features (query from Q-Former, key/value from vision)
             yield return new CrossAttentionLayer<T>(qFormerDim, visionDim, numQFormerHeads);
-            yield return new LayerNormalizationLayer<T>(qFormerDim);
+            yield return new LayerNormalizationLayer<T>();
             // Self-attention among query tokens
             yield return new MultiHeadAttentionLayer<T>(qFormerDim, qFormerDim, numQFormerHeads);
-            yield return new LayerNormalizationLayer<T>(qFormerDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(qFormerDim, qfFfnDim, geluActivation);
             yield return new DenseLayer<T>(qfFfnDim, qFormerDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(qFormerDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23497,14 +23497,14 @@ public static class LayerHelper<T>
             var decoderSelfAttn = new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
             decoderSelfAttn.UseCausalMask = true;
             yield return decoderSelfAttn;
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Cross-attention to Q-Former output
             yield return new CrossAttentionLayer<T>(decoderDim, qFormerDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -23527,15 +23527,15 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (ViT) ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23550,14 +23550,14 @@ public static class LayerHelper<T>
             var decoderSelfAttn = new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
             decoderSelfAttn.UseCausalMask = true;
             yield return decoderSelfAttn;
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Cross-attention to vision features (query from decoder, key/value from vision encoder)
             yield return new CrossAttentionLayer<T>(decoderDim, visionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -23585,15 +23585,15 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (CLIP ViT) ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23605,14 +23605,14 @@ public static class LayerHelper<T>
         {
             // Cross-attention: latent queries attend to vision tokens (query from perceiver, key/value from vision)
             yield return new CrossAttentionLayer<T>(perceiverDim, visionDim, numPerceiverHeads);
-            yield return new LayerNormalizationLayer<T>(perceiverDim);
+            yield return new LayerNormalizationLayer<T>();
             // Self-attention among latent tokens
             yield return new MultiHeadAttentionLayer<T>(perceiverDim, perceiverDim, numPerceiverHeads);
-            yield return new LayerNormalizationLayer<T>(perceiverDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(perceiverDim, perceiverFfnDim, geluActivation);
             yield return new DenseLayer<T>(perceiverFfnDim, perceiverDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(perceiverDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23626,16 +23626,16 @@ public static class LayerHelper<T>
             var decoderSelfAttn = new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
             decoderSelfAttn.UseCausalMask = true;
             yield return decoderSelfAttn;
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Gated cross-attention: decoder queries attend to perceiver output
             yield return new CrossAttentionLayer<T>(decoderDim, perceiverDim, numHeads);
             // Gate projection (tanh gate controls visual information flow)
             yield return new DenseLayer<T>(decoderDim, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -23658,15 +23658,15 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (CLIP ViT) ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23681,14 +23681,14 @@ public static class LayerHelper<T>
             var decoderAttn = new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
             decoderAttn.UseCausalMask = true;
             yield return decoderAttn;
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Cross-attention to vision features
             yield return new CrossAttentionLayer<T>(decoderDim, visionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -23713,15 +23713,15 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === EVA-CLIP Vision Encoder ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23736,14 +23736,14 @@ public static class LayerHelper<T>
             var decoderAttn = new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
             decoderAttn.UseCausalMask = true;
             yield return decoderAttn;
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Cross-attention to vision features
             yield return new CrossAttentionLayer<T>(decoderDim, visionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23754,7 +23754,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numRegressionLayers; i++)
         {
             yield return new DenseLayer<T>(regressionDim, regressionDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(regressionDim);
+            yield return new LayerNormalizationLayer<T>();
         }
     }
 
@@ -23778,10 +23778,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionDim * 4, geluActivation);
             yield return new DenseLayer<T>(visionDim * 4, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23794,10 +23794,10 @@ public static class LayerHelper<T>
         {
             // Standard self-attention
             yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Visual expert attention (separate QKV weights for visual tokens)
             yield return new MultiHeadAttentionLayer<T>(visualExpertDim, visualExpertDim, numVisualExpertHeads);
-            yield return new LayerNormalizationLayer<T>(visualExpertDim);
+            yield return new LayerNormalizationLayer<T>();
             // Projection from visual expert dim to decoder dim if they differ
             if (visualExpertDim != decoderDim)
                 yield return new DenseLayer<T>(visualExpertDim, decoderDim, identityActivation);
@@ -23806,7 +23806,7 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(decoderDim * 4, decoderDim, identityActivation);
             // Visual expert FFN
             yield return new DenseLayer<T>(decoderDim, decoderDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -23831,31 +23831,31 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (CLIP ViT) ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === 2-Layer MLP Cross-Modal Connector (Linear -> GELU -> Linear) ===
         yield return new DenseLayer<T>(visionDim, mlpIntermediateDim, geluActivation);
         yield return new DenseLayer<T>(mlpIntermediateDim, decoderDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>(decoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === LLM Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -23880,34 +23880,34 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (InternViT) ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === Pixel Shuffle: 4x channel expansion then spatial compression ===
         yield return new DenseLayer<T>(visionDim, visionDim * 4, geluActivation);
         yield return new DenseLayer<T>(visionDim * 4, shuffleDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>(shuffleDim);
+        yield return new LayerNormalizationLayer<T>();
         // === MLP Projection to decoder dim ===
         yield return new DenseLayer<T>(shuffleDim, decoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(decoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === LLM Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -23934,15 +23934,15 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (ViT) ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23955,14 +23955,14 @@ public static class LayerHelper<T>
         {
             // Cross-attention: queries attend to visual tokens
             yield return new MultiHeadAttentionLayer<T>(resamplerDim, resamplerDim, numHeads > 16 ? 16 : numHeads);
-            yield return new LayerNormalizationLayer<T>(resamplerDim);
+            yield return new LayerNormalizationLayer<T>();
             // Self-attention among query tokens
             yield return new MultiHeadAttentionLayer<T>(resamplerDim, resamplerDim, numHeads > 16 ? 16 : numHeads);
-            yield return new LayerNormalizationLayer<T>(resamplerDim);
+            yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(resamplerDim, resamplerFfnDim, geluActivation);
             yield return new DenseLayer<T>(resamplerFfnDim, resamplerDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(resamplerDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -23973,10 +23973,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -23999,16 +23999,16 @@ public static class LayerHelper<T>
 
         // === Patch Embedding (linear projection from pixel patches to embeddings) ===
         yield return new DenseLayer<T>(patchDim, decoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(decoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Causal Decoder (all layers are decoder, no separate vision encoder) ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -24033,15 +24033,15 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (ViT) ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -24049,19 +24049,19 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(visionDim, adapterDim, geluActivation);
         yield return new DenseLayer<T>(adapterDim, adapterDim, geluActivation);
         yield return new DenseLayer<T>(adapterDim, decoderDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>(decoderDim);
+        yield return new LayerNormalizationLayer<T>();
         // Gate projection (learnable gate to control visual information flow)
         yield return new DenseLayer<T>(decoderDim, decoderDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>(decoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === LLM Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -24086,34 +24086,34 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (hybrid SigLIP + SAM) ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === Semantic-Aware Token Reduction ===
         yield return new DenseLayer<T>(visionDim, reducedDim, geluActivation);
         yield return new DenseLayer<T>(reducedDim, reducedDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>(reducedDim);
+        yield return new LayerNormalizationLayer<T>();
         // MLP projection to decoder dim
         yield return new DenseLayer<T>(reducedDim, decoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(decoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === LLM Decoder (DeepSeek MoE) ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -24181,15 +24181,15 @@ public static class LayerHelper<T>
         yield return new PatchEmbeddingLayer<T>(imageHeight, imageWidth, imageChannels, patchSize, visionDim);
 
         // === Vision Encoder (per-frame ViT) ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads, initializationStrategy: lazy);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation, lazy);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation, lazy);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -24201,25 +24201,25 @@ public static class LayerHelper<T>
         for (int i = 0; i < numTemporalLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(temporalDim, temporalDim, numHeads > 16 ? 16 : numHeads, initializationStrategy: lazy);
-            yield return new LayerNormalizationLayer<T>(temporalDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(temporalDim, temporalFfnDim, geluActivation, lazy);
             yield return new DenseLayer<T>(temporalFfnDim, temporalDim, identityActivation, lazy);
-            yield return new LayerNormalizationLayer<T>(temporalDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === MLP Projection to LLM ===
         yield return new DenseLayer<T>(temporalDim, decoderDim, geluActivation, lazy);
-        yield return new LayerNormalizationLayer<T>(decoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === LLM Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads, initializationStrategy: lazy);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation, lazy);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation, lazy);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -24245,36 +24245,36 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === MLP Projection ===
         yield return new DenseLayer<T>(visionDim, decoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(decoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === LLM Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === Action Token Head ===
         yield return new DenseLayer<T>(decoderDim, actionDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(actionDim);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(actionDim, actionDim, identityActivation);
     }
 
@@ -24300,29 +24300,29 @@ public static class LayerHelper<T>
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(pointEncoderDim, pointEncoderDim, numHeads > 8 ? 8 : numHeads);
-            yield return new LayerNormalizationLayer<T>(pointEncoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(pointEncoderDim, encoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(encoderFfnDim, pointEncoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(pointEncoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === Q-Former Bridge (point-language alignment) ===
         yield return new MultiHeadAttentionLayer<T>(pointEncoderDim, pointEncoderDim, numHeads > 8 ? 8 : numHeads);
-        yield return new LayerNormalizationLayer<T>(pointEncoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Projection to LLM space ===
         yield return new DenseLayer<T>(pointEncoderDim, decoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(decoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === LLM Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -24350,21 +24350,21 @@ public static class LayerHelper<T>
         int detectionFfnDim = detectionDim * 4;
 
         // === Vision Encoder (ViT/Swin backbone) ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === Text Encoder Projection ===
         yield return new DenseLayer<T>(textDim, fusionDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>(fusionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Vision Projection to fusion dim ===
         if (visionDim != fusionDim)
@@ -24375,14 +24375,14 @@ public static class LayerHelper<T>
         {
             // Vision-to-text cross-attention
             yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads > 8 ? 8 : numHeads);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
             // Text-to-vision cross-attention
             yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads > 8 ? 8 : numHeads);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
             // FFN
             yield return new DenseLayer<T>(fusionDim, fusionFfnDim, geluActivation);
             yield return new DenseLayer<T>(fusionFfnDim, fusionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -24393,10 +24393,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDetectionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(detectionDim, detectionDim, numHeads > 8 ? 8 : numHeads);
-            yield return new LayerNormalizationLayer<T>(detectionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(detectionDim, detectionFfnDim, geluActivation);
             yield return new DenseLayer<T>(detectionFfnDim, detectionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(detectionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -24421,15 +24421,15 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (Swin/ViT for document images) ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -24442,14 +24442,14 @@ public static class LayerHelper<T>
         {
             // Self-attention with document reading-order awareness
             yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // Cross-attention to visual features
             yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             // FFN
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -24478,15 +24478,15 @@ public static class LayerHelper<T>
         int generationFfnDim = generationDim * 4;
 
         // === Shared Vision Encoder ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -24501,10 +24501,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numUnderstandingLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(understandingDim, understandingDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(understandingDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(understandingDim, understandingFfnDim, geluActivation);
             yield return new DenseLayer<T>(understandingFfnDim, understandingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(understandingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -24515,10 +24515,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numGenerationLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(generationDim, generationDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(generationDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(generationDim, generationFfnDim, geluActivation);
             yield return new DenseLayer<T>(generationFfnDim, generationDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(generationDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -24543,21 +24543,21 @@ public static class LayerHelper<T>
         int editingFfnDim = editingDim * 4;
 
         // === Vision Encoder ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === Instruction Encoder Projection ===
         yield return new DenseLayer<T>(visionDim, instructionDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(instructionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Editing Decoder (instruction-conditioned cross-attention) ===
         if (instructionDim != editingDim)
@@ -24567,14 +24567,14 @@ public static class LayerHelper<T>
         {
             // Self-attention
             yield return new MultiHeadAttentionLayer<T>(editingDim, editingDim, numHeads > 8 ? 8 : numHeads);
-            yield return new LayerNormalizationLayer<T>(editingDim);
+            yield return new LayerNormalizationLayer<T>();
             // Cross-attention to instruction features
             yield return new MultiHeadAttentionLayer<T>(editingDim, editingDim, numHeads > 8 ? 8 : numHeads);
-            yield return new LayerNormalizationLayer<T>(editingDim);
+            yield return new LayerNormalizationLayer<T>();
             // FFN
             yield return new DenseLayer<T>(editingDim, editingFfnDim, geluActivation);
             yield return new DenseLayer<T>(editingFfnDim, editingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(editingDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -24598,30 +24598,30 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Lightweight Vision Encoder ===
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === Projection ===
         yield return new DenseLayer<T>(visionDim, decoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(decoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Lightweight Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -25757,7 +25757,7 @@ public static class LayerHelper<T>
         int patchW = inputWidth / 16;
         for (int i = 0; i < depths[0]; i++)
         {
-            yield return new BatchNormalizationLayer<T>(channelDims[0], patchH, patchW);
+            yield return new BatchNormalizationLayer<T>();
             yield return new ConvolutionalLayer<T>(channelDims[0], 1, 1, 0, relu);
         }
     }
@@ -25805,7 +25805,7 @@ public static class LayerHelper<T>
 
             for (int d = 0; d < depths[stage]; d++)
             {
-                yield return new BatchNormalizationLayer<T>(outCh, h, w);
+                yield return new BatchNormalizationLayer<T>();
                 yield return new ConvolutionalLayer<T>(outCh, 3, 1, 1, relu);
             }
         }
@@ -25854,7 +25854,7 @@ public static class LayerHelper<T>
 
             for (int d = 0; d < depths[stage]; d++)
             {
-                yield return new BatchNormalizationLayer<T>(outCh, h, w);
+                yield return new BatchNormalizationLayer<T>();
                 yield return new ConvolutionalLayer<T>(outCh, 3, 1, 1, relu);
             }
         }
@@ -25897,7 +25897,7 @@ public static class LayerHelper<T>
         // ViT transformer blocks with embedded mask queries
         for (int i = 0; i < depths[0]; i++)
         {
-            yield return new BatchNormalizationLayer<T>(embedDim, patchH, patchW);
+            yield return new BatchNormalizationLayer<T>();
             yield return new ConvolutionalLayer<T>(embedDim, 1, 1, 0, relu);
         }
     }
@@ -25945,7 +25945,7 @@ public static class LayerHelper<T>
 
             for (int d = 0; d < depths[stage]; d++)
             {
-                yield return new BatchNormalizationLayer<T>(outCh, h, w);
+                yield return new BatchNormalizationLayer<T>();
                 yield return new ConvolutionalLayer<T>(outCh, 3, 1, 1, relu);
             }
         }
@@ -25994,7 +25994,7 @@ public static class LayerHelper<T>
 
             for (int d = 0; d < depths[stage]; d++)
             {
-                yield return new BatchNormalizationLayer<T>(outCh, h, w);
+                yield return new BatchNormalizationLayer<T>();
                 yield return new ConvolutionalLayer<T>(outCh, 3, 1, 1, relu);
             }
         }
@@ -26043,7 +26043,7 @@ public static class LayerHelper<T>
 
             for (int d = 0; d < depths[stage]; d++)
             {
-                yield return new BatchNormalizationLayer<T>(outCh, h, w);
+                yield return new BatchNormalizationLayer<T>();
                 yield return new ConvolutionalLayer<T>(outCh, 3, 1, 1, relu);
             }
         }
@@ -26092,7 +26092,7 @@ public static class LayerHelper<T>
 
             for (int d = 0; d < depths[stage]; d++)
             {
-                yield return new BatchNormalizationLayer<T>(outCh, h, w);
+                yield return new BatchNormalizationLayer<T>();
                 yield return new ConvolutionalLayer<T>(outCh, 3, 1, 1, relu);
             }
         }
@@ -26136,12 +26136,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -26186,12 +26186,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -26235,12 +26235,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -26284,12 +26284,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -26333,12 +26333,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -26382,12 +26382,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -26431,12 +26431,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -26480,12 +26480,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -26529,12 +26529,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -26578,12 +26578,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -26627,12 +26627,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -26676,12 +26676,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -26725,12 +26725,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -26774,12 +26774,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -26823,12 +26823,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -26872,12 +26872,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -26921,12 +26921,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -26970,12 +26970,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27053,12 +27053,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27102,12 +27102,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27151,12 +27151,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27200,12 +27200,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27249,12 +27249,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27298,12 +27298,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27347,12 +27347,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27396,12 +27396,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27445,12 +27445,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27494,12 +27494,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27543,12 +27543,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27592,12 +27592,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27641,12 +27641,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27690,12 +27690,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27739,12 +27739,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27788,12 +27788,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27837,12 +27837,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27886,12 +27886,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27935,12 +27935,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -27984,12 +27984,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -28033,12 +28033,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -28082,12 +28082,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -28131,12 +28131,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -28180,12 +28180,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -28229,12 +28229,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -28278,12 +28278,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -28339,12 +28339,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -28388,12 +28388,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -28437,12 +28437,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -28486,12 +28486,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -28535,12 +28535,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -28584,12 +28584,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -29164,7 +29164,7 @@ public static class LayerHelper<T>
         }
 
         // Final layer norm (represented as dense for parameter tracking)
-        yield return new LayerNormalizationLayer<T>(hiddenSize);
+        yield return new LayerNormalizationLayer<T>();
         // Final AdaLN modulation (scale + shift)
         yield return new DenseLayer<T>(timeEmbedDim, hiddenSize * 2, identity);
         // Output projection: hidden -> patch
@@ -29250,7 +29250,7 @@ public static class LayerHelper<T>
         }
 
         // Final norm and output
-        yield return new LayerNormalizationLayer<T>(hiddenSize);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(timeEmbedDim, hiddenSize * 2, identity);
         yield return new DenseLayer<T>(hiddenSize, patchDim, identity);
     }
@@ -29323,7 +29323,7 @@ public static class LayerHelper<T>
         }
 
         // Final norm and output projection
-        yield return new LayerNormalizationLayer<T>(hiddenSize);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(hiddenSize, patchDim, identity);
     }
 
@@ -29857,10 +29857,10 @@ public static class LayerHelper<T>
 
         // ERB Encoder
         yield return new DenseLayer<T>(numErbBands, hiddenDim, elu);
-        yield return new BatchNormalizationLayer<T>(hiddenDim);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ActivationLayer<T>(hiddenShape, elu);
         yield return new DenseLayer<T>(hiddenDim, hiddenDim, elu);
-        yield return new BatchNormalizationLayer<T>(hiddenDim);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ActivationLayer<T>(hiddenShape, elu);
 
         // GRU layers
@@ -29881,7 +29881,7 @@ public static class LayerHelper<T>
 
         // Decoder
         yield return new DenseLayer<T>(hiddenDim, hiddenDim, elu);
-        yield return new BatchNormalizationLayer<T>(hiddenDim);
+        yield return new BatchNormalizationLayer<T>();
         yield return new ActivationLayer<T>(hiddenShape, elu);
     }
 
@@ -29911,7 +29911,7 @@ public static class LayerHelper<T>
             yield return new ConvolutionalLayer<T>(
                 outChannels, kernelSize, stride, kernelSize / 2,
                 (IActivationFunction<T>)new LeakyReLUActivation<T>());
-            yield return new BatchNormalizationLayer<T>(outChannels);
+            yield return new BatchNormalizationLayer<T>();
 
             // Skip connection layer
             yield return new ConvolutionalLayer<T>(
@@ -29950,7 +29950,7 @@ public static class LayerHelper<T>
             {
                 yield return new DeconvolutionalLayer<T>(decoderInputShape, outChannels, kernelSize, stride, kernelSize / 2,
                     (IActivationFunction<T>)new LeakyReLUActivation<T>());
-                yield return new BatchNormalizationLayer<T>(outChannels);
+                yield return new BatchNormalizationLayer<T>();
             }
             else
             {
@@ -30046,7 +30046,7 @@ public static class LayerHelper<T>
                 stride: convStride, padding: convPadding,
                 activationFunction: new ReLUActivation<T>());
 
-            yield return new BatchNormalizationLayer<T>(outputDepth * currentHeight * currentWidth);
+            yield return new BatchNormalizationLayer<T>();
 
             if (block < numConvBlocks - 1)
             {
@@ -31035,7 +31035,7 @@ public static class LayerHelper<T>
         }
 
         // Final layer normalization
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
 
         // LM head: project back to vocabulary logits
         yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
@@ -31056,7 +31056,7 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
             yield return new MambaBlock<T>(maxSeqLength, modelDimension, stateDimension, expandFactor);
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
     }
 
@@ -31075,7 +31075,7 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
             yield return new Mamba2Block<T>(maxSeqLength, modelDimension, stateDimension, numHeads);
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
     }
 
@@ -31094,7 +31094,7 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
             yield return new MambaBlock<T>(maxSeqLength, modelDimension, stateDimension, expandFactor);
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
     }
 
@@ -31112,7 +31112,7 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
             yield return new RWKVLayer<T>(maxSeqLength, modelDimension, numHeads);
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
     }
 
@@ -31130,7 +31130,7 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
             yield return new RWKVLayer<T>(maxSeqLength, modelDimension, numHeads);
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
     }
 
@@ -31149,7 +31149,7 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
             yield return new RWKV7Block<T>(maxSeqLength, modelDimension, numHeads, ffnMultiplier);
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
     }
 
@@ -31167,7 +31167,7 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
             yield return new ExtendedLSTMLayer<T>(maxSeqLength, modelDimension, numHeads);
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
     }
 
@@ -31185,7 +31185,7 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
             yield return new GatedLinearAttentionLayer<T>(maxSeqLength, modelDimension, numHeads);
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
     }
 
@@ -31203,7 +31203,7 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
             yield return new GatedDeltaNetLayer<T>(maxSeqLength, modelDimension, numHeads);
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
     }
 
@@ -31220,7 +31220,7 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
             yield return new RealGatedLinearRecurrenceLayer<T>(maxSeqLength, modelDimension);
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
     }
 
@@ -31237,7 +31237,7 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
             yield return new RealGatedLinearRecurrenceLayer<T>(maxSeqLength, modelDimension);
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
     }
 
@@ -31254,7 +31254,7 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
             yield return new RealGatedLinearRecurrenceLayer<T>(maxSeqLength, modelDimension);
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
     }
 
@@ -31282,7 +31282,7 @@ public static class LayerHelper<T>
         yield return new HybridBlockScheduler<T>(maxSeqLength, blocks, isAttn,
             HybridSchedulePattern.JambaStyle, modelDimension);
 
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
     }
 
@@ -31310,7 +31310,7 @@ public static class LayerHelper<T>
         yield return new HybridBlockScheduler<T>(maxSeqLength, blocks, isAttn,
             HybridSchedulePattern.JambaStyle, modelDimension);
 
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
     }
 
@@ -31338,7 +31338,7 @@ public static class LayerHelper<T>
         yield return new HybridBlockScheduler<T>(maxSeqLength, blocks, isAttn,
             HybridSchedulePattern.ZambaStyle, modelDimension);
 
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
     }
 
@@ -31367,7 +31367,7 @@ public static class LayerHelper<T>
         yield return new HybridBlockScheduler<T>(maxSeqLength, blocks, isAttn,
             HybridSchedulePattern.ZambaStyle, modelDimension);
 
-        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
     }
 
@@ -31445,7 +31445,7 @@ public static class LayerHelper<T>
         yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, 3, patchSize, visionEmbeddingDim);
         for (int i = 0; i < numVisionLayers; i++)
             yield return new TransformerEncoderLayer<T>(visionEmbeddingDim, numHeads, ffnDim);
-        yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // Vision projectors (2-layer MLP)
         yield return new DenseLayer<T>(visionEmbeddingDim, embeddingDimension, (IActivationFunction<T>?)null);
@@ -31467,7 +31467,7 @@ public static class LayerHelper<T>
         }
 
         // Final layer norm + LM head
-        yield return new LayerNormalizationLayer<T>(embeddingDimension);
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(embeddingDimension, vocabularySize, (IActivationFunction<T>?)null);
     }
 
@@ -31575,7 +31575,7 @@ public static class LayerHelper<T>
         int patchW = inputWidth / 16;
         for (int i = 0; i < depths[0]; i++)
         {
-            yield return new BatchNormalizationLayer<T>(channelDims[0], patchH, patchW);
+            yield return new BatchNormalizationLayer<T>();
             yield return new ConvolutionalLayer<T>(channelDims[0], 1, 1, 0, relu);
         }
     }
@@ -31693,12 +31693,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -31745,12 +31745,12 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>(outC, h, w);
+            yield return new BatchNormalizationLayer<T>();
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>(outC, h, w);
+                yield return new BatchNormalizationLayer<T>();
             }
 
             inC = outC;
@@ -31856,15 +31856,15 @@ public static class LayerHelper<T>
         int decoderFfnDim = hiddenDim * 4;
 
         // === Text Encoder (FFT blocks) ===
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, encoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(encoderFfnDim, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -31876,10 +31876,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(hiddenDim, hiddenDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -31905,7 +31905,7 @@ public static class LayerHelper<T>
 
         // === Input projection from mel to hidden ===
         yield return new DenseLayer<T>(melChannels, hiddenDim, leakyRelu);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Upsampling blocks ===
         int currentDim = hiddenDim;
@@ -31916,13 +31916,13 @@ public static class LayerHelper<T>
 
             // Transposed convolution equivalent (upsampling via dense)
             yield return new DenseLayer<T>(currentDim, nextDim, leakyRelu);
-            yield return new LayerNormalizationLayer<T>(nextDim);
+            yield return new LayerNormalizationLayer<T>();
 
             // Multi-receptive-field residual blocks
             for (int r = 0; r < numResBlocks; r++)
             {
                 yield return new DenseLayer<T>(nextDim, nextDim, leakyRelu);
-                yield return new LayerNormalizationLayer<T>(nextDim);
+                yield return new LayerNormalizationLayer<T>();
             }
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
@@ -31950,14 +31950,14 @@ public static class LayerHelper<T>
 
         // === Mel conditioning encoder ===
         yield return new DenseLayer<T>(melChannels, hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Dilated residual blocks ===
         for (int i = 0; i < numResidualLayers; i++)
         {
             yield return new DenseLayer<T>(hiddenDim, ffnDim, geluActivation);
             yield return new DenseLayer<T>(ffnDim, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -32010,15 +32010,15 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(inputFeatures, encoderDim, identityActivation, lazy);
 
         // === Text Encoder (relative positional transformer) ===
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, encoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(encoderFfnDim, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -32026,14 +32026,14 @@ public static class LayerHelper<T>
         for (int i = 0; i < numFlowLayers; i++)
         {
             yield return new DenseLayer<T>(hiddenDim, hiddenDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim, hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new LayerNormalizationLayer<T>();
         }
 
         // === HiFi-GAN Decoder ===
         yield return new DenseLayer<T>(hiddenDim, decoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(decoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         int currentDim = decoderDim;
         for (int i = 0; i < numDecoderLayers; i++)
@@ -32041,7 +32041,7 @@ public static class LayerHelper<T>
             int nextDim = decoderDim / (1 << (i + 1));
             if (nextDim < 32) nextDim = 32;
             yield return new DenseLayer<T>(currentDim, nextDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>(nextDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentDim = nextDim;
         }
@@ -32069,15 +32069,15 @@ public static class LayerHelper<T>
         int llmFfnDim = llmDim * 4;
 
         // === Text Encoder ===
-        yield return new LayerNormalizationLayer<T>(textEncoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numTextEncoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(textEncoderDim, textEncoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textEncoderDim, textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textFfnDim, textEncoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -32091,10 +32091,10 @@ public static class LayerHelper<T>
             var selfAttn = new MultiHeadAttentionLayer<T>(llmDim, llmDim, numHeads);
             selfAttn.UseCausalMask = true;
             yield return selfAttn;
-            yield return new LayerNormalizationLayer<T>(llmDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(llmDim, llmFfnDim, geluActivation);
             yield return new DenseLayer<T>(llmFfnDim, llmDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(llmDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -32138,15 +32138,15 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(inputFeatures, encoderDim, identityActivation, lazy);
 
         // === Text Encoder ===
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, encoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(encoderFfnDim, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -32158,10 +32158,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numFlowLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(flowDim, flowDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(flowDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(flowDim, flowFfnDim, geluActivation);
             yield return new DenseLayer<T>(flowFfnDim, flowDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(flowDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -32188,42 +32188,42 @@ public static class LayerHelper<T>
         int encoderFfnDim = encoderDim * 4;
 
         // === Text Encoder ===
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, encoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(encoderFfnDim, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === Style Encoder (extracts style from reference audio or diffusion) ===
         yield return new DenseLayer<T>(encoderDim, styleDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(styleDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numStyleLayers; i++)
         {
             yield return new DenseLayer<T>(styleDim, styleDim * 2, geluActivation);
             yield return new DenseLayer<T>(styleDim * 2, styleDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(styleDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === Style-conditioned Decoder ===
         int combinedDim = encoderDim + styleDim;
         yield return new DenseLayer<T>(combinedDim, encoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, encoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(encoderFfnDim, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -32250,21 +32250,21 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Text Encoder ===
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, encoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(encoderFfnDim, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === Speaker Embedding Projection ===
         yield return new DenseLayer<T>(speakerDim, decoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>(decoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Projection (encoder -> decoder dim) ===
         if (encoderDim != decoderDim)
@@ -32274,10 +32274,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -32301,15 +32301,15 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
         // === Lightweight Text Encoder ===
-        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, encoderDim * 2, geluActivation);
             yield return new DenseLayer<T>(encoderDim * 2, encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -32322,7 +32322,7 @@ public static class LayerHelper<T>
         {
             yield return new DenseLayer<T>(decoderDim, decoderDim * 2, geluActivation);
             yield return new DenseLayer<T>(decoderDim * 2, decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
@@ -33323,7 +33323,7 @@ public static class LayerHelper<T>
         // SSM blocks with low-rank B/C projections controlled by ssmRank
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(hiddenDim);
+            yield return new BatchNormalizationLayer<T>();
             // SSM: B matrix (input -> low-rank state projection)
             yield return new DenseLayer<T>(inputSize: hiddenDim, outputSize: rankDim, activationFunction: null);
             // SSM: C * A (state dynamics with discretization-aware activation)
@@ -33742,7 +33742,7 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(inputSize: hiddenDimension, outputSize: denoisingNetworkDim, activationFunction: new GELUActivation<T>());
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
             yield return new DenseLayer<T>(inputSize: denoisingNetworkDim, outputSize: hiddenDimension, activationFunction: null);
-            yield return new BatchNormalizationLayer<T>(hiddenDimension);
+            yield return new BatchNormalizationLayer<T>();
         }
 
         // Output projection
@@ -33769,11 +33769,11 @@ public static class LayerHelper<T>
         // Residual blocks with attention
         for (int layer = 0; layer < numResidualLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(sequenceLength * hiddenDimension);
+            yield return new BatchNormalizationLayer<T>();
             yield return new DenseLayer<T>(inputSize: sequenceLength * hiddenDimension, outputSize: sequenceLength * hiddenDimension, activationFunction: null);
             yield return new DenseLayer<T>(inputSize: sequenceLength * hiddenDimension, outputSize: sequenceLength * hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(sequenceLength * hiddenDimension);
+            yield return new BatchNormalizationLayer<T>();
             yield return new DenseLayer<T>(inputSize: sequenceLength * hiddenDimension, outputSize: sequenceLength * intermediateDim, activationFunction: new GELUActivation<T>());
             yield return new DenseLayer<T>(inputSize: sequenceLength * intermediateDim, outputSize: sequenceLength * hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
@@ -33802,7 +33802,7 @@ public static class LayerHelper<T>
         // Residual blocks
         for (int block = 0; block < numResidualBlocks; block++)
         {
-            yield return new BatchNormalizationLayer<T>(sequenceLength * hiddenDimension);
+            yield return new BatchNormalizationLayer<T>();
             yield return new DenseLayer<T>(inputSize: sequenceLength * hiddenDimension, outputSize: sequenceLength * hiddenDimension, activationFunction: new GELUActivation<T>());
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
             yield return new DenseLayer<T>(inputSize: sequenceLength * hiddenDimension, outputSize: sequenceLength * hiddenDimension, activationFunction: null);
@@ -33832,11 +33832,11 @@ public static class LayerHelper<T>
         // Transformer-based denoiser layers
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(totalLen * hiddenDimension);
+            yield return new BatchNormalizationLayer<T>();
             yield return new DenseLayer<T>(inputSize: totalLen * hiddenDimension, outputSize: totalLen * hiddenDimension, activationFunction: null);
             yield return new DenseLayer<T>(inputSize: totalLen * hiddenDimension, outputSize: totalLen * hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(totalLen * hiddenDimension);
+            yield return new BatchNormalizationLayer<T>();
             yield return new DenseLayer<T>(inputSize: totalLen * hiddenDimension, outputSize: totalLen * intermediateDim, activationFunction: new GELUActivation<T>());
             yield return new DenseLayer<T>(inputSize: totalLen * intermediateDim, outputSize: totalLen * hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
@@ -33868,7 +33868,7 @@ public static class LayerHelper<T>
             // Per-granularity processing
             for (int g = 0; g < numGranularities; g++)
             {
-                yield return new BatchNormalizationLayer<T>(contextLength * hiddenDimension);
+                yield return new BatchNormalizationLayer<T>();
                 yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: new GELUActivation<T>());
             }
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
@@ -33899,11 +33899,11 @@ public static class LayerHelper<T>
         // Score network layers
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDimension);
+            yield return new BatchNormalizationLayer<T>();
             yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: null);
             yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDimension);
+            yield return new BatchNormalizationLayer<T>();
             yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * intermediateDim, activationFunction: new GELUActivation<T>());
             yield return new DenseLayer<T>(inputSize: contextLength * intermediateDim, outputSize: contextLength * hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
@@ -33931,7 +33931,7 @@ public static class LayerHelper<T>
         for (int layer = 0; layer < numLayers; layer++)
         {
             yield return new DenseLayer<T>(inputSize: hiddenDimension, outputSize: hiddenDimension, activationFunction: new ReLUActivation<T>());
-            yield return new BatchNormalizationLayer<T>(hiddenDimension);
+            yield return new BatchNormalizationLayer<T>();
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
             yield return new DenseLayer<T>(inputSize: hiddenDimension, outputSize: hiddenDimension, activationFunction: null);
         }
@@ -33962,11 +33962,11 @@ public static class LayerHelper<T>
         // Transformer encoder layers
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDimension);
+            yield return new BatchNormalizationLayer<T>();
             yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: null);
             yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDimension);
+            yield return new BatchNormalizationLayer<T>();
             yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * intermediateDim, activationFunction: new GELUActivation<T>());
             yield return new DenseLayer<T>(inputSize: contextLength * intermediateDim, outputSize: contextLength * hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
@@ -34087,7 +34087,7 @@ public static class LayerHelper<T>
         for (int layer = 0; layer < numTimeLayers; layer++)
         {
             yield return new DenseLayer<T>(inputSize: hiddenDimension, outputSize: hiddenDimension, activationFunction: new ReLUActivation<T>());
-            yield return new BatchNormalizationLayer<T>(hiddenDimension);
+            yield return new BatchNormalizationLayer<T>();
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
@@ -34098,7 +34098,7 @@ public static class LayerHelper<T>
         for (int layer = 0; layer < numFreqLayers; layer++)
         {
             yield return new DenseLayer<T>(inputSize: hiddenDimension, outputSize: hiddenDimension, activationFunction: new ReLUActivation<T>());
-            yield return new BatchNormalizationLayer<T>(hiddenDimension);
+            yield return new BatchNormalizationLayer<T>();
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 

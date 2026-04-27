@@ -4689,7 +4689,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <param name="momentum">The momentum for running statistics (default: 0.9).</param>
     public virtual void AddBatchNormalizationLayer(int featureSize, double epsilon = 1e-5, double momentum = 0.9)
     {
-        var layer = new BatchNormalizationLayer<T>(featureSize, epsilon, momentum);
+        var layer = new BatchNormalizationLayer<T>();
         AddLayerToCollection(layer);
     }
 

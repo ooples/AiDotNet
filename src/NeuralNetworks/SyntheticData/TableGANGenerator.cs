@@ -171,7 +171,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
             {
                 int layerInput = i == 0 ? inputDim : dims[i - 1] + inputDim;
                 Layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-                _genBNLayers.Add(new BatchNormalizationLayer<T>(dims[i]));
+                _genBNLayers.Add(new BatchNormalizationLayer<T>());
             }
 
             int lastHidden = dims.Length > 0 ? dims[^1] + inputDim : inputDim;
@@ -248,7 +248,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
             {
                 int layerInput = i == 0 ? inputDim : dims[i - 1] + inputDim;
                 Layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-                _genBNLayers.Add(new BatchNormalizationLayer<T>(dims[i]));
+                _genBNLayers.Add(new BatchNormalizationLayer<T>());
             }
 
             int lastHidden = dims.Length > 0 ? dims[^1] + inputDim : inputDim;

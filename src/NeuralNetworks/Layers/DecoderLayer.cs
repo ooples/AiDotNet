@@ -161,9 +161,9 @@ public class DecoderLayer<T> : LayerBase<T>
 
         InputSize = inputSize;
 
-        _norm1 = new LayerNormalizationLayer<T>(inputSize);
-        _norm2 = new LayerNormalizationLayer<T>(inputSize);
-        _norm3 = new LayerNormalizationLayer<T>(inputSize);
+        _norm1 = new LayerNormalizationLayer<T>();
+        _norm2 = new LayerNormalizationLayer<T>();
+        _norm3 = new LayerNormalizationLayer<T>();
 
         RegisterSubLayer(_selfAttention);
         RegisterSubLayer(_crossAttention);
@@ -194,9 +194,9 @@ public class DecoderLayer<T> : LayerBase<T>
 
         InputSize = inputSize;
 
-        _norm1 = new LayerNormalizationLayer<T>(inputSize);
-        _norm2 = new LayerNormalizationLayer<T>(inputSize);
-        _norm3 = new LayerNormalizationLayer<T>(inputSize);
+        _norm1 = new LayerNormalizationLayer<T>();
+        _norm2 = new LayerNormalizationLayer<T>();
+        _norm3 = new LayerNormalizationLayer<T>();
 
         RegisterSubLayer(_selfAttention);
         RegisterSubLayer(_crossAttention);

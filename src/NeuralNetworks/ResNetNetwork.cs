@@ -287,7 +287,7 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
         currentChannels = 64;
 
         // Batch normalization after conv1
-        layers.Add(new BatchNormalizationLayer<T>(currentChannels));
+        layers.Add(new BatchNormalizationLayer<T>());
 
         // ReLU activation
         layers.Add(new ActivationLayer<T>(

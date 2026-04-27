@@ -227,7 +227,7 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
             _genBNLayers.Clear();
             foreach (int dim in _options.GeneratorDimensions)
             {
-                _genBNLayers.Add(new BatchNormalizationLayer<T>(dim));
+                _genBNLayers.Add(new BatchNormalizationLayer<T>());
             }
             _usingCustomLayers = false;
         }
@@ -251,7 +251,7 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
             _genBNLayers.Clear();
             foreach (int dim in _options.GeneratorDimensions)
             {
-                _genBNLayers.Add(new BatchNormalizationLayer<T>(dim));
+                _genBNLayers.Add(new BatchNormalizationLayer<T>());
             }
         }
 

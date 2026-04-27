@@ -241,7 +241,7 @@ public class PackageUpgradeValidationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNormLayer_Forward_NormalizesValues()
     {
-        var layer = new BatchNormalizationLayer<double>(4);
+        var layer = new BatchNormalizationLayer<double>();
         var input = new Tensor<double>(new[] { 1, 4 }, new Vector<double>(new[] { 10.0, 20.0, 30.0, 40.0 }));
 
         var output = layer.Forward(input);

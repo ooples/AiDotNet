@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
-[LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = false, TestInputShape = "1, 4", TestConstructorArgs = "")]
 public partial class LayerNormalizationLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -220,16 +220,37 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// For example, if your data has 128 features, you would use featureSize=128.
     /// </para>
     /// </remarks>
-    public LayerNormalizationLayer(int featureSize, double epsilon = NumericalStabilityHelper.LargeEpsilon)
-        : base([featureSize], [featureSize])
+    public LayerNormalizationLayer(double epsilon = NumericalStabilityHelper.LargeEpsilon)
+        : base(new[] { -1 }, new[] { -1 })
     {
         _epsilon = NumericalStabilityHelper.GetEpsilon<T>(epsilon);
+        // Lazy init: feature dim resolved from input.Shape[^1] on first forward.
+        _gamma = new Tensor<T>([0]);
+        _beta = new Tensor<T>([0]);
+    }
+
+    /// <summary>
+    /// Resolves <c>featureSize</c> from <c>input.Shape[^1]</c> (last dim) on the first forward call,
+    /// allocates gamma/beta tensors, and registers them as trainable parameters. Per the
+    /// LayerNorm contract (Ba et al. 2016), normalization happens along the feature axis.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int featureSize = input.Shape[input.Shape.Length - 1];
+        if (featureSize <= 0)
+        {
+            throw new ArgumentException(
+                $"LayerNormalizationLayer cannot resolve featureSize: input.Shape[^1] = {featureSize}.",
+                nameof(input));
+        }
+
         _gamma = Tensor<T>.CreateDefault([featureSize], NumOps.One);
         _beta = Tensor<T>.CreateDefault([featureSize], NumOps.Zero);
 
-        // Register trainable parameters for GPU memory optimization
         RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
         RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+
+        ResolveShapes(new[] { featureSize }, new[] { featureSize });
     }
 
     /// <summary>
@@ -254,6 +275,8 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
+
         if (IsTrainingMode)
         {
             _lastInput = input;

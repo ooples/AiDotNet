@@ -197,7 +197,7 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
         for (int i = 0; i < _options.GeneratorDimensions.Length; i++)
         {
-            _genBNLayers.Add(new BatchNormalizationLayer<T>(_options.GeneratorDimensions[i]));
+            _genBNLayers.Add(new BatchNormalizationLayer<T>());
         }
     }
 

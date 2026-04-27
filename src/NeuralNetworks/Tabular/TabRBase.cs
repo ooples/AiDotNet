@@ -161,7 +161,7 @@ public abstract class TabRBase<T>
 
         if (Options.UseLayerNorm)
         {
-            _encoderNorm = new LayerNormalizationLayer<T>(Options.EmbeddingDimension);
+            _encoderNorm = new LayerNormalizationLayer<T>();
         }
 
         // Initialize context encoder
@@ -180,7 +180,7 @@ public abstract class TabRBase<T>
 
         if (Options.UseLayerNorm)
         {
-            _contextNorm = new LayerNormalizationLayer<T>(Options.EmbeddingDimension);
+            _contextNorm = new LayerNormalizationLayer<T>();
         }
 
         // Initialize attention projections

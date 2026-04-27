@@ -387,7 +387,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _numHeads,
             new GELUActivation<T>() as IActivationFunction<T>);
 
-        _norm1 = new LayerNormalizationLayer<T>(_embeddingSize);
+        _norm1 = new LayerNormalizationLayer<T>();
 
         // Standard transformer FFN: Linear(embed -> ff) + GELU + Linear(ff -> embed)
         _feedForward1 = new FeedForwardLayer<T>(
@@ -400,7 +400,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _embeddingSize,
             (IActivationFunction<T>?)null); // No activation on projection layer
 
-        _norm2 = new LayerNormalizationLayer<T>(_embeddingSize);
+        _norm2 = new LayerNormalizationLayer<T>();
 
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);

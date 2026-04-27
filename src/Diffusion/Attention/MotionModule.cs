@@ -99,8 +99,8 @@ public class MotionModule<T> : LayerBase<T>
         _ffnIn = new DenseLayer<T>(channels, ffnHidden, (IActivationFunction<T>)new GELUActivation<T>());
         _ffnOut = new DenseLayer<T>(ffnHidden, channels, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        _norm1 = new LayerNormalizationLayer<T>(channels);
-        _norm2 = new LayerNormalizationLayer<T>(channels);
+        _norm1 = new LayerNormalizationLayer<T>();
+        _norm2 = new LayerNormalizationLayer<T>();
     }
 
     /// <summary>

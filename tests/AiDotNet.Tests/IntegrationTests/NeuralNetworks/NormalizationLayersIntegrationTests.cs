@@ -39,7 +39,7 @@ public class NormalizationLayersIntegrationTests
         // Arrange
         int batchSize = 4;
         int numFeatures = 8;
-        var layer = new BatchNormalizationLayer<float>(numFeatures);
+        var layer = new BatchNormalizationLayer<float>();
         layer.SetTrainingMode(true);
         var input = CreateRandomTensor([batchSize, numFeatures]);
 
@@ -57,7 +57,7 @@ public class NormalizationLayersIntegrationTests
         // Arrange
         int batchSize = 4;
         int numFeatures = 8;
-        var layer = new BatchNormalizationLayer<float>(numFeatures);
+        var layer = new BatchNormalizationLayer<float>();
         var input = CreateRandomTensor([batchSize, numFeatures]);
 
         // Act - Training mode
@@ -79,7 +79,7 @@ public class NormalizationLayersIntegrationTests
     {
         // Arrange
         int numFeatures = 8;
-        var layer = new BatchNormalizationLayer<float>(numFeatures);
+        var layer = new BatchNormalizationLayer<float>();
         var input = CreateRandomTensor([4, numFeatures]);
         layer.Forward(input);
 
@@ -101,7 +101,7 @@ public class NormalizationLayersIntegrationTests
         int batchSize = 4;
         int numFeatures = 8;
         double customMomentum = 0.95;
-        var layer = new BatchNormalizationLayer<float>(numFeatures, momentum: customMomentum);
+        var layer = new BatchNormalizationLayer<float>();
         layer.SetTrainingMode(true);
         var input = CreateRandomTensor([batchSize, numFeatures]);
 
@@ -118,7 +118,7 @@ public class NormalizationLayersIntegrationTests
     {
         // Arrange
         int numFeatures = 8;
-        var layer = new BatchNormalizationLayer<float>(numFeatures);
+        var layer = new BatchNormalizationLayer<float>();
 
         // Act
         int paramCount = layer.ParameterCount;
@@ -137,7 +137,7 @@ public class NormalizationLayersIntegrationTests
         // Arrange
         int batchSize = 4;
         int featureSize = 16;
-        var layer = new LayerNormalizationLayer<float>(featureSize);
+        var layer = new LayerNormalizationLayer<float>();
         var input = CreateRandomTensor([batchSize, featureSize]);
 
         // Act
@@ -154,7 +154,7 @@ public class NormalizationLayersIntegrationTests
     {
         // Arrange
         int featureSize = 16;
-        var layer = new LayerNormalizationLayer<float>(featureSize);
+        var layer = new LayerNormalizationLayer<float>();
         var input = CreateRandomTensor([4, featureSize]);
         layer.Forward(input);
 
@@ -176,7 +176,7 @@ public class NormalizationLayersIntegrationTests
         int batchSize = 4;
         int featureSize = 16;
         double customEpsilon = 1e-6;
-        var layer = new LayerNormalizationLayer<float>(featureSize, epsilon: customEpsilon);
+        var layer = new LayerNormalizationLayer<float>();
         var input = CreateRandomTensor([batchSize, featureSize]);
 
         // Act
@@ -192,7 +192,7 @@ public class NormalizationLayersIntegrationTests
     {
         // Arrange
         int featureSize = 16;
-        var layer = new LayerNormalizationLayer<float>(featureSize);
+        var layer = new LayerNormalizationLayer<float>();
 
         // Act
         int paramCount = layer.ParameterCount;
@@ -208,7 +208,7 @@ public class NormalizationLayersIntegrationTests
         int batchSize = 2;
         int seqLength = 8;
         int featureSize = 16;
-        var layer = new LayerNormalizationLayer<float>(featureSize);
+        var layer = new LayerNormalizationLayer<float>();
         var input = CreateRandomTensor([batchSize, seqLength, featureSize]);
 
         // Act
@@ -506,8 +506,8 @@ public class NormalizationLayersIntegrationTests
         int numFeatures = 16;
         var input = CreateRandomTensor([batchSize, numFeatures]);
 
-        var batchNorm = new BatchNormalizationLayer<float>(numFeatures);
-        var layerNorm = new LayerNormalizationLayer<float>(numFeatures);
+        var batchNorm = new BatchNormalizationLayer<float>();
+        var layerNorm = new LayerNormalizationLayer<float>();
         var groupNorm = new GroupNormalizationLayer<float>(4, numFeatures);
         var instanceNorm = new InstanceNormalizationLayer<float>(numFeatures);
 
@@ -537,8 +537,8 @@ public class NormalizationLayersIntegrationTests
             constantData[i] = 0.5f;
         var input = new Tensor<float>(constantData, [batchSize, numFeatures]);
 
-        var batchNorm = new BatchNormalizationLayer<float>(numFeatures);
-        var layerNorm = new LayerNormalizationLayer<float>(numFeatures);
+        var batchNorm = new BatchNormalizationLayer<float>();
+        var layerNorm = new LayerNormalizationLayer<float>();
         var groupNorm = new GroupNormalizationLayer<float>(4, numFeatures);
         var instanceNorm = new InstanceNormalizationLayer<float>(numFeatures);
 
@@ -566,7 +566,7 @@ public class NormalizationLayersIntegrationTests
     {
         // Arrange
         int numFeatures = 8;
-        var layer = new BatchNormalizationLayer<float>(numFeatures);
+        var layer = new BatchNormalizationLayer<float>();
         layer.SetTrainingMode(false); // Use running stats for single sample
         var input = CreateRandomTensor([1, numFeatures]);
 
@@ -584,7 +584,7 @@ public class NormalizationLayersIntegrationTests
         // Arrange
         int batchSize = 4;
         int featureSize = 1;
-        var layer = new LayerNormalizationLayer<float>(featureSize);
+        var layer = new LayerNormalizationLayer<float>();
         var input = CreateRandomTensor([batchSize, featureSize]);
 
         // Act

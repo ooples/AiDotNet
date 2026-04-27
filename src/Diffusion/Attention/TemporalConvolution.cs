@@ -92,7 +92,7 @@ public class TemporalConvolution<T> : LayerBase<T>
         // cross-frame temporal dependencies. This serves as a placeholder for ONNX inference.
         _conv = new DenseLayer<T>(channels, channels, (IActivationFunction<T>)new GELUActivation<T>());
 
-        _norm = new LayerNormalizationLayer<T>(channels);
+        _norm = new LayerNormalizationLayer<T>();
     }
 
     /// <summary>

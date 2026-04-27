@@ -150,7 +150,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         // normalized = (value - value) / sqrt(0 + eps) = 0
         // output = gamma * 0 + beta = 0 + 0 = 0 (gamma=1, beta=0 initially)
         int featureSize = 4;
-        var layer = new LayerNormalizationLayer<double>(featureSize);
+        var layer = new LayerNormalizationLayer<double>();
 
         var input = new Tensor<double>(new[] { 1, featureSize });
         for (int i = 0; i < featureSize; i++) input[0, i] = 5.0;
@@ -177,7 +177,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         // output[2] = (6-5)/sqrt(5+eps) = 1/sqrt(5) ≈ 0.4472
         // output[3] = (8-5)/sqrt(5+eps) = 3/sqrt(5) ≈ 1.3416
         int featureSize = 4;
-        var layer = new LayerNormalizationLayer<double>(featureSize);
+        var layer = new LayerNormalizationLayer<double>();
 
         var input = new Tensor<double>(new[] { 1, featureSize });
         input[0, 0] = 2.0;
@@ -203,7 +203,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     {
         // Layer normalization should produce output with mean ≈ 0 (when beta=0)
         int featureSize = 5;
-        var layer = new LayerNormalizationLayer<double>(featureSize);
+        var layer = new LayerNormalizationLayer<double>();
 
         var input = new Tensor<double>(new[] { 1, featureSize });
         input[0, 0] = 1.0;
@@ -226,7 +226,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     {
         // Layer normalization should produce output with variance ≈ 1 (when gamma=1)
         int featureSize = 5;
-        var layer = new LayerNormalizationLayer<double>(featureSize);
+        var layer = new LayerNormalizationLayer<double>();
 
         var input = new Tensor<double>(new[] { 1, featureSize });
         input[0, 0] = 1.0;
@@ -257,7 +257,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         // Layer norm normalizes each sample independently
         // So changing one sample should not affect another's output
         int featureSize = 3;
-        var layer = new LayerNormalizationLayer<double>(featureSize);
+        var layer = new LayerNormalizationLayer<double>();
 
         var input1 = new Tensor<double>(new[] { 2, featureSize });
         input1[0, 0] = 1.0; input1[0, 1] = 2.0; input1[0, 2] = 3.0;
@@ -283,7 +283,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     {
         // Set gamma=2, beta=1, then output = 2 * normalized + 1
         int featureSize = 4;
-        var layer = new LayerNormalizationLayer<double>(featureSize);
+        var layer = new LayerNormalizationLayer<double>();
 
         // Set gamma=2, beta=1 for all features
         var gammaValues = new double[featureSize];

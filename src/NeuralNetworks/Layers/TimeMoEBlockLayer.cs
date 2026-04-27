@@ -85,7 +85,7 @@ public class TimeMoEBlockLayer<T> : LayerBase<T>
         _numExperts = numExperts;
         _topK = topK;
 
-        _norm1 = new LayerNormalizationLayer<T>(hiddenDim);
+        _norm1 = new LayerNormalizationLayer<T>();
 
         // sequenceLength=1 is the placeholder used by TransformerEncoderLayer; the attention
         // layer supports any rank and reshapes internally.
@@ -95,7 +95,7 @@ public class TimeMoEBlockLayer<T> : LayerBase<T>
             headCount: numHeads,
             activationFunction: new GELUActivation<T>() as IActivationFunction<T>);
 
-        _norm2 = new LayerNormalizationLayer<T>(hiddenDim);
+        _norm2 = new LayerNormalizationLayer<T>();
 
         // Build numExperts experts, each a 2-layer Dense FFN: hiddenDim -> intermediateSize
         // (GELU) -> hiddenDim. ExpertLayer wraps a list of sub-layers and applies them

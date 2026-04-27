@@ -127,10 +127,10 @@ public class STDiTBlock<T> : LayerBase<T>
         _ffnIn = new DenseLayer<T>(channels, ffnHidden, (IActivationFunction<T>)new GELUActivation<T>());
         _ffnOut = new DenseLayer<T>(ffnHidden, channels, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        _spatialNorm = new LayerNormalizationLayer<T>(channels);
-        _temporalNorm = new LayerNormalizationLayer<T>(channels);
-        _crossNorm = new LayerNormalizationLayer<T>(channels);
-        _ffnNorm = new LayerNormalizationLayer<T>(channels);
+        _spatialNorm = new LayerNormalizationLayer<T>();
+        _temporalNorm = new LayerNormalizationLayer<T>();
+        _crossNorm = new LayerNormalizationLayer<T>();
+        _ffnNorm = new LayerNormalizationLayer<T>();
     }
 
     /// <summary>

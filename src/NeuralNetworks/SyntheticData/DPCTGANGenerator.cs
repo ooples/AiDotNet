@@ -219,7 +219,7 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             _genBNLayers.Clear();
             foreach (int dim in _options.GeneratorDimensions)
             {
-                _genBNLayers.Add(new BatchNormalizationLayer<T>(dim));
+                _genBNLayers.Add(new BatchNormalizationLayer<T>());
             }
             _usingCustomLayers = false;
         }
@@ -236,7 +236,7 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             _genBNLayers.Clear();
             foreach (int dim in _options.GeneratorDimensions)
             {
-                _genBNLayers.Add(new BatchNormalizationLayer<T>(dim));
+                _genBNLayers.Add(new BatchNormalizationLayer<T>());
             }
         }
 

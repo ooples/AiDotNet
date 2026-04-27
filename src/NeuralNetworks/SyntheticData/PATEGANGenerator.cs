@@ -229,7 +229,7 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         // Create matching BN layers for hidden layers (all except output layer)
         for (int i = 0; i < _options.GeneratorDimensions.Length; i++)
         {
-            _genBNLayers.Add(new BatchNormalizationLayer<T>(_options.GeneratorDimensions[i]));
+            _genBNLayers.Add(new BatchNormalizationLayer<T>());
         }
     }
 

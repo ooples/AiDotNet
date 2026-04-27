@@ -69,7 +69,7 @@ public class MLPMixerBlockLayer<T> : LayerBase<T>
         int tempExpanded = numPatches * expansionFactor;
         int chanExpanded = hiddenDim * expansionFactor;
 
-        _norm1 = new LayerNormalizationLayer<T>(hiddenDim);
+        _norm1 = new LayerNormalizationLayer<T>();
 
         // Temporal mixer: [B, numPatches, hiddenDim] -> transpose -> [B, hiddenDim, numPatches]
         //                 -> Dense(numPatches -> tempExpanded, GELU) -> Dense(tempExpanded -> numPatches)
@@ -85,7 +85,7 @@ public class MLPMixerBlockLayer<T> : LayerBase<T>
             activationFunction: null);
         _fromPatchAxis = new TransposeLayer<T>(new[] { hiddenDim, numPatches }, new[] { 1, 0 });
 
-        _norm2 = new LayerNormalizationLayer<T>(hiddenDim);
+        _norm2 = new LayerNormalizationLayer<T>();
 
         // Channel mixer: per-patch Dense(hiddenDim -> chanExpanded, GELU) -> Dense(chanExpanded -> hiddenDim).
         // DenseLayer operates on the last axis, so no transpose is needed here.

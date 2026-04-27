@@ -118,7 +118,7 @@ public class TransitionLayer<T> : LayerBase<T>
         OutputChannels = (int)(inputChannels * compressionFactor);
         _relu = new ReLUActivation<T>();
 
-        _bn = new BatchNormalizationLayer<T>(inputChannels);
+        _bn = new BatchNormalizationLayer<T>();
 
         _conv = new ConvolutionalLayer<T>(
             outputDepth: OutputChannels,

@@ -78,7 +78,7 @@ public class LayerMathematicalTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_Forward_ApproximatelyZeroMean()
     {
-        var layer = new BatchNormalizationLayer<double>(2, epsilon: 1e-5);
+        var layer = new BatchNormalizationLayer<double>();
 
         var input = new Tensor<double>(new[] {
             1.0, 2.0,
@@ -104,7 +104,7 @@ public class LayerMathematicalTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_ConstantInput_ProducesZero()
     {
-        var layer = new BatchNormalizationLayer<double>(1, epsilon: 1e-5);
+        var layer = new BatchNormalizationLayer<double>();
 
         var input = new Tensor<double>(new[] { 5.0, 5.0, 5.0 }, [3, 1]);
         var output = layer.Forward(input);

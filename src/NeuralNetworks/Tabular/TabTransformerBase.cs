@@ -193,7 +193,7 @@ public abstract class TabTransformerBase<T>
         // Final layer normalization
         if (Options.UseLayerNorm)
         {
-            _finalLayerNorm = new LayerNormalizationLayer<T>(Options.EmbeddingDimension);
+            _finalLayerNorm = new LayerNormalizationLayer<T>();
         }
 
         // Initialize MLP layers

@@ -43,7 +43,7 @@ internal static class CodeTransformerLayerFactory
                 headCount: architecture.NumHeads,
                 activationFunction: new IdentityActivation<T>()));
 
-            layers.Add(new LayerNormalizationLayer<T>(architecture.ModelDimension));
+            layers.Add(new LayerNormalizationLayer<T>());
 
             layers.Add(new DenseLayer<T>(
                 inputSize: architecture.ModelDimension,
@@ -55,7 +55,7 @@ internal static class CodeTransformerLayerFactory
                 outputSize: architecture.ModelDimension,
                 activationFunction: new IdentityActivation<T>()));
 
-            layers.Add(new LayerNormalizationLayer<T>(architecture.ModelDimension));
+            layers.Add(new LayerNormalizationLayer<T>());
             AddDropoutIfEnabled(layers, architecture);
         }
     }
@@ -70,7 +70,7 @@ internal static class CodeTransformerLayerFactory
                 headCount: architecture.NumHeads,
                 activationFunction: new IdentityActivation<T>()));
 
-            layers.Add(new LayerNormalizationLayer<T>(architecture.ModelDimension));
+            layers.Add(new LayerNormalizationLayer<T>());
 
             layers.Add(new MultiHeadAttentionLayer<T>(
                 sequenceLength: architecture.MaxSequenceLength,
@@ -78,7 +78,7 @@ internal static class CodeTransformerLayerFactory
                 headCount: architecture.NumHeads,
                 activationFunction: new IdentityActivation<T>()));
 
-            layers.Add(new LayerNormalizationLayer<T>(architecture.ModelDimension));
+            layers.Add(new LayerNormalizationLayer<T>());
 
             layers.Add(new DenseLayer<T>(
                 inputSize: architecture.ModelDimension,
@@ -90,7 +90,7 @@ internal static class CodeTransformerLayerFactory
                 outputSize: architecture.ModelDimension,
                 activationFunction: new IdentityActivation<T>()));
 
-            layers.Add(new LayerNormalizationLayer<T>(architecture.ModelDimension));
+            layers.Add(new LayerNormalizationLayer<T>());
             AddDropoutIfEnabled(layers, architecture);
         }
     }

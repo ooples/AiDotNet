@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for computations (e.g., float, double).</typeparam>
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
-[LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "")]
 public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     /// <summary>
@@ -292,7 +292,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// For example, in a neural network for image classification:
     /// ```csharp
     /// // Create a batch normalization layer for 128 features
-    /// var batchNormLayer = new BatchNormalizationLayer<float>(128);
+    /// var batchNormLayer = new BatchNormalizationLayer<float>();
     /// ```
     /// 
     /// The layer initializes with:
@@ -301,19 +301,45 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// - Running statistics (mean and variance) initialized to 0.0 and 1.0
     /// </para>
     /// </remarks>
-    public BatchNormalizationLayer(int numFeatures, double epsilon = NumericalStabilityHelper.LargeEpsilon, double momentum = 0.9)
-        : base([numFeatures], [numFeatures])
+    public BatchNormalizationLayer(double epsilon = NumericalStabilityHelper.LargeEpsilon, double momentum = 0.9)
+        : base(new[] { -1 }, new[] { -1 })
     {
         _epsilon = NumericalStabilityHelper.GetEpsilon<T>(epsilon);
         _momentum = NumOps.FromDouble(momentum);
+        // Lazy: gamma/beta/running stats sized on first forward from input channel count
+        // (input.Shape[1] for rank>=2 channels-first NCHW, input.Length for rank-1 input).
+        _gamma = new Tensor<T>([0]);
+        _beta = new Tensor<T>([0]);
+        _runningMean = new Tensor<T>([0]);
+        _runningVariance = new Tensor<T>([0]);
+    }
+
+    /// <summary>
+    /// Resolves <c>numFeatures</c> from the input tensor's channel dim on the first forward
+    /// call (input.Shape[1] for rank >= 2 channels-first NCHW; input.Length for rank-1 input),
+    /// allocates gamma/beta + running mean/variance tensors, and registers gamma/beta as
+    /// trainable parameters. Per the BatchNorm paper (Ioffe &amp; Szegedy 2015), normalization
+    /// happens per-feature for [B,F] inputs and per-channel for [B,C,H,W] image inputs.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int numFeatures = input.Rank >= 2 ? input.Shape[1] : input.Length;
+        if (numFeatures <= 0)
+        {
+            throw new ArgumentException(
+                $"BatchNormalizationLayer cannot resolve numFeatures: derived dim = {numFeatures}.",
+                nameof(input));
+        }
+
         _gamma = Tensor<T>.CreateDefault([numFeatures], NumOps.One);
         _beta = new Tensor<T>([numFeatures]);
         _runningMean = new Tensor<T>([numFeatures]);
         _runningVariance = Tensor<T>.CreateDefault([numFeatures], NumOps.One);
 
-        // Register trainable parameters for GPU memory optimization
         RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
         RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+
+        ResolveShapes(new[] { numFeatures }, new[] { numFeatures });
     }
 
     /// <summary>
@@ -355,6 +381,8 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
+
         // Store original shape for backward pass restoration
         _originalInputShape = input._shape;
 

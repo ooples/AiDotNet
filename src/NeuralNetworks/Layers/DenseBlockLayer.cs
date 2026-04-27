@@ -64,7 +64,7 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>
         // Bottleneck layer: 1x1 conv to reduce channels (4 * growthRate is standard)
         int bottleneckChannels = 4 * growthRate;
 
-        _bn1 = new BatchNormalizationLayer<T>(inputChannels);
+        _bn1 = new BatchNormalizationLayer<T>();
         _conv1x1 = new ConvolutionalLayer<T>(
             outputDepth: bottleneckChannels,
             kernelSize: 1,
@@ -72,7 +72,7 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>
             padding: 0,
             activationFunction: new IdentityActivation<T>());
 
-        _bn2 = new BatchNormalizationLayer<T>(bottleneckChannels);
+        _bn2 = new BatchNormalizationLayer<T>();
         _conv3x3 = new ConvolutionalLayer<T>(
             outputDepth: growthRate,
             kernelSize: 3,

@@ -118,8 +118,8 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
         _scale = 1.0 / Math.Sqrt(_headDim);
 
         // Layer normalizations (pre-norm architecture)
-        _norm1 = new LayerNormalizationLayer<T>(dim);
-        _norm2 = new LayerNormalizationLayer<T>(dim);
+        _norm1 = new LayerNormalizationLayer<T>();
+        _norm2 = new LayerNormalizationLayer<T>();
 
         // QKV projection (3 * dim for Q, K, V combined)
         _qkvProj = new DenseLayer<T>(dim, dim * 3);

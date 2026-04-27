@@ -280,7 +280,7 @@ public class NeuralNetworkLayersIntegrationTests
     {
         // Arrange
         int numFeatures = 10;
-        var layer = new BatchNormalizationLayer<double>(numFeatures);
+        var layer = new BatchNormalizationLayer<double>();
         layer.SetTrainingMode(true);
 
         var input = new Tensor<double>([32, numFeatures]); // Large batch for stable statistics
@@ -300,7 +300,7 @@ public class NeuralNetworkLayersIntegrationTests
     {
         // Arrange
         int numFeatures = 5;
-        var layer = new BatchNormalizationLayer<double>(numFeatures);
+        var layer = new BatchNormalizationLayer<double>();
 
         var input = new Tensor<double>([8, numFeatures]);
         InitializeRandomTensor(input, scale: 5.0);
@@ -346,7 +346,7 @@ public class NeuralNetworkLayersIntegrationTests
     public async Task BatchNormalizationLayer_SupportsTraining_ReturnsTrue()
     {
         // Arrange
-        var layer = new BatchNormalizationLayer<double>(10);
+        var layer = new BatchNormalizationLayer<double>();
 
         // Assert
         Assert.True(layer.SupportsTraining);
@@ -582,7 +582,7 @@ public class NeuralNetworkLayersIntegrationTests
     {
         // Arrange
         int numFeatures = 5;
-        var layer = new BatchNormalizationLayer<double>(numFeatures);
+        var layer = new BatchNormalizationLayer<double>();
         layer.SetTrainingMode(true);
 
         // All same values - zero variance

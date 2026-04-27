@@ -242,7 +242,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
 
         // Initial TDNN layer
         _tdnnLayers.Add(new DenseLayer<T>(inputDim, channels, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _tdnnLayers.Add(new BatchNormalizationLayer<T>(channels));
+        _tdnnLayers.Add(new BatchNormalizationLayer<T>());
 
         // ECAPA-TDNN SE-Res2 blocks
         foreach (int dilation in _options.Dilations)
@@ -257,7 +257,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         _poolingLayer = new DenseLayer<T>(mfaOutputDim, _options.EmbeddingDimension * 2);
 
         // Final layers
-        _finalBatchNorm = new BatchNormalizationLayer<T>(_options.EmbeddingDimension);
+        _finalBatchNorm = new BatchNormalizationLayer<T>();
         _classifierLayer = new DenseLayer<T>(_options.EmbeddingDimension, 107); // 107 languages
     }
 
@@ -265,15 +265,15 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
     {
         // 1x1 reduction
         _resBlocks.Add(new DenseLayer<T>(channels, channels / 4, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _resBlocks.Add(new BatchNormalizationLayer<T>(channels / 4));
+        _resBlocks.Add(new BatchNormalizationLayer<T>());
 
         // Dilated conv
         _resBlocks.Add(new DenseLayer<T>(channels / 4, channels / 4, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _resBlocks.Add(new BatchNormalizationLayer<T>(channels / 4));
+        _resBlocks.Add(new BatchNormalizationLayer<T>());
 
         // 1x1 expansion
         _resBlocks.Add(new DenseLayer<T>(channels / 4, channels, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _resBlocks.Add(new BatchNormalizationLayer<T>(channels));
+        _resBlocks.Add(new BatchNormalizationLayer<T>());
 
         // SE block
         int seReduction = 8;

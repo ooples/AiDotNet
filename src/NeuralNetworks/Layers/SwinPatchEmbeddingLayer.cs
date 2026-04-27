@@ -102,7 +102,7 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
             padding: 0);
 
         // Layer normalization over embedding dimension
-        _norm = new LayerNormalizationLayer<T>(embedDim);
+        _norm = new LayerNormalizationLayer<T>();
 
         RegisterSubLayer(_projection);
         RegisterSubLayer(_norm);

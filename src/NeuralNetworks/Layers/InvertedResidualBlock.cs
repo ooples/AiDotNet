@@ -180,7 +180,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
                 padding: 0,
                 activationFunction: new IdentityActivation<T>());
 
-            _expandBn = new BatchNormalizationLayer<T>(hiddenDim);
+            _expandBn = new BatchNormalizationLayer<T>();
         }
 
         // Calculate output dimensions after depthwise conv
@@ -198,7 +198,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
             padding: 1,
             activationFunction: new IdentityActivation<T>());
 
-        _dwBn = new BatchNormalizationLayer<T>(dwInputChannels);
+        _dwBn = new BatchNormalizationLayer<T>();
 
         // Squeeze-and-Excitation block (optional, for MobileNetV3)
         if (_useSE)
@@ -218,7 +218,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
             padding: 0,
             activationFunction: new IdentityActivation<T>());
 
-        _projectBn = new BatchNormalizationLayer<T>(outChannels);
+        _projectBn = new BatchNormalizationLayer<T>();
 
         // Default internal BN layers to eval mode.
         // BN with batch_size=1 in training mode normalizes to zero (I - 1/N*11^T = 0 when N=1),

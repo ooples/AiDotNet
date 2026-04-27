@@ -163,7 +163,7 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
                     headCount: _architecture.NumHeads,
                     activationFunction: new IdentityActivation<T>()));
 
-                Layers.Add(new LayerNormalizationLayer<T>(_architecture.ModelDimension));
+                Layers.Add(new LayerNormalizationLayer<T>());
 
                 if (_architecture.DropoutRate > 0)
                 {

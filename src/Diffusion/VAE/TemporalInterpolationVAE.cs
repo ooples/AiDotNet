@@ -130,8 +130,8 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
         _interpIn = new DenseLayer<T>(latentChannels * 2, hiddenChannels, (IActivationFunction<T>)new GELUActivation<T>());
         _interpOut = new DenseLayer<T>(hiddenChannels, latentChannels, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        _encoderNorm = new LayerNormalizationLayer<T>(baseChannels);
-        _decoderNorm = new LayerNormalizationLayer<T>(hiddenChannels);
+        _encoderNorm = new LayerNormalizationLayer<T>();
+        _decoderNorm = new LayerNormalizationLayer<T>();
     }
 
     /// <inheritdoc />

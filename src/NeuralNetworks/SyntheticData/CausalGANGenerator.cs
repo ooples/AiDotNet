@@ -224,7 +224,7 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
             // Residual: input dimension includes original input concatenated
             int layerInput = i == 0 ? inputDim : dims[i - 1] + inputDim;
             Layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-            _genBNLayers.Add(new BatchNormalizationLayer<T>(dims[i]));
+            _genBNLayers.Add(new BatchNormalizationLayer<T>());
         }
 
         // Output layer: produces raw features (no activation)

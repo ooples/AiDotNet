@@ -177,11 +177,11 @@ public abstract class SAINTBase<T>
             if (Options.UseLayerNorm)
             {
                 var layerNorms = _layerNorms ?? throw new InvalidOperationException("Layer norms not initialized.");
-                layerNorms.Add(new LayerNormalizationLayer<T>(Options.EmbeddingDimension));
-                layerNorms.Add(new LayerNormalizationLayer<T>(Options.EmbeddingDimension));
+                layerNorms.Add(new LayerNormalizationLayer<T>());
+                layerNorms.Add(new LayerNormalizationLayer<T>());
                 if (Options.UseIntersampleAttention)
                 {
-                    layerNorms.Add(new LayerNormalizationLayer<T>(Options.EmbeddingDimension));
+                    layerNorms.Add(new LayerNormalizationLayer<T>());
                 }
             }
         }

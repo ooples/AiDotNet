@@ -133,7 +133,7 @@ public class LayerMathematicalTests2
     public async Task LayerNorm_NormalizesEachSample()
     {
         int featureSize = 4;
-        var layer = new LayerNormalizationLayer<double>(featureSize);
+        var layer = new LayerNormalizationLayer<double>();
 
         var data = new double[] {
             1.0, 2.0, 3.0, 4.0,      // sample 0

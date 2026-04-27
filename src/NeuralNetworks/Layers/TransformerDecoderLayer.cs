@@ -583,17 +583,17 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Self-attention layer (no activation)
         _selfAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation);
-        _norm1 = new LayerNormalizationLayer<T>(_embeddingSize);
+        _norm1 = new LayerNormalizationLayer<T>();
 
         // Cross-attention layer (no activation)
         _crossAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation);
-        _norm2 = new LayerNormalizationLayer<T>(_embeddingSize);
+        _norm2 = new LayerNormalizationLayer<T>();
 
         // Feed-forward layer (with activation) - expands to hidden dimension
         _feedForward = new FeedForwardLayer<T>(_embeddingSize, _feedForwardDim, activation);
         // Projection layer (no activation) - projects back to embedding size
         _feedForwardProjection = new FeedForwardLayer<T>(_feedForwardDim, _embeddingSize, (IActivationFunction<T>?)null);
-        _norm3 = new LayerNormalizationLayer<T>(_embeddingSize);
+        _norm3 = new LayerNormalizationLayer<T>();
 
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
@@ -649,17 +649,17 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Self-attention layer (no activation)
         _selfAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation);
-        _norm1 = new LayerNormalizationLayer<T>(_embeddingSize);
+        _norm1 = new LayerNormalizationLayer<T>();
 
         // Cross-attention layer (no activation)
         _crossAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation);
-        _norm2 = new LayerNormalizationLayer<T>(_embeddingSize);
+        _norm2 = new LayerNormalizationLayer<T>();
 
         // Feed-forward layer (with vector activation) - expands to hidden dimension
         _feedForward = new FeedForwardLayer<T>(_embeddingSize, _feedForwardDim, activation);
         // Projection layer (no activation) - projects back to embedding size
         _feedForwardProjection = new FeedForwardLayer<T>(_feedForwardDim, _embeddingSize, (IActivationFunction<T>?)null);
-        _norm3 = new LayerNormalizationLayer<T>(_embeddingSize);
+        _norm3 = new LayerNormalizationLayer<T>();
 
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);

@@ -172,7 +172,7 @@ public abstract class TabDPTBase<T>
             inputDim = mlpDims[i];
         }
 
-        _finalNorm = new LayerNormalizationLayer<T>(mlpDims[^1]);
+        _finalNorm = new LayerNormalizationLayer<T>();
     }
 
     /// <summary>
@@ -403,8 +403,8 @@ public abstract class TabDPTBase<T>
                 (IActivationFunction<TBlock>?)null);
 
             // Layer normalizations
-            _norm1 = new LayerNormalizationLayer<TBlock>(embeddingDim);
-            _norm2 = new LayerNormalizationLayer<TBlock>(embeddingDim);
+            _norm1 = new LayerNormalizationLayer<TBlock>();
+            _norm2 = new LayerNormalizationLayer<TBlock>();
         }
 
         private static Tensor<TBlock> InitializeWeights(int[] shape, double scale, Random random)

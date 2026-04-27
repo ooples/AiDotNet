@@ -196,7 +196,7 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
             int outputDim = channels[i];
             _featureEncoder.Add(new DenseLayer<T>(inputDim * kernelSizes[i], outputDim,
                 (IActivationFunction<T>)new GELUActivation<T>()));
-            _featureEncoder.Add(new LayerNormalizationLayer<T>(outputDim));
+            _featureEncoder.Add(new LayerNormalizationLayer<T>());
             inputDim = outputDim;
         }
 
@@ -210,13 +210,13 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
         {
             // Self-attention (simplified as dense layers)
             _transformerLayers.Add(new DenseLayer<T>(_options.HiddenSize, _options.HiddenSize));
-            _transformerLayers.Add(new LayerNormalizationLayer<T>(_options.HiddenSize));
+            _transformerLayers.Add(new LayerNormalizationLayer<T>());
 
             // Feed-forward
             _transformerLayers.Add(new DenseLayer<T>(_options.HiddenSize, _options.IntermediateSize,
                 (IActivationFunction<T>)new GELUActivation<T>()));
             _transformerLayers.Add(new DenseLayer<T>(_options.IntermediateSize, _options.HiddenSize));
-            _transformerLayers.Add(new LayerNormalizationLayer<T>(_options.HiddenSize));
+            _transformerLayers.Add(new LayerNormalizationLayer<T>());
             _transformerLayers.Add(new DropoutLayer<T>(_options.HiddenDropout));
         }
 

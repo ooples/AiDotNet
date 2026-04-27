@@ -153,7 +153,7 @@ public class BottleneckBlock<T> : LayerBase<T>
             padding: 0,
             activationFunction: new IdentityActivation<T>());
 
-        _bn1 = new BatchNormalizationLayer<T>(baseChannels);
+        _bn1 = new BatchNormalizationLayer<T>();
 
         // Second 3x3 conv: process at bottleneck width with stride
         _conv2 = new ConvolutionalLayer<T>(
@@ -166,7 +166,7 @@ public class BottleneckBlock<T> : LayerBase<T>
         int outHeight = inputHeight / stride;
         int outWidth = inputWidth / stride;
 
-        _bn2 = new BatchNormalizationLayer<T>(baseChannels);
+        _bn2 = new BatchNormalizationLayer<T>();
 
         // Third 1x1 conv: expand channels to outChannels (baseChannels * 4)
         _conv3 = new ConvolutionalLayer<T>(
@@ -176,7 +176,7 @@ public class BottleneckBlock<T> : LayerBase<T>
             padding: 0,
             activationFunction: new IdentityActivation<T>());
 
-        _bn3 = new BatchNormalizationLayer<T>(outChannels);
+        _bn3 = new BatchNormalizationLayer<T>();
 
         // Zero-init residual: initialize last BN's gamma to zero so residual blocks
         // start as identity mappings, improving training stability
@@ -196,7 +196,7 @@ public class BottleneckBlock<T> : LayerBase<T>
                 padding: 0,
                 activationFunction: new IdentityActivation<T>());
 
-            _downsampleBn = new BatchNormalizationLayer<T>(outChannels);
+            _downsampleBn = new BatchNormalizationLayer<T>();
         }
 
         RegisterSubLayer(_conv1);
