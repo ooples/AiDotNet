@@ -1,3 +1,4 @@
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using AiDotNet.Enums;
@@ -185,14 +186,18 @@ public class Issue1195CapabilityScopedLicensingTests
         });
         var result = LicenseValidator.ParseResponse(responseJson, 200);
 
-        // ReadOnlyCollection<string> is the runtime type returned by AsReadOnly().
-        // Cast to IList<string> to verify the IsReadOnly flag is true.
-        Assert.IsAssignableFrom<System.Collections.Generic.IReadOnlyList<string>>(result.Capabilities);
-        var asList = result.Capabilities as System.Collections.Generic.IList<string>;
-        if (asList is not null)
-        {
-            Assert.True(asList.IsReadOnly);
-        }
+        // The runtime type is ReadOnlyCollection<string> (from List.AsReadOnly()).
+        // Cast to IList<string> unconditionally — if this cast fails the test
+        // must fail too, not silently skip the mutability check.
+        var asList = Assert.IsAssignableFrom<System.Collections.Generic.IList<string>>(result.Capabilities);
+        Assert.True(asList.IsReadOnly);
+
+        // Behavioural guard: the read-only flag is documentation; the
+        // operations must actually throw. ReadOnlyCollection throws
+        // NotSupportedException on Add/Remove/Clear/Insert/indexer-set.
+        Assert.Throws<System.NotSupportedException>(() => asList.Add("model:save"));
+        Assert.Throws<System.NotSupportedException>(() => asList.Remove("tensors:save"));
+        Assert.Throws<System.NotSupportedException>(() => asList.Clear());
     }
 
     // ─── §2a-c: forward-compatible tensor-side bridge ───
@@ -228,58 +233,125 @@ public class Issue1195CapabilityScopedLicensingTests
     /// <summary>
     /// Null key — the bridge must not blow up. AiModelBuilder constructs
     /// without a key are common (trial-only users), and the bridge gets
-    /// called regardless.
+    /// called regardless. Also verify the no-op contract behaviourally:
+    /// disposal must be safe AND idempotent (the upstream
+    /// <see cref="ModelPersistenceGuard.SetActiveLicenseKey"/> nests this
+    /// scope inside its own composite, which can dispose more than once
+    /// during cleanup of nested BuildAsync failures), and repeat calls
+    /// must each return their own usable scope.
     /// </summary>
     [Fact]
     public void TensorLicenseFlow_NullKey_ReturnsNoopScope()
     {
-        using var scope = TensorLicenseFlow.SetActiveLicenseKey(null);
+        var scope = TensorLicenseFlow.SetActiveLicenseKey(null);
         Assert.NotNull(scope);
+
+        // Idempotent disposal — must not throw on the second Dispose.
+        var disposalEx = Record.Exception(() =>
+        {
+            scope.Dispose();
+            scope.Dispose();
+        });
+        Assert.Null(disposalEx);
+
+        // Repeat calls return another usable no-op scope (not null, not
+        // throwing on dispose). This guards against any future "single
+        // shared instance with one-shot dispose" regression that would
+        // make the second call unusable after the first scope tore down.
+        var second = TensorLicenseFlow.SetActiveLicenseKey(null);
+        Assert.NotNull(second);
+        var secondDisposalEx = Record.Exception(() => second.Dispose());
+        Assert.Null(secondDisposalEx);
     }
 
     /// <summary>
-    /// Forward-looking guard for the regression listed in the issue's
-    /// acceptance criteria: "trial counter ticks once on the upstream side,
-    /// zero on the tensor side".
+    /// Issue #1195 acceptance-criterion regression: "trial counter ticks
+    /// once on the upstream side, zero on the tensor side." Observe both
+    /// halves directly via the upstream <see cref="TrialStateManager"/>
+    /// (whose file path the guard reads through
+    /// <see cref="ModelPersistenceGuard.SetTestTrialFilePathOverride"/>):
+    /// a single <c>EnforceBeforeSave</c> increments
+    /// <c>OperationsUsed</c> from 0 → 1, and a follow-up
+    /// <c>EnforceBeforeSerialize</c> nested inside an
+    /// <see cref="ModelPersistenceGuard.InternalOperation"/> scope leaves
+    /// the counter unchanged.
     ///
-    /// The "ticks once on the upstream side" half is observable today via
-    /// the existing trial-counter integration tests in this folder; this
-    /// test additionally pins the structural guarantee that an upstream
-    /// <see cref="ModelPersistenceGuard.InternalOperation"/> scope routes
-    /// suppression into the tensor layer when the tensor licensing API
-    /// becomes available. Until that ships,
-    /// <see cref="TensorLicenseFlow.IsTensorsLicensingAvailable"/> reads
-    /// false and the suppression is a no-op — which is exactly the
-    /// pre-rollout contract.
+    /// The tensor-side leg of the assertion is structural until the
+    /// AiDotNet.Tensors release with the capability-scoped guard ships:
+    /// <see cref="TensorLicenseFlow.IsTensorsLicensingAvailable"/>
+    /// reflects current rollout state, and
+    /// <see cref="ModelPersistenceGuard.InternalOperation"/> routes
+    /// suppression into the tensor layer automatically the moment the API
+    /// becomes loadable.
     /// </summary>
     [Fact]
     public void TrialCounter_TicksOnceOnUpstreamLayer_ZeroOnTensorLayer()
     {
-        // When the tensor licensing API ships in a future Tensors NuGet
-        // bump, IsTensorsLicensingAvailable flips to true. At that point,
-        // entering ModelPersistenceGuard.InternalOperation() acquires the
-        // tensor-side scope, which suppresses tensor-side trial-counter
-        // ticks for the duration of the upstream save/load. Until then,
-        // the tensor side has no enforcement at all and the structural
-        // path is verified by TensorLicenseFlow_GracefullyHandlesAbsentTensorsApi.
-        bool tensorsApiPresent = TensorLicenseFlow.IsTensorsLicensingAvailable;
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", null);
 
-        // Assert the structural pairing: regardless of which side is
-        // active, entering the upstream InternalOperation scope must not
-        // throw, must return a valid IDisposable, and must release cleanly.
-        using (var upstreamScope = ModelPersistenceGuard.InternalOperation())
+        string tempDir = Path.Combine(Path.GetTempPath(), "aidotnet-issue1195-counter-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        string trialPath = Path.Combine(tempDir, "trial.json");
+
+        try
         {
-            Assert.NotNull(upstreamScope);
+            using (ModelPersistenceGuard.SetTestTrialFilePathOverride(trialPath))
+            {
+                var manager = new TrialStateManager(trialPath);
+
+                // Baseline: fresh trial counter at 0.
+                int baseline = manager.GetStatus().OperationsUsed;
+                Assert.Equal(0, baseline);
+
+                // One user-facing Save outside any InternalOperation scope.
+                // The upstream guard MUST tick the counter exactly once.
+                ModelPersistenceGuard.EnforceBeforeSave();
+
+                int afterSave = manager.GetStatus().OperationsUsed;
+                Assert.Equal(baseline + 1, afterSave);
+
+                // The pairing contract: an upstream InternalOperation
+                // scope wrapped around an EnforceBeforeSerialize must
+                // suppress the upstream tick — that's the byte-level
+                // helper the issue describes as the place double-counting
+                // would otherwise happen. The composite scope from the
+                // production code ALSO enters the tensor-layer
+                // InternalOperation when the API is present, so the
+                // tensor-side counter (private to that layer) likewise
+                // doesn't tick. Verify the upstream half by counter, the
+                // tensor half by the bridge's reflection-resolution flag.
+                using (ModelPersistenceGuard.InternalOperation())
+                {
+                    ModelPersistenceGuard.EnforceBeforeSerialize();
+                }
+
+                int afterNestedSerialize = manager.GetStatus().OperationsUsed;
+                Assert.Equal(afterSave, afterNestedSerialize);
+
+                // Tensor-layer half. When the AiDotNet.Tensors release
+                // with PersistenceGuard ships, IsTensorsLicensingAvailable
+                // flips to true and the bridge automatically routes
+                // suppression into the tensor layer. Until then, the
+                // tensor side has no enforcement at all — verified by
+                // the no-op behaviour of TensorLicenseFlow.InternalOperation
+                // covered in TensorLicenseFlow_GracefullyHandlesAbsentTensorsApi.
+                bool tensorsApiPresent = TensorLicenseFlow.IsTensorsLicensingAvailable;
+                using (var bridgeScope = TensorLicenseFlow.InternalOperation())
+                {
+                    Assert.NotNull(bridgeScope);
+                    // When the API is present, the runtime type is the
+                    // tensor-layer scope (not NoopScope). When absent,
+                    // it is NoopScope. Either way, dispose must succeed.
+                    Assert.True(tensorsApiPresent
+                        || bridgeScope.GetType().FullName!.EndsWith("NoopScope", StringComparison.Ordinal),
+                        "When the Tensors licensing API is absent, the bridge must return its NoopScope sentinel.");
+                }
+            }
         }
-
-        // When the API is present, the bridge wires the suppression
-        // through — verifiable by the structural reflection check rather
-        // than a counter peek (the tensor-side counter is not exposed
-        // upstream and shouldn't be).
-        if (tensorsApiPresent)
+        finally
         {
-            using var bridgeScope = TensorLicenseFlow.InternalOperation();
-            Assert.NotNull(bridgeScope);
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); }
+            catch { /* best effort */ }
         }
     }
 }

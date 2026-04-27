@@ -42,7 +42,15 @@ internal static class TensorLicenseFlow
     private const string TensorsGuardTypeName = "AiDotNet.Tensors.Licensing.PersistenceGuard";
 
     private static readonly object _resolutionLock = new();
-    private static bool _resolved;
+    // Volatile guards the double-checked-lock pattern: a non-volatile read
+    // of _resolved outside the lock could see a stale `false` (forcing a
+    // redundant lock acquisition — harmless) OR see `true` while the
+    // dependent reflection-handle writes (_setActiveLicenseKeyMethod et al.)
+    // are still in CPU store buffers and not yet visible to other cores.
+    // Volatile reads emit the appropriate acquire fence so once we observe
+    // _resolved == true, all writes that preceded the corresponding
+    // _resolved = true store are visible.
+    private static volatile bool _resolved;
 
     // Cached reflection handles. All null when the Tensors licensing API
     // isn't present in the currently-loaded Tensors assembly (the no-op
@@ -82,10 +90,24 @@ internal static class TensorLicenseFlow
             object? scope = _setActiveLicenseKeyMethod.Invoke(null, new[] { tensorsKey });
             return scope as IDisposable ?? NoopScope.Instance;
         }
-        catch (TargetInvocationException ex)
+        catch (Exception ex) when (
+            ex is TargetInvocationException
+                or ArgumentException
+                or MethodAccessException
+                or InvalidOperationException
+                or TargetException
+                or TargetParameterCountException)
         {
+            // Same broad catch-and-degrade rationale as in ToTensorsKey:
+            // the tensor-layer API may change signatures in a future
+            // release in ways that produce these reflection failures
+            // outside TargetInvocationException. The bridge must never
+            // fault the upstream persistence path.
             System.Diagnostics.Trace.TraceWarning(
-                $"TensorLicenseFlow: failed to set tensor-layer license key: {ex.InnerException?.GetType().Name ?? ex.GetType().Name}");
+                $"TensorLicenseFlow: failed to set tensor-layer license key: {ex.GetType().Name}" +
+                ((ex as TargetInvocationException)?.InnerException is { } inner
+                    ? $" ({inner.GetType().Name}: {inner.Message})"
+                    : $": {ex.Message}"));
             return NoopScope.Instance;
         }
     }
@@ -114,10 +136,19 @@ internal static class TensorLicenseFlow
             object? scope = _internalOperationMethod.Invoke(null, parameters: null);
             return scope as IDisposable ?? NoopScope.Instance;
         }
-        catch (TargetInvocationException ex)
+        catch (Exception ex) when (
+            ex is TargetInvocationException
+                or ArgumentException
+                or MethodAccessException
+                or InvalidOperationException
+                or TargetException
+                or TargetParameterCountException)
         {
             System.Diagnostics.Trace.TraceWarning(
-                $"TensorLicenseFlow: failed to enter tensor-layer InternalOperation: {ex.InnerException?.GetType().Name ?? ex.GetType().Name}");
+                $"TensorLicenseFlow: failed to enter tensor-layer InternalOperation: {ex.GetType().Name}" +
+                ((ex as TargetInvocationException)?.InnerException is { } inner
+                    ? $" ({inner.GetType().Name}: {inner.Message})"
+                    : $": {ex.Message}"));
             return NoopScope.Instance;
         }
     }
@@ -213,10 +244,25 @@ internal static class TensorLicenseFlow
 
             return instance;
         }
-        catch (TargetInvocationException ex)
+        catch (Exception ex) when (
+            ex is TargetInvocationException
+                or ArgumentException
+                or MethodAccessException
+                or InvalidOperationException
+                or TargetException
+                or TargetParameterCountException)
         {
+            // Reflection construction can throw beyond TargetInvocationException
+            // when the future tensor-layer API changes signatures (e.g., a
+            // setter renamed, a property type changed, a constructor parameter
+            // added). The bridge must never fault the upstream persistence
+            // path: log and degrade to no-op so the upstream guard still
+            // runs. Includes the inner exception type for triage.
             System.Diagnostics.Trace.TraceWarning(
-                $"TensorLicenseFlow: failed to build tensor-layer license key: {ex.InnerException?.GetType().Name ?? ex.GetType().Name}");
+                $"TensorLicenseFlow: failed to build tensor-layer license key: {ex.GetType().Name}" +
+                ((ex as TargetInvocationException)?.InnerException is { } inner
+                    ? $" ({inner.GetType().Name}: {inner.Message})"
+                    : $": {ex.Message}"));
             return null;
         }
     }
