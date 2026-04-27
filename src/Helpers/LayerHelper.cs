@@ -24163,45 +24163,55 @@ public static class LayerHelper<T>
         int temporalFfnDim = temporalDim * 4;
         int decoderFfnDim = decoderDim * 4;
 
+        // Lazy weight init: paper-default video VLMs (LLaVA-Video, LLaVA-NeXT-
+        // Video, LongVILA, PLLaVA, etc.) have ~0.5–1B params under defaults
+        // (visionDim=1024, decoderDim=4096, 24+32 layers). Eager weight
+        // allocation OOMs the test runner. Mirroring the pattern from
+        // NoisePredictorBase / DiffusionResBlock keeps weight tensors at
+        // size 0 until the first Forward call materializes them, so test
+        // construction stays cheap and trained runs allocate only what
+        // they actually use.
+        var lazy = Initialization.InitializationStrategies<T>.Lazy;
+
         // === Vision Encoder (per-frame ViT) ===
         yield return new LayerNormalizationLayer<T>(visionDim);
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads, initializationStrategy: lazy);
             yield return new LayerNormalizationLayer<T>(visionDim);
-            yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
-            yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
+            yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation, lazy);
+            yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation, lazy);
             yield return new LayerNormalizationLayer<T>(visionDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === Projection to temporal dim if needed ===
         if (visionDim != temporalDim)
-            yield return new DenseLayer<T>(visionDim, temporalDim, identityActivation);
+            yield return new DenseLayer<T>(visionDim, temporalDim, identityActivation, lazy);
 
         // === Temporal Aggregation Module ===
         for (int i = 0; i < numTemporalLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(temporalDim, temporalDim, numHeads > 16 ? 16 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(temporalDim, temporalDim, numHeads > 16 ? 16 : numHeads, initializationStrategy: lazy);
             yield return new LayerNormalizationLayer<T>(temporalDim);
-            yield return new DenseLayer<T>(temporalDim, temporalFfnDim, geluActivation);
-            yield return new DenseLayer<T>(temporalFfnDim, temporalDim, identityActivation);
+            yield return new DenseLayer<T>(temporalDim, temporalFfnDim, geluActivation, lazy);
+            yield return new DenseLayer<T>(temporalFfnDim, temporalDim, identityActivation, lazy);
             yield return new LayerNormalizationLayer<T>(temporalDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === MLP Projection to LLM ===
-        yield return new DenseLayer<T>(temporalDim, decoderDim, geluActivation);
+        yield return new DenseLayer<T>(temporalDim, decoderDim, geluActivation, lazy);
         yield return new LayerNormalizationLayer<T>(decoderDim);
 
         // === LLM Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads, initializationStrategy: lazy);
             yield return new LayerNormalizationLayer<T>(decoderDim);
-            yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
-            yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
+            yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation, lazy);
+            yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation, lazy);
             yield return new LayerNormalizationLayer<T>(decoderDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
