@@ -24155,7 +24155,11 @@ public static class LayerHelper<T>
         int numTemporalLayers = 2,
         int numDecoderLayers = 32,
         int numHeads = 12,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int imageHeight = 224,
+        int imageWidth = 224,
+        int imageChannels = 3,
+        int patchSize = 16)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -24172,6 +24176,20 @@ public static class LayerHelper<T>
         // construction stays cheap and trained runs allocate only what
         // they actually use.
         var lazy = Initialization.InitializationStrategies<T>.Lazy;
+
+        // === Patch Embedding (paper-faithful ViT front end) ===
+        // Per Dosovitskiy et al. 2021 ("An Image is Worth 16x16 Words"):
+        //   raw image [B, C, H, W]
+        //     ↓ patchify into (H/P)·(W/P) patches of [P, P, C]
+        //     ↓ linear project each flattened patch to embedding dim
+        //   sequence [B, num_patches, visionDim]
+        // PatchEmbeddingLayer's 4D ingest treats the leading axis as batch,
+        // so the same layer also handles per-frame embedding for video VLMs
+        // (input [F, C, H, W] → [F, num_patches, visionDim]). Without this
+        // first layer the original chain started with LayerNorm(visionDim)
+        // on raw [F, C, H, W] and threw "Gamma shape (visionDim) does not
+        // match last dim (W)" on every forward.
+        yield return new PatchEmbeddingLayer<T>(imageHeight, imageWidth, imageChannels, patchSize, visionDim);
 
         // === Vision Encoder (per-frame ViT) ===
         yield return new LayerNormalizationLayer<T>(visionDim);
