@@ -3339,35 +3339,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     continue;
                 }
 
-                // Issue #1208 fix: only restore the layer's tensor
-                // references back to the originals when structure
-                // changed (lazy resize) OR when no buffer is being
-                // preserved for subsequent steps. In the steady-state
-                // case (training iterations with stable shapes) we
-                // KEEP the layer fields pointing at the buffer views
-                // so the next training step's forward/backward uses
-                // the same references the optimizer applies updates to.
-                //
-                // The previous code unconditionally restored originals,
-                // which left the buffer/view alignment in a state where:
-                //   1. SetTrainableParameters swapped `_embeddingTensor`
-                //      from buffer-view back to the lazy-init original.
-                //   2. Next training step's CollectParameters returned
-                //      cached (now-stale) buffer-view references.
-                //   3. Forward used the original (post-swap) reference.
-                //   4. Tape recorded gradients keyed by the original.
-                //   5. `grads[param]` lookup with the cached view
-                //      reference missed every match — optimizer saw 0
-                //      gradient and the embedding never trained.
-                //
-                // Now we copy view data into originals (so Clone /
-                // Serialize / GetTrainableParameters from user code see
-                // up-to-date weights right after Train returns) but
-                // keep the layer's *active* references on the views.
-                // External observers go through GetTrainableParameters
-                // → returns the buffer-view tensor with the same data
-                // either way. The buffer is the single source of truth
-                // until structure actually changes.
+                // Issue #1208: only swap layer fields back to the
+                // originals when structure changed (lazy resize). For
+                // stable iterations keep buffer-views as the live
+                // references — the optimizer/tape and the layer all
+                // agree on the same tensor reference, and `grads[param]`
+                // lookup matches. Copy view → original data so external
+                // observers (Clone / Serialize / GetTrainableParameters
+                // from user code) still see up-to-date weights.
                 for (int i = 0; i < originals.Count; i++)
                 {
                     // Bulk copy via Engine — zero-alloc, SIMD-accelerated
@@ -3376,16 +3355,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                 if (anyStructureChanged)
                 {
-                    // Structure changed → buffer is going to be
-                    // invalidated below anyway; restore originals so
-                    // the next CollectParameters call picks them up.
                     trainable.SetTrainableParameters(originals);
                 }
-                // else: keep views as the live references. The data
-                // sync above means the originals also hold the
-                // post-step weights, so any external code holding a
-                // pre-Train reference to the original sees correct
-                // values.
             }
         }
 
