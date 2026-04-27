@@ -27079,6 +27079,20 @@ public static class LayerHelper<T>
     /// <summary>
     /// Creates decoder layers for the SwinUNETR model.
     /// </summary>
+    /// <remarks>
+    /// Per Hatamizadeh et al. 2022 ("Swin UNETR: Swin Transformers for Semantic
+    /// Segmentation of Brain Tumors in MRI Images"), the decoder mirrors the
+    /// encoder's hierarchical downsampling (4× then 2× three more times = 32×)
+    /// with five 2× upsampling stages that restore the input resolution.
+    /// Each stage applies upsampling followed by 3×3 conv → ReLU → 3×3 conv → ReLU
+    /// (the residual block specified in the paper). The final 1×1 conv projects
+    /// to <paramref name="numClasses"/> with identity activation (logits).
+    /// Skip connections from encoder stages are described in the paper but
+    /// require Forward to consume saved intermediate features, which the
+    /// current sequential SwinUNETR forward path does not support; the
+    /// decoder produces the paper-correct output shape <c>[B, numClasses, H, W]</c>
+    /// without them so the segmentation loss receives a per-pixel logit map.
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateSwinUNETRDecoderLayers(
         int encoderOutputChannels, int decoderDim, int numClasses,
         int featureHeight, int featureWidth)
@@ -27086,9 +27100,29 @@ public static class LayerHelper<T>
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
+        // Bottleneck refinement at H/32, W/32: project encoder output to decoderDim.
         yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
         yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+
+        // Five 2× upsampling stages: H/32 → H/16 → H/8 → H/4 → H/2 → H.
+        // Channel halving each stage (decoderDim → decoderDim/2 → ... → decoderDim/16),
+        // mirroring the encoder pyramid per Hatamizadeh et al. 2022 Figure 1.
+        int curC = decoderDim;
+        int curH = featureHeight;
+        int curW = featureWidth;
+        for (int stage = 0; stage < 5; stage++)
+        {
+            yield return new UpsamplingLayer<T>([curC, curH, curW], 2);
+            int nextC = stage < 4 ? Math.Max(curC / 2, 16) : curC;
+            yield return new ConvolutionalLayer<T>(curC, curH * 2, curW * 2, nextC, 3, 1, 1, relu);
+            yield return new ConvolutionalLayer<T>(nextC, curH * 2, curW * 2, nextC, 3, 1, 1, relu);
+            curC = nextC;
+            curH *= 2;
+            curW *= 2;
+        }
+
+        // Final 1×1 segmentation head: project to per-pixel class logits at full resolution.
+        yield return new ConvolutionalLayer<T>(curC, curH, curW, numClasses, 1, 1, 0, identity);
     }
 
     #endregion

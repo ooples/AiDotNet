@@ -322,4 +322,11 @@ public class UpsamplingLayer<T> : LayerBase<T>
         _lastInput = null;
         _gpuCachedInputShape = null;
     }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["ScaleFactor"] = _scaleFactor.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
 }

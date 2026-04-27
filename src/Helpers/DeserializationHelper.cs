@@ -732,6 +732,19 @@ public static class DeserializationHelper
             }
             instance = ctor.Invoke(new object[] { inputDepth, inputHeight, inputWidth, poolSize, stride, poolingType });
         }
+        else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.UpsamplingLayer<>) ||
+                 (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.UpsamplingLayer`1")))
+        {
+            // UpsamplingLayer(int[] inputShape, int scaleFactor)
+            int scaleFactor = TryGetInt(additionalParams, "ScaleFactor") ?? 2;
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int[]), typeof(int) });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find UpsamplingLayer constructor.");
+            }
+            instance = ctor.Invoke(new object[] { inputShape, scaleFactor });
+        }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.MaxPoolingLayer<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.MaxPoolingLayer`1")))
         {
