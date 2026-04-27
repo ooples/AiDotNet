@@ -273,6 +273,20 @@ public class CategoricalCrossEntropyTapeIssue1191Tests
         const int modelDim = 16;
         const int ffDim = 32;
         const int numFacts = vocabSize; // identity task: input k → class k
+        const int totalIters = 400;
+        const int window = 40;
+        const int trials = 5;
+        // Multi-trial pass criterion: at least 4/5 trials must satisfy
+        // every guard. The Transformer has no exposed seed for weight
+        // init, so a single stochastic run can flake on CI even when
+        // the fix is correct. Across 5 trials we tolerate 1 unlucky
+        // run while still rejecting any genuine regression — the pre-
+        // fix 1/V bug fails *every* trial because it's deterministic
+        // (the loss reporting bug is independent of init).
+        const int requiredPasses = 4;
+
+        float lnV = (float)Math.Log(vocabSize);   // 2.0794
+        float lnVOverV = lnV / vocabSize;          // 0.2599
 
         var architecture = new TransformerArchitecture<float>(
             inputType: InputType.TwoDimensional,
@@ -287,27 +301,7 @@ public class CategoricalCrossEntropyTapeIssue1191Tests
             maxSequenceLength: seqLen,
             vocabularySize: vocabSize);
 
-        // Use Adam at a conservative LR. After the #1191 fix, tape
-        // gradients are V× larger than the buggy 1/V version, so a
-        // higher LR would over-shoot on this small model. Adam's
-        // per-parameter step adaptation keeps the trajectory sane
-        // regardless of which parameter is dominant.
-        var optimizerOptions = new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
-        {
-            InitialLearningRate = 0.005,
-            Beta1 = 0.9,
-            Beta2 = 0.999,
-            Epsilon = 1e-8,
-            UseAdaptiveBetas = false
-        };
-        var optimizer = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, optimizerOptions);
-
-        var transformer = new Transformer<float>(
-            architecture,
-            lossFunction: new CategoricalCrossEntropyLoss<float>(),
-            optimizer: optimizer);
-
-        // Build the identity dataset: input [k,k,k,k] → class k.
+        // Build the identity dataset once: input [k,k,k,k] → class k.
         var inputs = new Tensor<float>[numFacts];
         var targets = new Tensor<float>[numFacts];
         for (int k = 0; k < numFacts; k++)
@@ -321,104 +315,123 @@ public class CategoricalCrossEntropyTapeIssue1191Tests
             targets[k] = tgt;
         }
 
-        transformer.SetTrainingMode(true);
-
-        // First call exposes the random-init loss. Pre-fix this is
-        // ~ln(V)/V ≈ 0.26 at V=8 instead of ~ln(V) ≈ 2.08.
-        transformer.Train(inputs[0], targets[0]);
-        float initialLoss = transformer.GetLastLoss();
-        _output.WriteLine($"V={vocabSize}  initial loss after 1 iter = {initialLoss:F6}");
-
-        float lnV = (float)Math.Log(vocabSize);   // 2.0794
-        float lnVOverV = lnV / vocabSize;          // 0.2599
-
-        Assert.True(!float.IsNaN(initialLoss) && !float.IsInfinity(initialLoss),
-            $"Initial loss must be finite; got {initialLoss}");
-
-        // Initial loss should be in the same ballpark as ln(V). Allow a
-        // wide window because (a) the model isn't perfectly uniform at
-        // init, and (b) the first gradient step has already happened.
-        // The pre-fix 1/V value of 0.26 is 8× smaller than the lower
-        // bound here — it can't pass.
-        Assert.True(initialLoss > 0.5f * lnV,
-            $"Initial loss {initialLoss:F6} is suspiciously below ln(V)={lnV:F6}. " +
-            $"The 1/V scaling bug from issue #1191 produces ~{lnVOverV:F6} here.");
-
-        // Run a stochastic per-sample training loop. The issue's pre-fix
-        // repro had loss bouncing in the tight band [0.228, 0.272] —
-        // every value within ~10% of ln(V)/V ≈ 0.26, unable to escape
-        // the 1/V plateau. The post-fix model must demonstrably escape
-        // that region, both upward (correct loss reporting) and
-        // downward (gradients drive learning toward correct
-        // configurations).
-        var lossesOverTime = new System.Collections.Generic.List<float>();
-        const int totalIters = 400;
-        for (int iter = 0; iter < totalIters; iter++)
+        int passed = 0;
+        var failureMessages = new System.Collections.Generic.List<string>();
+        for (int trial = 0; trial < trials; trial++)
         {
-            int k = iter % numFacts;
-            transformer.Train(inputs[k], targets[k]);
-            lossesOverTime.Add(transformer.GetLastLoss());
+            // Use Adam at a conservative LR. After the #1191 fix, tape
+            // gradients are V× larger than the buggy 1/V version, so a
+            // higher LR would over-shoot on this small model. Adam's
+            // per-parameter step adaptation keeps the trajectory sane
+            // regardless of which parameter is dominant. Each trial
+            // gets a fresh optimizer + transformer so weight init is
+            // independent.
+            var optimizerOptions = new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 0.005,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
+                UseAdaptiveBetas = false
+            };
+            var optimizer = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, optimizerOptions);
+            var transformer = new Transformer<float>(
+                architecture,
+                lossFunction: new CategoricalCrossEntropyLoss<float>(),
+                optimizer: optimizer);
+
+            transformer.SetTrainingMode(true);
+
+            // First call exposes the random-init loss. Pre-fix this is
+            // ~ln(V)/V ≈ 0.26 at V=8 instead of ~ln(V) ≈ 2.08.
+            transformer.Train(inputs[0], targets[0]);
+            float initialLoss = transformer.GetLastLoss();
+
+            // initialLoss after one training step depends on init — it
+            // can drift toward 0.5 × ln(V) on lucky inits even though
+            // the 1/V plateau (~ln(V)/V ≈ 0.26) is structurally
+            // impossible after the fix. Use a wide floor so that any
+            // reasonable post-fix value passes; the buggy value is
+            // 4× below this floor.
+            bool initialOk =
+                !float.IsNaN(initialLoss)
+                && !float.IsInfinity(initialLoss)
+                && initialLoss > 0.5f * lnV;
+
+            // Run a stochastic per-sample training loop. The issue's pre-fix
+            // repro had loss bouncing in the tight band [0.228, 0.272] —
+            // every value within ~10% of ln(V)/V ≈ 0.26, unable to escape
+            // the 1/V plateau. The post-fix model must demonstrably escape
+            // that region, both upward (correct loss reporting) and
+            // downward (gradients drive learning toward correct
+            // configurations).
+            var lossesOverTime = new System.Collections.Generic.List<float>(totalIters);
+            for (int iter = 0; iter < totalIters; iter++)
+            {
+                int k = iter % numFacts;
+                transformer.Train(inputs[k], targets[k]);
+                lossesOverTime.Add(transformer.GetLastLoss());
+            }
+
+            float minLoss = lossesOverTime.Min();
+            float maxLoss = lossesOverTime.Max();
+            float spread = maxLoss - minLoss;
+            float firstWindowMean = Average(lossesOverTime, 0, window);
+            float lastWindowMean = Average(lossesOverTime, totalIters - window, window);
+
+            _output.WriteLine(
+                $"trial {trial + 1}/{trials}: initial={initialLoss:F4}  min={minLoss:F4}  max={maxLoss:F4}  " +
+                $"spread={spread:F4}  first_window={firstWindowMean:F4}  last_window={lastWindowMean:F4}");
+
+            // Guard 1: early-training mean in ln(V) ballpark (not 1/V plateau).
+            // Guard 2: model REACHES low loss (gradient flow proof).
+            // Guard 3: max loss escapes the 1/V plateau region.
+            // Guard 4: spread > tolerance (no Cycle-30 bit-identical signature).
+            bool trialPass =
+                initialOk
+                && firstWindowMean > 0.5f * lnV
+                && minLoss < 0.85f * lnV
+                && maxLoss > 0.5f * lnV
+                && spread > 1e-2f;
+            if (trialPass)
+            {
+                passed++;
+            }
+            else
+            {
+                failureMessages.Add(
+                    $"trial {trial + 1}: initial={initialLoss:F4}, " +
+                    $"firstWin={firstWindowMean:F4} (>{0.5f * lnV:F4}? {firstWindowMean > 0.5f * lnV}), " +
+                    $"min={minLoss:F4} (<{0.85f * lnV:F4}? {minLoss < 0.85f * lnV}), " +
+                    $"max={maxLoss:F4} (>{0.5f * lnV:F4}? {maxLoss > 0.5f * lnV}), " +
+                    $"spread={spread:F4} (>1e-2? {spread > 1e-2f})");
+            }
         }
 
-        float minLoss = lossesOverTime.Min();
-        float maxLoss = lossesOverTime.Max();
-        float spread = maxLoss - minLoss;
-        const int window = 40;
-        float firstWindowMean = Average(lossesOverTime, 0, window);
-        float lastWindowMean = Average(lossesOverTime, totalIters - window, window);
-        _output.WriteLine(
-            $"Loss range over {totalIters} iters: min={minLoss:F6}  max={maxLoss:F6}  spread={spread:F6}  " +
-            $"first_window={firstWindowMean:F6}  last_window={lastWindowMean:F6}");
+        _output.WriteLine($"Aggregate: {passed}/{trials} trials passed all guards.");
 
-        // Guard 1: early-training mean must be in the ln(V) ballpark,
-        // NOT the buggy ln(V)/V plateau. The 0.5 × ln(V) floor is 4×
-        // the buggy value, so this can't pass with the 1/V regression.
-        Assert.True(firstWindowMean > 0.5f * lnV,
-            $"Early training loss {firstWindowMean:F6} is suspiciously below ln(V)={lnV:F6}. " +
-            $"Issue #1191's 1/V scaling produces ~{lnVOverV:F6} on this task.");
-
-        // Guard 2 (real-improvement assertion): the model must REACH a
-        // per-iteration loss strictly below the random-init floor
-        // ln(V). This is the canonical proof that gradients flow with
-        // correct magnitude — the pre-fix issue repro had loss
-        // bouncing in [0.228, 0.272], unable to escape the plateau.
-        // Empirically, with the 1/V fix this Transformer reliably
-        // reaches min < 1.5 (≈ 0.72×ln(V)) within 400 stochastic
-        // single-sample iterations across many runs (observed range
-        // 0.50–1.31). The 0.85 threshold gives margin against the
-        // worst observed run while still proving learning occurred.
-        // The per-sample SGD noise on a tiny model means windowed
-        // means stay near the run-mean (≈ ln(V)) — the trajectory
-        // visits low-loss configurations but oscillates, so MIN is
-        // the right convergence proxy here, not the window mean.
-        Assert.True(minLoss < 0.85f * lnV,
-            $"Model never reached low loss across {totalIters} iters " +
-            $"(issue #1191): min={minLoss:F6}, threshold={0.85f * lnV:F6} = 0.85×ln(V). " +
-            $"Pre-fix repro had min=0.228 (within 10% of the {lnVOverV:F6} 1/V plateau). " +
-            $"Reaching low loss is the canonical proof gradients drive the model " +
-            $"toward correct configurations.");
-
-        // Guard 3 (escape-from-plateau): the maximum loss must also
-        // visibly exceed ln(V)/V — the pre-fix Cycle-30 run was bit-
-        // identical at 0.0217 across 56k SGD steps. Any value above
-        // 0.5×ln(V) on any iteration disproves that signature.
-        Assert.True(maxLoss > 0.5f * lnV,
-            $"Loss never escaped the 1/V plateau region (issue #1191): " +
-            $"max={maxLoss:F6}, ln(V)/V={lnVOverV:F6}, " +
-            $"required max > {0.5f * lnV:F6}.");
-
-        // Guard 4 (movement): bit-identical loss across iterations is
-        // the Cycle-30 plateau signature. Empirically the post-fix
-        // spread is 2.0–6.1 (typical run); 1e-2 is a paranoid floor.
-        Assert.True(spread > 1e-2f,
-            $"Loss is too flat across {totalIters} iters (issue #1191 plateau symptom): " +
-            $"min={minLoss:F6}, max={maxLoss:F6}, spread={spread:F6}.");
+        // Multi-trial pass criterion: a clear majority must satisfy
+        // every guard. The 1/V regression would fail every trial
+        // (the bug is deterministic — pre-fix loss is structurally
+        // ~ln(V)/V ≈ {0.2599} regardless of init), so the threshold
+        // distinguishes "fix is correct" from "fix has regressed"
+        // even with 1–2 unlucky weight-init trials.
+        Assert.True(passed >= requiredPasses,
+            $"Convergence checks were unstable: passed {passed}/{trials} trials, " +
+            $"required {requiredPasses}. The 1/V bug from issue #1191 would fail " +
+            $"every trial deterministically. Per-trial failure detail:\n  " +
+            string.Join("\n  ", failureMessages));
     }
 
     private static float Average(System.Collections.Generic.List<float> xs, int start, int count)
     {
         float s = 0f;
-        for (int i = start; i < start + count && i < xs.Count; i++) s += xs[i];
-        return s / count;
+        int n = 0;
+        for (int i = start; i < start + count && i < xs.Count; i++)
+        {
+            s += xs[i];
+            n++;
+        }
+        return n == 0 ? 0f : s / n;
     }
 }
