@@ -954,16 +954,37 @@ public class NeuralNetworkArchitecture<T>
                 break;
 
             case InputType.ThreeDimensional:
-                if (InputHeight <= 0 || InputWidth <= 0 || InputDepth <= 0)
+                // Spatial dims may be -1 (sentinel) for PyTorch-LazyConv2d-style models
+                // that resolve H/W on the first Forward call. Channels (InputDepth) must
+                // still be a concrete positive int because lazy convolution allocates
+                // weights with shape [outChannels, inChannels, k, k] on first forward.
+                if (InputDepth <= 0)
                 {
-                    throw new ArgumentException("InputHeight, InputWidth, and InputDepth must all be greater than 0 for ThreeDimensional input.");
+                    throw new ArgumentException("InputDepth must be greater than 0 for ThreeDimensional input.");
+                }
+                if ((InputHeight <= 0 && InputHeight != -1) || (InputWidth <= 0 && InputWidth != -1))
+                {
+                    throw new ArgumentException("InputHeight and InputWidth must be greater than 0 (or -1 for dynamic spatial dims) for ThreeDimensional input.");
+                }
+                if ((InputHeight == -1) != (InputWidth == -1))
+                {
+                    throw new ArgumentException("Half-dynamic spatial dims are not supported. Set both InputHeight and InputWidth to -1 for dynamic input, or provide concrete values for both.");
                 }
                 break;
 
             case InputType.FourDimensional:
-                if (InputFrames <= 0 || InputDepth <= 0 || InputHeight <= 0 || InputWidth <= 0)
+                // Same lazy-spatial convention as ThreeDimensional, with InputFrames also required.
+                if (InputFrames <= 0 || InputDepth <= 0)
                 {
-                    throw new ArgumentException("InputFrames, InputDepth, InputHeight, and InputWidth must all be greater than 0 for FourDimensional (temporal video) input.");
+                    throw new ArgumentException("InputFrames and InputDepth must be greater than 0 for FourDimensional (temporal video) input.");
+                }
+                if ((InputHeight <= 0 && InputHeight != -1) || (InputWidth <= 0 && InputWidth != -1))
+                {
+                    throw new ArgumentException("InputHeight and InputWidth must be greater than 0 (or -1 for dynamic spatial dims) for FourDimensional input.");
+                }
+                if ((InputHeight == -1) != (InputWidth == -1))
+                {
+                    throw new ArgumentException("Half-dynamic spatial dims are not supported. Set both InputHeight and InputWidth to -1 for dynamic input, or provide concrete values for both.");
                 }
                 break;
 
@@ -971,7 +992,15 @@ public class NeuralNetworkArchitecture<T>
                 throw new ArgumentException("Invalid InputDimensionality specified.");
         }
 
-        // Calculate size AFTER dimension inference (important for TwoDimensional with inferred dimensions)
+        // Calculate size AFTER dimension inference (important for TwoDimensional with inferred dimensions).
+        // When spatial dims are dynamic (sentinel -1), InputSize cannot be precomputed and the
+        // size validation / layer-shape check are skipped; the lazy first-forward path resolves them.
+        if (HasDynamicSpatialDims)
+        {
+            // Don't overwrite InputSize when dynamic; leave whatever the user provided (typically 0).
+            return;
+        }
+
         int calculatedSize = InputType switch
         {
             InputType.OneDimensional => InputSize,
@@ -1005,5 +1034,58 @@ public class NeuralNetworkArchitecture<T>
                 throw new ArgumentException($"The first layer's input size ({firstLayerInputSize}) must match the input size ({InputSize}).");
             }
         }
+    }
+
+    /// <summary>
+    /// Indicates whether this architecture declares dynamic (lazy) spatial dimensions —
+    /// <see cref="InputHeight"/> and <see cref="InputWidth"/> set to <c>-1</c> as PyTorch-style
+    /// sentinels, meaning the network resolves H/W from the actual input on the first forward.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Channel (<see cref="InputDepth"/>) and frame (<see cref="InputFrames"/>) dimensions remain
+    /// required positive integers even when spatial dims are dynamic, because lazy convolution
+    /// still needs the channel count at construction to size its kernel weights.
+    /// </para>
+    /// </remarks>
+    public bool HasDynamicSpatialDims => InputHeight == -1 || InputWidth == -1;
+
+    /// <summary>
+    /// Creates an architecture for a network whose spatial dimensions are resolved on the first
+    /// forward pass (PyTorch <c>LazyConv2d</c>-style). Suitable for detection backbones and any
+    /// model that must process variable-size images in the same run.
+    /// </summary>
+    /// <param name="inputType">
+    /// Either <see cref="InputType.ThreeDimensional"/> (image: <c>[C, H, W]</c>) or
+    /// <see cref="InputType.FourDimensional"/> (temporal video: <c>[F, C, H, W]</c>).
+    /// </param>
+    /// <param name="taskType">The task this network performs.</param>
+    /// <param name="channels">The channel count (<see cref="InputDepth"/>); required.</param>
+    /// <param name="outputSize">The flattened output size (e.g. number of classes).</param>
+    /// <param name="frames">For <see cref="InputType.FourDimensional"/>, the temporal frame count; ignored otherwise.</param>
+    /// <returns>A new architecture with <see cref="HasDynamicSpatialDims"/> set to <c>true</c>.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="inputType"/> is not 3D or 4D.</exception>
+    public static NeuralNetworkArchitecture<T> CreateDynamicSpatial(
+        InputType inputType,
+        NeuralNetworkTaskType taskType,
+        int channels,
+        int outputSize,
+        int frames = 0)
+    {
+        if (inputType != InputType.ThreeDimensional && inputType != InputType.FourDimensional)
+        {
+            throw new ArgumentException(
+                $"Dynamic spatial dims are only meaningful for ThreeDimensional or FourDimensional input; got {inputType}.",
+                nameof(inputType));
+        }
+
+        return new NeuralNetworkArchitecture<T>(
+            inputType: inputType,
+            taskType: taskType,
+            inputDepth: channels,
+            inputHeight: -1,
+            inputWidth: -1,
+            inputFrames: frames,
+            outputSize: outputSize);
     }
 }
