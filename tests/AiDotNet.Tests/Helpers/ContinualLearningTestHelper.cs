@@ -456,6 +456,8 @@ public class MockLayer<T> : ILayer<T>
 
     public int[] GetOutputShape() => [10];
 
+    public bool IsShapeResolved => true;
+
     public Tensor<T>? GetWeights() => null;
 
     public Tensor<T>? GetBiases() => null;

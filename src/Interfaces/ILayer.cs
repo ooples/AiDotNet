@@ -38,6 +38,24 @@ public interface ILayer<T> : IDiagnosticsProvider, IWeightLoadable<T>
     int[] GetOutputShape();
 
     /// <summary>
+    /// Indicates whether this layer's input/output shapes are concrete or still deferred.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Layers constructed in PyTorch-style lazy mode (channel + kernel dims known at
+    /// construction; spatial dims inferred on first <see cref="Forward"/> call) report
+    /// <c>false</c> until the first forward pass resolves their shapes from the input
+    /// tensor. After resolution this returns <c>true</c> and <see cref="GetInputShape"/>
+    /// / <see cref="GetOutputShape"/> return arrays with no <c>-1</c> placeholders.
+    /// </para>
+    /// <para>
+    /// Layers that bake every dim at construction (the default for most existing layers)
+    /// always report <c>true</c>.
+    /// </para>
+    /// </remarks>
+    bool IsShapeResolved { get; }
+
+    /// <summary>
     /// Gets the weight tensor for layers that have trainable weights.
     /// </summary>
     /// <returns>The weight tensor, or null if the layer has no weights.</returns>
