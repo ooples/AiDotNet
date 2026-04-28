@@ -2387,7 +2387,7 @@ public static class LayerHelper<T>
             : throw new InvalidOperationException("Output size must be specified and greater than 0 for HTM network.");
 
         // Spatial Pooler Layer
-        yield return new SpatialPoolerLayer<T>(inputSize, columnCount, sparsityThreshold);
+        yield return new SpatialPoolerLayer<T>(columnCount, sparsityThreshold);
 
         // Temporal Memory Layer
         yield return new TemporalMemoryLayer<T>(columnCount, cellsPerColumn);

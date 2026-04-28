@@ -179,7 +179,7 @@ public class MissingLayersIntegrationTests
         int inputSize = 8;
         int columnCount = 5;
 
-        var layer = new SpatialPoolerLayer<float>(inputSize, columnCount, sparsityThreshold: 0.4);
+        var layer = new SpatialPoolerLayer<float>(columnCount, sparsityThreshold: 0.4);
         var input = CreateRandomTensor(new[] { inputSize });
         var output = layer.Forward(input);
 

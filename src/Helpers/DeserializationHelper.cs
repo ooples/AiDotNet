@@ -976,10 +976,9 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(SpatialPoolerLayer<>))
         {
-            int inputSize = inputShape[0];
             int columnCount = outputShape[0];
             double sparsityThreshold = TryGetDouble(additionalParams, "SparsityThreshold") ?? 0.02;
-            instance = new SpatialPoolerLayer<T>(inputSize, columnCount, sparsityThreshold);
+            instance = new SpatialPoolerLayer<T>(columnCount, sparsityThreshold);
         }
         else if (genericDef == typeof(MeasurementLayer<>))
         {
