@@ -63,7 +63,7 @@ public class VideoUNetPredictorIntegrationTests
         // Build the same kind of temporal layer the predictor uses — DenseLayer
         // mapping [F] → [F]. Forward it once on a dummy [1, F] input to force
         // lazy init to a known shape.
-        var temporalLayer = new DenseLayer<float>(inputSize: 3, outputSize: 3);
+        var temporalLayer = new DenseLayer<float>( outputSize: 3);
         temporalLayer.Forward(Make2D(rows: 1, cols: 3));
 
         var method = typeof(VideoUNetPredictor<float>).GetMethod(
@@ -115,7 +115,7 @@ public class VideoUNetPredictorIntegrationTests
 
         // Identity-like temporal layer: Dense(F, F) with weights set to identity.
         // After the residual add in ApplyTemporalProcessing, output = video + layer(video) ≈ 2*video for identity.
-        var temporalLayer = new DenseLayer<float>(inputSize: F, outputSize: F);
+        var temporalLayer = new DenseLayer<float>( outputSize: F);
         temporalLayer.Forward(Make2D(rows: 1, cols: F)); // force lazy init
 
         var method = typeof(VideoUNetPredictor<float>).GetMethod(
@@ -183,7 +183,7 @@ public class VideoUNetPredictorIntegrationTests
 
         // Projection Dense(16 timeEmbedDim, channels*2=8).
         int timeEmbedDim = 16;
-        var projection = new DenseLayer<float>(inputSize: timeEmbedDim, outputSize: channels * 2);
+        var projection = new DenseLayer<float>( outputSize: channels * 2);
         projection.Forward(Make2D(rows: 1, cols: timeEmbedDim)); // force lazy init
 
         // 1D timeEmbed [timeEmbedDim] — covers the broadcast-to-all-batches case.

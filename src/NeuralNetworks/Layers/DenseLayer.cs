@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -44,7 +44,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8")]
 public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -329,15 +329,10 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// starting values that help with training.
     /// </para>
     /// </remarks>
-    public DenseLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null,
+    public DenseLayer(int outputSize, IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
-        : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
+        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
     {
-        if (inputSize <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(inputSize), "Input size must be greater than zero.");
-        }
-
         if (outputSize <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be greater than zero.");
@@ -348,41 +343,27 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         L2Strength = NumOps.FromDouble(0.01);
         _lastRegularizationLoss = NumOps.Zero;
 
-        // Store the initialization strategy
         InitializationStrategy = initializationStrategy;
 
-        // Check if using lazy initialization
-        if (initializationStrategy is { IsLazy: true })
-        {
-            // Defer weight allocation until first Forward() call
-            // Create placeholder tensors with zero size - they'll be properly allocated in EnsureInitialized
-            _weights = new Tensor<T>([0, 0]);
-            _biases = new Tensor<T>([0]);
-            _isInitialized = false;
-        }
-        else
-        {
-            // Eager initialization — use TensorAllocator for pooled/arena allocation
-            // to reduce GC pressure on large weight tensors (e.g., VGG FC: 25088×4096)
-            _weights = TensorAllocator.Rent<T>([inputSize, outputSize]);
-            _biases = TensorAllocator.Rent<T>([outputSize]);
+        // Always lazy: input feature size is resolved on first forward.
+        _weights = new Tensor<T>([0, 0]);
+        _biases = new Tensor<T>([0]);
+        _isInitialized = false;
+    }
 
-            // Use strategy if provided, otherwise use default Xavier initialization
-            if (initializationStrategy is not null)
-            {
-                initializationStrategy.InitializeWeights(_weights, inputSize, outputSize);
-                initializationStrategy.InitializeBiases(_biases);
-            }
-            else
-            {
-                InitializeParameters();
-            }
+    /// <summary>
+    /// Resolves input feature size from input.Shape[^1] on first forward.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"DenseLayer requires rank>=1 input; got rank {rank}.", nameof(input));
 
-            // Register trainable parameters with the engine for GPU persistence
-            RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
-            _isInitialized = true;
-        }
+        int inputSize = input.Shape[rank - 1];
+        int outputSize = OutputShape[0];
+        ResolveShapes(new[] { inputSize }, new[] { outputSize });
     }
 
     /// <summary>
@@ -415,15 +396,10 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// use <see cref="WithActivation"/> or <see cref="WithVectorActivation"/> factory methods to avoid ambiguity.
     /// </para>
     /// </remarks>
-    public DenseLayer(int inputSize, int outputSize, IVectorActivationFunction<T> vectorActivation,
+    public DenseLayer(int outputSize, IVectorActivationFunction<T> vectorActivation,
         IInitializationStrategy<T>? initializationStrategy = null)
-        : base([inputSize], [outputSize], vectorActivation)
+        : base(new[] { -1 }, new[] { outputSize }, vectorActivation)
     {
-        if (inputSize <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(inputSize), "Input size must be greater than zero.");
-        }
-
         if (outputSize <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be greater than zero.");
@@ -434,38 +410,11 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         L2Strength = NumOps.FromDouble(0.01);
         _lastRegularizationLoss = NumOps.Zero;
 
-        // Store the initialization strategy
         InitializationStrategy = initializationStrategy;
 
-        // Check if using lazy initialization
-        if (initializationStrategy is { IsLazy: true })
-        {
-            // Defer weight allocation until first Forward() call
-            _weights = new Tensor<T>([0, 0]);
-            _biases = new Tensor<T>([0]);
-            _isInitialized = false;
-        }
-        else
-        {
-            // Eager initialization — use TensorAllocator for pooled/arena allocation
-            // to reduce GC pressure on large weight tensors (e.g., VGG FC: 25088×4096)
-            _weights = TensorAllocator.Rent<T>([inputSize, outputSize]);
-            _biases = TensorAllocator.Rent<T>([outputSize]);
-
-            if (initializationStrategy is not null)
-            {
-                initializationStrategy.InitializeWeights(_weights, inputSize, outputSize);
-                initializationStrategy.InitializeBiases(_biases);
-            }
-            else
-            {
-                InitializeParameters();
-            }
-
-            RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
-            _isInitialized = true;
-        }
+        _weights = new Tensor<T>([0, 0]);
+        _biases = new Tensor<T>([0]);
+        _isInitialized = false;
     }
 
     /// <summary>
@@ -1385,11 +1334,11 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         if (UsingVectorActivation && VectorActivation is not null)
         {
-            copy = new DenseLayer<T>(InputShape[0], OutputShape[0], VectorActivation);
+            copy = new DenseLayer<T>(OutputShape[0], VectorActivation);
         }
         else
         {
-            copy = new DenseLayer<T>(InputShape[0], OutputShape[0], ScalarActivation);
+            copy = new DenseLayer<T>(OutputShape[0], ScalarActivation);
         }
 
         copy.SetParameters(GetParameters());

@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Helpers;
 using AiDotNet.Initialization;
 using AiDotNet.NeuralNetworks.Layers;
@@ -108,7 +108,6 @@ public class DiffusionResBlock<T> : LayerBase<T>
 
         // Time embedding projection: projects time embed to outChannels for additive conditioning
         _timeMlp = new DenseLayer<T>(
-            timeEmbedDim > 0 ? timeEmbedDim : 1,
             outChannels,
             (IActivationFunction<T>)new SiLUActivation<T>(),
             InitializationStrategies<T>.Lazy);

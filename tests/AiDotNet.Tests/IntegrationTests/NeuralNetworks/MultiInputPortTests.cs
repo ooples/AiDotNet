@@ -132,7 +132,7 @@ public class MultiInputPortTests
     [Fact(Timeout = 120000)]
     public async Task SingleInputLayer_NamedForward_WithInputKey_Works()
     {
-        var layer = new DenseLayer<double>(4, 8);
+        var layer = new DenseLayer<double>(8);
 
         var input = Tensor<double>.CreateRandom([1, 4]);
         var inputs = new Dictionary<string, Tensor<double>>
@@ -149,7 +149,7 @@ public class MultiInputPortTests
     [Fact(Timeout = 120000)]
     public async Task SingleInputLayer_InputPorts_DefaultsSingleInput()
     {
-        var layer = new DenseLayer<double>(4, 8);
+        var layer = new DenseLayer<double>(8);
 
         Assert.Single(layer.InputPorts);
         Assert.Equal("input", layer.InputPorts[0].Name);

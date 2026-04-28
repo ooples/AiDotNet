@@ -902,9 +902,9 @@ public static class DeserializationHelper
 
             var experts = new List<ILayer<T>>();
             for (int e = 0; e < numExperts; e++)
-                experts.Add(new DenseLayer<T>(inputSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>));
+                experts.Add(new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>));
 
-            var router = new DenseLayer<T>(inputSize, numExperts, new SoftmaxActivation<T>() as IActivationFunction<T>);
+            var router = new DenseLayer<T>(numExperts, new SoftmaxActivation<T>() as IActivationFunction<T>);
             instance = new MixtureOfExpertsLayer<T>(experts, router, inputShape, outputShape, topK);
         }
         else if (genericDef == typeof(ReservoirLayer<>))
@@ -1006,7 +1006,7 @@ public static class DeserializationHelper
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? innerActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            var innerLayer = new DenseLayer<T>(innerInputSize, innerOutputSize, innerActivation as IActivationFunction<T>);
+            var innerLayer = new DenseLayer<T>(innerOutputSize, innerActivation as IActivationFunction<T>);
 
             // Create ResidualLayer directly to avoid constructor ambiguity
             object? residualActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);

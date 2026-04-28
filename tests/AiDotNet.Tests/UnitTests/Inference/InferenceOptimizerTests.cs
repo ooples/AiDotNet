@@ -280,7 +280,7 @@ public class InferenceOptimizerTests
             new ReshapeLayer<float>(new[] { seqLen, embDim }),
             new SelfAttentionLayer<float>(seqLen, embDim, headCount, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>()),
             new FlattenLayer<float>(),
-            new DenseLayer<float>(flatSize, flatSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+            new DenseLayer<float>(flatSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -313,7 +313,7 @@ public class InferenceOptimizerTests
         var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
         {
             new InputLayer<float>(inSize),
-            new DenseLayer<float>(inSize, outSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+            new DenseLayer<float>(outSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -346,7 +346,7 @@ public class InferenceOptimizerTests
         {
             new InputLayer<float>(inputSize),
             new AttentionLayer<float>(inputSize, attentionSize, activation: (AiDotNet.Interfaces.IActivationFunction<float>?)null),
-            new DenseLayer<float>(attentionSize, attentionSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+            new DenseLayer<float>(attentionSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -369,7 +369,7 @@ public class InferenceOptimizerTests
         {
             new InputLayer<float>(inputSize),
             new GraphAttentionLayer<float>(inputSize, outputSize, numHeads: 1),
-            new DenseLayer<float>(outputSize, outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+            new DenseLayer<float>(outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 
         var architecture = new NeuralNetworkArchitecture<float>(

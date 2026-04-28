@@ -277,7 +277,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int size = 32;
         int[] inputShape = [size];
-        var innerLayer = new DenseLayer<float>(size, size);
+        var innerLayer = new DenseLayer<float>(size);
         var layer = new ResidualLayer<float>(innerLayer, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, size]);
@@ -297,7 +297,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int size = 32;
         int[] inputShape = [size];
-        var innerLayer = new DenseLayer<float>(size, size);
+        var innerLayer = new DenseLayer<float>(size);
         var original = new ResidualLayer<float>(innerLayer, (IActivationFunction<float>?)null);
 
         // Act
@@ -640,9 +640,9 @@ public class AdvancedLayersIntegrationTests
         int size = 32;
         int[] inputShape = [size];
 
-        var block1 = new ResidualLayer<float>(new DenseLayer<float>(size, size), (IActivationFunction<float>?)null);
-        var block2 = new ResidualLayer<float>(new DenseLayer<float>(size, size), (IActivationFunction<float>?)null);
-        var block3 = new ResidualLayer<float>(new DenseLayer<float>(size, size), (IActivationFunction<float>?)null);
+        var block1 = new ResidualLayer<float>(new DenseLayer<float>(size), (IActivationFunction<float>?)null);
+        var block2 = new ResidualLayer<float>(new DenseLayer<float>(size), (IActivationFunction<float>?)null);
+        var block3 = new ResidualLayer<float>(new DenseLayer<float>(size), (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, size]);
 
@@ -1413,7 +1413,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 64;
         int outputSize = 32;
-        var layer = new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>?)null);
+        var layer = new DenseLayer<float>(outputSize, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([4, inputSize]);
 
@@ -1434,7 +1434,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int outputSize = 8;
-        var original = new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>?)null);
+        var original = new DenseLayer<float>(outputSize, (IActivationFunction<float>?)null);
         var input = Tensor<float>.CreateRandom([2, inputSize]);
 
         // Act
@@ -1454,7 +1454,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 64;
         int outputSize = 32;
-        var layer = new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>?)null);
+        var layer = new DenseLayer<float>(outputSize, (IActivationFunction<float>?)null);
 
         // Act
         int paramCount = layer.ParameterCount;
@@ -1470,7 +1470,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 32;
         int outputSize = 16;
-        var layer = new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new DenseLayer<float>(outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
 
         var input = Tensor<float>.CreateDefault([2, inputSize], -1.0f);
 
@@ -2978,7 +2978,7 @@ public class AdvancedLayersIntegrationTests
     public async Task SpectralNormalizationLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
-        var innerLayer = new DenseLayer<float>(64, 32);
+        var innerLayer = new DenseLayer<float>(32);
         var layer = new SpectralNormalizationLayer<float>(innerLayer, powerIterations: 1);
 
         var input = Tensor<float>.CreateRandom([4, 64]);
@@ -2996,7 +2996,7 @@ public class AdvancedLayersIntegrationTests
     public async Task SpectralNormalizationLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
-        var innerLayer = new DenseLayer<float>(32, 16);
+        var innerLayer = new DenseLayer<float>(16);
         var original = new SpectralNormalizationLayer<float>(innerLayer, powerIterations: 2);
         var input = Tensor<float>.CreateRandom([2, 32]);
 
@@ -3323,7 +3323,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 32;
         int outputSize = 16;
-        var innerLayer = new DenseLayer<float>(inputSize, outputSize);
+        var innerLayer = new DenseLayer<float>(outputSize);
         var layer = new TimeDistributedLayer<float>(innerLayer,
             activationFunction: (IActivationFunction<float>)new ReLUActivation<float>());
 
@@ -3344,7 +3344,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int outputSize = 8;
-        var innerLayer = new DenseLayer<float>(inputSize, outputSize);
+        var innerLayer = new DenseLayer<float>(outputSize);
         var original = new TimeDistributedLayer<float>(innerLayer,
             activationFunction: (IActivationFunction<float>)new ReLUActivation<float>());
         var input = Tensor<float>.CreateRandom([1, 4, inputSize]);
@@ -4532,8 +4532,8 @@ public class AdvancedLayersIntegrationTests
         int outputSize = 8;
         var layers = new List<ILayer<float>>
         {
-            new DenseLayer<float>(inputSize, hiddenSize, (IActivationFunction<float>)new ReLUActivation<float>()),
-            new DenseLayer<float>(hiddenSize, outputSize, (IActivationFunction<float>)new IdentityActivation<float>())
+            new DenseLayer<float>(hiddenSize, (IActivationFunction<float>)new ReLUActivation<float>()),
+            new DenseLayer<float>(outputSize, (IActivationFunction<float>)new IdentityActivation<float>())
         };
         var layer = new ExpertLayer<float>(layers, [inputSize], [outputSize]);
 
@@ -4556,7 +4556,7 @@ public class AdvancedLayersIntegrationTests
         int outputSize = 4;
         var layers = new List<ILayer<float>>
         {
-            new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>())
+            new DenseLayer<float>(outputSize, (IActivationFunction<float>)new ReLUActivation<float>())
         };
         var original = new ExpertLayer<float>(layers, [inputSize], [outputSize]);
         var input = Tensor<float>.CreateRandom([2, inputSize]);
@@ -4732,10 +4732,10 @@ public class AdvancedLayersIntegrationTests
         int numExperts = 2;
         var experts = new List<ILayer<float>>
         {
-            new DenseLayer<float>(inputSize, outputSize),
-            new DenseLayer<float>(inputSize, outputSize)
+            new DenseLayer<float>(outputSize),
+            new DenseLayer<float>(outputSize)
         };
-        var router = new DenseLayer<float>(inputSize, numExperts);
+        var router = new DenseLayer<float>(numExperts);
         var layer = new MixtureOfExpertsLayer<float>(experts, router, [inputSize], [outputSize]);
         var input = Tensor<float>.CreateRandom([2, 3, inputSize]);
 
@@ -4756,11 +4756,11 @@ public class AdvancedLayersIntegrationTests
         int numExperts = 3;
         var experts = new List<ILayer<float>>
         {
-            new DenseLayer<float>(inputSize, outputSize),
-            new DenseLayer<float>(inputSize, outputSize),
-            new DenseLayer<float>(inputSize, outputSize)
+            new DenseLayer<float>(outputSize),
+            new DenseLayer<float>(outputSize),
+            new DenseLayer<float>(outputSize)
         };
-        var router = new DenseLayer<float>(inputSize, numExperts);
+        var router = new DenseLayer<float>(numExperts);
         var layer = new MixtureOfExpertsLayer<float>(experts, router, [inputSize], [outputSize], topK: 1);
         var input = Tensor<float>.CreateRandom([3, inputSize]);
 

@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -120,15 +120,15 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
         int hiddenChannels = baseChannels * 4;
 
         // Encoder: inputChannels -> baseChannels -> (norm at baseChannels) -> latentChannels*2
-        _encoderIn = new DenseLayer<T>(inputChannels, baseChannels, (IActivationFunction<T>)new GELUActivation<T>());
-        _encoderOut = new DenseLayer<T>(baseChannels, latentChannels * 2, (IActivationFunction<T>)new IdentityActivation<T>());
+        _encoderIn = new DenseLayer<T>(baseChannels, (IActivationFunction<T>)new GELUActivation<T>());
+        _encoderOut = new DenseLayer<T>(latentChannels * 2, (IActivationFunction<T>)new IdentityActivation<T>());
         // Decoder: latentChannels -> hiddenChannels -> (norm at hiddenChannels) -> inputChannels
-        _decoderIn = new DenseLayer<T>(latentChannels, hiddenChannels, (IActivationFunction<T>)new GELUActivation<T>());
-        _decoderOut = new DenseLayer<T>(hiddenChannels, inputChannels, (IActivationFunction<T>)new IdentityActivation<T>());
+        _decoderIn = new DenseLayer<T>(hiddenChannels, (IActivationFunction<T>)new GELUActivation<T>());
+        _decoderOut = new DenseLayer<T>(inputChannels, (IActivationFunction<T>)new IdentityActivation<T>());
 
         // Interpolation network: takes two latent frames and produces intermediate frame
-        _interpIn = new DenseLayer<T>(latentChannels * 2, hiddenChannels, (IActivationFunction<T>)new GELUActivation<T>());
-        _interpOut = new DenseLayer<T>(hiddenChannels, latentChannels, (IActivationFunction<T>)new IdentityActivation<T>());
+        _interpIn = new DenseLayer<T>(hiddenChannels, (IActivationFunction<T>)new GELUActivation<T>());
+        _interpOut = new DenseLayer<T>(latentChannels, (IActivationFunction<T>)new IdentityActivation<T>());
 
         _encoderNorm = new LayerNormalizationLayer<T>();
         _decoderNorm = new LayerNormalizationLayer<T>();

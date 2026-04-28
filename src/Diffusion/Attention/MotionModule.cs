@@ -96,8 +96,8 @@ public class MotionModule<T> : LayerBase<T>
             spatialSize: spatialSize);
 
         int ffnHidden = channels * ffnMultiplier;
-        _ffnIn = new DenseLayer<T>(channels, ffnHidden, (IActivationFunction<T>)new GELUActivation<T>());
-        _ffnOut = new DenseLayer<T>(ffnHidden, channels, (IActivationFunction<T>)new IdentityActivation<T>());
+        _ffnIn = new DenseLayer<T>(ffnHidden, (IActivationFunction<T>)new GELUActivation<T>());
+        _ffnOut = new DenseLayer<T>(channels, (IActivationFunction<T>)new IdentityActivation<T>());
 
         _norm1 = new LayerNormalizationLayer<T>();
         _norm2 = new LayerNormalizationLayer<T>();

@@ -139,12 +139,12 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var hiddenSize in _sacOptions.PolicyHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            layers.Add(new DenseLayer<T>(hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
             prevSize = hiddenSize;
         }
 
         // Output: mean and log_std for each action dimension
-        layers.Add(new DenseLayer<T>(prevSize, _sacOptions.ActionSize * 2, (IActivationFunction<T>)new IdentityActivation<T>()));
+        layers.Add(new DenseLayer<T>(_sacOptions.ActionSize * 2, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
@@ -167,12 +167,12 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var hiddenSize in _sacOptions.QHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            layers.Add(new DenseLayer<T>(hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
             prevSize = hiddenSize;
         }
 
         // Output: single Q-value
-        layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new IdentityActivation<T>()));
+        layers.Add(new DenseLayer<T>(1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,

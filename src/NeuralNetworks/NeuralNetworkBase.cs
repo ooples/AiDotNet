@@ -4643,7 +4643,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         ILayer<T> layer = layerType switch
         {
-            LayerType.Dense => new DenseLayer<T>(inputSize, units, activationFunc),
+            LayerType.Dense => new DenseLayer<T>(units, activationFunc),
             _ => throw new NotSupportedException($"Layer type {layerType} not supported in AddLayer method")
         };
         AddLayerToCollection(layer);

@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Engines;
@@ -448,10 +448,10 @@ public class DiffWaveNetwork<T>
         _melChannels = melChannels;
 
         // Input projection (1 channel audio to residual channels)
-        _inputProjection = new DenseLayer<T>(1, residualChannels, (IActivationFunction<T>?)null);
+        _inputProjection = new DenseLayer<T>(residualChannels, (IActivationFunction<T>?)null);
 
         // Diffusion timestep embedding
-        _diffusionEmbedding = new DenseLayer<T>(128, residualChannels, (IActivationFunction<T>?)null);
+        _diffusionEmbedding = new DenseLayer<T>(residualChannels, (IActivationFunction<T>?)null);
 
         // Residual blocks with varying dilation
         _residualBlocks = new List<DiffWaveResidualBlock<T>>();
@@ -466,8 +466,8 @@ public class DiffWaveNetwork<T>
         }
 
         // Output projections
-        _outputProjection1 = new DenseLayer<T>(residualChannels, residualChannels, (IActivationFunction<T>?)null);
-        _outputProjection2 = new DenseLayer<T>(residualChannels, 1, (IActivationFunction<T>?)null);
+        _outputProjection1 = new DenseLayer<T>(residualChannels, (IActivationFunction<T>?)null);
+        _outputProjection2 = new DenseLayer<T>(1, (IActivationFunction<T>?)null);
 
         CalculateParameterCount();
     }
@@ -674,20 +674,20 @@ public class DiffWaveResidualBlock<T>
         _dilation = dilation;
 
         // Dilated convolution (simplified as dense layer)
-        _dilatedConv = new DenseLayer<T>(channels, channels * 2, (IActivationFunction<T>?)null);
+        _dilatedConv = new DenseLayer<T>(channels * 2, (IActivationFunction<T>?)null);
 
         // Diffusion embedding projection
-        _diffusionProj = new DenseLayer<T>(channels, channels, (IActivationFunction<T>?)null);
+        _diffusionProj = new DenseLayer<T>(channels, (IActivationFunction<T>?)null);
 
         // Optional mel conditioning projection
         if (conditionChannels > 0)
         {
-            _conditionProj = new DenseLayer<T>(conditionChannels, channels * 2, (IActivationFunction<T>?)null);
+            _conditionProj = new DenseLayer<T>(channels * 2, (IActivationFunction<T>?)null);
         }
 
         // Output projections
-        _outputConv = new DenseLayer<T>(channels, channels, (IActivationFunction<T>?)null);
-        _skipConv = new DenseLayer<T>(channels, channels, (IActivationFunction<T>?)null);
+        _outputConv = new DenseLayer<T>(channels, (IActivationFunction<T>?)null);
+        _skipConv = new DenseLayer<T>(channels, (IActivationFunction<T>?)null);
 
         ParameterCount = _dilatedConv.ParameterCount +
                          _diffusionProj.ParameterCount +

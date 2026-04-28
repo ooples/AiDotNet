@@ -113,7 +113,7 @@ public class LoRAIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task StandardLoRAAdapter_WrapsDenseLayer_Correctly()
     {
-        var baseLayer = new DenseLayer<double>(InputSize, OutputSize, (IActivationFunction<double>)new ReLUActivation<double>());
+        var baseLayer = new DenseLayer<double>(OutputSize, (IActivationFunction<double>)new ReLUActivation<double>());
         var adapter = new StandardLoRAAdapter<double>(baseLayer, Rank, Alpha);
 
         Assert.Same(baseLayer, adapter.BaseLayer);
@@ -125,7 +125,7 @@ public class LoRAIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task StandardLoRAAdapter_Forward_CombinesBaseAndLoRA()
     {
-        var baseLayer = new DenseLayer<double>(InputSize, OutputSize, (IActivationFunction<double>)new ReLUActivation<double>());
+        var baseLayer = new DenseLayer<double>(OutputSize, (IActivationFunction<double>)new ReLUActivation<double>());
         var adapter = new StandardLoRAAdapter<double>(baseLayer, Rank, Alpha);
         var input = CreateTensor(1, InputSize);
 
@@ -146,7 +146,7 @@ public class LoRAIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task StandardLoRAAdapter_FrozenBaseLayer_OnlyTrainsLoRA()
     {
-        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
+        var baseLayer = new DenseLayer<double>(OutputSize);
         var adapter = new StandardLoRAAdapter<double>(baseLayer, Rank, Alpha, freezeBaseLayer: true);
 
         // Only LoRA parameters should be trainable
@@ -157,7 +157,7 @@ public class LoRAIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task StandardLoRAAdapter_UnfrozenBaseLayer_TrainsBoth()
     {
-        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
+        var baseLayer = new DenseLayer<double>(OutputSize);
         var adapter = new StandardLoRAAdapter<double>(baseLayer, Rank, Alpha, freezeBaseLayer: false);
 
         // Both base and LoRA parameters should be trainable
@@ -169,7 +169,7 @@ public class LoRAIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task StandardLoRAAdapter_MergeToOriginalLayer_ProducesFunctionalLayer()
     {
-        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
+        var baseLayer = new DenseLayer<double>(OutputSize);
         var adapter = new StandardLoRAAdapter<double>(baseLayer, Rank, Alpha);
         var input = CreateTensor(1, InputSize);
 
@@ -197,7 +197,7 @@ public class LoRAIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task QLoRAAdapter_Initialize_CorrectlyWrapsLayer()
     {
-        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
+        var baseLayer = new DenseLayer<double>(OutputSize);
         var adapter = new QLoRAAdapter<double>(baseLayer, Rank, Alpha);
 
         Assert.Same(baseLayer, adapter.BaseLayer);
@@ -207,7 +207,7 @@ public class LoRAIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task QLoRAAdapter_Forward_ProducesValidOutput()
     {
-        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
+        var baseLayer = new DenseLayer<double>(OutputSize);
         var adapter = new QLoRAAdapter<double>(baseLayer, Rank, Alpha);
         var input = CreateTensor(1, InputSize);
 
@@ -220,7 +220,7 @@ public class LoRAIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DoRAAdapter_Initialize_CorrectlyWrapsLayer()
     {
-        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
+        var baseLayer = new DenseLayer<double>(OutputSize);
         var adapter = new DoRAAdapter<double>(baseLayer, Rank, Alpha);
 
         Assert.Same(baseLayer, adapter.BaseLayer);
@@ -230,7 +230,7 @@ public class LoRAIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DoRAAdapter_Forward_ProducesValidOutput()
     {
-        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
+        var baseLayer = new DenseLayer<double>(OutputSize);
         var adapter = new DoRAAdapter<double>(baseLayer, Rank, Alpha);
         var input = CreateTensor(1, InputSize);
 
@@ -243,7 +243,7 @@ public class LoRAIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task AdaLoRAAdapter_Initialize_CorrectlyWrapsLayer()
     {
-        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
+        var baseLayer = new DenseLayer<double>(OutputSize);
         var adapter = new AdaLoRAAdapter<double>(baseLayer, Rank, Alpha);
 
         Assert.Same(baseLayer, adapter.BaseLayer);
@@ -253,7 +253,7 @@ public class LoRAIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task AdaLoRAAdapter_Forward_ProducesValidOutput()
     {
-        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
+        var baseLayer = new DenseLayer<double>(OutputSize);
         var adapter = new AdaLoRAAdapter<double>(baseLayer, Rank, Alpha);
         var input = CreateTensor(1, InputSize);
 
@@ -269,7 +269,7 @@ public class LoRAIntegrationTests
         // VeRA requires shared matrices to be initialized first
         VeRAAdapter<double>.InitializeSharedMatrices(InputSize, OutputSize, Rank);
 
-        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
+        var baseLayer = new DenseLayer<double>(OutputSize);
         var adapter = new VeRAAdapter<double>(baseLayer, Rank, Alpha);
 
         Assert.Same(baseLayer, adapter.BaseLayer);
@@ -278,7 +278,7 @@ public class LoRAIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LoKrAdapter_Initialize_CorrectlyWrapsLayer()
     {
-        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
+        var baseLayer = new DenseLayer<double>(OutputSize);
         var adapter = new LoKrAdapter<double>(baseLayer, Rank, Alpha);
 
         Assert.Same(baseLayer, adapter.BaseLayer);
@@ -287,7 +287,7 @@ public class LoRAIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LoHaAdapter_Initialize_CorrectlyWrapsLayer()
     {
-        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
+        var baseLayer = new DenseLayer<double>(OutputSize);
         var adapter = new LoHaAdapter<double>(baseLayer, Rank, Alpha);
 
         Assert.Same(baseLayer, adapter.BaseLayer);
@@ -304,7 +304,7 @@ public class LoRAIntegrationTests
         int largeOutputSize = 1024;
         int rank = 8;
 
-        var baseLayer = new DenseLayer<double>(largeInputSize, largeOutputSize);
+        var baseLayer = new DenseLayer<double>(largeOutputSize);
         var adapter = new StandardLoRAAdapter<double>(baseLayer, rank, freezeBaseLayer: true);
 
         int fullParams = largeInputSize * largeOutputSize + largeOutputSize; // weights + bias
@@ -401,7 +401,7 @@ public class LoRAIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task AllAdapters_ForwardPass_ProducesValidOutput()
     {
-        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
+        var baseLayer = new DenseLayer<double>(OutputSize);
 
         // Initialize shared matrices for VeRA and DVoRA
         VeRAAdapter<double>.InitializeSharedMatrices(InputSize, OutputSize, Rank);
@@ -410,15 +410,15 @@ public class LoRAIntegrationTests
         // Note: MoRA requires square layers; LoRAXS requires SVD initialization with pretrained weights
         var adapters = new List<(string Name, LoRAAdapterBase<double> Adapter, int ExpectedOutputSize)>
         {
-            ("Standard", new StandardLoRAAdapter<double>(new DenseLayer<double>(InputSize, OutputSize), Rank, Alpha), OutputSize),
-            ("DoRA", new DoRAAdapter<double>(new DenseLayer<double>(InputSize, OutputSize), Rank, Alpha), OutputSize),
-            ("VeRA", new VeRAAdapter<double>(new DenseLayer<double>(InputSize, OutputSize), Rank, Alpha), OutputSize),
-            ("DVoRA", new DVoRAAdapter<double>(new DenseLayer<double>(InputSize, OutputSize), Rank, Alpha), OutputSize),
-            ("LoKr", new LoKrAdapter<double>(new DenseLayer<double>(InputSize, OutputSize), Rank, Alpha), OutputSize),
-            ("LoHa", new LoHaAdapter<double>(new DenseLayer<double>(InputSize, OutputSize), Rank, Alpha), OutputSize),
-            ("LoRAFA", new LoRAFAAdapter<double>(new DenseLayer<double>(InputSize, OutputSize), Rank, Alpha), OutputSize),
-            ("PiSSA", new PiSSAAdapter<double>(new DenseLayer<double>(InputSize, OutputSize), Rank, Alpha), OutputSize),
-            ("MoRA", new MoRAAdapter<double>(new DenseLayer<double>(InputSize, InputSize), Rank, Alpha), InputSize), // MoRA requires square
+            ("Standard", new StandardLoRAAdapter<double>(new DenseLayer<double>(OutputSize), Rank, Alpha), OutputSize),
+            ("DoRA", new DoRAAdapter<double>(new DenseLayer<double>(OutputSize), Rank, Alpha), OutputSize),
+            ("VeRA", new VeRAAdapter<double>(new DenseLayer<double>(OutputSize), Rank, Alpha), OutputSize),
+            ("DVoRA", new DVoRAAdapter<double>(new DenseLayer<double>(OutputSize), Rank, Alpha), OutputSize),
+            ("LoKr", new LoKrAdapter<double>(new DenseLayer<double>(OutputSize), Rank, Alpha), OutputSize),
+            ("LoHa", new LoHaAdapter<double>(new DenseLayer<double>(OutputSize), Rank, Alpha), OutputSize),
+            ("LoRAFA", new LoRAFAAdapter<double>(new DenseLayer<double>(OutputSize), Rank, Alpha), OutputSize),
+            ("PiSSA", new PiSSAAdapter<double>(new DenseLayer<double>(OutputSize), Rank, Alpha), OutputSize),
+            ("MoRA", new MoRAAdapter<double>(new DenseLayer<double>(InputSize), Rank, Alpha), InputSize), // MoRA requires square
         };
 
         foreach (var (name, adapter, expectedOutputSize) in adapters)

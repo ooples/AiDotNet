@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
@@ -630,14 +630,14 @@ public class ImageEncoder<T>
         _numPatches = (imageSize / patchSize) * (imageSize / patchSize);
 
         var patchDim = 3 * patchSize * patchSize; // RGB patches
-        _patchEmbed = new DenseLayer<T>(patchDim, embedDim, (IActivationFunction<T>?)null);
+        _patchEmbed = new DenseLayer<T>(embedDim, (IActivationFunction<T>?)null);
 
         _transformerLayers = new List<DenseLayer<T>>();
         for (int i = 0; i < numLayers; i++)
         {
             // Simplified transformer layer as MLP
-            _transformerLayers.Add(new DenseLayer<T>(embedDim, embedDim * 4, (IActivationFunction<T>?)null));
-            _transformerLayers.Add(new DenseLayer<T>(embedDim * 4, embedDim, (IActivationFunction<T>?)null));
+            _transformerLayers.Add(new DenseLayer<T>(embedDim * 4, (IActivationFunction<T>?)null));
+            _transformerLayers.Add(new DenseLayer<T>(embedDim, (IActivationFunction<T>?)null));
         }
 
         ParameterCount = _patchEmbed.ParameterCount;
@@ -788,8 +788,8 @@ public class ImageProjector<T>
         _outputDim = outputDim;
         _numTokens = numTokens;
 
-        _projection = new DenseLayer<T>(inputDim, outputDim, (IActivationFunction<T>?)null);
-        _tokenExpansion = new DenseLayer<T>(outputDim, outputDim * numTokens, (IActivationFunction<T>?)null);
+        _projection = new DenseLayer<T>(outputDim, (IActivationFunction<T>?)null);
+        _tokenExpansion = new DenseLayer<T>(outputDim * numTokens, (IActivationFunction<T>?)null);
 
         ParameterCount = _projection.ParameterCount + _tokenExpansion.ParameterCount;
     }

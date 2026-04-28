@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -72,7 +72,7 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
         _norm = new LayerNormalizationLayer<T>();
 
         // Linear reduction: 4 * inputDim -> 2 * inputDim
-        _reduction = new DenseLayer<T>(inputDim * 4, _outputDim);
+        _reduction = new DenseLayer<T>(_outputDim);
 
         RegisterSubLayer(_reduction);
         RegisterSubLayer(_norm);

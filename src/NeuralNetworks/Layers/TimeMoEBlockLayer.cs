@@ -106,11 +106,9 @@ public class TimeMoEBlockLayer<T> : LayerBase<T>
             var innerLayers = new List<ILayer<T>>
             {
                 new DenseLayer<T>(
-                    inputSize: hiddenDim,
                     outputSize: intermediateSize,
                     activationFunction: new GELUActivation<T>()),
                 new DenseLayer<T>(
-                    inputSize: intermediateSize,
                     outputSize: hiddenDim,
                     activationFunction: null),
             };
@@ -122,7 +120,6 @@ public class TimeMoEBlockLayer<T> : LayerBase<T>
 
         // Router: dense projection from per-token hidden → per-expert score.
         var router = new DenseLayer<T>(
-            inputSize: hiddenDim,
             outputSize: numExperts,
             activationFunction: null);
 

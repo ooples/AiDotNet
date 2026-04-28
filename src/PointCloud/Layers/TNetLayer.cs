@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -110,12 +110,12 @@ public class TNetLayer<T> : LayerBase<T>
         int fcInput = inputChannels;
         foreach (var hidden in fc)
         {
-            _fcLayers.Add(new DenseLayer<T>(fcInput, hidden, activationFunction: new ReLUActivation<T>()));
+            _fcLayers.Add(new DenseLayer<T>(hidden, activationFunction: new ReLUActivation<T>()));
             fcInput = hidden;
         }
 
         int outputDim = _transformDim * _transformDim;
-        _fcLayers.Add(new DenseLayer<T>(fcInput, outputDim, activationFunction: new IdentityActivation<T>()));
+        _fcLayers.Add(new DenseLayer<T>(outputDim, activationFunction: new IdentityActivation<T>()));
 
         Parameters = GetParameters();
     }

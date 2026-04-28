@@ -113,18 +113,18 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var hiddenSize in _options.PolicyHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new TanhActivation<T>()));
+            layers.Add(new DenseLayer<T>(hiddenSize, (IActivationFunction<T>)new TanhActivation<T>()));
             prevSize = hiddenSize;
         }
 
         // Output layer
         if (_options.IsContinuous)
         {
-            layers.Add(new DenseLayer<T>(prevSize, outputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
+            layers.Add(new DenseLayer<T>(outputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
         }
         else
         {
-            layers.Add(new DenseLayer<T>(prevSize, outputSize, (IActivationFunction<T>)new SoftmaxActivation<T>()));
+            layers.Add(new DenseLayer<T>(outputSize, (IActivationFunction<T>)new SoftmaxActivation<T>()));
         }
 
         var architecture = new NeuralNetworkArchitecture<T>(
@@ -145,11 +145,11 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var hiddenSize in _options.ValueHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new TanhActivation<T>()));
+            layers.Add(new DenseLayer<T>(hiddenSize, (IActivationFunction<T>)new TanhActivation<T>()));
             prevSize = hiddenSize;
         }
 
-        layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new IdentityActivation<T>()));
+        layers.Add(new DenseLayer<T>(1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,

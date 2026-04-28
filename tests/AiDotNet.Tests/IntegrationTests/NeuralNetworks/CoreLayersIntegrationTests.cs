@@ -60,7 +60,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int inputSize = 64;
         int outputSize = 32;
-        var layer = new DenseLayer<float>(inputSize, outputSize);
+        var layer = new DenseLayer<float>(outputSize);
         var input = Create2DInput(4, inputSize);
 
         // Act
@@ -78,7 +78,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int outputSize = 8;
-        var layer = new DenseLayer<float>(inputSize, outputSize);
+        var layer = new DenseLayer<float>(outputSize);
         var input = CreateRandomTensor([inputSize]);
 
         // Act
@@ -95,7 +95,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int outputSize = 8;
-        var layer = new DenseLayer<float>(inputSize, outputSize);
+        var layer = new DenseLayer<float>(outputSize);
         var input = CreateRandomTensor([2, 5, inputSize]); // [batch, sequence, features]
 
         // Act
@@ -116,7 +116,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int outputSize = 8;
-        var original = new DenseLayer<float>(inputSize, outputSize);
+        var original = new DenseLayer<float>(outputSize);
         var input = Create2DInput(2, inputSize);
 
         // Act
@@ -138,7 +138,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int inputSize = 8;
         int outputSize = 4;
-        var layer = new DenseLayer<float>(inputSize, outputSize);
+        var layer = new DenseLayer<float>(outputSize);
         var newWeights = CreateRandomTensor([inputSize, outputSize], 99);
 
         // Act - Use SetParameter from IWeightLoadable instead of protected SetWeights
@@ -159,7 +159,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int inputSize = 64;
         int outputSize = 32;
-        var layer = new DenseLayer<float>(inputSize, outputSize);
+        var layer = new DenseLayer<float>(outputSize);
 
         // Act
         int paramCount = layer.ParameterCount;
@@ -176,8 +176,8 @@ public class CoreLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int outputSize = 8;
-        var reluLayer = new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
-        var sigmoidLayer = new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new SigmoidActivation<float>());
+        var reluLayer = new DenseLayer<float>(outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
+        var sigmoidLayer = new DenseLayer<float>(outputSize, (IActivationFunction<float>)new SigmoidActivation<float>());
         var input = Create2DInput(2, inputSize);
 
         // Copy weights from relu to sigmoid for fair comparison
@@ -206,7 +206,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int outputSize = 8;
-        var layer = new DenseLayer<float>(inputSize, outputSize)
+        var layer = new DenseLayer<float>(outputSize)
         {
             UseAuxiliaryLoss = true,
             Regularization = RegularizationType.L2,
@@ -775,7 +775,7 @@ public class CoreLayersIntegrationTests
         int inputSize = 8;
         int outputSize = 4;
         // ReLU is a fused-supported activation — exercises the changed branch
-        var layer = new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new DenseLayer<float>(outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
         var input = Create2DInput(2, inputSize, seed: 77);
 
         // Act
@@ -797,7 +797,7 @@ public class CoreLayersIntegrationTests
     public async Task DenseLayer_InferenceModeWithFusedActivation_ProducesFiniteOutput()
     {
         // Inference mode takes the new fused path — verify output is well-formed
-        var layer = new DenseLayer<float>(16, 8, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new DenseLayer<float>(8, (IActivationFunction<float>)new ReLUActivation<float>());
         layer.SetTrainingMode(false);
         var input = Create2DInput(4, 16, seed: 10);
 
@@ -814,7 +814,7 @@ public class CoreLayersIntegrationTests
     public async Task DenseLayer_TrainingModeWithFusedActivation_ProducesFiniteOutput()
     {
         // Training mode now always goes through else-branch — verify output shape and finiteness
-        var layer = new DenseLayer<float>(16, 8, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new DenseLayer<float>(8, (IActivationFunction<float>)new ReLUActivation<float>());
         layer.SetTrainingMode(true);
         var input = Create2DInput(4, 16, seed: 20);
 
@@ -832,7 +832,7 @@ public class CoreLayersIntegrationTests
     {
         // IdentityActivation has no fused type, so both training and inference go through else-branch.
         // The new Activate(Tensor) override returns the same reference — verify consistent results.
-        var layer = new DenseLayer<float>(8, 4, (IActivationFunction<float>)new IdentityActivation<float>());
+        var layer = new DenseLayer<float>(4, (IActivationFunction<float>)new IdentityActivation<float>());
         var input = Create2DInput(2, 8, seed: 55);
 
         layer.SetTrainingMode(false);
@@ -850,7 +850,7 @@ public class CoreLayersIntegrationTests
     {
         // Regression: after the PR change the else-branch applies ApplyActivation(preActivation).
         // ReLU should still zero out negatives.
-        var layer = new DenseLayer<float>(8, 4, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new DenseLayer<float>(4, (IActivationFunction<float>)new ReLUActivation<float>());
         layer.SetTrainingMode(true);
 
         // Use a fixed input where some pre-activation outputs will be negative
@@ -865,7 +865,7 @@ public class CoreLayersIntegrationTests
     public async Task DenseLayer_SwitchingModesDuringMultiplePasses_ProducesConsistentResults()
     {
         // Stress-test the training/inference switch: alternating modes should never corrupt output.
-        var layer = new DenseLayer<float>(8, 4, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new DenseLayer<float>(4, (IActivationFunction<float>)new ReLUActivation<float>());
         var input = Create2DInput(2, 8, seed: 99);
 
         layer.SetTrainingMode(false);
@@ -891,7 +891,7 @@ public class CoreLayersIntegrationTests
     public async Task DenseWithDropout_TrainingVsInference_BehavesDifferently()
     {
         // Arrange
-        var dense = new DenseLayer<float>(32, 16);
+        var dense = new DenseLayer<float>(16);
         var dropout = new DropoutLayer<float>(0.5);
         var input = Create2DInput(4, 32);
 

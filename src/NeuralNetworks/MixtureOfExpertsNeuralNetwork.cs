@@ -229,7 +229,6 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
         if (_options.OutputDim != Architecture.OutputSize)
         {
             var outputLayer = new DenseLayer<T>(
-                _options.OutputDim,
                 Architecture.OutputSize,
                 NeuralNetworkHelper<T>.GetDefaultActivationFunction(Architecture.TaskType)
             );

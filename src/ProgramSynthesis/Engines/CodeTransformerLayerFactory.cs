@@ -46,12 +46,10 @@ internal static class CodeTransformerLayerFactory
             layers.Add(new LayerNormalizationLayer<T>());
 
             layers.Add(new DenseLayer<T>(
-                inputSize: architecture.ModelDimension,
                 outputSize: architecture.FeedForwardDimension,
                 activationFunction: new GELUActivation<T>()));
 
             layers.Add(new DenseLayer<T>(
-                inputSize: architecture.FeedForwardDimension,
                 outputSize: architecture.ModelDimension,
                 activationFunction: new IdentityActivation<T>()));
 
@@ -81,12 +79,10 @@ internal static class CodeTransformerLayerFactory
             layers.Add(new LayerNormalizationLayer<T>());
 
             layers.Add(new DenseLayer<T>(
-                inputSize: architecture.ModelDimension,
                 outputSize: architecture.FeedForwardDimension,
                 activationFunction: new GELUActivation<T>()));
 
             layers.Add(new DenseLayer<T>(
-                inputSize: architecture.FeedForwardDimension,
                 outputSize: architecture.ModelDimension,
                 activationFunction: new IdentityActivation<T>()));
 
@@ -98,7 +94,6 @@ internal static class CodeTransformerLayerFactory
     internal static void AddOutputProjection<T>(IList<ILayer<T>> layers, CodeSynthesisArchitecture<T> architecture)
     {
         layers.Add(new DenseLayer<T>(
-            inputSize: architecture.ModelDimension,
             outputSize: architecture.VocabularySize,
             activationFunction: new IdentityActivation<T>()));
     }

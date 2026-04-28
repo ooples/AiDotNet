@@ -406,10 +406,10 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
                 IActivationFunction<T> outputActivation = NeuralNetworkHelper<T>.GetDefaultActivationFunction(Architecture.TaskType);
 
                 // First layer: intermediate representation -> hidden layer
-                var hiddenLayer = new DenseLayer<T>(intermediateSize, hiddenSize, hiddenActivation);
+                var hiddenLayer = new DenseLayer<T>(hiddenSize, hiddenActivation);
 
                 // Second layer: hidden -> output
-                var outputLayer = new DenseLayer<T>(hiddenSize, Architecture.OutputSize, outputActivation);
+                var outputLayer = new DenseLayer<T>(Architecture.OutputSize, outputActivation);
 
                 // Store layers as a list that will be executed sequentially
                 var classifierLayers = new List<ILayer<T>> { hiddenLayer, outputLayer };

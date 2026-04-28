@@ -476,7 +476,7 @@ public class InferenceSessionIntegrationTests
         const int inputSize = FlatSize;
         const int outputSize = FlatSize;
 
-        var baseDense = new DenseLayer<float>(inputSize, outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>());
+        var baseDense = new DenseLayer<float>(outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>());
         var multi = new AiDotNet.LoRA.Adapters.MultiLoRAAdapter<float>(baseDense, defaultTaskName: "taskA", defaultRank: 1, alpha: 1.0, freezeBaseLayer: true);
         multi.AddTask("taskB", rank: 1, alpha: 1.0);
 
@@ -484,7 +484,7 @@ public class InferenceSessionIntegrationTests
         {
             new InputLayer<float>(inputSize),
             multi,
-            new DenseLayer<float>(outputSize, outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+            new DenseLayer<float>(outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -532,7 +532,7 @@ public class InferenceSessionIntegrationTests
         const int inputSize = FlatSize;
         const int outputSize = FlatSize;
 
-        var baseDense = new DenseLayer<float>(outputSize, outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>());
+        var baseDense = new DenseLayer<float>(outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>());
         var multi = new AiDotNet.LoRA.Adapters.MultiLoRAAdapter<float>(baseDense, defaultTaskName: "taskA", defaultRank: 1, alpha: 1.0, freezeBaseLayer: true);
         multi.AddTask("taskB", rank: 1, alpha: 1.0);
 
@@ -547,7 +547,7 @@ public class InferenceSessionIntegrationTests
                 activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>()),
             new FlattenLayer<float>(),
             multi,
-            new DenseLayer<float>(outputSize, outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+            new DenseLayer<float>(outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -600,7 +600,7 @@ public class InferenceSessionIntegrationTests
                 activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
             ,
             new FlattenLayer<float>(),
-            new DenseLayer<float>(FlatSize, FlatSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+            new DenseLayer<float>(FlatSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 
         var architecture = new NeuralNetworkArchitecture<float>(

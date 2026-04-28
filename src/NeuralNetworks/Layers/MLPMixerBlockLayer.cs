@@ -76,11 +76,9 @@ public class MLPMixerBlockLayer<T> : LayerBase<T>
         //                 -> transpose -> [B, numPatches, hiddenDim]
         _toPatchAxis = new TransposeLayer<T>(new[] { 1, 0 });
         _temporalMlpExpand = new DenseLayer<T>(
-            inputSize: numPatches,
             outputSize: tempExpanded,
             activationFunction: new GELUActivation<T>());
         _temporalMlpContract = new DenseLayer<T>(
-            inputSize: tempExpanded,
             outputSize: numPatches,
             activationFunction: null);
         _fromPatchAxis = new TransposeLayer<T>(new[] { 1, 0 });
@@ -90,11 +88,9 @@ public class MLPMixerBlockLayer<T> : LayerBase<T>
         // Channel mixer: per-patch Dense(hiddenDim -> chanExpanded, GELU) -> Dense(chanExpanded -> hiddenDim).
         // DenseLayer operates on the last axis, so no transpose is needed here.
         _channelMlpExpand = new DenseLayer<T>(
-            inputSize: hiddenDim,
             outputSize: chanExpanded,
             activationFunction: new GELUActivation<T>());
         _channelMlpContract = new DenseLayer<T>(
-            inputSize: chanExpanded,
             outputSize: hiddenDim,
             activationFunction: null);
 

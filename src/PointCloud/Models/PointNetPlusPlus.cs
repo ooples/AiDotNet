@@ -314,7 +314,6 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         if (_classifierChannels.Length == 0)
         {
             var outputLayer = new DenseLayer<T>(
-                classifierInput,
                 _numClasses,
                 activationFunction: new IdentityActivation<T>());
             AddLayerToCollection(outputLayer);
@@ -325,7 +324,6 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         foreach (var hidden in _classifierChannels)
         {
             var dense = new DenseLayer<T>(
-                classifierInput,
                 hidden,
                 activationFunction: new ReLUActivation<T>());
             AddLayerToCollection(dense);
@@ -341,7 +339,6 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         }
 
         var output = new DenseLayer<T>(
-            classifierInput,
             _numClasses,
             activationFunction: new IdentityActivation<T>());
         AddLayerToCollection(output);

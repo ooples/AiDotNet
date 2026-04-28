@@ -14,7 +14,7 @@ public class LayerPortTests
     [Fact(Timeout = 120000)]
     public async Task DenseLayer_HasSingleInputPort()
     {
-        var layer = new DenseLayer<double>(4, 8);
+        var layer = new DenseLayer<double>(8);
         Assert.Single(layer.InputPorts);
         Assert.Equal("input", layer.InputPorts[0].Name);
     }
@@ -22,7 +22,7 @@ public class LayerPortTests
     [Fact(Timeout = 120000)]
     public async Task DenseLayer_HasSingleOutputPort()
     {
-        var layer = new DenseLayer<double>(4, 8);
+        var layer = new DenseLayer<double>(8);
         Assert.Single(layer.OutputPorts);
         Assert.Equal("output", layer.OutputPorts[0].Name);
     }
@@ -30,7 +30,7 @@ public class LayerPortTests
     [Fact(Timeout = 120000)]
     public async Task DenseLayer_MultiInputForward_DelegatesToSingleInput()
     {
-        var layer = new DenseLayer<double>(4, 2);
+        var layer = new DenseLayer<double>(2);
         var input = new Tensor<double>([1, 4]);
         for (int i = 0; i < 4; i++) input[0, i] = (i + 1) * 0.1;
 
@@ -160,7 +160,7 @@ public class LayerPortTests
     [Fact(Timeout = 120000)]
     public async Task LayerBase_ForwardGpu_ThrowsOnEmptyArgs()
     {
-        var layer = new DenseLayer<double>(4, 2);
+        var layer = new DenseLayer<double>(2);
         // 0 args → throws
         Assert.ThrowsAny<Exception>(() => layer.ForwardGpu());
     }
@@ -170,7 +170,7 @@ public class LayerPortTests
     [Fact(Timeout = 120000)]
     public async Task SingleInputLayer_MultiInputForward_IgnoresExtraKeys()
     {
-        var layer = new DenseLayer<double>(4, 2);
+        var layer = new DenseLayer<double>(2);
         var input = new Tensor<double>([1, 4]);
         for (int i = 0; i < 4; i++) input[0, i] = (i + 1) * 0.1;
 

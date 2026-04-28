@@ -140,12 +140,12 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var hiddenSize in _options.ActorHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            layers.Add(new DenseLayer<T>(hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
             prevSize = hiddenSize;
         }
 
         // Output layer with tanh activation to bound actions to [-1, 1]
-        layers.Add(new DenseLayer<T>(prevSize, _options.ActionSize, (IActivationFunction<T>)new TanhActivation<T>()));
+        layers.Add(new DenseLayer<T>(_options.ActionSize, (IActivationFunction<T>)new TanhActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
@@ -167,12 +167,12 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var hiddenSize in _options.CriticHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            layers.Add(new DenseLayer<T>(hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
             prevSize = hiddenSize;
         }
 
         // Output single Q-value
-        layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new IdentityActivation<T>()));
+        layers.Add(new DenseLayer<T>(1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,

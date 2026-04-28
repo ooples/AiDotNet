@@ -20,7 +20,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
-        var router = new DenseLayer<float>(10, 4); // Output 4 scores for 4 experts
+        var router = new DenseLayer<float>(4); // Output 4 scores for 4 experts
 
         // Act
         var moe = new MixtureOfExpertsLayer<float>(
@@ -39,7 +39,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = new List<ILayer<float>>();
-        var router = new DenseLayer<float>(10, 0);
+        var router = new DenseLayer<float>(0);
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
@@ -64,7 +64,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
-        var router = new DenseLayer<float>(10, 4);
+        var router = new DenseLayer<float>(4);
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
@@ -79,7 +79,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
-        var router = new DenseLayer<float>(10, 4);
+        var router = new DenseLayer<float>(4);
 
         // Act
         var moe = new MixtureOfExpertsLayer<float>(
@@ -104,7 +104,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
-        var router = new DenseLayer<float>(10, 4);
+        var router = new DenseLayer<float>(4);
         var moe = new MixtureOfExpertsLayer<float>(
             experts, router,
             new[] { 10 }, new[] { 10 });
@@ -125,7 +125,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(3, 5, 5);
-        var router = new DenseLayer<float>(5, 3);
+        var router = new DenseLayer<float>(3);
         var moe = new MixtureOfExpertsLayer<float>(
             experts, router,
             new[] { 5 }, new[] { 5 },
@@ -155,7 +155,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
-        var router = new DenseLayer<float>(10, 4);
+        var router = new DenseLayer<float>(4);
         var moe = new MixtureOfExpertsLayer<float>(
             experts, router,
             new[] { 10 }, new[] { 10 },
@@ -188,7 +188,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(3, 10, 10);
-        var router = new DenseLayer<float>(10, 3);
+        var router = new DenseLayer<float>(3);
         var moe = new MixtureOfExpertsLayer<float>(
             experts, router,
             new[] { 10 }, new[] { 10 });
@@ -206,7 +206,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(2, 5, 5);
-        var router = new DenseLayer<float>(5, 2);
+        var router = new DenseLayer<float>(2);
         var moe = new MixtureOfExpertsLayer<float>(
             experts, router,
             new[] { 5 }, new[] { 5 });
@@ -229,7 +229,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(2, 5, 5);
-        var router = new DenseLayer<float>(5, 2);
+        var router = new DenseLayer<float>(2);
         var moe = new MixtureOfExpertsLayer<float>(
             experts, router,
             new[] { 5 }, new[] { 5 });
@@ -245,7 +245,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(3, 10, 10);
-        var router = new DenseLayer<float>(10, 3);
+        var router = new DenseLayer<float>(3);
         var moe = new MixtureOfExpertsLayer<float>(
             experts, router,
             new[] { 10 }, new[] { 10 });
@@ -267,7 +267,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
-        var router = new DenseLayer<float>(10, 4);
+        var router = new DenseLayer<float>(4);
         var moe = new MixtureOfExpertsLayer<float>(
             experts, router,
             new[] { 10 }, new[] { 10 },
@@ -291,7 +291,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
-        var router = new DenseLayer<float>(10, 4);
+        var router = new DenseLayer<float>(4);
         var moe = new MixtureOfExpertsLayer<float>(
             experts, router,
             new[] { 10 }, new[] { 10 },
@@ -312,7 +312,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
-        var router = new DenseLayer<float>(10, 4);
+        var router = new DenseLayer<float>(4);
         var moe = new MixtureOfExpertsLayer<float>(
             experts, router,
             new[] { 10 }, new[] { 10 },
@@ -327,7 +327,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
-        var router = new DenseLayer<float>(10, 4);
+        var router = new DenseLayer<float>(4);
         var moe = new MixtureOfExpertsLayer<float>(
             experts, router,
             new[] { 10 }, new[] { 10 },
@@ -360,7 +360,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
-        var router = new DenseLayer<float>(10, 4);
+        var router = new DenseLayer<float>(4);
         var moe = new MixtureOfExpertsLayer<float>(
             experts, router,
             new[] { 10 }, new[] { 10 },
@@ -379,7 +379,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
-        var router = new DenseLayer<float>(10, 4);
+        var router = new DenseLayer<float>(4);
         var moe = new MixtureOfExpertsLayer<float>(
             experts, router,
             new[] { 10 }, new[] { 10 },
@@ -400,7 +400,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
-        var router = new DenseLayer<float>(10, 4);
+        var router = new DenseLayer<float>(4);
         var moe = new MixtureOfExpertsLayer<float>(
             experts, router,
             new[] { 10 }, new[] { 10 },
@@ -424,7 +424,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(4, 10, 10);
-        var router = new DenseLayer<float>(10, 4);
+        var router = new DenseLayer<float>(4);
         var moe = new MixtureOfExpertsLayer<float>(
             experts, router,
             new[] { 10 }, new[] { 10 },
@@ -462,7 +462,7 @@ public class MixtureOfExpertsLayerTests
     {
         // Arrange
         var experts = CreateTestExperts(3, 10, 10);
-        var router = new DenseLayer<float>(10, 3);
+        var router = new DenseLayer<float>(3);
         var moe = new MixtureOfExpertsLayer<float>(
             experts, router,
             new[] { 10 }, new[] { 10 },
@@ -504,7 +504,7 @@ public class MixtureOfExpertsLayerTests
         {
             var expertLayers = new List<ILayer<float>>
             {
-                new DenseLayer<float>(inputDim, outputDim, new ReLUActivation<float>())
+                new DenseLayer<float>(outputDim, new ReLUActivation<float>())
             };
             experts.Add(new Expert<float>(expertLayers, new[] { inputDim }, new[] { outputDim }));
         }

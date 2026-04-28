@@ -385,7 +385,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
                 : new ActivationFunctions.SoftmaxActivation<T>();
 
             layers.Add(new DenseLayer<T>(
-                inputSize: finalChannels,
                 outputSize: config.NumClasses,
                 activationFunction: outputActivation));
         }

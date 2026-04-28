@@ -420,7 +420,7 @@ public class NormalizationLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int outputSize = 8;
-        var denseLayer = new DenseLayer<float>(inputSize, outputSize);
+        var denseLayer = new DenseLayer<float>(outputSize);
         var layer = new SpectralNormalizationLayer<float>(denseLayer);
         var input = CreateRandomTensor([4, inputSize]);
 
@@ -439,7 +439,7 @@ public class NormalizationLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int outputSize = 8;
-        var denseLayer = new DenseLayer<float>(inputSize, outputSize);
+        var denseLayer = new DenseLayer<float>(outputSize);
         var layer = new SpectralNormalizationLayer<float>(denseLayer);
         var input = CreateRandomTensor([4, inputSize]);
         layer.Forward(input);
@@ -461,7 +461,7 @@ public class NormalizationLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int outputSize = 8;
-        var denseLayer = new DenseLayer<float>(inputSize, outputSize);
+        var denseLayer = new DenseLayer<float>(outputSize);
         var layer = new SpectralNormalizationLayer<float>(denseLayer, powerIterations: 5);
         var input = CreateRandomTensor([4, inputSize]);
 

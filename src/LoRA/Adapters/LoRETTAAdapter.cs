@@ -1,4 +1,4 @@
-﻿using AiDotNet.Extensions;
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -863,7 +863,6 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
 
         // Create a new dense layer with merged parameters
         DenseLayer<T> mergedLayer = new DenseLayer<T>(
-            inputSize,
             outputSize,
             (IActivationFunction<T>?)null);
         mergedLayer.SetParameters(mergedParams);

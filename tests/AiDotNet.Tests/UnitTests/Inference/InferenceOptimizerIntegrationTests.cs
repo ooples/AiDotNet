@@ -383,7 +383,7 @@ public class InferenceOptimizerIntegrationTests
             new ReshapeLayer<float>(new[] { seqLen, embDim }),
             mha,
             new FlattenLayer<float>(),
-            new DenseLayer<float>(flatSize, flatSize,
+            new DenseLayer<float>(flatSize,
                 activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 
@@ -420,7 +420,7 @@ public class InferenceOptimizerIntegrationTests
             new ReshapeLayer<float>(new[] { seqLen, embDim }),
             gqa,
             new FlattenLayer<float>(),
-            new DenseLayer<float>(flatSize, flatSize,
+            new DenseLayer<float>(flatSize,
                 activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 
@@ -450,9 +450,9 @@ public class InferenceOptimizerIntegrationTests
             new ReshapeLayer<float>(new[] { seqLen, embDim }),
             mha,
             new FlattenLayer<float>(),
-            new DenseLayer<float>(flatSize, 16,
+            new DenseLayer<float>(16,
                 activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>()),
-            new DenseLayer<float>(16, flatSize,
+            new DenseLayer<float>(flatSize,
                 activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 

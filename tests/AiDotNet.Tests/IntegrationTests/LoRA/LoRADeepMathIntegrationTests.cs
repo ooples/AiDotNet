@@ -376,7 +376,7 @@ public class LoRADeepMathIntegrationTests
         // Weights = [[3,4],[0,5]], biases = [0,0]
         // magnitude[0] = ||[3,4]|| = 5
         // magnitude[1] = ||[0,5]|| = 5
-        var baseLayer = new DenseLayer<double>(2, 2);
+        var baseLayer = new DenseLayer<double>(2);
         baseLayer.SetParameters(new Vector<double>(new double[] { 3, 4, 0, 5, 0, 0 }));
 
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 1, alpha: 1.0);
@@ -396,7 +396,7 @@ public class LoRADeepMathIntegrationTests
     {
         // Weights = [[1,0],[0,1]], biases = [0,0]
         // magnitude[0] = ||[1,0]|| = 1, magnitude[1] = ||[0,1]|| = 1
-        var baseLayer = new DenseLayer<double>(2, 2);
+        var baseLayer = new DenseLayer<double>(2);
         baseLayer.SetParameters(new Vector<double>(new double[] { 1, 0, 0, 1, 0, 0 }));
 
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 1, alpha: 1.0);
@@ -412,7 +412,7 @@ public class LoRADeepMathIntegrationTests
     {
         // Only first output neuron has [3,4] → magnitude = 5
         // Second: [5,12] → magnitude = 13
-        var baseLayer = new DenseLayer<double>(2, 2);
+        var baseLayer = new DenseLayer<double>(2);
         baseLayer.SetParameters(new Vector<double>(new double[] { 3, 4, 5, 12, 0, 0 }));
 
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 1, alpha: 1.0);
@@ -426,7 +426,7 @@ public class LoRADeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DoRA_ParameterCount_IncludesMagnitude()
     {
-        var baseLayer = new DenseLayer<double>(10, 5);
+        var baseLayer = new DenseLayer<double>(5);
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 2, alpha: 2.0);
 
         // frozen: loraParams + magnitude = (10*2 + 2*5) + 5 = 35
@@ -443,7 +443,7 @@ public class LoRADeepMathIntegrationTests
         // With B=0, DoRA output = input @ W^T (no bias)
         // W = [[3,4],[0,5]], input = [1, 2]
         // output = [1*3+2*4, 1*0+2*5] = [11, 10]
-        var baseLayer = new DenseLayer<double>(2, 2);
+        var baseLayer = new DenseLayer<double>(2);
         baseLayer.SetParameters(new Vector<double>(new double[] { 3, 4, 0, 5, 0, 0 }));
 
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 1, alpha: 1.0);
@@ -459,7 +459,7 @@ public class LoRADeepMathIntegrationTests
     {
         // W = I (identity), input = [3, 7]
         // output = [3, 7]
-        var baseLayer = new DenseLayer<double>(2, 2);
+        var baseLayer = new DenseLayer<double>(2);
         baseLayer.SetParameters(new Vector<double>(new double[] { 1, 0, 0, 1, 0, 0 }));
 
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 1, alpha: 1.0);
@@ -476,7 +476,7 @@ public class LoRADeepMathIntegrationTests
         // W = [[3,4],[0,5]]
         // input1 = [1, 0] → [3, 0]
         // input2 = [0, 1] → [4, 5]
-        var baseLayer = new DenseLayer<double>(2, 2);
+        var baseLayer = new DenseLayer<double>(2);
         baseLayer.SetParameters(new Vector<double>(new double[] { 3, 4, 0, 5, 0, 0 }));
 
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 1, alpha: 1.0);
@@ -496,7 +496,7 @@ public class LoRADeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task StandardAdapter_FrozenParamCount_OnlyLoRA()
     {
-        var baseLayer = new DenseLayer<double>(10, 5);
+        var baseLayer = new DenseLayer<double>(5);
         var adapter = new StandardLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
 
         int loraOnly = 10 * 3 + 3 * 5;
@@ -506,7 +506,7 @@ public class LoRADeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task StandardAdapter_UnfrozenParamCount_BaseAndLoRA()
     {
-        var baseLayer = new DenseLayer<double>(10, 5);
+        var baseLayer = new DenseLayer<double>(5);
         int baseParams = baseLayer.ParameterCount;
         var adapter = new StandardLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: false);
 
@@ -518,7 +518,7 @@ public class LoRADeepMathIntegrationTests
     public async Task StandardAdapter_InitialForward_EqualsBaseOnly()
     {
         // With B=0, LoRA output = 0, so adapter output = base output + 0 = base output
-        var baseLayer = new DenseLayer<double>(4, 3);
+        var baseLayer = new DenseLayer<double>(3);
         baseLayer.SetParameters(new Vector<double>(new double[]
         {
             1, 0, 0, 0,  // W[0,:] = [1,0,0,0]
@@ -557,7 +557,7 @@ public class LoRADeepMathIntegrationTests
         // 1024x1024 with rank=8: LoRA uses < 2% of full parameters
         int size = 1024;
         int rank = 8;
-        var baseLayer = new DenseLayer<double>(size, size);
+        var baseLayer = new DenseLayer<double>(size);
         var adapter = new StandardLoRAAdapter<double>(baseLayer, rank, freezeBaseLayer: true);
 
         int fullWeights = size * size;
@@ -576,7 +576,7 @@ public class LoRADeepMathIntegrationTests
     public async Task LoHa_ParameterCount_Frozen()
     {
         // 2 * rank * inputSize * outputSize (frozen)
-        var baseLayer = new DenseLayer<double>(10, 5);
+        var baseLayer = new DenseLayer<double>(5);
         var adapter = new LoHaAdapter<double>(baseLayer, rank: 3, alpha: 3.0);
 
         Assert.Equal(2 * 3 * 10 * 5, adapter.ParameterCount);
@@ -586,7 +586,7 @@ public class LoRADeepMathIntegrationTests
     public async Task LoHa_InitialForward_EqualsBaseOutput()
     {
         // B matrices all zero initially → ΔW = 0 → adapter output = base output
-        var baseLayer = new DenseLayer<double>(4, 3);
+        var baseLayer = new DenseLayer<double>(3);
         var input = MakeTensor(1, 4, [1.0, 2.0, 3.0, 4.0]);
 
         var baseOutput = baseLayer.Forward(input);

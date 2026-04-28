@@ -120,7 +120,6 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             int layerInputSize = denseLayer.GetInputShape()[0];
             layers[layers.Count - 1] = new DenseLayer<T>(
-                layerInputSize,
                 _options.ActionSize,
                 (IActivationFunction<T>)new TanhActivation<T>()
             );

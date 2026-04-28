@@ -1,4 +1,4 @@
-﻿
+
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -348,7 +348,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             _ => new IdentityActivation<T>()
         };
 
-        _outputLayer = new DenseLayer<T>(_hiddenDim, outputDim, activationFunc);
+        _outputLayer = new DenseLayer<T>(outputDim, activationFunc);
         Layers.Add(_outputLayer);
     }
 

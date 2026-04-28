@@ -142,17 +142,17 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         var layers = new List<ILayer<T>>();
 
         // Input layer
-        layers.Add(new DenseLayer<T>(_options.StateSize, _options.ActorHiddenLayers[0], (IActivationFunction<T>)new ReLUActivation<T>()));
+        layers.Add(new DenseLayer<T>(_options.ActorHiddenLayers[0], (IActivationFunction<T>)new ReLUActivation<T>()));
 
         // Hidden layers
         for (int i = 1; i < _options.ActorHiddenLayers.Count; i++)
         {
-            layers.Add(new DenseLayer<T>(_options.ActorHiddenLayers[i - 1], _options.ActorHiddenLayers[i], (IActivationFunction<T>)new ReLUActivation<T>()));
+            layers.Add(new DenseLayer<T>(_options.ActorHiddenLayers[i], (IActivationFunction<T>)new ReLUActivation<T>()));
         }
 
         // Output layer with Tanh for continuous actions
         // Issue #1 fix: DenseLayer constructor automatically applies Xavier/Glorot weight initialization
-        layers.Add(new DenseLayer<T>(_options.ActorHiddenLayers.Last(), _options.ActionSize, (IActivationFunction<T>)new TanhActivation<T>()));
+        layers.Add(new DenseLayer<T>(_options.ActionSize, (IActivationFunction<T>)new TanhActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
@@ -174,16 +174,16 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         var layers = new List<ILayer<T>>();
 
         // Input layer
-        layers.Add(new DenseLayer<T>(inputSize, _options.CriticHiddenLayers[0], (IActivationFunction<T>)new ReLUActivation<T>()));
+        layers.Add(new DenseLayer<T>(_options.CriticHiddenLayers[0], (IActivationFunction<T>)new ReLUActivation<T>()));
 
         // Hidden layers
         for (int i = 1; i < _options.CriticHiddenLayers.Count; i++)
         {
-            layers.Add(new DenseLayer<T>(_options.CriticHiddenLayers[i - 1], _options.CriticHiddenLayers[i], (IActivationFunction<T>)new ReLUActivation<T>()));
+            layers.Add(new DenseLayer<T>(_options.CriticHiddenLayers[i], (IActivationFunction<T>)new ReLUActivation<T>()));
         }
 
         // Output layer (Q-value)
-        layers.Add(new DenseLayer<T>(_options.CriticHiddenLayers.Last(), 1, (IActivationFunction<T>)new IdentityActivation<T>()));
+        layers.Add(new DenseLayer<T>(1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,

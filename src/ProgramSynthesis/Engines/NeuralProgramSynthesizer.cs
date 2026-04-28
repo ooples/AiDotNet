@@ -173,7 +173,6 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
 
             // Output projection
             Layers.Add(new DenseLayer<T>(
-                inputSize: _architecture.ModelDimension,
                 outputSize: _architecture.VocabularySize,
                 activationFunction: new IdentityActivation<T>()));
         }

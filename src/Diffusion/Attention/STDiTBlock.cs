@@ -124,8 +124,8 @@ public class STDiTBlock<T> : LayerBase<T>
             spatialSize: spatialSize);
 
         int ffnHidden = channels * ffnMultiplier;
-        _ffnIn = new DenseLayer<T>(channels, ffnHidden, (IActivationFunction<T>)new GELUActivation<T>());
-        _ffnOut = new DenseLayer<T>(ffnHidden, channels, (IActivationFunction<T>)new IdentityActivation<T>());
+        _ffnIn = new DenseLayer<T>(ffnHidden, (IActivationFunction<T>)new GELUActivation<T>());
+        _ffnOut = new DenseLayer<T>(channels, (IActivationFunction<T>)new IdentityActivation<T>());
 
         _spatialNorm = new LayerNormalizationLayer<T>();
         _temporalNorm = new LayerNormalizationLayer<T>();

@@ -406,8 +406,7 @@ public class AiModelBuilderPredictIntegrationTests
         var layers = new List<AiDotNet.Interfaces.ILayer<float>>
         {
             new AiDotNet.NeuralNetworks.Layers.InputLayer<float>(selectedSize),
-            new AiDotNet.NeuralNetworks.Layers.DenseLayer<float>(
-                selectedSize, outputSize,
+            new AiDotNet.NeuralNetworks.Layers.DenseLayer<float>(outputSize,
                 activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 
@@ -463,8 +462,7 @@ public class AiModelBuilderPredictIntegrationTests
         var layers = new List<AiDotNet.Interfaces.ILayer<float>>
         {
             new AiDotNet.NeuralNetworks.Layers.InputLayer<float>(featureCount),
-            new AiDotNet.NeuralNetworks.Layers.DenseLayer<float>(
-                featureCount, outputSize,
+            new AiDotNet.NeuralNetworks.Layers.DenseLayer<float>(outputSize,
                 activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 

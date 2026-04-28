@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Optimizers;
@@ -120,7 +120,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
 
         for (int i = 0; i < numFrequencyLevels; i++)
         {
-            _mlpBlocks[i] = new DenseLayer<T>(currentDim, hiddenDim, (IActivationFunction<T>)new ReLUActivation<T>());
+            _mlpBlocks[i] = new DenseLayer<T>(hiddenDim, (IActivationFunction<T>)new ReLUActivation<T>());
             RegisterSubLayer(_mlpBlocks[i]);
             currentDim = hiddenDim;
         }

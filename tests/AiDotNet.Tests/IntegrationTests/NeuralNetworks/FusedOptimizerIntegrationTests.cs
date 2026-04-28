@@ -305,8 +305,8 @@ public class FusedOptimizerIntegrationTests
             outputSize: 2);
 
         var network = new FusedTrainingTestNetwork(architecture);
-        network.AddLayer(new DenseLayer<float>(4, 8));
-        network.AddLayer(new DenseLayer<float>(8, 2));
+        network.AddLayer(new DenseLayer<float>(8));
+        network.AddLayer(new DenseLayer<float>(2));
         return network;
     }
 
@@ -320,8 +320,8 @@ public class FusedOptimizerIntegrationTests
             outputSize: 2);
 
         var network = new FusedTrainingTestNetworkDouble(architecture);
-        network.AddLayer(new DenseLayer<double>(4, 8));
-        network.AddLayer(new DenseLayer<double>(8, 2));
+        network.AddLayer(new DenseLayer<double>(8));
+        network.AddLayer(new DenseLayer<double>(2));
         return network;
     }
 

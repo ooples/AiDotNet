@@ -25,7 +25,7 @@ public class NeuralNetworkLayersIntegrationTests
         // Arrange
         int inputSize = 10;
         int outputSize = 5;
-        var layer = new DenseLayer<double>(inputSize, outputSize);
+        var layer = new DenseLayer<double>(outputSize);
         var input = new Tensor<double>([1, inputSize]);
 
         // Initialize with random values
@@ -51,7 +51,7 @@ public class NeuralNetworkLayersIntegrationTests
         int batchSize = 8;
         int inputSize = 10;
         int outputSize = 5;
-        var layer = new DenseLayer<double>(inputSize, outputSize);
+        var layer = new DenseLayer<double>(outputSize);
         var input = new Tensor<double>([batchSize, inputSize]);
 
         // Initialize with random values
@@ -81,7 +81,7 @@ public class NeuralNetworkLayersIntegrationTests
         int inputSize = 5;
         int outputSize = 3;
         IActivationFunction<double> relu = new ReLUActivation<double>();
-        var layer = new DenseLayer<double>(inputSize, outputSize, relu);
+        var layer = new DenseLayer<double>(outputSize, relu);
 
         var input = new Tensor<double>([1, inputSize]);
         for (int i = 0; i < inputSize; i++)
@@ -104,7 +104,7 @@ public class NeuralNetworkLayersIntegrationTests
     public async Task DenseLayer_SupportsTraining_ReturnsTrue()
     {
         // Arrange
-        var layer = new DenseLayer<double>(10, 5);
+        var layer = new DenseLayer<double>(5);
 
         // Assert
         Assert.True(layer.SupportsTraining);
@@ -116,7 +116,7 @@ public class NeuralNetworkLayersIntegrationTests
         // Arrange
         int inputSize = 4;
         int outputSize = 3;
-        var layer = new DenseLayer<double>(inputSize, outputSize);
+        var layer = new DenseLayer<double>(outputSize);
 
         // Act
         var parameters = layer.GetParameters();
@@ -518,7 +518,7 @@ public class NeuralNetworkLayersIntegrationTests
     public async Task DenseLayer_ZeroOutput_ThrowsArgumentOutOfRange()
     {
         // Arrange, Act & Assert - zero output size is invalid
-        Assert.Throws<ArgumentOutOfRangeException>(() => new DenseLayer<double>(5, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DenseLayer<double>(0));
     }
 
     [Fact(Timeout = 120000)]
@@ -544,7 +544,7 @@ public class NeuralNetworkLayersIntegrationTests
     public async Task DenseLayer_LargeValues_RemainsNumericallyStable()
     {
         // Arrange
-        var layer = new DenseLayer<double>(10, 5);
+        var layer = new DenseLayer<double>(5);
         var input = new Tensor<double>([1, 10]);
         InitializeTensorWithValue(input, 1000.0); // Large values
 
@@ -563,7 +563,7 @@ public class NeuralNetworkLayersIntegrationTests
     public async Task DenseLayer_SmallValues_RemainsNumericallyStable()
     {
         // Arrange
-        var layer = new DenseLayer<double>(10, 5);
+        var layer = new DenseLayer<double>(5);
         var input = new Tensor<double>([1, 10]);
         InitializeTensorWithValue(input, 1e-10); // Very small values
 
@@ -612,7 +612,7 @@ public class NeuralNetworkLayersIntegrationTests
     public async Task DenseLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
-        var original = new DenseLayer<double>(10, 5);
+        var original = new DenseLayer<double>(5);
         var input = new Tensor<double>([1, 10]);
         InitializeRandomTensor(input);
 

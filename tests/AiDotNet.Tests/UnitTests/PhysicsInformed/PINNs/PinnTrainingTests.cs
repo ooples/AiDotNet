@@ -33,7 +33,7 @@ public class PinnTrainingTests
     {
         var layers = new ILayer<double>[]
         {
-            new DenseLayer<double>(inputSize, outputSize, (IActivationFunction<double>)new IdentityActivation<double>())
+            new DenseLayer<double>(outputSize, (IActivationFunction<double>)new IdentityActivation<double>())
         };
 
         return new NeuralNetworkArchitecture<double>(

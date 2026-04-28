@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
@@ -267,7 +267,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         int inputSize,
         int outputSize,
         IActivationFunction<T>? activation = null)
-        => new DenseLayer<T>(inputSize, outputSize, activation, InitializationStrategies<T>.Lazy);
+        => new DenseLayer<T>(outputSize, activation, InitializationStrategies<T>.Lazy);
 
     /// <summary>
     /// Creates a <see cref="DenseLayer{T}"/> with a vector activation and lazy weight
@@ -279,7 +279,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         int inputSize,
         int outputSize,
         IVectorActivationFunction<T> vectorActivation)
-        => new DenseLayer<T>(inputSize, outputSize, vectorActivation, InitializationStrategies<T>.Lazy);
+        => new DenseLayer<T>(outputSize, vectorActivation, InitializationStrategies<T>.Lazy);
 
     /// <summary>
     /// Creates a <see cref="ConvolutionalLayer{T}"/> with lazy weight allocation.

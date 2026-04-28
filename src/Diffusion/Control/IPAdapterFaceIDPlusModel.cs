@@ -115,8 +115,8 @@ public class IPAdapterFaceIDPlusModel<T> : LatentDiffusionModelBase<T>
             inputChannels: 3, latentChannels: LATENT_CHANNELS, baseChannels: 128,
             channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
 
-        _faceProjection = new DenseLayer<T>(FACE_EMBED_DIM, 768);
-        _imageProjection = new DenseLayer<T>(1024, 768);
+        _faceProjection = new DenseLayer<T>(768);
+        _imageProjection = new DenseLayer<T>(768);
     }
 
     /// <inheritdoc />

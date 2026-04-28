@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
@@ -939,16 +939,16 @@ public class NeRFNetwork<T>
         for (int i = 0; i < numLayers; i++)
         {
             int inDim = i == 0 ? inputDim : hiddenDim;
-            _densityLayers.Add(new DenseLayer<T>(inDim, hiddenDim, (IActivationFunction<T>)new ReLUActivation<T>()));
+            _densityLayers.Add(new DenseLayer<T>(hiddenDim, (IActivationFunction<T>)new ReLUActivation<T>()));
         }
-        _densityLayers.Add(new DenseLayer<T>(hiddenDim, 1, (IActivationFunction<T>?)null)); // Output density
+        _densityLayers.Add(new DenseLayer<T>(1, (IActivationFunction<T>?)null)); // Output density
 
         // Color network: features + direction -> RGB
         _colorLayers = new List<DenseLayer<T>>();
         int colorInputDim = hiddenDim + 3 + 6 * 4; // Features + direction + positional encoding
 
-        _colorLayers.Add(new DenseLayer<T>(colorInputDim, hiddenDim / 2, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _colorLayers.Add(new DenseLayer<T>(hiddenDim / 2, 3, (IActivationFunction<T>)new SigmoidActivation<T>())); // RGB output
+        _colorLayers.Add(new DenseLayer<T>(hiddenDim / 2, (IActivationFunction<T>)new ReLUActivation<T>()));
+        _colorLayers.Add(new DenseLayer<T>(3, (IActivationFunction<T>)new SigmoidActivation<T>())); // RGB output
     }
 
     /// <summary>

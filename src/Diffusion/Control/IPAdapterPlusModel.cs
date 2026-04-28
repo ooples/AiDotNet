@@ -130,7 +130,7 @@ public class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
             seed: seed);
 
         // Image projection: maps CLIP image embeddings to cross-attention space
-        _imageProjection = new DenseLayer<T>(IMAGE_EMBED_DIM, 768);
+        _imageProjection = new DenseLayer<T>(768);
     }
 
     /// <inheritdoc />

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using AiDotNet.Helpers;
@@ -191,7 +191,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         {
             // Lifting layer: embed input to higher dimension
             var liftLayer = new NeuralNetworks.Layers.DenseLayer<T>(
-                Architecture.InputSize,
                 _width,
                 new GELUActivation<T>() as IActivationFunction<T>);
             Layers.Add(liftLayer);
@@ -214,7 +213,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             // Projection layer: map back to output dimension
             var projectLayer = new NeuralNetworks.Layers.DenseLayer<T>(
-                _width,
                 Architecture.OutputSize,
                 NeuralNetworkHelper<T>.GetDefaultActivationFunction(Architecture.TaskType));
             Layers.Add(projectLayer);

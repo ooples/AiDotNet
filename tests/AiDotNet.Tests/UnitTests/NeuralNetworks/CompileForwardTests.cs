@@ -165,8 +165,8 @@ public class CompileForwardTests
             outputSize: 2);
 
         var network = new SimpleTestNetwork(architecture);
-        network.AddLayer(new DenseLayer<float>(4, 8));
-        network.AddLayer(new DenseLayer<float>(8, 2));
+        network.AddLayer(new DenseLayer<float>(8));
+        network.AddLayer(new DenseLayer<float>(2));
         return network;
     }
 

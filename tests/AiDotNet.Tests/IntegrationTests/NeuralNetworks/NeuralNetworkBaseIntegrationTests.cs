@@ -44,8 +44,8 @@ public class NeuralNetworkBaseIntegrationTests
             outputSize: 2);
 
         var network = new TestNeuralNetwork(architecture);
-        network.AddLayer(new DenseLayer<float>(4, 3));
-        network.AddLayer(new DenseLayer<float>(3, 2));
+        network.AddLayer(new DenseLayer<float>(3));
+        network.AddLayer(new DenseLayer<float>(2));
 
         return network;
     }
@@ -81,12 +81,12 @@ public class NeuralNetworkBaseIntegrationTests
             outputSize: 2);
 
         var network = new TestNeuralNetwork(architecture);
-        var first = new DenseLayer<float>(4, 3);
+        var first = new DenseLayer<float>(3);
         network.AddLayer(first);
 
         var firstCount = network.ParameterCount;
 
-        var second = new DenseLayer<float>(3, 2);
+        var second = new DenseLayer<float>(2);
         network.AddLayer(second);
 
         Assert.Equal(first.ParameterCount + second.ParameterCount, network.ParameterCount);

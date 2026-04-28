@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -112,13 +112,13 @@ public class Causal3DVAE<T> : VAEModelBase<T>
         int maxChannels = baseChannels * _channelMultipliers[^1];
 
         // Encoder: inputChannels -> baseChannels -> (norm at baseChannels) -> latentChannels*2
-        _encoderIn = new DenseLayer<T>(inputChannels, baseChannels, (IActivationFunction<T>)new GELUActivation<T>());
+        _encoderIn = new DenseLayer<T>(baseChannels, (IActivationFunction<T>)new GELUActivation<T>());
         _encoderNorm = new LayerNormalizationLayer<T>();
-        _encoderOut = new DenseLayer<T>(baseChannels, latentChannels * 2, (IActivationFunction<T>)new IdentityActivation<T>());
+        _encoderOut = new DenseLayer<T>(latentChannels * 2, (IActivationFunction<T>)new IdentityActivation<T>());
         // Decoder: latentChannels -> maxChannels -> (norm at maxChannels) -> inputChannels
-        _decoderIn = new DenseLayer<T>(latentChannels, maxChannels, (IActivationFunction<T>)new GELUActivation<T>());
+        _decoderIn = new DenseLayer<T>(maxChannels, (IActivationFunction<T>)new GELUActivation<T>());
         _decoderNorm = new LayerNormalizationLayer<T>();
-        _decoderOut = new DenseLayer<T>(maxChannels, inputChannels, (IActivationFunction<T>)new IdentityActivation<T>());
+        _decoderOut = new DenseLayer<T>(inputChannels, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     /// <inheritdoc />
