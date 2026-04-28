@@ -180,11 +180,10 @@ public class ConvolutionalLayersIntegrationTests
     public async Task DepthwiseSeparableConvolutionalLayer_Forward_ProducesValidOutput()
     {
         // Arrange: efficient convolution used in MobileNet
-        // Constructor: (inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, stride, padding, activation)
+        // Constructor (lazy): (outputDepth, kernelSize, stride, padding, activation)
         IActivationFunction<double> relu = new ReLUActivation<double>();
         var layer = new DepthwiseSeparableConvolutionalLayer<double>(
-            inputDepth: 3, outputDepth: 16, kernelSize: 3,
-            inputHeight: 8, inputWidth: 8, stride: 1, padding: 1,
+            outputDepth: 16, kernelSize: 3, stride: 1, padding: 1,
             activation: relu);
 
         var input = Tensor<double>.CreateRandom(3, 8, 8);

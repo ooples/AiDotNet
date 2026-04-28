@@ -2580,9 +2580,9 @@ public class AdvancedLayersIntegrationTests
         int height = 32;
         int width = 32;
         int kernelSize = 3;
-        // Constructor: (inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, stride, padding, activation)
+        // Constructor (lazy): (outputDepth, kernelSize, stride, padding, activation)
         var layer = new DepthwiseSeparableConvolutionalLayer<float>(
-            inputChannels, outputChannels, kernelSize, height, width, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
+            outputChannels, kernelSize, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
 
         // Input: [batch, channels, height, width]
         var input = Tensor<float>.CreateRandom([2, inputChannels, height, width]);
@@ -2605,9 +2605,9 @@ public class AdvancedLayersIntegrationTests
         int height = 16;
         int width = 16;
         int kernelSize = 3;
-        // Constructor: (inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, stride, padding, activation)
+        // Constructor (lazy): (outputDepth, kernelSize, stride, padding, activation)
         var original = new DepthwiseSeparableConvolutionalLayer<float>(
-            inputChannels, outputChannels, kernelSize, height, width, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
+            outputChannels, kernelSize, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
         var input = Tensor<float>.CreateRandom([1, inputChannels, height, width]);
 
         // Act
