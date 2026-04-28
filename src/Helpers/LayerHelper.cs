@@ -4193,9 +4193,7 @@ public static class LayerHelper<T>
             int inChannels = block == numEncoderBlocks - 2 ? bottleneckFilters : encoderFilters[block + 1];
 
             // Upsample3D to increase resolution
-            yield return new Upsample3DLayer<T>(
-                inputShape: [inChannels, currentResolution, currentResolution, currentResolution],
-                scaleFactor: 2);
+            yield return new Upsample3DLayer<T>(scaleFactor: 2);
             currentResolution *= 2;
 
             // First Conv3D after upsample (would concatenate with skip in full U-Net)

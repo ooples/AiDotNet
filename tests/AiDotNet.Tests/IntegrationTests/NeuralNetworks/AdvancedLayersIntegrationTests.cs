@@ -3412,7 +3412,7 @@ public class AdvancedLayersIntegrationTests
         // inputShape: [channels, depth, height, width]
         int[] inputShape = [3, 4, 8, 8];
         int scaleFactor = 2;
-        var layer = new Upsample3DLayer<float>(inputShape, scaleFactor);
+        var layer = new Upsample3DLayer<float>(scaleFactor);
 
         // Input: [batch, channels, depth, height, width]
         var input = Tensor<float>.CreateRandom([2, 3, 4, 8, 8]);
@@ -3431,7 +3431,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [2, 2, 4, 4];
         int scaleFactor = 2;
-        var original = new Upsample3DLayer<float>(inputShape, scaleFactor);
+        var original = new Upsample3DLayer<float>(scaleFactor);
         var input = Tensor<float>.CreateRandom([1, 2, 2, 4, 4]);
 
         // Act
