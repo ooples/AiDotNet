@@ -1888,7 +1888,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [64];
         float stddev = 0.1f;
-        var layer = new GaussianNoiseLayer<float>(inputShape, stddev);
+        var layer = new GaussianNoiseLayer<float>(stddev);
         layer.SetTrainingMode(true);
 
         var input = Tensor<float>.CreateDefault([4, 64], 1.0f);
@@ -1919,7 +1919,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [64];
         float stddev = 0.1f;
-        var layer = new GaussianNoiseLayer<float>(inputShape, stddev);
+        var layer = new GaussianNoiseLayer<float>(stddev);
         layer.SetTrainingMode(false);
 
         var input = Tensor<float>.CreateDefault([4, 64], 1.0f);
@@ -1943,7 +1943,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [32];
-        var original = new GaussianNoiseLayer<float>(inputShape, 0.1f);
+        var original = new GaussianNoiseLayer<float>(0.1f);
         original.SetTrainingMode(false);
         var input = Tensor<float>.CreateRandom([2, 32]);
 

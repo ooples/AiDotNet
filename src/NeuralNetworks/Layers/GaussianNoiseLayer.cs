@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for computations (e.g., float, double).</typeparam>
 [LayerCategory(LayerCategory.Regularization)]
 [LayerTask(LayerTask.Regularization)]
-[LayerProperty(IsTrainable = false, HasTrainingMode = true, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }")]
+[LayerProperty(IsTrainable = false, HasTrainingMode = true, TestInputShape = "1, 4", TestConstructorArgs = "")]
 public class GaussianNoiseLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -207,13 +207,21 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public GaussianNoiseLayer(
-        int[] inputShape,
         double standardDeviation = 0.1,
         double mean = 0)
-        : base(inputShape, inputShape)
+        : base(new[] { -1 }, new[] { -1 })
     {
         _mean = NumOps.FromDouble(mean);
         _standardDeviation = NumOps.FromDouble(standardDeviation);
+    }
+
+    /// <summary>
+    /// Resolves shape on first forward; output equals input (passthrough).
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var shape = input.Shape.ToArray();
+        ResolveShapes(shape, shape);
     }
 
     /// <summary>
@@ -247,6 +255,7 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
         if (IsTrainingMode)
         {
