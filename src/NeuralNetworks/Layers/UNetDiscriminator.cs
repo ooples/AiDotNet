@@ -540,9 +540,7 @@ internal partial class UNetUpBlock<T> : LayerBase<T>
         int outWidth = width * 2;
 
         // Bilinear upsampling
-        _upsample = new UpsamplingLayer<T>(
-            [inChannels, height, width],
-            scaleFactor: 2);
+        _upsample = new UpsamplingLayer<T>(scaleFactor: 2);
 
         // Conv after concatenation (inChannels + skipChannels -> outChannels)
         _conv1 = new ConvolutionalLayer<T>(

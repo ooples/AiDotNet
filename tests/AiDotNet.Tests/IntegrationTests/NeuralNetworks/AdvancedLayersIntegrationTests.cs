@@ -365,7 +365,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [4, 8, 8]; // channels, height, width
         int scaleFactor = 2;
-        var layer = new UpsamplingLayer<float>(inputShape, scaleFactor);
+        var layer = new UpsamplingLayer<float>(scaleFactor);
 
         var input = Tensor<float>.CreateRandom([1, 4, 8, 8]);
 
@@ -387,7 +387,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [4, 8, 8];
-        var original = new UpsamplingLayer<float>(inputShape, 2);
+        var original = new UpsamplingLayer<float>(2);
 
         // Act
         var clone = original.Clone();
@@ -404,7 +404,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [2, 4, 4];
         int scaleFactor = 4;
-        var layer = new UpsamplingLayer<float>(inputShape, scaleFactor);
+        var layer = new UpsamplingLayer<float>(scaleFactor);
 
         var input = Tensor<float>.CreateRandom([1, 2, 4, 4]);
 
@@ -702,7 +702,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [2, 2, 2]; // Very small spatial dimensions
-        var layer = new UpsamplingLayer<float>(inputShape, 2);
+        var layer = new UpsamplingLayer<float>(2);
 
         var input = Tensor<float>.CreateRandom([1, 2, 2, 2]);
 

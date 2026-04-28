@@ -728,7 +728,7 @@ public static class DeserializationHelper
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.UpsamplingLayer<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.UpsamplingLayer`1")))
         {
-            // UpsamplingLayer(int[] inputShape, int scaleFactor)
+            // UpsamplingLayer(int scaleFactor) — lazy: input shape resolved on first forward
             int scaleFactor = TryGetInt(additionalParams, "ScaleFactor") ?? 2;
             if (scaleFactor <= 0)
             {
@@ -736,12 +736,12 @@ public static class DeserializationHelper
                     $"Invalid UpsamplingLayer ScaleFactor metadata: {scaleFactor}. ScaleFactor must be positive.");
             }
 
-            var ctor = type.GetConstructor(new Type[] { typeof(int[]), typeof(int) });
+            var ctor = type.GetConstructor(new Type[] { typeof(int) });
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find UpsamplingLayer constructor.");
             }
-            instance = ctor.Invoke(new object[] { inputShape, scaleFactor });
+            instance = ctor.Invoke(new object[] { scaleFactor });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.MaxPoolingLayer<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.MaxPoolingLayer`1")))
