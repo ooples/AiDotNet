@@ -194,6 +194,9 @@ public class VAEEncoder<T> : LayerBase<T>
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
+        // Pre-resolve so ParameterRegistry, GetParameters, SetParameters, and
+        // pretrained weight loading all work on a freshly constructed encoder.
+        _inputConv.ResolveFromShape(new[] { 1, inputChannels, inputSpatialSize, inputSpatialSize });
 
         // Build down blocks
         _downBlocks = new DownBlock<T>[_channelMults.Length];
@@ -253,6 +256,13 @@ public class VAEEncoder<T> : LayerBase<T>
             stride: 1,
             padding: 0,
             activationFunction: new IdentityActivation<T>());
+
+        // Pre-resolve mean/logvar/quant convs from the bottleneck topology so the
+        // ParameterRegistry has consistent named entries for pretrained-weight loading
+        // before any forward pass fires.
+        _meanConv.ResolveFromShape(new[] { 1, lastChannels, _bottleneckSize, _bottleneckSize });
+        _logVarConv.ResolveFromShape(new[] { 1, lastChannels, _bottleneckSize, _bottleneckSize });
+        _quantConv.ResolveFromShape(new[] { 1, latentChannels, _bottleneckSize, _bottleneckSize });
     }
 
     private static int[] CalculateInputShape(int channels, int spatialSize)
@@ -406,13 +416,20 @@ public class VAEEncoder<T> : LayerBase<T>
     private (Tensor<T> First, Tensor<T> Second) SplitChannels(Tensor<T> combined, int splitChannels)
     {
         var shape = combined._shape;
-        int batch = shape.Length > 3 ? shape[0] : 1;
-        int totalChannels = shape.Length > 3 ? shape[1] : shape[0];
-        int height = shape.Length > 3 ? shape[2] : shape[1];
-        int width = shape.Length > 3 ? shape[3] : shape[2];
+        bool batched = shape.Length > 3;
+        int batch = batched ? shape[0] : 1;
+        int totalChannels = batched ? shape[1] : shape[0];
+        int height = batched ? shape[2] : shape[1];
+        int width = batched ? shape[3] : shape[2];
 
-        var first = new Tensor<T>(new[] { batch, splitChannels, height, width });
-        var second = new Tensor<T>(new[] { batch, splitChannels, height, width });
+        // Preserve the input rank so callers that round-trip rank-3 [C, H, W] tensors
+        // through the encoder don't see their tensor silently promoted to rank-4.
+        int[] outShape = batched
+            ? new[] { batch, splitChannels, height, width }
+            : new[] { splitChannels, height, width };
+
+        var first = new Tensor<T>(outShape);
+        var second = new Tensor<T>(outShape);
         var combinedSpan = combined.AsSpan();
         var firstSpan = first.AsWritableSpan();
         var secondSpan = second.AsWritableSpan();
@@ -766,9 +783,12 @@ public class VAEEncoder<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Builds and returns the parameter registry for external use.
+    /// Builds and returns the parameter registry for use inside the assembly. Kept
+    /// <c>internal</c> so the raw <see cref="ParameterRegistry{T}"/> plumbing isn't
+    /// frozen into the public API surface — external callers should use the
+    /// <see cref="LoadWeights"/>/<see cref="ValidateWeights"/> entry points instead.
     /// </summary>
-    public ParameterRegistry<T> BuildParameterRegistryPublic()
+    internal ParameterRegistry<T> BuildParameterRegistryPublic()
     {
         return BuildParameterRegistry();
     }

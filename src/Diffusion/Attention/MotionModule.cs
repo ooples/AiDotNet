@@ -101,6 +101,18 @@ public class MotionModule<T> : LayerBase<T>
 
         _norm1 = new LayerNormalizationLayer<T>();
         _norm2 = new LayerNormalizationLayer<T>();
+
+        // Pre-resolve the lazy sublayers from the ctor-known shape so GetParameters,
+        // SetParameters, ParameterCount, and ONNX export all work on a freshly
+        // constructed MotionModule — without waiting for the first Forward.
+        // Forward expects input of shape [H*W, numFrames, channels] (matches
+        // TemporalSelfAttention's input contract).
+        var inputShape = new[] { spatialSize * spatialSize, numFrames, channels };
+        var ffnHiddenShape = new[] { spatialSize * spatialSize, numFrames, ffnHidden };
+        _norm1.ResolveFromShape(inputShape);
+        _norm2.ResolveFromShape(inputShape);
+        _ffnIn.ResolveFromShape(inputShape);
+        _ffnOut.ResolveFromShape(ffnHiddenShape);
     }
 
     /// <summary>

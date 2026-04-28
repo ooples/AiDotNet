@@ -464,17 +464,20 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
 
         var effectiveLossFunction = lossFunction ?? LossFunction;
 
-        // Primary path: layer-level backpropagation for exact gradients.
-        // Forward through encoder/decoder layers, compute loss gradient,
-        // then backpropagate through the layer chain.
+        // Primary path: tape-recorded forward + layer-level backprop. ForwardForTraining
+        // runs encode+decode without suppressing tape recording so the per-layer caches
+        // populate. We then push the loss derivative back through the layer chain via
+        // BackpropagateLossGradient, and finally read accumulated gradients via the
+        // concrete VAE's GetParameterGradients override.
         try
         {
-            var predicted = Predict(input);
+            var predicted = ForwardForTraining(input);
 
             var lossGrad = effectiveLossFunction.CalculateDerivative(
                 predicted.ToVector(), target.ToVector());
             var lossGradTensor = new Tensor<T>(predicted._shape, lossGrad);
 
+            BackpropagateLossGradient(lossGradTensor);
 
             var gradients = GetParameterGradients();
 
@@ -571,14 +574,30 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     }
 
     /// <summary>
-    /// Extracts accumulated parameter gradients from all layers after backpropagation.
+    /// Pushes a loss gradient tensor (shape matching the decoder's output) back through
+    /// the decoder and encoder layer chain so each layer's parameter gradient cache is
+    /// populated. The default implementation is a no-op so legacy subclasses that don't
+    /// override the exact-gradient path keep working — but those subclasses will fall
+    /// back to SPSA. Subclasses that want the fast layer-level path should override this
+    /// to call <c>layer.Backward(grad)</c> in reverse order through their decoder and
+    /// encoder layers.
     /// </summary>
-    protected virtual Vector<T> GetParameterGradients()
+    /// <param name="lossGradient">
+    /// dL/dy for the decoder's output. Shape must match what <see cref="ForwardForTraining"/>
+    /// returned.
+    /// </param>
+    protected virtual void BackpropagateLossGradient(Tensor<T> lossGradient)
     {
-        throw new NotSupportedException(
-            $"{GetType().Name} does not implement GetParameterGradients. " +
-            "Override this method to extract layer-level gradients.");
+        // Default no-op. Concrete VAEs that maintain layer-level state should override.
     }
+
+    /// <summary>
+    /// Extracts accumulated parameter gradients from all encoder/decoder/norm layers after
+    /// <see cref="BackpropagateLossGradient"/> has populated them. Concrete VAEs must walk
+    /// their owned layers and concatenate <see cref="LayerBase{T}.GetParameterGradients"/>
+    /// in the same order they expose their flat parameter vector via <see cref="GetParameters"/>.
+    /// </summary>
+    protected abstract Vector<T> GetParameterGradients();
 
     /// <inheritdoc />
     public virtual void ApplyGradients(Vector<T> gradients, T learningRate)

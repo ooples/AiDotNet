@@ -107,48 +107,75 @@ public class LiteVAEModel<T> : VAEModelBase<T>
         int[] multipliers = [1, 2, 4];
         int channels = _baseChannels;
 
-        _encoderLayers.Add(new ConvolutionalLayer<T>(
+        // Placeholder spatial size — only the channel count matters for ParameterCount,
+        // and ResolveFromShape requires concrete positive dims.
+        const int placeholderSpatial = 32;
+        int currentChannels = _inputChannels;
+        int currentSpatial = placeholderSpatial;
+
+        var firstConv = new ConvolutionalLayer<T>(
             outputDepth: channels,
             kernelSize: 3, stride: 1, padding: 1,
-            activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
+            activationFunction: (IActivationFunction<T>)new GELUActivation<T>());
+        firstConv.ResolveFromShape(new[] { 1, currentChannels, currentSpatial, currentSpatial });
+        _encoderLayers.Add(firstConv);
+        currentChannels = channels;
 
         foreach (int mult in multipliers)
         {
             int outChannels = _baseChannels * mult;
             // Strided conv for downsampling (lightweight)
-            _encoderLayers.Add(new ConvolutionalLayer<T>(
+            var conv = new ConvolutionalLayer<T>(
                 outputDepth: outChannels,
                 kernelSize: 3, stride: 2, padding: 1,
-                activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
+                activationFunction: (IActivationFunction<T>)new GELUActivation<T>());
+            conv.ResolveFromShape(new[] { 1, currentChannels, currentSpatial, currentSpatial });
+            _encoderLayers.Add(conv);
+            currentChannels = outChannels;
+            currentSpatial = Math.Max(1, currentSpatial / 2);
             channels = outChannels;
         }
 
         // Latent projection
-        _encoderLayers.Add(new ConvolutionalLayer<T>(
+        var latentConv = new ConvolutionalLayer<T>(
             outputDepth: _latentChannels * 2,
             kernelSize: 1, stride: 1, padding: 0,
-            activationFunction: new IdentityActivation<T>()));
+            activationFunction: new IdentityActivation<T>());
+        latentConv.ResolveFromShape(new[] { 1, currentChannels, currentSpatial, currentSpatial });
+        _encoderLayers.Add(latentConv);
 
         // Lightweight decoder
-        _decoderLayers.Add(new ConvolutionalLayer<T>(
+        int decoderChannels = _latentChannels;
+        int decoderSpatial = Math.Max(1, placeholderSpatial / (1 << multipliers.Length));
+
+        var decoderIn = new ConvolutionalLayer<T>(
             outputDepth: channels,
             kernelSize: 1, stride: 1, padding: 0,
-            activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
+            activationFunction: (IActivationFunction<T>)new GELUActivation<T>());
+        decoderIn.ResolveFromShape(new[] { 1, decoderChannels, decoderSpatial, decoderSpatial });
+        _decoderLayers.Add(decoderIn);
+        decoderChannels = channels;
 
         for (int i = multipliers.Length - 1; i >= 0; i--)
         {
             int outChannels = i == 0 ? _baseChannels : _baseChannels * multipliers[i - 1];
-            _decoderLayers.Add(new DeconvolutionalLayer<T>(
+            var deconv = new DeconvolutionalLayer<T>(
                 outputDepth: outChannels,
                 kernelSize: 4, stride: 2, padding: 1,
-                activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
+                activationFunction: (IActivationFunction<T>)new GELUActivation<T>());
+            deconv.ResolveFromShape(new[] { 1, decoderChannels, decoderSpatial, decoderSpatial });
+            _decoderLayers.Add(deconv);
+            decoderChannels = outChannels;
+            decoderSpatial *= 2;
             channels = outChannels;
         }
 
-        _decoderLayers.Add(new ConvolutionalLayer<T>(
+        var decoderOut = new ConvolutionalLayer<T>(
             outputDepth: _inputChannels,
             kernelSize: 3, stride: 1, padding: 1,
-            activationFunction: new TanhActivation<T>()));
+            activationFunction: new TanhActivation<T>());
+        decoderOut.ResolveFromShape(new[] { 1, decoderChannels, decoderSpatial, decoderSpatial });
+        _decoderLayers.Add(decoderOut);
     }
 
     /// <inheritdoc />

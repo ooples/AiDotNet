@@ -119,6 +119,17 @@ public class Causal3DVAE<T> : VAEModelBase<T>
         _decoderIn = new DenseLayer<T>(maxChannels, (IActivationFunction<T>)new GELUActivation<T>());
         _decoderNorm = new LayerNormalizationLayer<T>();
         _decoderOut = new DenseLayer<T>(inputChannels, (IActivationFunction<T>)new IdentityActivation<T>());
+
+        // Pre-resolve every encoder/decoder sublayer from the ctor-known channel topology
+        // so ParameterCount, GetParameters, SetParameters, Clone, and the base save/load
+        // path all see consistent layouts on a freshly constructed VAE — without waiting
+        // for the first Encode/Decode call.
+        _encoderIn.ResolveFromShape(new[] { 1, inputChannels });
+        _encoderNorm.ResolveFromShape(new[] { 1, baseChannels });
+        _encoderOut.ResolveFromShape(new[] { 1, baseChannels });
+        _decoderIn.ResolveFromShape(new[] { 1, latentChannels });
+        _decoderNorm.ResolveFromShape(new[] { 1, maxChannels });
+        _decoderOut.ResolveFromShape(new[] { 1, maxChannels });
     }
 
     /// <inheritdoc />

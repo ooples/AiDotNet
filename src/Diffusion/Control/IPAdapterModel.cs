@@ -609,11 +609,6 @@ public class ImageEncoder<T>
     private readonly List<DenseLayer<T>> _transformerLayers;
 
     /// <summary>
-    /// Gets the number of parameters.
-    /// </summary>
-    public int ParameterCount { get; private set; }
-
-    /// <summary>
     /// Initializes a new ImageEncoder.
     /// </summary>
     public ImageEncoder(
@@ -624,6 +619,12 @@ public class ImageEncoder<T>
         int numHeads = 12,
         int? seed = null)
     {
+        if (imageSize <= 0) throw new ArgumentOutOfRangeException(nameof(imageSize), "imageSize must be positive.");
+        if (patchSize <= 0) throw new ArgumentOutOfRangeException(nameof(patchSize), "patchSize must be positive.");
+        if (imageSize % patchSize != 0)
+            throw new ArgumentException($"imageSize ({imageSize}) must be evenly divisible by patchSize ({patchSize}).", nameof(patchSize));
+        if (embedDim <= 0) throw new ArgumentOutOfRangeException(nameof(embedDim), "embedDim must be positive.");
+
         _imageSize = imageSize;
         _patchSize = patchSize;
         _embedDim = embedDim;
@@ -631,19 +632,38 @@ public class ImageEncoder<T>
 
         var patchDim = 3 * patchSize * patchSize; // RGB patches
         _patchEmbed = new DenseLayer<T>(embedDim, (IActivationFunction<T>?)null);
+        // Patch projection consumes [numPatches, patchDim] tokens, not the whole flattened image.
+        _patchEmbed.ResolveFromShape(new[] { _numPatches, patchDim });
 
         _transformerLayers = new List<DenseLayer<T>>();
         for (int i = 0; i < numLayers; i++)
         {
             // Simplified transformer layer as MLP
-            _transformerLayers.Add(new DenseLayer<T>(embedDim * 4, (IActivationFunction<T>?)null));
-            _transformerLayers.Add(new DenseLayer<T>(embedDim, (IActivationFunction<T>?)null));
-        }
+            var ffnIn = new DenseLayer<T>(embedDim * 4, (IActivationFunction<T>?)null);
+            ffnIn.ResolveFromShape(new[] { _numPatches, embedDim });
+            _transformerLayers.Add(ffnIn);
 
-        ParameterCount = _patchEmbed.ParameterCount;
-        foreach (var layer in _transformerLayers)
+            var ffnOut = new DenseLayer<T>(embedDim, (IActivationFunction<T>?)null);
+            ffnOut.ResolveFromShape(new[] { _numPatches, embedDim * 4 });
+            _transformerLayers.Add(ffnOut);
+        }
+    }
+
+    /// <summary>
+    /// Number of trainable parameters across patch projection + transformer layers.
+    /// Computed live from each sublayer so it reflects current state regardless of
+    /// when the layers were resolved.
+    /// </summary>
+    public int ParameterCount
+    {
+        get
         {
-            ParameterCount += layer.ParameterCount;
+            int total = _patchEmbed.ParameterCount;
+            foreach (var layer in _transformerLayers)
+            {
+                total += layer.ParameterCount;
+            }
+            return total;
         }
     }
 
@@ -652,7 +672,8 @@ public class ImageEncoder<T>
     /// </summary>
     public Tensor<T> Encode(Tensor<T> image)
     {
-        // Simplified encoding: flatten and project
+        // Extract [numPatches, patchDim] tokens from a [B, 3, H, W] image so the
+        // patch projection matches its resolved input shape.
         var flatImage = FlattenPatches(image);
         var embeddings = _patchEmbed.Forward(flatImage);
 
@@ -669,16 +690,44 @@ public class ImageEncoder<T>
         return x;
     }
 
+    /// <summary>
+    /// Splits a <c>[B, 3, imageSize, imageSize]</c> image into <c>[numPatches, patchDim]</c>
+    /// row-major patch tokens (B is collapsed; this simplified encoder processes one image
+    /// at a time). <c>patchDim = 3 * patchSize * patchSize</c> in row-major channel-first
+    /// layout matching the patch projection's expected input.
+    /// </summary>
     private Tensor<T> FlattenPatches(Tensor<T> image)
     {
-        // Simplified: just flatten the image
-        var flatData = new T[image.Length];
-        var span = image.AsSpan();
-        for (int i = 0; i < span.Length && i < flatData.Length; i++)
+        int channels = image.Shape.Length >= 4 ? image.Shape[1] : 3;
+        int patchDim = channels * _patchSize * _patchSize;
+        int patchesPerSide = _imageSize / _patchSize;
+
+        var flat = new T[_numPatches * patchDim];
+        // Source memory layout: [B=1, C, H, W]; we read the first batch element only.
+        var src = image.AsSpan();
+        int hStride = _imageSize;
+        int cStride = _imageSize * _imageSize;
+
+        for (int py = 0; py < patchesPerSide; py++)
         {
-            flatData[i] = span[i];
+            for (int px = 0; px < patchesPerSide; px++)
+            {
+                int patchIdx = py * patchesPerSide + px;
+                int dst = patchIdx * patchDim;
+                for (int c = 0; c < channels; c++)
+                {
+                    for (int dy = 0; dy < _patchSize; dy++)
+                    {
+                        int srcRow = (py * _patchSize + dy) * hStride + c * cStride + px * _patchSize;
+                        for (int dx = 0; dx < _patchSize; dx++)
+                        {
+                            flat[dst++] = src[srcRow + dx];
+                        }
+                    }
+                }
+            }
         }
-        return new Tensor<T>(new[] { 1, flatData.Length }, new Vector<T>(flatData));
+        return new Tensor<T>(new[] { _numPatches, patchDim }, new Vector<T>(flat));
     }
 
     private Tensor<T> ApplyGelu(Tensor<T> x)
@@ -771,9 +820,10 @@ public class ImageProjector<T>
     private readonly DenseLayer<T> _tokenExpansion;
 
     /// <summary>
-    /// Gets the number of parameters.
+    /// Number of trainable parameters across the projection + token-expansion layers.
+    /// Computed live from the underlying lazy layers so it reflects current state.
     /// </summary>
-    public int ParameterCount { get; }
+    public int ParameterCount => _projection.ParameterCount + _tokenExpansion.ParameterCount;
 
     /// <summary>
     /// Initializes a new ImageProjector.
@@ -784,6 +834,10 @@ public class ImageProjector<T>
         int numTokens = 4,
         int? seed = null)
     {
+        if (inputDim <= 0) throw new ArgumentOutOfRangeException(nameof(inputDim), "inputDim must be positive.");
+        if (outputDim <= 0) throw new ArgumentOutOfRangeException(nameof(outputDim), "outputDim must be positive.");
+        if (numTokens <= 0) throw new ArgumentOutOfRangeException(nameof(numTokens), "numTokens must be positive.");
+
         _inputDim = inputDim;
         _outputDim = outputDim;
         _numTokens = numTokens;
@@ -791,7 +845,10 @@ public class ImageProjector<T>
         _projection = new DenseLayer<T>(outputDim, (IActivationFunction<T>?)null);
         _tokenExpansion = new DenseLayer<T>(outputDim * numTokens, (IActivationFunction<T>?)null);
 
-        ParameterCount = _projection.ParameterCount + _tokenExpansion.ParameterCount;
+        // Pre-resolve so ParameterCount, GetParameters, SetParameters, and clone work
+        // on a freshly constructed projector before any forward pass.
+        _projection.ResolveFromShape(new[] { 1, inputDim });
+        _tokenExpansion.ResolveFromShape(new[] { 1, outputDim });
     }
 
     /// <summary>

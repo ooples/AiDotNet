@@ -499,6 +499,39 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     }
 
     /// <summary>
+    /// Eagerly resolves a lazy layer's shape (and allocates its weights) from a known
+    /// input shape, without running an actual forward pass. Parent wrappers that already
+    /// know their child layer's input shape at construction time call this so that
+    /// <see cref="GetParameters"/>, <see cref="SetParameters"/>, <c>ParameterCount</c>,
+    /// and ONNX export work correctly on a freshly constructed model — i.e. before any
+    /// real <c>Forward</c> has fired.
+    /// </summary>
+    /// <param name="inputShape">
+    /// Concrete (no <c>-1</c>) shape that this layer would receive on its first forward.
+    /// Each dim must be positive.
+    /// </param>
+    /// <remarks>
+    /// Idempotent: returns immediately if the layer's shape has already been resolved.
+    /// The dummy tensor allocated here is discarded; only the shape is consumed.
+    /// </remarks>
+    public void ResolveFromShape(int[] inputShape)
+    {
+        if (IsShapeResolved) return;
+        if (inputShape == null) throw new ArgumentNullException(nameof(inputShape));
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            if (inputShape[i] <= 0)
+            {
+                throw new ArgumentException(
+                    $"ResolveFromShape requires concrete positive dims; got {inputShape[i]} at axis {i}.",
+                    nameof(inputShape));
+            }
+        }
+        var dummy = new Tensor<T>(inputShape);
+        EnsureInitializedFromInput(dummy);
+    }
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>

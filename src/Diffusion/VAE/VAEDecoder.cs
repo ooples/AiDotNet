@@ -107,6 +107,13 @@ public class VAEDecoder<T> : LayerBase<T>
     private readonly int _bottleneckSize;
 
     /// <summary>
+    /// Number of residual blocks per up-stage. Persisted in the checkpoint so that
+    /// <see cref="Deserialize(BinaryReader)"/> can reject files built from a decoder with
+    /// a different up-block layout.
+    /// </summary>
+    private readonly int _numResBlocks;
+
+    /// <summary>
     /// Final output spatial size.
     /// </summary>
     private readonly int _outputSpatialSize;
@@ -175,6 +182,7 @@ public class VAEDecoder<T> : LayerBase<T>
         _baseChannels = baseChannels;
         _channelMults = channelMults ?? new[] { 1, 2, 4, 4 };
         _numGroups = numGroups;
+        _numResBlocks = numResBlocks;
         _outputSpatialSize = outputSpatialSize;
         _silu = new SiLUActivation<T>();
         _tanh = new TanhActivation<T>();
@@ -501,6 +509,7 @@ public class VAEDecoder<T> : LayerBase<T>
         writer.Write(_numGroups);
         writer.Write(_bottleneckSize);
         writer.Write(_outputSpatialSize);
+        writer.Write(_numResBlocks);
 
         _postQuantConv.Serialize(writer);
         _inputConv.Serialize(writer);
@@ -535,14 +544,26 @@ public class VAEDecoder<T> : LayerBase<T>
         {
             channelMults[i] = reader.ReadInt32();
         }
-        _ = reader.ReadInt32(); // numGroups
-        _ = reader.ReadInt32(); // bottleneckSize
-        _ = reader.ReadInt32(); // outputSpatialSize
+        var numGroups = reader.ReadInt32();
+        var bottleneckSize = reader.ReadInt32();
+        var outputSpatialSize = reader.ReadInt32();
+        var numResBlocks = reader.ReadInt32();
 
         if (outputChannels != _outputChannels || latentChannels != _latentChannels ||
-            baseChannels != _baseChannels || !channelMults.SequenceEqual(_channelMults))
+            baseChannels != _baseChannels || !channelMults.SequenceEqual(_channelMults) ||
+            numGroups != _numGroups || bottleneckSize != _bottleneckSize ||
+            outputSpatialSize != _outputSpatialSize || numResBlocks != _numResBlocks)
         {
-            throw new InvalidOperationException("Architecture mismatch in VAEDecoder deserialization.");
+            throw new InvalidOperationException(
+                "Architecture mismatch in VAEDecoder deserialization. " +
+                $"Expected (outputChannels={_outputChannels}, latentChannels={_latentChannels}, " +
+                $"baseChannels={_baseChannels}, channelMults=[{string.Join(",", _channelMults)}], " +
+                $"numGroups={_numGroups}, bottleneckSize={_bottleneckSize}, " +
+                $"outputSpatialSize={_outputSpatialSize}, numResBlocks={_numResBlocks}); " +
+                $"got (outputChannels={outputChannels}, latentChannels={latentChannels}, " +
+                $"baseChannels={baseChannels}, channelMults=[{string.Join(",", channelMults)}], " +
+                $"numGroups={numGroups}, bottleneckSize={bottleneckSize}, " +
+                $"outputSpatialSize={outputSpatialSize}, numResBlocks={numResBlocks}).");
         }
 
         _postQuantConv.Deserialize(reader);
