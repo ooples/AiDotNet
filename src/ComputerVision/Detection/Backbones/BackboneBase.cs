@@ -24,7 +24,7 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 /// Think of it as the "eyes" of the detector that learns to recognize patterns like
 /// edges, textures, and shapes.</para>
 /// </remarks>
-public abstract class BackboneBase<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.IFeatureMapProvider<T>
+public abstract class BackboneBase<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.IDetectionBackbone<T>
 {
     /// <summary>
     /// Whether the backbone is in training mode (separate from base IsTrainingMode for backwards compat).
