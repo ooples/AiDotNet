@@ -3803,7 +3803,7 @@ public class AdvancedLayersIntegrationTests
         int inputWidth = 28;
         int outputHeight = 28;
         int outputWidth = 28;
-        var layer = new SpatialTransformerLayer<float>(inputHeight, inputWidth, outputHeight, outputWidth,
+        var layer = new SpatialTransformerLayer<float>(outputHeight, outputWidth,
             (IActivationFunction<float>)new TanhActivation<float>());
 
         // Input: [batch, height, width]
@@ -3825,7 +3825,7 @@ public class AdvancedLayersIntegrationTests
         int inputWidth = 16;
         int outputHeight = 16;
         int outputWidth = 16;
-        var original = new SpatialTransformerLayer<float>(inputHeight, inputWidth, outputHeight, outputWidth,
+        var original = new SpatialTransformerLayer<float>(outputHeight, outputWidth,
             (IActivationFunction<float>)new TanhActivation<float>());
         var input = Tensor<float>.CreateRandom([1, inputHeight, inputWidth]);
 
