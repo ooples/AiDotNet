@@ -74,7 +74,7 @@ public class MLPMixerBlockLayer<T> : LayerBase<T>
         // Temporal mixer: [B, numPatches, hiddenDim] -> transpose -> [B, hiddenDim, numPatches]
         //                 -> Dense(numPatches -> tempExpanded, GELU) -> Dense(tempExpanded -> numPatches)
         //                 -> transpose -> [B, numPatches, hiddenDim]
-        _toPatchAxis = new TransposeLayer<T>(new[] { numPatches, hiddenDim }, new[] { 1, 0 });
+        _toPatchAxis = new TransposeLayer<T>(new[] { 1, 0 });
         _temporalMlpExpand = new DenseLayer<T>(
             inputSize: numPatches,
             outputSize: tempExpanded,
@@ -83,7 +83,7 @@ public class MLPMixerBlockLayer<T> : LayerBase<T>
             inputSize: tempExpanded,
             outputSize: numPatches,
             activationFunction: null);
-        _fromPatchAxis = new TransposeLayer<T>(new[] { hiddenDim, numPatches }, new[] { 1, 0 });
+        _fromPatchAxis = new TransposeLayer<T>(new[] { 1, 0 });
 
         _norm2 = new LayerNormalizationLayer<T>();
 

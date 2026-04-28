@@ -239,13 +239,13 @@ public static class DeserializationHelper
                 }
             }
 
-            var ctor = type.GetConstructor(new Type[] { typeof(int[]), typeof(int[]) });
+            var ctor = type.GetConstructor(new Type[] { typeof(int[]) });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find TransposeLayer constructor with (int[], int[]).");
+                throw new InvalidOperationException("Cannot find TransposeLayer constructor with (int[]).");
             }
 
-            instance = ctor.Invoke(new object[] { inputShape, permutation });
+            instance = ctor.Invoke(new object[] { permutation });
         }
         else if (genericDef == typeof(EmbeddingLayer<>))
         {

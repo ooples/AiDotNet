@@ -31,10 +31,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
     IsTrainable = false,
     ChangesShape = true,
     TestInputShape = "1, 2, 3",
-    TestConstructorArgs = "new[] { 2, 3 }, new[] { 1, 0 }")]
+    TestConstructorArgs = "new[] { 1, 0 }")]
 public class TransposeLayer<T> : LayerBase<T>
 {
-    private readonly int[] _logicalInputShape;
+    private int[] _logicalInputShape;
     private readonly int[] _permutation;
     private readonly int[] _fullPermutation;
 
@@ -53,10 +53,11 @@ public class TransposeLayer<T> : LayerBase<T>
     /// Thrown when <paramref name="permutation"/> is not a valid permutation of
     /// <c>0..inputShape.Length - 1</c>.
     /// </exception>
-    public TransposeLayer(int[] inputShape, int[] permutation)
-        : base(inputShape, ComputeOutputShape(inputShape, permutation))
+    public TransposeLayer(int[] permutation)
+        : base(MakeUnknown(permutation.Length), MakeUnknown(permutation.Length))
     {
-        _logicalInputShape = (int[])inputShape.Clone();
+        ValidatePermutation(permutation);
+        _logicalInputShape = Array.Empty<int>();
         _permutation = (int[])permutation.Clone();
 
         // Expand to include the batch axis at position 0 for Engine.TensorPermute.
@@ -66,39 +67,57 @@ public class TransposeLayer<T> : LayerBase<T>
             _fullPermutation[i + 1] = permutation[i] + 1;
     }
 
-    private static int[] ComputeOutputShape(int[] inputShape, int[] permutation)
+    private static int[] MakeUnknown(int rank)
     {
-        if (inputShape is null) throw new ArgumentNullException(nameof(inputShape));
-        if (permutation is null) throw new ArgumentNullException(nameof(permutation));
-        if (permutation.Length != inputShape.Length)
-            throw new ArgumentException(
-                $"Permutation length ({permutation.Length}) must match inputShape length ({inputShape.Length}).",
-                nameof(permutation));
+        var s = new int[rank];
+        for (int i = 0; i < rank; i++) s[i] = -1;
+        return s;
+    }
 
-        var seen = new bool[inputShape.Length];
+    private static void ValidatePermutation(int[] permutation)
+    {
+        if (permutation is null) throw new ArgumentNullException(nameof(permutation));
+        var seen = new bool[permutation.Length];
         for (int i = 0; i < permutation.Length; i++)
         {
             int p = permutation[i];
-            if (p < 0 || p >= inputShape.Length)
+            if (p < 0 || p >= permutation.Length)
                 throw new ArgumentException(
-                    $"Permutation index {p} at position {i} is out of range [0, {inputShape.Length}).",
+                    $"Permutation index {p} at position {i} is out of range [0, {permutation.Length}).",
                     nameof(permutation));
             if (seen[p])
                 throw new ArgumentException(
-                    $"Permutation index {p} appears more than once.",
-                    nameof(permutation));
+                    $"Permutation index {p} appears more than once.", nameof(permutation));
             seen[p] = true;
         }
+    }
 
-        var outputShape = new int[inputShape.Length];
-        for (int i = 0; i < permutation.Length; i++)
-            outputShape[i] = inputShape[permutation[i]];
-        return outputShape;
+    /// <summary>
+    /// Resolves logical input shape on first forward and computes the output shape via the permutation.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        // Treat the leading axis of input as the batch axis; logical input shape is the rest.
+        var fullShape = input.Shape.ToArray();
+        if (fullShape.Length < 1 + _permutation.Length)
+            throw new ArgumentException(
+                $"TransposeLayer expects input rank >= {1 + _permutation.Length} (batch + {_permutation.Length} logical axes); got {fullShape.Length}.",
+                nameof(input));
+
+        int rank = _permutation.Length;
+        var logical = new int[rank];
+        Array.Copy(fullShape, fullShape.Length - rank, logical, 0, rank);
+        _logicalInputShape = logical;
+
+        var outShape = new int[rank];
+        for (int i = 0; i < rank; i++) outShape[i] = logical[_permutation[i]];
+        ResolveShapes(logical, outShape);
     }
 
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         return Engine.TensorPermute(input, _fullPermutation);
     }
 
