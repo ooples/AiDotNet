@@ -98,7 +98,37 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
     /// <inheritdoc />
     public override Tensor<T> Encode(Tensor<T> input)
     {
-        return EncodeText(input);
+        // Build a default attention mask from token IDs so the EOS-pooling path in
+        // GetPooledEmbedding works on the common Tokenize -> Encode -> GetPooledEmbedding
+        // flow. Without this, Tokenize/TokenizeBatch produce padded rows of zeros, and
+        // EncodeText (called with mask = null) treats them as real text. The pooled
+        // embedding would then come from the last padded position instead of EOS.
+        return EncodeText(input, BuildDefaultAttentionMask(input));
+    }
+
+    /// <summary>
+    /// Builds a 0/1 attention mask the same shape as the supplied <paramref name="tokenIds"/>:
+    /// 1 for any non-zero token id (real BPE token, BOS, or EOS), 0 for the PAD-id-0 tail.
+    /// Mirrors the convention used by <see cref="Tokenize"/> / <see cref="TokenizeBatch"/>,
+    /// which fill the unused tail with the default token id (0).
+    /// </summary>
+    private Tensor<T> BuildDefaultAttentionMask(Tensor<T> tokenIds)
+    {
+        var shape = tokenIds._shape;
+        int batchSize = shape[0];
+        int seqLen = shape.Length > 1 ? shape[1] : MaxSequenceLength;
+
+        var maskData = new Vector<T>(batchSize * seqLen);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int s = 0; s < seqLen; s++)
+            {
+                int flatIdx = b * seqLen + s;
+                bool isReal = NumOps.ToDouble(tokenIds[flatIdx]) != 0.0;
+                maskData[flatIdx] = isReal ? NumOps.FromDouble(1.0) : NumOps.Zero;
+            }
+        }
+        return new Tensor<T>(new[] { batchSize, seqLen }, maskData);
     }
 
     /// <inheritdoc />

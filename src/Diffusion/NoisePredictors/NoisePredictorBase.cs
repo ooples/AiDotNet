@@ -62,36 +62,28 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Default behavior</b>: returns an empty enumeration. Reflection-
-    /// based discovery is NOT the default because it would dispose layers
-    /// the predictor doesn't own (e.g., injected/shared cross-attention
-    /// layers from a shared encoder, a VAE reference passed in by the
-    /// caller). Ownership is expressed by what a predictor explicitly
-    /// enumerates, not by what reflection happens to find.
+    /// <b>Default behavior</b>: returns an empty enumeration. Reflection-based discovery
+    /// is NOT the default because it would dispose layers the predictor doesn't own
+    /// (e.g., injected/shared cross-attention layers from a shared encoder, a VAE
+    /// reference passed in by the caller). <see cref="DisposeOnceGuard"/> only protects
+    /// against double-dispose; it does not stop the first predictor from tearing down
+    /// a dependency another model still needs. Ownership is expressed by what a
+    /// predictor explicitly enumerates, not by what reflection happens to find.
     /// </para>
     /// <para>
-    /// Concrete predictors that own their layers and want Dispose-time
-    /// cleanup can either:
+    /// Concrete predictors that own their layers and want Dispose-time cleanup must
+    /// opt in by overriding this method. They have two options:
     /// </para>
     /// <list type="number">
     /// <item>Override and yield specific field references explicitly
     /// (recommended — zero reflection cost, explicit ownership).</item>
-    /// <item>Accept the reflective default (<see cref="ReflectInstanceLayers"/>) which
-    /// walks fields plus <see cref="System.Collections.IEnumerable"/> and
+    /// <item>Override to call <c>ReflectInstanceLayers(this)</c> when the predictor
+    /// owns every reachable layer. <see cref="ReflectInstanceLayers"/> walks fields
+    /// plus <see cref="System.Collections.IEnumerable"/> and
     /// <see cref="System.Collections.IDictionary"/> elements that implement
-    /// <see cref="ILayer{T}"/>, but does NOT recurse into arbitrary nested
-    /// reference-type objects — a <c>List&lt;DiTBlock&gt;</c> where <c>DiTBlock</c>
-    /// only holds layer <i>properties</i> is not discovered.</item>
+    /// <see cref="ILayer{T}"/>, and recurses into wrapper objects (DiTBlock,
+    /// ResidualStage, etc.) with a cycle guard.</item>
     /// </list>
-    /// </remarks>
-    /// <remarks>
-    /// The default is empty: returning <see cref="ReflectInstanceLayers"/> as the
-    /// default would also enumerate injected/shared layers, and the first predictor
-    /// to dispose would tear down dependencies that other models still need.
-    /// <see cref="DisposeOnceGuard"/> only protects against double-dispose, not against
-    /// disposing a borrowed layer. Concrete predictors must opt in to owned-layer
-    /// enumeration by overriding this with either explicit field yields (recommended)
-    /// or <c>ReflectInstanceLayers(this)</c> when they own every reachable layer.
     /// </remarks>
     protected virtual IEnumerable<ILayer<T>> EnumerateLayers() =>
         Enumerable.Empty<ILayer<T>>();
@@ -413,12 +405,26 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     public abstract Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null);
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The base class cannot recover an integer timestep from a sinusoidal time
+    /// embedding: <see cref="GetTimestepEmbedding"/> emits <c>sin(t * freq)</c> /
+    /// <c>cos(t * freq)</c> values, so reading the first slot would just return a
+    /// frequency-modulated sample — not the original timestep — and downstream
+    /// <see cref="PredictNoise"/> would denoise against the wrong schedule. Concrete
+    /// predictors that consume the embedding directly (e.g., DiT-style time-MLP
+    /// conditioning) must override this; predictors that work in integer-timestep
+    /// space should call <see cref="PredictNoise(Tensor{T}, int, Tensor{T})"/> with
+    /// an explicit timestep instead of routing through this method.
+    /// </remarks>
     public virtual Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
-        // Default implementation: use the first element of timeEmbedding to get timestep
-        // Derived classes should override for proper batch handling
-        var timestep = (int)NumOps.ToDouble(timeEmbedding[0, 0]);
-        return PredictNoise(noisySample, timestep, conditioning);
+        throw new NotSupportedException(
+            $"{GetType().Name}: PredictNoiseWithEmbedding has no meaningful base " +
+            "implementation. The sinusoidal time embedding produced by GetTimestepEmbedding " +
+            "encodes the timestep as sin/cos features; the original integer timestep cannot " +
+            "be recovered from a single embedding slot. Override this method on the concrete " +
+            "predictor to consume the embedding directly (DiT-style time-MLP), or call " +
+            "PredictNoise(Tensor<T>, int, Tensor<T>?) with an explicit integer timestep.");
     }
 
     /// <summary>
@@ -755,12 +761,25 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     }
 
     /// <summary>
-    /// Forward pass through the noise predictor's layers.
-    /// Override to implement the actual forward computation.
+    /// Forward pass through the noise predictor's layers, used as the differentiable
+    /// path for tape-based gradient computation in <see cref="ComputeGradientsWithTape"/>.
+    /// Concrete predictors must override this to call <see cref="PredictNoise"/> with the
+    /// correct timestep (and conditioning context) for the training sample.
     /// </summary>
+    /// <remarks>
+    /// The base class cannot pick a meaningful default timestep — noise predictors are
+    /// timestep-conditional, so any hardcoded value (the previous behavior of <c>t = 0</c>)
+    /// would only train one branch of the schedule. Failing fast here forces concrete
+    /// predictors / training loops to supply the timestep explicitly.
+    /// </remarks>
     protected virtual Tensor<T> Forward(Tensor<T> input)
     {
-        return PredictNoise(input, 0);
+        throw new NotSupportedException(
+            $"{GetType().Name}: Forward(Tensor<T>) has no meaningful default for a " +
+            "timestep-conditional noise predictor. Override this method to call " +
+            "PredictNoise(input, timestep, context?) with the training sample's timestep, " +
+            "or invoke ComputeGradientsWithTape with a custom forwardBuilder so the " +
+            "differentiable path knows which timestep / conditioning to use.");
     }
 
     /// <summary>
@@ -778,17 +797,28 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// non-null builder when the caller's training loop uses a different objective —
     /// otherwise gradients would silently optimize the wrong loss.
     /// </param>
+    /// <param name="forwardBuilder">
+    /// Optional callback that runs the differentiable forward pass against
+    /// <paramref name="input"/>, recording the engine ops the tape needs. When
+    /// <c>null</c>, falls back to the protected <see cref="Forward"/> hook (which
+    /// concrete predictors override with their timestep-aware implementation). Pass a
+    /// non-null builder to bind a specific timestep / conditioning per call without
+    /// requiring a Forward override.
+    /// </param>
     /// <returns>Dictionary mapping each parameter tensor to its gradient.</returns>
     public Dictionary<Tensor<T>, Tensor<T>> ComputeGradientsWithTape(
         Tensor<T> input,
         Tensor<T> target,
         Tensor<T>[] trainableParams,
-        Func<Tensor<T>, Tensor<T>, Tensor<T>>? lossBuilder = null)
+        Func<Tensor<T>, Tensor<T>, Tensor<T>>? lossBuilder = null,
+        Func<Tensor<T>, Tensor<T>>? forwardBuilder = null)
     {
         using var tape = new GradientTape<T>();
 
-        // Forward pass (recorded by the engine)
-        var predicted = Forward(input);
+        // Forward pass (recorded by the engine).
+        var predicted = forwardBuilder is not null
+            ? forwardBuilder(input)
+            : Forward(input);
 
         Tensor<T> loss;
         if (lossBuilder is not null)
@@ -876,14 +906,15 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <see cref="EnumerateLayers"/> that implements <see cref="IDisposable"/>.
     /// </summary>
     /// <remarks>
-    /// <see cref="EnumerateLayers"/> defaults to a reflection walk over
-    /// instance fields, so subclasses get the cascade automatically. Concrete
-    /// predictors that want to constrain WHAT gets disposed (e.g., skip a
-    /// shared layer injected via constructor that the predictor doesn't own)
-    /// override <see cref="EnumerateLayers"/> to return an explicit allow-list.
-    /// The <see cref="ObjectDisposedException"/> catch prevents a shared-layer
-    /// graph — the same <see cref="ILayer{T}"/> instance used by multiple
-    /// predictors or networks — from aborting the cascade when a previous
+    /// <see cref="EnumerateLayers"/> defaults to an empty enumeration so injected
+    /// or shared layers (cross-attention from a shared encoder, a VAE reference
+    /// passed in by the caller) are NOT torn down here. Concrete predictors that
+    /// own their layers must opt in to cleanup by overriding
+    /// <see cref="EnumerateLayers"/> — either yielding specific owned-field
+    /// references or returning <c>ReflectInstanceLayers(this)</c>. The
+    /// <see cref="ObjectDisposedException"/> catch additionally prevents a
+    /// shared-layer graph — the same <see cref="ILayer{T}"/> instance used by
+    /// multiple predictors or networks — from aborting the cascade when a previous
     /// owner already disposed it.
     /// </remarks>
     protected virtual void Dispose(bool disposing)
