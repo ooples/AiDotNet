@@ -309,8 +309,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         int embeddingDimension,
         int headCount,
         IActivationFunction<T>? activation = null)
-        => new MultiHeadAttentionLayer<T>(
-            sequenceLength, embeddingDimension, headCount,
+        => new MultiHeadAttentionLayer<T>(headCount, (embeddingDimension) / (headCount), 
             activation, InitializationStrategies<T>.Lazy);
 
     /// <summary>

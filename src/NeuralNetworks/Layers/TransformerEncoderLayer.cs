@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -380,11 +380,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _numHeads = numHeads;
         _feedForwardDim = feedForwardDim;
 
-        int sequenceLength = 1; // Default to 1
-        _selfAttention = new MultiHeadAttentionLayer<T>(
-            sequenceLength,
-            _embeddingSize,
-            _numHeads,
+        _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, (_embeddingSize) / (_numHeads),
             new GELUActivation<T>() as IActivationFunction<T>);
 
         _norm1 = new LayerNormalizationLayer<T>();

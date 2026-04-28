@@ -812,7 +812,7 @@ internal class InferenceOptimizer<T>
         // We convert it into a MultiHeadAttentionLayer with an identity output projection so that
         // downstream inference rewrites (FlashAttention / KV-cache) can be applied consistently.
         var activation = layer.ScalarActivation;
-        var mha = new MultiHeadAttentionLayer<T>(seqLen, embDim, headCount, activationFunction: activation);
+        var mha = new MultiHeadAttentionLayer<T>(headCount, (embDim) / (headCount), activationFunction: activation);
 
         var selfParams = layer.GetParameters();
         int projSize = embDim * embDim;

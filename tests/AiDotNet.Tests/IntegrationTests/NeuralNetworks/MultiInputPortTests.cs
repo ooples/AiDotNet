@@ -163,7 +163,7 @@ public class MultiInputPortTests
     [Fact(Timeout = 120000)]
     public async Task MultiHeadAttention_InputPorts_DeclaresQueryKeyValue()
     {
-        var layer = new MultiHeadAttentionLayer<double>(sequenceLength: 4, embeddingDimension: 8, headCount: 2);
+        var layer = new MultiHeadAttentionLayer<double>(2, (8) / (2));
 
         Assert.Equal(3, layer.InputPorts.Count);
         Assert.Equal("query", layer.InputPorts[0].Name);
@@ -177,7 +177,7 @@ public class MultiInputPortTests
     [Fact(Timeout = 120000)]
     public async Task MultiHeadAttention_NamedForward_QueryOnly_SelfAttention()
     {
-        var layer = new MultiHeadAttentionLayer<double>(sequenceLength: 4, embeddingDimension: 8, headCount: 2);
+        var layer = new MultiHeadAttentionLayer<double>(2, (8) / (2));
         var query = Tensor<double>.CreateRandom([1, 4, 8]);
 
         var output = layer.Forward(new Dictionary<string, Tensor<double>> { ["query"] = query });
@@ -189,7 +189,7 @@ public class MultiInputPortTests
     [Fact(Timeout = 120000)]
     public async Task MultiHeadAttention_NamedForward_QueryKeyValue_CrossAttention()
     {
-        var layer = new MultiHeadAttentionLayer<double>(sequenceLength: 4, embeddingDimension: 8, headCount: 2);
+        var layer = new MultiHeadAttentionLayer<double>(2, (8) / (2));
         var query = Tensor<double>.CreateRandom([1, 4, 8]);
         var key = Tensor<double>.CreateRandom([1, 6, 8]);
         var value = Tensor<double>.CreateRandom([1, 6, 8]);

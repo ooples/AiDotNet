@@ -20,7 +20,7 @@ public class QuantizedAttentionTests
         int seqLen = 4;
         int embDim = 32;
         int numHeads = 4;
-        var mha = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
+        var mha = new MultiHeadAttentionLayer<float>(numHeads, (embDim) / (numHeads));
 
         var quantized = new QuantizedAttentionLayer(mha);
 
@@ -55,7 +55,7 @@ public class QuantizedAttentionTests
         int seqLen = 4;
         int embDim = 32;
         int numHeads = 4;
-        var mha = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
+        var mha = new MultiHeadAttentionLayer<float>(numHeads, (embDim) / (numHeads));
 
         var quantized = new QuantizedAttentionLayer(mha);
 
@@ -76,7 +76,7 @@ public class QuantizedAttentionTests
         int seqLen = 4;
         int embDim = 32;
         int numHeads = 4;
-        var mha = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
+        var mha = new MultiHeadAttentionLayer<float>(numHeads, (embDim) / (numHeads));
         var quantized = new QuantizedAttentionLayer(mha);
 
         var input = CreateRandomTensor(new[] { seqLen, embDim });
@@ -89,7 +89,7 @@ public class QuantizedAttentionTests
     [Fact(Timeout = 60000)]
     public async Task QuantizedAttention_IsInferenceOnly()
     {
-        var mha = new MultiHeadAttentionLayer<float>(4, 32, 4);
+        var mha = new MultiHeadAttentionLayer<float>(4, (32) / (4));
         var quantized = new QuantizedAttentionLayer(mha);
 
         Assert.False(quantized.SupportsTraining);
@@ -102,7 +102,7 @@ public class QuantizedAttentionTests
     [Fact(Timeout = 60000)]
     public async Task QuantizedAttention_UpdateParameters_ThrowsNotSupported()
     {
-        var mha = new MultiHeadAttentionLayer<float>(4, 32, 4);
+        var mha = new MultiHeadAttentionLayer<float>(4, (32) / (4));
         var quantized = new QuantizedAttentionLayer(mha);
 
         Assert.Throws<NotSupportedException>(() => quantized.UpdateParameters(0.01f));
@@ -257,7 +257,7 @@ public class QuantizedAttentionTests
         int seqLen = 4;
         int embDim = 32;
         int numHeads = 4;
-        var mha = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
+        var mha = new MultiHeadAttentionLayer<float>(numHeads, (embDim) / (numHeads));
 
         var quantized = new QuantizedAttentionLayer(mha, InferenceQuantizationMode.WeightOnlyFP8);
 
@@ -275,7 +275,7 @@ public class QuantizedAttentionTests
         int seqLen = 4;
         int embDim = 32;
         int numHeads = 4;
-        var mha = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
+        var mha = new MultiHeadAttentionLayer<float>(numHeads, (embDim) / (numHeads));
 
         var quantized = new QuantizedAttentionLayer(mha, InferenceQuantizationMode.WeightOnlyFP8);
 
@@ -296,7 +296,7 @@ public class QuantizedAttentionTests
         int seqLen = 4;
         int embDim = 32;
         int numHeads = 4;
-        var mha = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
+        var mha = new MultiHeadAttentionLayer<float>(numHeads, (embDim) / (numHeads));
 
         var quantized = new QuantizedAttentionLayer(mha, InferenceQuantizationMode.WeightOnlyNF4);
 
@@ -314,7 +314,7 @@ public class QuantizedAttentionTests
         int seqLen = 4;
         int embDim = 32;
         int numHeads = 4;
-        var mha = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
+        var mha = new MultiHeadAttentionLayer<float>(numHeads, (embDim) / (numHeads));
 
         var quantized = new QuantizedAttentionLayer(mha, InferenceQuantizationMode.WeightOnlyNF4);
 
@@ -413,7 +413,7 @@ public class QuantizedAttentionTests
         int seqLen = 4;
         int embDim = 128;
         int numHeads = 8;
-        var mha = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
+        var mha = new MultiHeadAttentionLayer<float>(numHeads, (embDim) / (numHeads));
 
         var quantized = new QuantizedAttentionLayer(mha, InferenceQuantizationMode.WeightOnlyInt8);
 
@@ -433,7 +433,7 @@ public class QuantizedAttentionTests
         int seqLen = 4;
         int embDim = 128;
         int numHeads = 8;
-        var mha = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
+        var mha = new MultiHeadAttentionLayer<float>(numHeads, (embDim) / (numHeads));
 
         var quantized = new QuantizedAttentionLayer(mha, InferenceQuantizationMode.WeightOnlyFP8);
 
@@ -456,7 +456,7 @@ public class QuantizedAttentionTests
         int seqLen = 4;
         int embDim = 128;
         int numHeads = 8;
-        var mha = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
+        var mha = new MultiHeadAttentionLayer<float>(numHeads, (embDim) / (numHeads));
 
         var quantized = new QuantizedAttentionLayer(mha, InferenceQuantizationMode.WeightOnlyNF4);
 

@@ -582,11 +582,11 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var activation = ffnActivation ?? new GELUActivation<T>();
 
         // Self-attention layer (no activation)
-        _selfAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation);
+        _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, (_embeddingSize) / (_numHeads), activation);
         _norm1 = new LayerNormalizationLayer<T>();
 
         // Cross-attention layer (no activation)
-        _crossAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation);
+        _crossAttention = new MultiHeadAttentionLayer<T>(_numHeads, (_embeddingSize) / (_numHeads), activation);
         _norm2 = new LayerNormalizationLayer<T>();
 
         // Feed-forward layer (with activation) - expands to hidden dimension
@@ -648,11 +648,11 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var activation = ffnVectorActivation ?? new GELUActivation<T>();
 
         // Self-attention layer (no activation)
-        _selfAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation);
+        _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, (_embeddingSize) / (_numHeads), activation);
         _norm1 = new LayerNormalizationLayer<T>();
 
         // Cross-attention layer (no activation)
-        _crossAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation);
+        _crossAttention = new MultiHeadAttentionLayer<T>(_numHeads, (_embeddingSize) / (_numHeads), activation);
         _norm2 = new LayerNormalizationLayer<T>();
 
         // Feed-forward layer (with vector activation) - expands to hidden dimension

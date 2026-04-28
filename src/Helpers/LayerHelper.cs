@@ -225,7 +225,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numHiddenLayers; i++)
         {
             // Masked self-attention (standard MultiHeadAttention handles masking via causal mask)
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenSize, numAttentionHeads, (IActivationFunction<T>?)null);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenSize) / (numAttentionHeads), (IActivationFunction<T>?)null);
             yield return new LayerNormalizationLayer<T>();
 
             // Feed-forward
@@ -282,7 +282,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numHiddenLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenSize, numAttentionHeads, (IActivationFunction<T>?)null);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenSize) / (numAttentionHeads), (IActivationFunction<T>?)null);
             yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(hiddenSize * 4, new GELUActivation<T>() as IActivationFunction<T>);
@@ -381,7 +381,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numHiddenLayers; i++)
         {
             // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenSize, numAttentionHeads, (IActivationFunction<T>?)null);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenSize) / (numAttentionHeads), (IActivationFunction<T>?)null);
             yield return new LayerNormalizationLayer<T>();
 
             // Feed-forward
@@ -705,10 +705,7 @@ public static class LayerHelper<T>
         );
 
         // Add multi-head attention mechanism to focus on relevant time steps
-        yield return new MultiHeadAttentionLayer<T>(
-            sequenceLength: historyWindowSize,
-            embeddingDimension: 16,
-            headCount: 4,
+        yield return new MultiHeadAttentionLayer<T>(4, (16) / (4), 
             activationFunction: new ReLUActivation<T>()
         );
 
@@ -1141,7 +1138,7 @@ public static class LayerHelper<T>
         // Multiple transformer blocks
         for (int i = 0; i < 3; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(sequenceLength, embeddingSize, headCount, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new MultiHeadAttentionLayer<T>(headCount, (embeddingSize) / (headCount), new GELUActivation<T>() as IActivationFunction<T>);
 
             yield return new LayerNormalizationLayer<T>();
 
@@ -1631,10 +1628,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numEncoderLayers; i++)
         {
             // Self-attention block
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: modelDimension,
-                headCount: numHeads,
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads), 
                 activationFunction: new IdentityActivation<T>());
 
             // Add normalization
@@ -1666,10 +1660,7 @@ public static class LayerHelper<T>
             for (int i = 0; i < numDecoderLayers; i++)
             {
                 // Self-attention block
-                yield return new MultiHeadAttentionLayer<T>(
-                    sequenceLength: maxSequenceLength,
-                    embeddingDimension: modelDimension,
-                    headCount: numHeads,
+                yield return new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads), 
                     activationFunction: new IdentityActivation<T>());
 
                 // Add normalization
@@ -1682,10 +1673,7 @@ public static class LayerHelper<T>
                 }
 
                 // Cross-attention block
-                yield return new MultiHeadAttentionLayer<T>(
-                    sequenceLength: maxSequenceLength,
-                    embeddingDimension: modelDimension,
-                    headCount: numHeads,
+                yield return new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads), 
                     activationFunction: new IdentityActivation<T>());
 
                 // Add normalization
@@ -5341,10 +5329,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < 6; i++)
         {
             // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxTextLength,
-                embeddingDimension: textHiddenDim,
-                headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (textHiddenDim) / (numHeads));
 
             // Layer norm
             yield return new LayerNormalizationLayer<T>();
@@ -5465,10 +5450,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < 6; i++)
         {
             // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxTextLength,
-                embeddingDimension: textHiddenDim,
-                headCount: 12,
+            yield return new MultiHeadAttentionLayer<T>(12, (textHiddenDim) / (12), 
                 activationFunction: identityActivation);
 
             yield return new LayerNormalizationLayer<T>();
@@ -5511,10 +5493,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLmLayers; i++)
         {
             // Self-attention (causal/masked for autoregressive generation)
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxAudioTokens,
-                embeddingDimension: lmHiddenDim,
-                headCount: numHeads,
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (lmHiddenDim) / (numHeads), 
                 activationFunction: identityActivation);
 
             yield return new LayerNormalizationLayer<T>();
@@ -5525,10 +5504,7 @@ public static class LayerHelper<T>
             }
 
             // Cross-attention to text encoder output
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxAudioTokens,
-                embeddingDimension: lmHiddenDim,
-                headCount: numHeads,
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (lmHiddenDim) / (numHeads), 
                 activationFunction: identityActivation);
 
             yield return new LayerNormalizationLayer<T>();
@@ -5614,10 +5590,7 @@ public static class LayerHelper<T>
         // Transformer encoder layers
         for (int i = 0; i < 12; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxTextLength,
-                embeddingDimension: textHiddenDim,
-                headCount: 12,
+            yield return new MultiHeadAttentionLayer<T>(12, (textHiddenDim) / (12), 
                 activationFunction: identityActivation);
 
             yield return new LayerNormalizationLayer<T>();
@@ -5680,10 +5653,7 @@ public static class LayerHelper<T>
                 // Cross-attention at specified resolutions
                 if (attentionResolutions.Contains(mult))
                 {
-                    yield return new MultiHeadAttentionLayer<T>(
-                        sequenceLength: maxTextLength,
-                        embeddingDimension: outChannels,
-                        headCount: numHeads,
+                    yield return new MultiHeadAttentionLayer<T>(numHeads, (outChannels) / (numHeads), 
                         activationFunction: identityActivation);
                     yield return new LayerNormalizationLayer<T>();
                 }
@@ -5694,10 +5664,7 @@ public static class LayerHelper<T>
 
         // Middle block
         yield return new DenseLayer<T>(currentChannels, siluActivation);
-        yield return new MultiHeadAttentionLayer<T>(
-            sequenceLength: maxTextLength,
-            embeddingDimension: currentChannels,
-            headCount: numHeads,
+        yield return new MultiHeadAttentionLayer<T>(numHeads, (currentChannels) / (numHeads), 
             activationFunction: identityActivation);
         yield return new DenseLayer<T>(currentChannels, siluActivation);
 
@@ -5714,10 +5681,7 @@ public static class LayerHelper<T>
 
                 if (attentionResolutions.Contains(mult))
                 {
-                    yield return new MultiHeadAttentionLayer<T>(
-                        sequenceLength: maxTextLength,
-                        embeddingDimension: outChannels,
-                        headCount: numHeads,
+                    yield return new MultiHeadAttentionLayer<T>(numHeads, (outChannels) / (numHeads), 
                         activationFunction: identityActivation);
                     yield return new LayerNormalizationLayer<T>();
                 }
@@ -5823,10 +5787,7 @@ public static class LayerHelper<T>
         // T5 encoder layers
         for (int i = 0; i < 12; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxTextLength,
-                embeddingDimension: textHiddenDim,
-                headCount: 12,
+            yield return new MultiHeadAttentionLayer<T>(12, (textHiddenDim) / (12), 
                 activationFunction: identityActivation);
 
             yield return new LayerNormalizationLayer<T>();
@@ -5874,10 +5835,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDitBlocks; i++)
         {
             // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxAudioLength,
-                embeddingDimension: ditHiddenDim,
-                headCount: numHeads,
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (ditHiddenDim) / (numHeads), 
                 activationFunction: identityActivation);
 
             yield return new LayerNormalizationLayer<T>();
@@ -5888,10 +5846,7 @@ public static class LayerHelper<T>
             }
 
             // Cross-attention to text encoder output
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxAudioLength,
-                embeddingDimension: ditHiddenDim,
-                headCount: numHeads,
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (ditHiddenDim) / (numHeads), 
                 activationFunction: identityActivation);
 
             yield return new LayerNormalizationLayer<T>();
@@ -5990,10 +5945,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numEncoderLayers; i++)
         {
             // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxFrames,
-                embeddingDimension: modelDim,
-                headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (modelDim) / (numHeads));
 
             // Layer normalization (pre-LN architecture)
             yield return new LayerNormalizationLayer<T>();
@@ -6110,10 +6062,7 @@ public static class LayerHelper<T>
         // Text encoder transformer layers
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxTextLength,
-                embeddingDimension: textHiddenDim,
-                headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (textHiddenDim) / (numHeads));
 
             yield return new LayerNormalizationLayer<T>();
 
@@ -6220,10 +6169,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             // Self-attention for temporal modeling
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxFrames,
-                embeddingDimension: hiddenDim,
-                headCount: 8);
+            yield return new MultiHeadAttentionLayer<T>(8, (hiddenDim) / (8));
 
             yield return new LayerNormalizationLayer<T>();
 
@@ -6296,10 +6242,7 @@ public static class LayerHelper<T>
         // Transformer encoder layers
         for (int i = 0; i < numAttentionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxFrames,
-                embeddingDimension: hiddenDim,
-                headCount: 8);
+            yield return new MultiHeadAttentionLayer<T>(8, (hiddenDim) / (8));
 
             yield return new LayerNormalizationLayer<T>();
 
@@ -6497,10 +6440,7 @@ public static class LayerHelper<T>
         // BEATs_iter3 uses 12 layers, matching BERT-base and ViT-Base architectures.
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: embeddingDim,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (embeddingDim) / (numAttentionHeads));
 
             yield return new LayerNormalizationLayer<T>();
 
@@ -6587,10 +6527,7 @@ public static class LayerHelper<T>
         // 4. Transformer Encoder Stack
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: embeddingDim,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (embeddingDim) / (numAttentionHeads));
 
             yield return new LayerNormalizationLayer<T>();
 
@@ -6655,10 +6592,7 @@ public static class LayerHelper<T>
 
             for (int layer = 0; layer < numLayersPerStage[stage]; layer++)
             {
-                yield return new MultiHeadAttentionLayer<T>(
-                    sequenceLength: seqLen,
-                    embeddingDimension: currentDim,
-                    headCount: numHeads);
+                yield return new MultiHeadAttentionLayer<T>(numHeads, (currentDim) / (numHeads));
                 yield return new LayerNormalizationLayer<T>();
                 yield return new DenseLayer<T>(ffDim, reluActivation);
                 yield return new DenseLayer<T>(currentDim, identityActivation);
@@ -6718,10 +6652,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: embeddingDim,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (embeddingDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(embeddingDim, identityActivation);
@@ -6766,10 +6697,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: embeddingDim,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (embeddingDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(embeddingDim, identityActivation);
@@ -6862,10 +6790,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: embeddingDim,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (embeddingDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(embeddingDim, identityActivation);
@@ -6966,10 +6891,7 @@ public static class LayerHelper<T>
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
             // Self-attention module
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: numFreqBins,
-                embeddingDimension: conformerDim,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (conformerDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
@@ -7066,10 +6988,7 @@ public static class LayerHelper<T>
         // Transformer blocks with rotary embeddings
         for (int i = 0; i < numTransformerLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: numBands,
-                embeddingDimension: transformerDim,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (transformerDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(transformerDim, identityActivation);
@@ -7107,10 +7026,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numTransformerLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: numMelBands,
-                embeddingDimension: transformerDim,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (transformerDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(transformerDim, identityActivation);
@@ -7143,10 +7059,7 @@ public static class LayerHelper<T>
         // Cross-domain Transformer
         for (int i = 0; i < numTransformerLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: numFreqBins / 4,
-                embeddingDimension: transformerDim,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (transformerDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(transformerDim, identityActivation);
@@ -7214,10 +7127,7 @@ public static class LayerHelper<T>
         // === BOTTLENECK ===
 
         // Attention for global context
-        yield return new MultiHeadAttentionLayer<T>(
-            sequenceLength: maxFrames,
-            embeddingDimension: baseChannels * 16,
-            headCount: 8);
+        yield return new MultiHeadAttentionLayer<T>(8, (baseChannels * 16) / (8));
 
         yield return new LayerNormalizationLayer<T>();
 
@@ -9678,10 +9588,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: hiddenDim,
-                headCount: numHeads,
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
                 activationFunction: identityActivation);
 
             yield return new LayerNormalizationLayer<T>();
@@ -9783,10 +9690,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             // Self-attention (spatial-aware)
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: hiddenDim,
-                headCount: numHeads,
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
                 activationFunction: identityActivation);
 
             yield return new LayerNormalizationLayer<T>();
@@ -9873,10 +9777,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: hiddenDim,
-                headCount: numHeads,
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
                 activationFunction: identityActivation);
 
             yield return new LayerNormalizationLayer<T>();
@@ -9943,10 +9844,7 @@ public static class LayerHelper<T>
         // Transformer encoder
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxPatches,
-                embeddingDimension: hiddenDim,
-                headCount: numHeads,
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
                 activationFunction: identityActivation);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim * 4, geluActivation);
@@ -10025,10 +9923,7 @@ public static class LayerHelper<T>
         // Transformer encoder
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: numPatches,
-                embeddingDimension: hiddenDim,
-                headCount: numHeads,
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
                 activationFunction: identityActivation);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim * 4, geluActivation);
@@ -10112,10 +10007,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength + numPatches,
-                embeddingDimension: hiddenDim,
-                headCount: numHeads,
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
                 activationFunction: identityActivation);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim * 4, geluActivation);
@@ -10181,10 +10073,7 @@ public static class LayerHelper<T>
         // Transformer layers for text encoding
         for (int i = 0; i < 4; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: hiddenDim,
-                headCount: numHeads,
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
                 activationFunction: identityActivation);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim * 4, reluActivation);
@@ -10381,7 +10270,7 @@ public static class LayerHelper<T>
         // Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identityActivation);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(intermediateSize, geluActivation);
             yield return new DenseLayer<T>(hiddenDim, identityActivation);
@@ -10427,7 +10316,7 @@ public static class LayerHelper<T>
         // ViT transformer encoder
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numPatches + 1, hiddenDim, numHeads, identityActivation);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identityActivation);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(intermediateSize, geluActivation);
             yield return new DenseLayer<T>(hiddenDim, identityActivation);
@@ -10474,11 +10363,11 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             // Text stream attention
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identityActivation);
             yield return new LayerNormalizationLayer<T>();
 
             // Layout stream attention
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, layoutDim, numHeads, identityActivation);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (layoutDim) / (numHeads), identityActivation);
             yield return new LayerNormalizationLayer<T>();
 
             // Feed-forward
@@ -10525,7 +10414,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(196, hiddenDim, numHeads, identityActivation);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identityActivation);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(intermediateSize, geluActivation);
             yield return new DenseLayer<T>(hiddenDim, identityActivation);
@@ -10545,9 +10434,9 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identityActivation);
             yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identityActivation);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(intermediateSize, geluActivation);
             yield return new DenseLayer<T>(hiddenDim, identityActivation);
@@ -10593,7 +10482,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(Math.Min(maxPatches, 256), hiddenDim, numHeads, identityActivation);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identityActivation);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(intermediateSize, geluActivation);
             yield return new DenseLayer<T>(hiddenDim, identityActivation);
@@ -10613,9 +10502,9 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identityActivation);
             yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numHeads, identityActivation);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identityActivation);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(intermediateSize, geluActivation);
             yield return new DenseLayer<T>(hiddenDim, identityActivation);
@@ -10652,7 +10541,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < Math.Min(visionLayers, 6); i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(256, visionDim, numHeads, identityActivation);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads), identityActivation);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim * 4, siluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -10667,7 +10556,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < Math.Min(textLayers, 6); i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(512, textDim, numHeads, identityActivation);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (textDim) / (numHeads), identityActivation);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textDim * 4, siluActivation);
             yield return new DenseLayer<T>(textDim, identityActivation);
@@ -10708,7 +10597,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < Math.Min(visionLayers, 6); i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(64, visionDim, numHeads, identityActivation);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads), identityActivation);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim * 4, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -10723,7 +10612,7 @@ public static class LayerHelper<T>
         // Fusion layers
         for (int i = 0; i < fusionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(512, fusionDim, numHeads, identityActivation);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (fusionDim) / (numHeads), identityActivation);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(fusionDim * 4, geluActivation);
             yield return new DenseLayer<T>(fusionDim, identityActivation);
@@ -10869,7 +10758,7 @@ public static class LayerHelper<T>
         // Transformer layers
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(seqLen, hiddenDim, numHeads, identityActivation);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identityActivation);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(intermediateSize, geluActivation);
             yield return new DenseLayer<T>(hiddenDim, identityActivation);
@@ -10912,12 +10801,12 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(visionDim, 3, 1, 1);
 
         // Transformer for vision
-        yield return new MultiHeadAttentionLayer<T>(seqLen, visionDim, 8, identityActivation);
+        yield return new MultiHeadAttentionLayer<T>(8, (visionDim) / (8), identityActivation);
         yield return new LayerNormalizationLayer<T>();
 
         // Language model
         yield return new EmbeddingLayer<T>(charsetSize, languageDim);
-        yield return new MultiHeadAttentionLayer<T>(seqLen, languageDim, 8, identityActivation);
+        yield return new MultiHeadAttentionLayer<T>(8, (languageDim) / (8), identityActivation);
         yield return new LayerNormalizationLayer<T>();
 
         // Fusion with iterative refinement
@@ -12159,10 +12048,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numEncoderLayers; i++)
         {
             // Self-attention layer for temporal patterns
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: sequenceLength,
-                embeddingDimension: modelDimension,
-                headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads));
 
             // Layer normalization
             yield return new LayerNormalizationLayer<T>();
@@ -12187,10 +12073,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             // Cross-attention for encoder-decoder connection
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: sequenceLength,
-                embeddingDimension: modelDimension,
-                headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads));
 
             // Layer normalization
             yield return new LayerNormalizationLayer<T>();
@@ -12279,10 +12162,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numEncoderLayers; i++)
         {
             // Self-attention with de-stationary mechanism
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: sequenceLength,
-                embeddingDimension: modelDimension,
-                headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads));
 
             // Layer normalization
             yield return new LayerNormalizationLayer<T>();
@@ -12307,19 +12187,13 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             // Self-attention in decoder
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: sequenceLength,
-                embeddingDimension: modelDimension,
-                headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads));
 
             // Layer normalization
             yield return new LayerNormalizationLayer<T>();
 
             // Cross-attention for encoder-decoder connection
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: sequenceLength,
-                embeddingDimension: modelDimension,
-                headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads));
 
             // Layer normalization
             yield return new LayerNormalizationLayer<T>();
@@ -15946,10 +15820,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: hiddenDimension,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDimension) / (numAttentionHeads));
 
             // Add & Norm after attention
             yield return new LayerNormalizationLayer<T>(
@@ -16062,10 +15933,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             // Multi-head self-attention - captures relationships across filing sections
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: hiddenDimension,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDimension) / (numAttentionHeads));
 
             // Add & Norm after attention
             yield return new LayerNormalizationLayer<T>(
@@ -16198,10 +16066,7 @@ public static class LayerHelper<T>
         // === Transformer Layers ===
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: hiddenDimension,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDimension) / (numAttentionHeads));
 
             yield return new LayerNormalizationLayer<T>(
                 );
@@ -16292,10 +16157,7 @@ public static class LayerHelper<T>
         // === Transformer Layers ===
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: hiddenDimension,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDimension) / (numAttentionHeads));
 
             yield return new LayerNormalizationLayer<T>(
                 );
@@ -16359,7 +16221,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDimension, numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDimension) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(intermediateDimension, (IActivationFunction<T>)new GELUActivation<T>());
             yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>?)null);
@@ -16403,7 +16265,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDimension, numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDimension) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(intermediateDimension, (IActivationFunction<T>)new GELUActivation<T>());
             yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>?)null);
@@ -16447,7 +16309,7 @@ public static class LayerHelper<T>
         // Shared transformer backbone
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDimension, numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDimension) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(intermediateDimension, (IActivationFunction<T>)new GELUActivation<T>());
             yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>?)null);
@@ -16492,7 +16354,7 @@ public static class LayerHelper<T>
         // Transformer blocks
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDimension, numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDimension) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(intermediateDimension, (IActivationFunction<T>)new GELUActivation<T>());
             yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>?)null);
@@ -16642,10 +16504,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: sequenceLength,
-                embeddingDimension: hiddenDimension,
-                headCount: headCount);
+            yield return new MultiHeadAttentionLayer<T>(headCount, (hiddenDimension) / (headCount));
             yield return new LayerNormalizationLayer<T>();
 
             // Feed-forward network
@@ -16776,10 +16635,7 @@ public static class LayerHelper<T>
         // Transformer layers with inter-sample attention
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: sequenceLength,
-                embeddingDimension: hiddenDimension,
-                headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDimension) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(hiddenDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
@@ -16813,10 +16669,7 @@ public static class LayerHelper<T>
         // Transformer encoder for categorical columns
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: sequenceLength,
-                embeddingDimension: hiddenDimension,
-                headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDimension) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(hiddenDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
@@ -17010,10 +16863,7 @@ public static class LayerHelper<T>
         // Multi-head self-attention layers for feature interactions
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: numFeatures,
-                embeddingDimension: embeddingDimension,
-                headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0)
@@ -17104,10 +16954,7 @@ public static class LayerHelper<T>
         // Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1,
-                embeddingDimension: embeddingDimension,
-                headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(embeddingDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
@@ -17148,10 +16995,7 @@ public static class LayerHelper<T>
         // Deep transformer encoder (TabPFN uses many layers)
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1,
-                embeddingDimension: embeddingDimension,
-                headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(embeddingDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
@@ -17231,10 +17075,7 @@ public static class LayerHelper<T>
         // Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1,
-                embeddingDimension: embeddingDimension,
-                headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
 
             // ReGLU-style feed-forward (using GELU approximation)
@@ -17380,10 +17221,7 @@ public static class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>();
 
         // Attention for cross-asset relationships
-        yield return new MultiHeadAttentionLayer<T>(
-            sequenceLength: sequenceLength,
-            embeddingDimension: hiddenDimension,
-            headCount: numHeads);
+        yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDimension) / (numHeads));
         yield return new LayerNormalizationLayer<T>();
 
         yield return new DenseLayer<T>(hiddenDimension * 2, (IActivationFunction<T>)new GELUActivation<T>());
@@ -17470,10 +17308,7 @@ public static class LayerHelper<T>
         // Transformer encoder for temporal patterns
         for (int i = 0; i < layers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: sequenceLength,
-                embeddingDimension: hiddenSize,
-                headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenSize) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(hiddenSize * 4, (IActivationFunction<T>)new GELUActivation<T>());
@@ -19281,10 +19116,7 @@ public static class LayerHelper<T>
         // Transformer encoder
         for (int i = 0; i < numTransformerLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 500,
-                embeddingDimension: transformerDim,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (transformerDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, geluActivation);
             yield return new DenseLayer<T>(transformerDim, identityActivation);
@@ -19324,10 +19156,7 @@ public static class LayerHelper<T>
         // Transformer encoder
         for (int i = 0; i < numTransformerLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 500,
-                embeddingDimension: transformerDim,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (transformerDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, geluActivation);
             yield return new DenseLayer<T>(transformerDim, identityActivation);
@@ -19687,10 +19516,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: hiddenDim,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDim) / (numAttentionHeads));
 
             yield return new LayerNormalizationLayer<T>();
 
@@ -19748,10 +19574,7 @@ public static class LayerHelper<T>
             yield return new LayerNormalizationLayer<T>();
 
             // Multi-head self-attention module
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: encoderDim,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
 
             // Convolution module (approximated with dense layers)
@@ -19799,10 +19622,7 @@ public static class LayerHelper<T>
         // --- Transformer Encoder ---
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: encoderDim,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(feedForwardDim, geluActivation);
@@ -19846,10 +19666,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numTextEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: textEncoderDim,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (textEncoderDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
 
             yield return new DenseLayer<T>(ffDim, geluActivation);
@@ -19939,7 +19756,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             // Magnitude path
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
@@ -20054,8 +19871,7 @@ public static class LayerHelper<T>
         // Encoder: attention blocks on compressed representation
         for (int i = 0; i < numEncoderBlocks; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: numClusters, embeddingDimension: attentionDim, headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (attentionDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(attentionDim, identityActivation);
@@ -20066,8 +19882,7 @@ public static class LayerHelper<T>
         // Decoder: attention blocks for reconstruction
         for (int i = 0; i < numDecoderBlocks; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: numClusters, embeddingDimension: attentionDim, headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (attentionDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, reluActivation);
             yield return new DenseLayer<T>(attentionDim, identityActivation);
@@ -20135,8 +19950,7 @@ public static class LayerHelper<T>
         // Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, geluActivation);
             yield return new DenseLayer<T>(hiddenDim, (IActivationFunction<T>)new IdentityActivation<T>());
@@ -20212,8 +20026,7 @@ public static class LayerHelper<T>
         // Small Transformer encoder
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, geluActivation);
             yield return new DenseLayer<T>(hiddenDim, identityActivation);
@@ -20243,8 +20056,7 @@ public static class LayerHelper<T>
         // WavLM Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, geluActivation);
             yield return new DenseLayer<T>(hiddenDim, identityActivation);
@@ -20280,8 +20092,7 @@ public static class LayerHelper<T>
         // T5-style encoder layers
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: encoderDim, embeddingDimension: encoderDim, headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(encoderDim, identityActivation);
@@ -20292,8 +20103,7 @@ public static class LayerHelper<T>
         // Cross-attention decoder layers
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: decoderDim, embeddingDimension: decoderDim, headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (decoderDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(decoderDim, identityActivation);
@@ -20379,8 +20189,7 @@ public static class LayerHelper<T>
         // Self-similarity Transformer encoder
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(hiddenDim * 4, geluActivation);
             yield return new DenseLayer<T>(hiddenDim, identityActivation);
@@ -20441,8 +20250,7 @@ public static class LayerHelper<T>
         // Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, geluActivation);
             yield return new DenseLayer<T>(hiddenDim, identityActivation);
@@ -20507,8 +20315,7 @@ public static class LayerHelper<T>
         // Graph attention layers (simulated as attention + FC)
         for (int i = 0; i < numGnnLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: gnnHiddenDim, embeddingDimension: gnnHiddenDim, headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (gnnHiddenDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(gnnHiddenDim * 2, geluActivation);
             yield return new DenseLayer<T>(gnnHiddenDim, identityActivation);
@@ -20545,8 +20352,7 @@ public static class LayerHelper<T>
             yield return new LayerNormalizationLayer<T>();
 
             // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
 
             // Convolution module (simulated as FC + activation + FC)
@@ -20648,7 +20454,7 @@ public static class LayerHelper<T>
         // Transformer layers for semantic modeling
         for (int i = 0; i < numSemanticLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(semanticDim, semanticDim, numSemanticHeads);
+            yield return new MultiHeadAttentionLayer<T>(numSemanticHeads, (semanticDim) / (numSemanticHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(semanticDim, semanticDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(semanticDim * 4, semanticDim, geluActivation);
@@ -20707,7 +20513,7 @@ public static class LayerHelper<T>
         // Transformer layers with causal masking
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(hiddenDim, hiddenDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(hiddenDim * 4, hiddenDim, geluActivation);
@@ -20733,7 +20539,7 @@ public static class LayerHelper<T>
         // AR transformer layers
         for (int i = 0; i < numARLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(arHiddenDim, arHiddenDim, numARHeads);
+            yield return new MultiHeadAttentionLayer<T>(numARHeads, (arHiddenDim) / (numARHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(arHiddenDim, arHiddenDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(arHiddenDim * 4, arHiddenDim, geluActivation);
@@ -20759,7 +20565,7 @@ public static class LayerHelper<T>
         // Deep transformer for long-form generation
         for (int i = 0; i < numSemanticLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(semanticDim, semanticDim, numSemanticHeads);
+            yield return new MultiHeadAttentionLayer<T>(numSemanticHeads, (semanticDim) / (numSemanticHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(semanticDim, semanticDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(semanticDim * 4, semanticDim, geluActivation);
@@ -20785,7 +20591,7 @@ public static class LayerHelper<T>
         // Transformer layers
         for (int i = 0; i < numSemanticLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(semanticDim, semanticDim, numSemanticHeads);
+            yield return new MultiHeadAttentionLayer<T>(numSemanticHeads, (semanticDim) / (numSemanticHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(semanticDim, semanticDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(semanticDim * 4, semanticDim, geluActivation);
@@ -20812,7 +20618,7 @@ public static class LayerHelper<T>
         // Whisper-style audio encoder
         for (int i = 0; i < numAudioEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(audioEncoderDim, audioEncoderDim, numAudioEncoderHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAudioEncoderHeads, (audioEncoderDim) / (numAudioEncoderHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(audioEncoderDim, audioEncoderDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(audioEncoderDim * 4, audioEncoderDim, geluActivation);
@@ -20847,7 +20653,7 @@ public static class LayerHelper<T>
         // Window-level Q-Former layers
         for (int i = 0; i < numQFormerLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(qFormerDim, qFormerDim, 12);
+            yield return new MultiHeadAttentionLayer<T>(12, (qFormerDim) / (12));
             yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(qFormerDim, qFormerDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(qFormerDim * 4, qFormerDim, geluActivation);
@@ -20882,7 +20688,7 @@ public static class LayerHelper<T>
         // Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(hiddenDim, hiddenDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(hiddenDim, feedForwardDim, geluActivation);
             yield return new FullyConnectedLayer<T>(feedForwardDim, hiddenDim, geluActivation);
@@ -20909,7 +20715,7 @@ public static class LayerHelper<T>
         // Transformer encoder layers with music-aware attention
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(hiddenDim, hiddenDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(hiddenDim, feedForwardDim, geluActivation);
             yield return new FullyConnectedLayer<T>(feedForwardDim, hiddenDim, geluActivation);
@@ -20942,7 +20748,7 @@ public static class LayerHelper<T>
         // Conformer-style encoder layers
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numEncoderHeads);
+            yield return new MultiHeadAttentionLayer<T>(numEncoderHeads, (encoderDim) / (numEncoderHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(encoderDim, encoderDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(encoderDim * 4, encoderDim, geluActivation);
@@ -20994,7 +20800,7 @@ public static class LayerHelper<T>
             // Conformer-style layers within each stack
             for (int i = 0; i < layers; i++)
             {
-                yield return new MultiHeadAttentionLayer<T>(dim, dim, heads);
+                yield return new MultiHeadAttentionLayer<T>(heads, (dim) / (heads));
                 yield return new LayerNormalizationLayer<T>();
                 yield return new FullyConnectedLayer<T>(dim, dim * 4, geluActivation);
                 yield return new FullyConnectedLayer<T>(dim * 4, dim, geluActivation);
@@ -21034,7 +20840,7 @@ public static class LayerHelper<T>
             yield return new LayerNormalizationLayer<T>();
 
             // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
 
             // Second half-step feed-forward
@@ -21067,7 +20873,7 @@ public static class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>();
         for (int i = 0; i < numTextEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(textEncoderDim, textEncoderDim, numTextEncoderHeads);
+            yield return new MultiHeadAttentionLayer<T>(numTextEncoderHeads, (textEncoderDim) / (numTextEncoderHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new FullyConnectedLayer<T>(textEncoderDim, textEncoderDim * 4, geluActivation);
             yield return new FullyConnectedLayer<T>(textEncoderDim * 4, textEncoderDim, geluActivation);
@@ -21454,8 +21260,7 @@ public static class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>();
         for (int i = 1; i < fullBandLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: fullBandHiddenSize, headCount: 4);
+            yield return new MultiHeadAttentionLayer<T>(4, (fullBandHiddenSize) / (4));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(fullBandHiddenSize * 2, geluActivation);
             yield return new DenseLayer<T>(fullBandHiddenSize, identityActivation);
@@ -21467,8 +21272,7 @@ public static class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>();
         for (int i = 1; i < subBandLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: subBandHiddenSize, headCount: 4);
+            yield return new MultiHeadAttentionLayer<T>(4, (subBandHiddenSize) / (4));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(subBandHiddenSize * 2, geluActivation);
             yield return new DenseLayer<T>(subBandHiddenSize, identityActivation);
@@ -21493,15 +21297,13 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDualPathBlocks; i++)
         {
             // Intra-chunk (time) self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: encoderDim, headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(encoderDim, identityActivation);
             yield return new LayerNormalizationLayer<T>();
             // Inter-chunk (frequency) self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: encoderDim, headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(encoderDim, identityActivation);
@@ -21529,8 +21331,7 @@ public static class LayerHelper<T>
         // Transformer decoder layers
         for (int i = 0; i < numLMLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: lmHiddenDim, headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (lmHiddenDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(lmHiddenDim * 4, geluActivation);
             yield return new DenseLayer<T>(lmHiddenDim, identityActivation);
@@ -21551,8 +21352,7 @@ public static class LayerHelper<T>
         // Diffusion latent feature extractor with cross-attention
         yield return new DenseLayer<T>(latentDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
-        yield return new MultiHeadAttentionLayer<T>(
-            sequenceLength: 1, embeddingDimension: latentDim, headCount: 4);
+        yield return new MultiHeadAttentionLayer<T>(4, (latentDim) / (4));
         yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(latentDim * 2, geluActivation);
         yield return new DenseLayer<T>(latentDim, identityActivation);
@@ -21561,8 +21361,7 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(classifierDim, geluActivation);
         for (int i = 1; i < numClassifierLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: classifierDim, headCount: 4);
+            yield return new MultiHeadAttentionLayer<T>(4, (classifierDim) / (4));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(classifierDim * 2, geluActivation);
             yield return new DenseLayer<T>(classifierDim, identityActivation);
@@ -21609,12 +21408,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numUNetLayers; i++)
         {
             // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: uNetDim, headCount: 8);
+            yield return new MultiHeadAttentionLayer<T>(8, (uNetDim) / (8));
             yield return new LayerNormalizationLayer<T>();
             // Cross-attention for text conditioning
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: uNetDim, headCount: 8);
+            yield return new MultiHeadAttentionLayer<T>(8, (uNetDim) / (8));
             yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(uNetDim * 4, geluActivation);
@@ -21625,8 +21422,7 @@ public static class LayerHelper<T>
         // U-Net decoder path with cross-attention conditioning
         for (int i = 0; i < numUNetLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: uNetDim, headCount: 8);
+            yield return new MultiHeadAttentionLayer<T>(8, (uNetDim) / (8));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(uNetDim * 4, geluActivation);
             yield return new DenseLayer<T>(uNetDim, identityActivation);
@@ -21655,8 +21451,7 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(textEncoderDim, identityActivation);
             yield return new LayerNormalizationLayer<T>();
             // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: textEncoderDim, headCount: 8);
+            yield return new MultiHeadAttentionLayer<T>(8, (textEncoderDim) / (8));
             yield return new LayerNormalizationLayer<T>();
             // Convolution module (approximated with dense)
             yield return new DenseLayer<T>(textEncoderDim, geluActivation);
@@ -21672,8 +21467,7 @@ public static class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>();
         for (int i = 1; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: decoderDim, headCount: 8);
+            yield return new MultiHeadAttentionLayer<T>(8, (decoderDim) / (8));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(decoderDim, identityActivation);
@@ -21698,8 +21492,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numPerceiverLayers; i++)
         {
             // Cross-attention (latent queries attend to audio features)
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: llmHiddenDim, headCount: 8);
+            yield return new MultiHeadAttentionLayer<T>(8, (llmHiddenDim) / (8));
             yield return new LayerNormalizationLayer<T>();
             // Feed-forward network
             yield return new DenseLayer<T>(llmHiddenDim * 4, geluActivation);
@@ -21725,8 +21518,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numPerceiverLayers; i++)
         {
             // Cross-attention (latent queries attend to music features)
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: llmHiddenDim, headCount: 8);
+            yield return new MultiHeadAttentionLayer<T>(8, (llmHiddenDim) / (8));
             yield return new LayerNormalizationLayer<T>();
             // Feed-forward network
             yield return new DenseLayer<T>(llmHiddenDim * 4, geluActivation);
@@ -21750,8 +21542,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numProjectionLayers; i++)
         {
             int outDim = i == numProjectionLayers - 1 ? llmHiddenDim : (audioEncoderDim + llmHiddenDim) / 2;
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: currentDim, headCount: Math.Max(1, currentDim / 64));
+            yield return new MultiHeadAttentionLayer<T>(Math.Max(1, currentDim / 64), (currentDim) / (Math.Max(1, currentDim / 64)));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(outDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
@@ -21778,8 +21569,7 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(encoderDim, identityActivation);
             yield return new LayerNormalizationLayer<T>();
             // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: encoderDim, headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             // Convolution module (approximated with dense)
             yield return new DenseLayer<T>(encoderDim, geluActivation);
@@ -21796,12 +21586,10 @@ public static class LayerHelper<T>
         for (int i = 1; i < numDecoderLayers; i++)
         {
             // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: decoderDim, headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             // Cross-attention to encoder
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: decoderDim, headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(decoderDim * 4, geluActivation);
@@ -21827,8 +21615,7 @@ public static class LayerHelper<T>
         for (int i = 1; i < numEncoderLayers; i++)
         {
             // Spectral self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: 1, embeddingDimension: encoderDim, headCount: numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(encoderDim * 4, geluActivation);
@@ -21876,10 +21663,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             // Branch 1: Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: encoderDim,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
 
             // Branch 2: Convolutional Gating MLP (cgMLP)
@@ -21930,10 +21714,7 @@ public static class LayerHelper<T>
         {
             // Pre-norm MHA
             yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(
-                sequenceLength: maxSequenceLength,
-                embeddingDimension: encoderDim,
-                headCount: numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
             // Depthwise separable convolution module
@@ -21991,7 +21772,7 @@ public static class LayerHelper<T>
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(encoderDim, identityActivation);
             yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim * 2, geluActivation);
             yield return new BatchNormalizationLayer<T>();
@@ -22041,7 +21822,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
@@ -22058,10 +21839,10 @@ public static class LayerHelper<T>
         {
             // Self-attention
             yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, decoderDim, numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (decoderDim) / (numAttentionHeads));
             // Cross-attention
             yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, decoderDim, numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (decoderDim) / (numAttentionHeads));
             // Feed-forward
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, geluActivation);
@@ -22128,7 +21909,7 @@ public static class LayerHelper<T>
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(encoderDim, identityActivation);
             yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
         }
         yield return new LayerNormalizationLayer<T>();
@@ -22148,7 +21929,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLLMLayers; i++)
         {
             yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, llmDim, llmHeads);
+            yield return new MultiHeadAttentionLayer<T>(llmHeads, (llmDim) / (llmHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(llmDim * 4, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
@@ -22184,7 +21965,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
@@ -22230,7 +22011,7 @@ public static class LayerHelper<T>
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             yield return new DenseLayer<T>(encoderDim, identityActivation);
             yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim * 2, geluActivation);
             yield return new BatchNormalizationLayer<T>();
@@ -22250,9 +22031,9 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, decoderDim, numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (decoderDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, decoderDim, numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (decoderDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
@@ -22284,7 +22065,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
@@ -22382,7 +22163,7 @@ public static class LayerHelper<T>
         // Vision transformer layers
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionEmbeddingDim, visionEmbeddingDim, numVisionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numVisionHeads, (visionEmbeddingDim) / (numVisionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionEmbeddingDim, identityActivation);
@@ -22400,7 +22181,7 @@ public static class LayerHelper<T>
         // Text transformer layers (causal attention for autoregressive text encoding)
         for (int i = 0; i < numTextLayers; i++)
         {
-            var textAttention = new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
+            var textAttention = new MultiHeadAttentionLayer<T>(numTextHeads, (textEmbeddingDim) / (numTextHeads));
             textAttention.UseCausalMask = true;
             yield return textAttention;
             yield return new LayerNormalizationLayer<T>();
@@ -22453,7 +22234,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionEmbeddingDim, visionEmbeddingDim, numVisionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numVisionHeads, (visionEmbeddingDim) / (numVisionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionEmbeddingDim, identityActivation);
@@ -22469,7 +22250,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numTextLayers; i++)
         {
-            var textAttention = new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
+            var textAttention = new MultiHeadAttentionLayer<T>(numTextHeads, (textEmbeddingDim) / (numTextHeads));
             textAttention.UseCausalMask = true;
             yield return textAttention;
             yield return new LayerNormalizationLayer<T>();
@@ -22528,7 +22309,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numVisionLayers; i++)
         {
             // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(visionEmbeddingDim, visionEmbeddingDim, numVisionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numVisionHeads, (visionEmbeddingDim) / (numVisionHeads));
             yield return new LayerNormalizationLayer<T>();
             // Feed-forward network
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
@@ -22545,7 +22326,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numTextLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
+            yield return new MultiHeadAttentionLayer<T>(numTextHeads, (textEmbeddingDim) / (numTextHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textEmbeddingDim, identityActivation);
@@ -22564,10 +22345,10 @@ public static class LayerHelper<T>
             for (int i = 0; i < numCaptioningDecoderLayers; i++)
             {
                 // Cross-attention to vision encoder features
-                yield return new MultiHeadAttentionLayer<T>(captioningDecoderDim, captioningDecoderDim, numCaptioningDecoderHeads);
+                yield return new MultiHeadAttentionLayer<T>(numCaptioningDecoderHeads, (captioningDecoderDim) / (numCaptioningDecoderHeads));
                 yield return new LayerNormalizationLayer<T>();
                 // Causal self-attention for autoregressive decoding
-                yield return new MultiHeadAttentionLayer<T>(captioningDecoderDim, captioningDecoderDim, numCaptioningDecoderHeads);
+                yield return new MultiHeadAttentionLayer<T>(numCaptioningDecoderHeads, (captioningDecoderDim) / (numCaptioningDecoderHeads));
                 yield return new LayerNormalizationLayer<T>();
                 // Feed-forward network
                 yield return new DenseLayer<T>(captFfnDim, geluActivation);
@@ -22636,7 +22417,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numTextLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
+            yield return new MultiHeadAttentionLayer<T>(numTextHeads, (textEmbeddingDim) / (numTextHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textEmbeddingDim, identityActivation);
@@ -22687,7 +22468,7 @@ public static class LayerHelper<T>
         int transformerStages = numVisionLayers - cnnStages;
         for (int i = 0; i < transformerStages; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionEmbeddingDim, visionEmbeddingDim, numVisionHeads);
+            yield return new MultiHeadAttentionLayer<T>(numVisionHeads, (visionEmbeddingDim) / (numVisionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionEmbeddingDim, identityActivation);
@@ -22703,7 +22484,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numTextLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
+            yield return new MultiHeadAttentionLayer<T>(numTextHeads, (textEmbeddingDim) / (numTextHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textEmbeddingDim, identityActivation);
@@ -22762,7 +22543,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(embeddingDim, embeddingDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             // Feed-forward network
             yield return new DenseLayer<T>(ffnDim, geluActivation);
@@ -22797,7 +22578,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numEncoderLayers; i++)
         {
             // Standard multi-head attention (approximates DaViT dual attention)
-            yield return new MultiHeadAttentionLayer<T>(encoderEmbeddingDim, encoderEmbeddingDim, numEncoderHeads);
+            yield return new MultiHeadAttentionLayer<T>(numEncoderHeads, (encoderEmbeddingDim) / (numEncoderHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(encoderEmbeddingDim, identityActivation);
@@ -22813,7 +22594,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             // Causal self-attention
-            var decoderSelfAttn = new MultiHeadAttentionLayer<T>(decoderEmbeddingDim, decoderEmbeddingDim, numDecoderHeads);
+            var decoderSelfAttn = new MultiHeadAttentionLayer<T>(numDecoderHeads, (decoderEmbeddingDim) / (numDecoderHeads));
             decoderSelfAttn.UseCausalMask = true;
             yield return decoderSelfAttn;
             yield return new LayerNormalizationLayer<T>();
@@ -22853,7 +22634,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -22870,7 +22651,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numTextLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(textDim, textDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (textDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textDim, identityActivation);
@@ -22936,7 +22717,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numFusionLayers; i++)
         {
             // Multi-head self-attention over concatenated vision+text tokens
-            yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (fusionDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             // Feed-forward network
             yield return new DenseLayer<T>(fusionFfnDim, geluActivation);
@@ -22976,7 +22757,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numRelationshipLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (fusionDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(fusionFfnDim, geluActivation);
             yield return new DenseLayer<T>(fusionDim, identityActivation);
@@ -22994,7 +22775,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numTextLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (fusionDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(fusionFfnDim, geluActivation);
             yield return new DenseLayer<T>(fusionDim, identityActivation);
@@ -23048,7 +22829,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numVisionLayers; i++)
         {
             // Vision self-attention block
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23076,7 +22857,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numTextLayers; i++)
         {
             // Text self-attention block
-            yield return new MultiHeadAttentionLayer<T>(textDim, textDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (textDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textDim, identityActivation);
@@ -23097,7 +22878,7 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(fusionDim, identityActivation);
 
         // === Final Cross-Modal Fusion ===
-        yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+        yield return new MultiHeadAttentionLayer<T>(numHeads, (fusionDim) / (numHeads));
         yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(fusionFfnDim, geluActivation);
         yield return new DenseLayer<T>(fusionDim, identityActivation);
@@ -23132,7 +22913,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23150,7 +22931,7 @@ public static class LayerHelper<T>
             yield return new CrossAttentionLayer<T>(qFormerDim, visionDim, numQFormerHeads);
             yield return new LayerNormalizationLayer<T>();
             // Self-attention among query tokens
-            yield return new MultiHeadAttentionLayer<T>(qFormerDim, qFormerDim, numQFormerHeads);
+            yield return new MultiHeadAttentionLayer<T>(numQFormerHeads, (qFormerDim) / (numQFormerHeads));
             yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(qfFfnDim, geluActivation);
@@ -23166,7 +22947,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             // Causal self-attention
-            var decoderSelfAttn = new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            var decoderSelfAttn = new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             decoderSelfAttn.UseCausalMask = true;
             yield return decoderSelfAttn;
             yield return new LayerNormalizationLayer<T>();
@@ -23203,7 +22984,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23219,7 +23000,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             // Causal self-attention on decoder tokens
-            var decoderSelfAttn = new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            var decoderSelfAttn = new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             decoderSelfAttn.UseCausalMask = true;
             yield return decoderSelfAttn;
             yield return new LayerNormalizationLayer<T>();
@@ -23261,7 +23042,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23279,7 +23060,7 @@ public static class LayerHelper<T>
             yield return new CrossAttentionLayer<T>(perceiverDim, visionDim, numPerceiverHeads);
             yield return new LayerNormalizationLayer<T>();
             // Self-attention among latent tokens
-            yield return new MultiHeadAttentionLayer<T>(perceiverDim, perceiverDim, numPerceiverHeads);
+            yield return new MultiHeadAttentionLayer<T>(numPerceiverHeads, (perceiverDim) / (numPerceiverHeads));
             yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(perceiverFfnDim, geluActivation);
@@ -23295,7 +23076,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             // Causal self-attention
-            var decoderSelfAttn = new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            var decoderSelfAttn = new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             decoderSelfAttn.UseCausalMask = true;
             yield return decoderSelfAttn;
             yield return new LayerNormalizationLayer<T>();
@@ -23334,7 +23115,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23350,7 +23131,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             // Causal self-attention
-            var decoderAttn = new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            var decoderAttn = new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             decoderAttn.UseCausalMask = true;
             yield return decoderAttn;
             yield return new LayerNormalizationLayer<T>();
@@ -23389,7 +23170,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23405,7 +23186,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             // Causal self-attention
-            var decoderAttn = new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            var decoderAttn = new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             decoderAttn.UseCausalMask = true;
             yield return decoderAttn;
             yield return new LayerNormalizationLayer<T>();
@@ -23449,7 +23230,7 @@ public static class LayerHelper<T>
         // ViT encoder transformer blocks
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionDim * 4, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23465,10 +23246,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             // Standard self-attention
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             // Visual expert attention (separate QKV weights for visual tokens)
-            yield return new MultiHeadAttentionLayer<T>(visualExpertDim, visualExpertDim, numVisualExpertHeads);
+            yield return new MultiHeadAttentionLayer<T>(numVisualExpertHeads, (visualExpertDim) / (numVisualExpertHeads));
             yield return new LayerNormalizationLayer<T>();
             // Projection from visual expert dim to decoder dim if they differ
             if (visualExpertDim != decoderDim)
@@ -23507,7 +23288,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23523,7 +23304,7 @@ public static class LayerHelper<T>
         // === LLM Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderDim, identityActivation);
@@ -23556,7 +23337,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23575,7 +23356,7 @@ public static class LayerHelper<T>
         // === LLM Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderDim, identityActivation);
@@ -23610,7 +23391,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23626,10 +23407,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numResamplerLayers; i++)
         {
             // Cross-attention: queries attend to visual tokens
-            yield return new MultiHeadAttentionLayer<T>(resamplerDim, resamplerDim, numHeads > 16 ? 16 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (resamplerDim) / (numHeads > 16 ? 16 : numHeads));
             yield return new LayerNormalizationLayer<T>();
             // Self-attention among query tokens
-            yield return new MultiHeadAttentionLayer<T>(resamplerDim, resamplerDim, numHeads > 16 ? 16 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (resamplerDim) / (numHeads > 16 ? 16 : numHeads));
             yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(resamplerFfnDim, geluActivation);
@@ -23644,7 +23425,7 @@ public static class LayerHelper<T>
         // === LLM Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderDim, identityActivation);
@@ -23676,7 +23457,7 @@ public static class LayerHelper<T>
         // === Causal Decoder (all layers are decoder, no separate vision encoder) ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderDim, identityActivation);
@@ -23709,7 +23490,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23729,7 +23510,7 @@ public static class LayerHelper<T>
         // === LLM Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderDim, identityActivation);
@@ -23762,7 +23543,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23781,7 +23562,7 @@ public static class LayerHelper<T>
         // === LLM Decoder (DeepSeek MoE) ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderDim, identityActivation);
@@ -23857,7 +23638,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads, initializationStrategy: lazy);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads), initializationStrategy: lazy);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation, lazy);
             yield return new DenseLayer<T>(visionDim, identityActivation, lazy);
@@ -23872,7 +23653,7 @@ public static class LayerHelper<T>
         // === Temporal Aggregation Module ===
         for (int i = 0; i < numTemporalLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(temporalDim, temporalDim, numHeads > 16 ? 16 : numHeads, initializationStrategy: lazy);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (temporalDim) / (numHeads > 16 ? 16 : numHeads), initializationStrategy: lazy);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(temporalFfnDim, geluActivation, lazy);
             yield return new DenseLayer<T>(temporalDim, identityActivation, lazy);
@@ -23887,7 +23668,7 @@ public static class LayerHelper<T>
         // === LLM Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads, initializationStrategy: lazy);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads), initializationStrategy: lazy);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderFfnDim, geluActivation, lazy);
             yield return new DenseLayer<T>(decoderDim, identityActivation, lazy);
@@ -23921,7 +23702,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23936,7 +23717,7 @@ public static class LayerHelper<T>
         // === LLM Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderDim, identityActivation);
@@ -23971,7 +23752,7 @@ public static class LayerHelper<T>
         // === Point Cloud Encoder (MHA-based, not ViT patch-based) ===
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(pointEncoderDim, pointEncoderDim, numHeads > 8 ? 8 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 8 ? 8 : numHeads, (pointEncoderDim) / (numHeads > 8 ? 8 : numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(pointEncoderDim, identityActivation);
@@ -23980,7 +23761,7 @@ public static class LayerHelper<T>
         }
 
         // === Q-Former Bridge (point-language alignment) ===
-        yield return new MultiHeadAttentionLayer<T>(pointEncoderDim, pointEncoderDim, numHeads > 8 ? 8 : numHeads);
+        yield return new MultiHeadAttentionLayer<T>(numHeads > 8 ? 8 : numHeads, (pointEncoderDim) / (numHeads > 8 ? 8 : numHeads));
         yield return new LayerNormalizationLayer<T>();
 
         // === Projection to LLM space ===
@@ -23990,7 +23771,7 @@ public static class LayerHelper<T>
         // === LLM Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderDim, identityActivation);
@@ -24026,7 +23807,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -24046,10 +23827,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numFusionLayers; i++)
         {
             // Vision-to-text cross-attention
-            yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads > 8 ? 8 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 8 ? 8 : numHeads, (fusionDim) / (numHeads > 8 ? 8 : numHeads));
             yield return new LayerNormalizationLayer<T>();
             // Text-to-vision cross-attention
-            yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads > 8 ? 8 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 8 ? 8 : numHeads, (fusionDim) / (numHeads > 8 ? 8 : numHeads));
             yield return new LayerNormalizationLayer<T>();
             // FFN
             yield return new DenseLayer<T>(fusionFfnDim, geluActivation);
@@ -24064,7 +23845,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numDetectionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(detectionDim, detectionDim, numHeads > 8 ? 8 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 8 ? 8 : numHeads, (detectionDim) / (numHeads > 8 ? 8 : numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(detectionFfnDim, geluActivation);
             yield return new DenseLayer<T>(detectionDim, identityActivation);
@@ -24097,7 +23878,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -24113,10 +23894,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             // Self-attention with document reading-order awareness
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             // Cross-attention to visual features
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             // FFN
             yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
@@ -24154,7 +23935,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -24172,7 +23953,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numUnderstandingLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(understandingDim, understandingDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (understandingDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(understandingFfnDim, geluActivation);
             yield return new DenseLayer<T>(understandingDim, identityActivation);
@@ -24186,7 +23967,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numGenerationLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(generationDim, generationDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (generationDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(generationFfnDim, geluActivation);
             yield return new DenseLayer<T>(generationDim, identityActivation);
@@ -24219,7 +24000,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -24238,10 +24019,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numEditingLayers; i++)
         {
             // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(editingDim, editingDim, numHeads > 8 ? 8 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 8 ? 8 : numHeads, (editingDim) / (numHeads > 8 ? 8 : numHeads));
             yield return new LayerNormalizationLayer<T>();
             // Cross-attention to instruction features
-            yield return new MultiHeadAttentionLayer<T>(editingDim, editingDim, numHeads > 8 ? 8 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads > 8 ? 8 : numHeads, (editingDim) / (numHeads > 8 ? 8 : numHeads));
             yield return new LayerNormalizationLayer<T>();
             // FFN
             yield return new DenseLayer<T>(editingFfnDim, geluActivation);
@@ -24274,7 +24055,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -24289,7 +24070,7 @@ public static class LayerHelper<T>
         // === Lightweight Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderDim, identityActivation);
@@ -29336,7 +29117,7 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(hiddenDim, relu);
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(maxPhonemeLength, hiddenDim, numHeads, identity);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identity);
             yield return new DenseLayer<T>(hiddenDim * 4, relu);
             yield return new DenseLayer<T>(hiddenDim, identity);
         }
@@ -29463,7 +29244,7 @@ public static class LayerHelper<T>
         int maxFrames = (sampleRate * maxAudioLengthSeconds) / frameRateDivisor;
         for (int i = 0; i < numTransformerLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(maxFrames, hiddenDim, numHeads, identity);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identity);
             yield return new DenseLayer<T>(ffDim, gelu);
             yield return new DenseLayer<T>(hiddenDim, identity);
         }
@@ -30460,13 +30241,13 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numTransformerLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, headCount, geluActivation);
+            yield return new MultiHeadAttentionLayer<T>(headCount, (embeddingDimension) / (headCount), geluActivation);
         }
 
         // Cross-modal attention
         for (int i = 0; i < 4; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, headCount, geluActivation);
+            yield return new MultiHeadAttentionLayer<T>(headCount, (embeddingDimension) / (headCount), geluActivation);
         }
 
         // Modality decoders
@@ -30496,7 +30277,6 @@ public static class LayerHelper<T>
     {
         IActivationFunction<T>? nullActivation = null;
         var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
-        int sequenceLength = 32;
         int numHeads = 8;
 
         // Dual-stream architecture: audio and visual encoders run in parallel via
@@ -30509,7 +30289,7 @@ public static class LayerHelper<T>
             new DenseLayer<T>(embeddingDimension, tanhActivation)
         };
         for (int i = 0; i < numEncoderLayers; i++)
-            audioEncoderLayers.Add(new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads));
+            audioEncoderLayers.Add(new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads)));
         audioEncoderLayers.Add(new DenseLayer<T>(embeddingDimension, tanhActivation));
 
         var visualEncoderLayers = new List<ILayer<T>>
@@ -30517,7 +30297,7 @@ public static class LayerHelper<T>
             new DenseLayer<T>(embeddingDimension, tanhActivation)
         };
         for (int i = 0; i < numEncoderLayers; i++)
-            visualEncoderLayers.Add(new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads));
+            visualEncoderLayers.Add(new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads)));
         visualEncoderLayers.Add(new DenseLayer<T>(embeddingDimension, tanhActivation));
 
         yield return new ParallelStreamsLayer<T>(
@@ -30532,12 +30312,12 @@ public static class LayerHelper<T>
 
         // Temporal modeling: 4 attention layers
         for (int i = 0; i < 4; i++)
-            yield return new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads));
         yield return new DenseLayer<T>(embeddingDimension, tanhActivation);
 
         // Cross-modal fusion: 4 attention layers
         for (int i = 0; i < 4; i++)
-            yield return new MultiHeadAttentionLayer<T>(sequenceLength, embeddingDimension, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads));
 
         // Event classification head
         yield return new DenseLayer<T>(numCategories, nullActivation);
@@ -31524,7 +31304,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(encoderDim, identityActivation);
@@ -31539,7 +31319,7 @@ public static class LayerHelper<T>
         // === Mel Decoder (FFT blocks) ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(hiddenDim, hiddenDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(hiddenDim, identityActivation);
@@ -31678,7 +31458,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(encoderDim, identityActivation);
@@ -31737,7 +31517,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numTextEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(textEncoderDim, textEncoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (textEncoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textEncoderDim, identityActivation);
@@ -31752,7 +31532,7 @@ public static class LayerHelper<T>
         // === Autoregressive LLM Decoder (codec token prediction) ===
         for (int i = 0; i < numLLMLayers; i++)
         {
-            var selfAttn = new MultiHeadAttentionLayer<T>(llmDim, llmDim, numHeads);
+            var selfAttn = new MultiHeadAttentionLayer<T>(numHeads, (llmDim) / (numHeads));
             selfAttn.UseCausalMask = true;
             yield return selfAttn;
             yield return new LayerNormalizationLayer<T>();
@@ -31806,7 +31586,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(encoderDim, identityActivation);
@@ -31821,7 +31601,7 @@ public static class LayerHelper<T>
         // === Flow Matching Blocks (conditional vector field estimator) ===
         for (int i = 0; i < numFlowLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(flowDim, flowDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (flowDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(flowFfnDim, geluActivation);
             yield return new DenseLayer<T>(flowDim, identityActivation);
@@ -31856,7 +31636,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(encoderDim, identityActivation);
@@ -31883,7 +31663,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(encoderDim, identityActivation);
@@ -31918,7 +31698,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(encoderDim, identityActivation);
@@ -31937,7 +31717,7 @@ public static class LayerHelper<T>
         // === Speaker-conditioned Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderDim, identityActivation);
@@ -31969,7 +31749,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim * 2, geluActivation);
             yield return new DenseLayer<T>(encoderDim, identityActivation);

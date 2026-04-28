@@ -37,10 +37,7 @@ internal static class CodeTransformerLayerFactory
     {
         for (int i = 0; i < architecture.NumEncoderLayers; i++)
         {
-            layers.Add(new MultiHeadAttentionLayer<T>(
-                sequenceLength: architecture.MaxSequenceLength,
-                embeddingDimension: architecture.ModelDimension,
-                headCount: architecture.NumHeads,
+            layers.Add(new MultiHeadAttentionLayer<T>(architecture.NumHeads, (architecture.ModelDimension) / (architecture.NumHeads), 
                 activationFunction: new IdentityActivation<T>()));
 
             layers.Add(new LayerNormalizationLayer<T>());
@@ -62,18 +59,12 @@ internal static class CodeTransformerLayerFactory
     {
         for (int i = 0; i < architecture.NumDecoderLayers; i++)
         {
-            layers.Add(new MultiHeadAttentionLayer<T>(
-                sequenceLength: architecture.MaxSequenceLength,
-                embeddingDimension: architecture.ModelDimension,
-                headCount: architecture.NumHeads,
+            layers.Add(new MultiHeadAttentionLayer<T>(architecture.NumHeads, (architecture.ModelDimension) / (architecture.NumHeads), 
                 activationFunction: new IdentityActivation<T>()));
 
             layers.Add(new LayerNormalizationLayer<T>());
 
-            layers.Add(new MultiHeadAttentionLayer<T>(
-                sequenceLength: architecture.MaxSequenceLength,
-                embeddingDimension: architecture.ModelDimension,
-                headCount: architecture.NumHeads,
+            layers.Add(new MultiHeadAttentionLayer<T>(architecture.NumHeads, (architecture.ModelDimension) / (architecture.NumHeads), 
                 activationFunction: new IdentityActivation<T>()));
 
             layers.Add(new LayerNormalizationLayer<T>());

@@ -1335,7 +1335,7 @@ public class AdvancedLayersIntegrationTests
         int sequenceLength = 10;
         int embeddingSize = 64;
         int numHeads = 8;
-        var layer = new MultiHeadAttentionLayer<float>(sequenceLength, embeddingSize, numHeads);
+        var layer = new MultiHeadAttentionLayer<float>(numHeads, (embeddingSize) / (numHeads));
 
         var input = Tensor<float>.CreateRandom([2, sequenceLength, embeddingSize]); // [batch, sequence, embedding]
 
@@ -1354,7 +1354,7 @@ public class AdvancedLayersIntegrationTests
         int sequenceLength = 4;
         int embeddingSize = 48;
         int numHeads = 6;
-        var layer = new MultiHeadAttentionLayer<float>(sequenceLength, embeddingSize, numHeads);
+        var layer = new MultiHeadAttentionLayer<float>(numHeads, (embeddingSize) / (numHeads));
 
         var input = Tensor<float>.CreateRandom([4, embeddingSize]); // [batch, embedding]
 
@@ -1373,7 +1373,7 @@ public class AdvancedLayersIntegrationTests
         int sequenceLength = 4;
         int embeddingSize = 32;
         int numHeads = 4;
-        var original = new MultiHeadAttentionLayer<float>(sequenceLength, embeddingSize, numHeads);
+        var original = new MultiHeadAttentionLayer<float>(numHeads, (embeddingSize) / (numHeads));
         var input = Tensor<float>.CreateRandom([1, sequenceLength, embeddingSize]);
 
         // Act
@@ -1394,7 +1394,7 @@ public class AdvancedLayersIntegrationTests
         int sequenceLength = 10;
         int embeddingSize = 64;
         int numHeads = 8;
-        var layer = new MultiHeadAttentionLayer<float>(sequenceLength, embeddingSize, numHeads);
+        var layer = new MultiHeadAttentionLayer<float>(numHeads, (embeddingSize) / (numHeads));
 
         // Act
         int paramCount = layer.ParameterCount;

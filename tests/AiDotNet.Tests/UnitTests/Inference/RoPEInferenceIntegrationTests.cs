@@ -17,7 +17,7 @@ public class RoPEInferenceIntegrationTests
         int seqLen = 8;
         int embDim = 64;
         int numHeads = 4;
-        var layer = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
+        var layer = new MultiHeadAttentionLayer<float>(numHeads, (embDim) / (numHeads));
         layer.ConfigurePositionalEncoding(PositionalEncodingType.Rotary);
 
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
@@ -34,8 +34,8 @@ public class RoPEInferenceIntegrationTests
         int embDim = 32;
         int numHeads = 4;
 
-        var layerNoPos = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
-        var layerRoPE = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
+        var layerNoPos = new MultiHeadAttentionLayer<float>(numHeads, (embDim) / (numHeads));
+        var layerRoPE = new MultiHeadAttentionLayer<float>(numHeads, (embDim) / (numHeads));
         layerRoPE.ConfigurePositionalEncoding(PositionalEncodingType.Rotary);
 
         // Copy parameters so only difference is RoPE
@@ -56,7 +56,7 @@ public class RoPEInferenceIntegrationTests
         int seqLen = 8;
         int embDim = 64;
         int numHeads = 4;
-        var layer = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
+        var layer = new MultiHeadAttentionLayer<float>(numHeads, (embDim) / (numHeads));
         layer.ConfigurePositionalEncoding(PositionalEncodingType.ALiBi);
 
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
@@ -126,7 +126,7 @@ public class RoPEInferenceIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MHA_PositionalEncoding_PreservedInMetadata()
     {
-        var layer = new MultiHeadAttentionLayer<float>(8, 32, 4);
+        var layer = new MultiHeadAttentionLayer<float>(4, (32) / (4));
         layer.ConfigurePositionalEncoding(PositionalEncodingType.Rotary);
 
         Assert.Equal(PositionalEncodingType.Rotary, layer.PositionalEncoding);

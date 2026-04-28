@@ -209,7 +209,7 @@ public class AttentionLayersIntegrationTests
         // Arrange - 2D input [seqLen, embedDim]
         int seqLen = 16;
         int embedDim = 64;
-        var layer = new MultiHeadAttentionLayer<float>(seqLen, embedDim, headCount: 8);
+        var layer = new MultiHeadAttentionLayer<float>(8, (embedDim) / (8));
         var input = CreateRandomTensor<float>([seqLen, embedDim]);
 
         // Act
@@ -226,7 +226,7 @@ public class AttentionLayersIntegrationTests
         // Arrange - 3D input [batch, seqLen, embedDim]
         int seqLen = 16;
         int embedDim = 64;
-        var layer = new MultiHeadAttentionLayer<float>(seqLen, embedDim, headCount: 8);
+        var layer = new MultiHeadAttentionLayer<float>(8, (embedDim) / (8));
         var input = CreateRandomTensor<float>([2, seqLen, embedDim]);
 
         // Act
@@ -243,7 +243,7 @@ public class AttentionLayersIntegrationTests
         // Arrange - 5D input [batch1, batch2, batch3, seqLen, embedDim]
         int seqLen = 4;
         int embedDim = 32;
-        var layer = new MultiHeadAttentionLayer<float>(seqLen, embedDim, headCount: 4);
+        var layer = new MultiHeadAttentionLayer<float>(4, (embedDim) / (4));
         var input = CreateRandomTensor<float>([2, 2, 2, seqLen, embedDim]);
 
         // Act
@@ -261,7 +261,7 @@ public class AttentionLayersIntegrationTests
         // Arrange - cross-attention with separate query and key/value
         int seqLen = 8;
         int embedDim = 32;
-        var layer = new MultiHeadAttentionLayer<float>(seqLen, embedDim, headCount: 4);
+        var layer = new MultiHeadAttentionLayer<float>(4, (embedDim) / (4));
         var query = CreateRandomTensor<float>([2, seqLen, embedDim]);
         var keyValue = CreateRandomTensor<float>([2, 12, embedDim]);
 
@@ -279,7 +279,7 @@ public class AttentionLayersIntegrationTests
         // Arrange
         int seqLen = 8;
         int embedDim = 32;
-        var original = new MultiHeadAttentionLayer<float>(seqLen, embedDim, headCount: 4);
+        var original = new MultiHeadAttentionLayer<float>(4, (embedDim) / (4));
         var input = CreateRandomTensor<float>([2, seqLen, embedDim]);
         var originalOutput = original.Forward(input);
 
@@ -510,7 +510,7 @@ public class AttentionLayersIntegrationTests
         int seqLen = 8;
         int embedDim = 64;
         int headCount = 16; // 64 / 16 = 4 per head
-        var layer = new MultiHeadAttentionLayer<float>(seqLen, embedDim, headCount);
+        var layer = new MultiHeadAttentionLayer<float>(headCount, (embedDim) / (headCount));
         var input = CreateRandomTensor<float>([2, seqLen, embedDim]);
 
         // Act

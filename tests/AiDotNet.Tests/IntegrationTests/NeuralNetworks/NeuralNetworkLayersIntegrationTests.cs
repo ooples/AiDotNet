@@ -444,7 +444,7 @@ public class NeuralNetworkLayersIntegrationTests
         int embeddingDimension = 64;
         int headCount = 8;
 
-        var layer = new MultiHeadAttentionLayer<double>(sequenceLength, embeddingDimension, headCount);
+        var layer = new MultiHeadAttentionLayer<double>(headCount, (embeddingDimension) / (headCount));
         var input = new Tensor<double>([1, sequenceLength, embeddingDimension]);
         InitializeRandomTensor(input);
 
@@ -467,7 +467,7 @@ public class NeuralNetworkLayersIntegrationTests
         int headCount = 8;
 
         // Act
-        var layer = new MultiHeadAttentionLayer<double>(sequenceLength, embeddingDimension, headCount);
+        var layer = new MultiHeadAttentionLayer<double>(headCount, (embeddingDimension) / (headCount));
 
         // Assert
         Assert.NotNull(layer);
@@ -488,7 +488,7 @@ public class NeuralNetworkLayersIntegrationTests
         int embeddingDimension = 32;
         int headCount = 4;
 
-        var layer = new MultiHeadAttentionLayer<double>(sequenceLength, embeddingDimension, headCount);
+        var layer = new MultiHeadAttentionLayer<double>(headCount, (embeddingDimension) / (headCount));
         var input = new Tensor<double>([batchSize, sequenceLength, embeddingDimension]);
         InitializeRandomTensor(input);
 
@@ -504,7 +504,7 @@ public class NeuralNetworkLayersIntegrationTests
     public async Task MultiHeadAttentionLayer_SupportsTraining_ReturnsTrue()
     {
         // Arrange
-        var layer = new MultiHeadAttentionLayer<double>(10, 64, 8);
+        var layer = new MultiHeadAttentionLayer<double>(8, (64) / (8));
 
         // Assert
         Assert.True(layer.SupportsTraining);

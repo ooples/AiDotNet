@@ -540,10 +540,7 @@ public class InferenceSessionIntegrationTests
         {
             new InputLayer<float>(inputSize),
             new ReshapeLayer<float>(new[] { SequenceLength, EmbeddingDimension }),
-            new MultiHeadAttentionLayer<float>(
-                sequenceLength: SequenceLength,
-                embeddingDimension: EmbeddingDimension,
-                headCount: HeadCount,
+            new MultiHeadAttentionLayer<float>(HeadCount, (EmbeddingDimension) / (HeadCount), 
                 activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>()),
             new FlattenLayer<float>(),
             multi,
@@ -593,10 +590,7 @@ public class InferenceSessionIntegrationTests
         {
             new InputLayer<float>(FlatSize),
             new ReshapeLayer<float>(new[] { SequenceLength, EmbeddingDimension }),
-            new MultiHeadAttentionLayer<float>(
-                sequenceLength: SequenceLength,
-                embeddingDimension: EmbeddingDimension,
-                headCount: HeadCount,
+            new MultiHeadAttentionLayer<float>(HeadCount, (EmbeddingDimension) / (HeadCount), 
                 activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
             ,
             new FlattenLayer<float>(),

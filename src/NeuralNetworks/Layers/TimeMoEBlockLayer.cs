@@ -89,10 +89,7 @@ public class TimeMoEBlockLayer<T> : LayerBase<T>
 
         // sequenceLength=1 is the placeholder used by TransformerEncoderLayer; the attention
         // layer supports any rank and reshapes internally.
-        _selfAttention = new MultiHeadAttentionLayer<T>(
-            sequenceLength: 1,
-            embeddingDimension: hiddenDim,
-            headCount: numHeads,
+        _selfAttention = new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
             activationFunction: new GELUActivation<T>() as IActivationFunction<T>);
 
         _norm2 = new LayerNormalizationLayer<T>();

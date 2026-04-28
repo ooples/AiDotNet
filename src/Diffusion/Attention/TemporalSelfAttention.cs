@@ -86,10 +86,7 @@ public class TemporalSelfAttention<T> : LayerBase<T>
         _numFrames = numFrames;
         _spatialSize = spatialSize;
 
-        _temporalAttention = new MultiHeadAttentionLayer<T>(
-            sequenceLength: numFrames,
-            embeddingDimension: channels,
-            headCount: numHeads,
+        _temporalAttention = new MultiHeadAttentionLayer<T>(numHeads, (channels) / (numHeads), 
             activationFunction: new IdentityActivation<T>());
     }
 

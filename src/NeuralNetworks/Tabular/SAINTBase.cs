@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -153,18 +153,12 @@ public abstract class SAINTBase<T>
         for (int i = 0; i < Options.NumLayers; i++)
         {
             // Column attention layer
-            _columnAttentionLayers.Add(new MultiHeadAttentionLayer<T>(
-                Options.EmbeddingDimension,
-                Options.NumHeads,
-                Options.EmbeddingDimension / Options.NumHeads));
+            _columnAttentionLayers.Add(new MultiHeadAttentionLayer<T>(Options.EmbeddingDimension / Options.NumHeads, (Options.NumHeads) / (Options.EmbeddingDimension / Options.NumHeads)));
 
             // Row attention layer (if enabled)
             if (Options.UseIntersampleAttention)
             {
-                (_rowAttentionLayers ?? throw new InvalidOperationException("Row attention layers not initialized.")).Add(new MultiHeadAttentionLayer<T>(
-                    Options.EmbeddingDimension,
-                    Options.NumHeads,
-                    Options.EmbeddingDimension / Options.NumHeads));
+                (_rowAttentionLayers ?? throw new InvalidOperationException("Row attention layers not initialized.")).Add(new MultiHeadAttentionLayer<T>(Options.EmbeddingDimension / Options.NumHeads, (Options.NumHeads) / (Options.EmbeddingDimension / Options.NumHeads)));
             }
 
             // Feed-forward network
