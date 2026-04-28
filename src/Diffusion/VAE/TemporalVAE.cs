@@ -718,12 +718,8 @@ public class TemporalVAE<T> : VAEModelBase<T>
         int downsampleFactor = (int)Math.Pow(2, _channelMultipliers.Length - 1);
         int spatialSize = 64 / downsampleFactor; // Compute from input size
         return new Conv3DLayer<T>(
-            inputChannels: channels,
             outputChannels: channels,
             kernelSize: _temporalKernelSize,
-            inputDepth: 8,
-            inputHeight: spatialSize,
-            inputWidth: spatialSize,
             stride: 1,
             padding: 1,
             activationFunction: new SiLUActivation<T>());

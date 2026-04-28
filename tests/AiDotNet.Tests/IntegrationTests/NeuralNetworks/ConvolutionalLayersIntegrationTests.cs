@@ -112,8 +112,7 @@ public class ConvolutionalLayersIntegrationTests
         // Constructor: (inputChannels, outputChannels, kernelSize, inputDepth, inputHeight, inputWidth, stride, padding, activation)
         IActivationFunction<double> relu = new ReLUActivation<double>();
         var layer = new Conv3DLayer<double>(
-            inputChannels: 1, outputChannels: 4, kernelSize: 3,
-            inputDepth: 8, inputHeight: 8, inputWidth: 8,
+            outputChannels: 4, kernelSize: 3,
             stride: 1, padding: 1, activationFunction: relu);
 
         var input = Tensor<double>.CreateRandom(1, 8, 8, 8);

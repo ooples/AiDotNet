@@ -613,23 +613,19 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(Conv3DLayer<>))
         {
-            // Conv3DLayer(int inputChannels, int outputChannels, int kernelSize, int inputDepth, int inputHeight, int inputWidth, int stride, int padding, IActivationFunction<T>?)
-            // Input shape format: [channels, depth, height, width]
-            int inputChannels = inputShape.Length > 0 ? inputShape[0] : 1;
-            int inputDepthC = inputShape.Length > 1 ? inputShape[1] : 1;
-            int inputHeightC = inputShape.Length > 2 ? inputShape[2] : 1;
-            int inputWidthC = inputShape.Length > 3 ? inputShape[3] : 1;
+            // Conv3DLayer(int outputChannels, int kernelSize, int stride, int padding, IActivationFunction<T>?)
+            // — lazy ctor; spatial dims (D/H/W) and inputChannels resolved on first Forward.
             int outputChannels = outputShape.Length > 0 ? outputShape[0] : 1;
             int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 3;
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             int padding = TryGetInt(additionalParams, "Padding") ?? 0;
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType });
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType });
             if (ctor is null)
                 throw new InvalidOperationException("Cannot find Conv3DLayer constructor with expected signature.");
             var activation = TryRestoreActivation<T>(additionalParams);
-            instance = ctor.Invoke(new object?[] { inputChannels, outputChannels, kernelSize, inputDepthC, inputHeightC, inputWidthC, stride, padding, activation });
+            instance = ctor.Invoke(new object?[] { outputChannels, kernelSize, stride, padding, activation });
         }
         else if (genericDef == typeof(NeuralNetworks.Layers.MeshPoolLayer<>))
         {

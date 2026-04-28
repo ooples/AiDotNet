@@ -4029,12 +4029,8 @@ public static class LayerHelper<T>
 
             // Conv3D layer with padding to maintain resolution before pooling
             yield return new Conv3DLayer<T>(
-                inputChannels: inChannels,
                 outputChannels: outputFilters,
                 kernelSize: 3,
-                inputDepth: currentResolution,
-                inputHeight: currentResolution,
-                inputWidth: currentResolution,
                 stride: 1,
                 padding: 1,
                 activationFunction: new ReLUActivation<T>());
@@ -4143,24 +4139,16 @@ public static class LayerHelper<T>
 
             // First Conv3D in block
             yield return new Conv3DLayer<T>(
-                inputChannels: inChannels,
                 outputChannels: outputFilters,
                 kernelSize: 3,
-                inputDepth: currentResolution,
-                inputHeight: currentResolution,
-                inputWidth: currentResolution,
                 stride: 1,
                 padding: 1,
                 activationFunction: new ReLUActivation<T>());
 
             // Second Conv3D in block
             yield return new Conv3DLayer<T>(
-                inputChannels: outputFilters,
                 outputChannels: outputFilters,
                 kernelSize: 3,
-                inputDepth: currentResolution,
-                inputHeight: currentResolution,
-                inputWidth: currentResolution,
                 stride: 1,
                 padding: 1,
                 activationFunction: new ReLUActivation<T>());
@@ -4180,12 +4168,8 @@ public static class LayerHelper<T>
         // Additional convolutions at the bottleneck
         int bottleneckFilters = baseFilters * (1 << (numEncoderBlocks - 1)) * 2;
         yield return new Conv3DLayer<T>(
-            inputChannels: encoderFilters[numEncoderBlocks - 1],
             outputChannels: bottleneckFilters,
             kernelSize: 3,
-            inputDepth: currentResolution,
-            inputHeight: currentResolution,
-            inputWidth: currentResolution,
             stride: 1,
             padding: 1,
             activationFunction: new ReLUActivation<T>());
@@ -4219,24 +4203,17 @@ public static class LayerHelper<T>
             // First Conv3D after upsample (would concatenate with skip in full U-Net)
             // For simplicity, we assume channels are doubled from skip connection
             yield return new Conv3DLayer<T>(
-                inputChannels: inChannels, // In full U-Net: inChannels + encoderFilters[block] from skip
+                // In full U-Net: inChannels + encoderFilters[block] from skip
                 outputChannels: outputFilters,
                 kernelSize: 3,
-                inputDepth: currentResolution,
-                inputHeight: currentResolution,
-                inputWidth: currentResolution,
                 stride: 1,
                 padding: 1,
                 activationFunction: new ReLUActivation<T>());
 
             // Second Conv3D in decoder block
             yield return new Conv3DLayer<T>(
-                inputChannels: outputFilters,
                 outputChannels: outputFilters,
                 kernelSize: 3,
-                inputDepth: currentResolution,
-                inputHeight: currentResolution,
-                inputWidth: currentResolution,
                 stride: 1,
                 padding: 1,
                 activationFunction: new ReLUActivation<T>());
@@ -4245,12 +4222,8 @@ public static class LayerHelper<T>
         // ============== OUTPUT LAYER ==============
         // 1x1x1 convolution to produce per-voxel class predictions
         yield return new Conv3DLayer<T>(
-            inputChannels: baseFilters,
             outputChannels: numClasses,
             kernelSize: 1,
-            inputDepth: currentResolution,
-            inputHeight: currentResolution,
-            inputWidth: currentResolution,
             stride: 1,
             padding: 0,
             activationFunction: numClasses > 1 ? new SoftmaxActivation<T>() : new SigmoidActivation<T>());

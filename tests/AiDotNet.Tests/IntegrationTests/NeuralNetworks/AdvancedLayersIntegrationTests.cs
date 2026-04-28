@@ -1144,8 +1144,7 @@ public class AdvancedLayersIntegrationTests
         int outputChannels = 8;
         int kernelSize = 3;
         int inputDepth = 8, inputHeight = 8, inputWidth = 8;
-        var layer = new Conv3DLayer<float>(inputChannels, outputChannels, kernelSize,
-            inputDepth, inputHeight, inputWidth, 1, 1, (IActivationFunction<float>?)null);
+        var layer = new Conv3DLayer<float>(outputChannels, kernelSize, 1, 1, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, inputChannels, inputDepth, inputHeight, inputWidth]);
 
@@ -1166,8 +1165,8 @@ public class AdvancedLayersIntegrationTests
         int inputChannels = 1;
         int outputChannels = 4;
         int kernelSize = 3;
-        var original = new Conv3DLayer<float>(inputChannels, outputChannels, kernelSize,
-            4, 4, 4, 1, 1, (IActivationFunction<float>?)null);
+        var original = new Conv3DLayer<float>(outputChannels, kernelSize,
+            1, 1, (IActivationFunction<float>?)null);
         var input = Tensor<float>.CreateRandom([1, inputChannels, 4, 4, 4]);
 
         // Act
