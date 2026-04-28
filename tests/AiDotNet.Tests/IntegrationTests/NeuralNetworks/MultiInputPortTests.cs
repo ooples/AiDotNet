@@ -210,7 +210,7 @@ public class MultiInputPortTests
     [Fact(Timeout = 120000)]
     public async Task DecoderLayer_InputPorts_DeclaresDecoderEncoderMask()
     {
-        var layer = new DecoderLayer<double>(inputSize: 8, attentionSize: 8, feedForwardSize: 16, activation: (IActivationFunction<double>?)null);
+        var layer = new DecoderLayer<double>(attentionSize: 8, feedForwardSize: 16, activation: (IActivationFunction<double>?)null);
 
         Assert.Equal(3, layer.InputPorts.Count);
         Assert.Equal("decoder_input", layer.InputPorts[0].Name);

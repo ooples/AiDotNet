@@ -3624,7 +3624,7 @@ public class AdvancedLayersIntegrationTests
         int inputSize = 32;
         int attentionSize = 16;
         int feedForwardSize = 64;
-        var layer = new DecoderLayer<float>(inputSize, attentionSize, feedForwardSize,
+        var layer = new DecoderLayer<float>(attentionSize, feedForwardSize,
             (IActivationFunction<float>)new ReLUActivation<float>());
 
         // Input: [batch, sequenceLength, inputSize]
@@ -3645,7 +3645,7 @@ public class AdvancedLayersIntegrationTests
         int inputSize = 16;
         int attentionSize = 8;
         int feedForwardSize = 32;
-        var original = new DecoderLayer<float>(inputSize, attentionSize, feedForwardSize,
+        var original = new DecoderLayer<float>(attentionSize, feedForwardSize,
             (IActivationFunction<float>)new ReLUActivation<float>());
         var input = Tensor<float>.CreateRandom([1, 4, inputSize]);
 

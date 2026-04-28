@@ -237,7 +237,7 @@ public class TransformerShapeCompatibilityTests
         int inputSize = 64;
         int attentionSize = 32; // Can now differ from inputSize thanks to Wo projection
         int feedForwardSize = 128;
-        var layer = new DecoderLayer<double>(inputSize, attentionSize, feedForwardSize, (IActivationFunction<double>?)null);
+        var layer = new DecoderLayer<double>(attentionSize, feedForwardSize, (IActivationFunction<double>?)null);
 
         // 3D input: [batch_size, seq_length, input_size]
         int batchSize = 2;
