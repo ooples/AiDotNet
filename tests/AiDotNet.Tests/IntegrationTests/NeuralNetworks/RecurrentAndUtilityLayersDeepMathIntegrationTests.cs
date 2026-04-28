@@ -392,7 +392,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ReshapeLayer_PreservesAllValues()
     {
-        var reshape = new ReshapeLayer<double>(new[] { 2, 3 }, new[] { 3, 2 });
+        var reshape = new ReshapeLayer<double>(new[] { 3, 2 });
 
         var input = new Tensor<double>(new[] { 1, 2, 3 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
         var output = reshape.Forward(input);
@@ -407,7 +407,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ReshapeLayer_OutputShapeIsCorrect()
     {
-        var reshape = new ReshapeLayer<double>(new[] { 4, 3 }, new[] { 6, 2 });
+        var reshape = new ReshapeLayer<double>(new[] { 6, 2 });
 
         var input = new Tensor<double>(new[] { 1, 4, 3 });
         var output = reshape.Forward(input);
@@ -420,7 +420,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ReshapeLayer_NoTrainableParameters()
     {
-        var reshape = new ReshapeLayer<double>(new[] { 4 }, new[] { 2, 2 });
+        var reshape = new ReshapeLayer<double>(new[] { 2, 2 });
         Assert.Equal(0, reshape.ParameterCount);
     }
 

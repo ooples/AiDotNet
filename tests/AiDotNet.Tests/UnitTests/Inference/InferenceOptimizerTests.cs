@@ -277,7 +277,7 @@ public class InferenceOptimizerTests
         var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
         {
             new InputLayer<float>(flatSize),
-            new ReshapeLayer<float>(new[] { flatSize }, new[] { seqLen, embDim }),
+            new ReshapeLayer<float>(new[] { seqLen, embDim }),
             new SelfAttentionLayer<float>(seqLen, embDim, headCount, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>()),
             new FlattenLayer<float>(),
             new DenseLayer<float>(flatSize, flatSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())

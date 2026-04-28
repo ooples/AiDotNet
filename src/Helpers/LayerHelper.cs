@@ -13690,7 +13690,6 @@ public static class LayerHelper<T>
 
         // === Patch Embedding: [B, contextLength * numFeatures] → [B, numPatches, hiddenDim] ===
         yield return new ReshapeLayer<T>(
-            new[] { contextLength * numFeatures },
             new[] { numPatches, patchInputSize });
         yield return new DenseLayer<T>(
             inputSize: patchInputSize,
@@ -32946,7 +32945,7 @@ public static class LayerHelper<T>
         // Forward() works out-of-the-box for the default task).
 
         // === Patch Embedding: [B, contextLength] → [B, numPatches, hiddenDim] ===
-        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new ReshapeLayer<T>(new[] { numPatches, patchLength });
         yield return new DenseLayer<T>(
             inputSize: patchLength,
             outputSize: hiddenDim,
@@ -33080,7 +33079,6 @@ public static class LayerHelper<T>
 
         // === Patch Embedding: [B, contextLength * numFeatures] → [B, numPatches, hiddenDim] ===
         yield return new ReshapeLayer<T>(
-            new[] { contextLength * numFeatures },
             new[] { numPatches, patchInputSize });
         yield return new DenseLayer<T>(
             inputSize: patchInputSize,
@@ -33128,7 +33126,7 @@ public static class LayerHelper<T>
         // path applies a causal mask for the decoder-only semantics) +
         // Flatten + Dense forecast head.
 
-        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new ReshapeLayer<T>(new[] { numPatches, patchLength });
         yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDim, activationFunction: null);
 
         for (int layer = 0; layer < numLayers; layer++)
@@ -33176,7 +33174,7 @@ public static class LayerHelper<T>
         // + final output head.
 
         // === Patch Embedding: [B, contextLength] → [B, numPatches, hiddenDim] ===
-        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new ReshapeLayer<T>(new[] { numPatches, patchLength });
         yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDim, activationFunction: null);
 
         // === Decoder-only MoE transformer stack ===
@@ -33238,7 +33236,7 @@ public static class LayerHelper<T>
         yield return new KairosMultiSizePatchLayer<T>(contextLength, hiddenDim, validPatchSizes);
         // Reshape [B, hiddenDim] → [B, 1, hiddenDim] so the transformer sees
         // a sequence of length 1.
-        yield return new ReshapeLayer<T>(new[] { hiddenDim }, new[] { 1, hiddenDim });
+        yield return new ReshapeLayer<T>(new[] { 1, hiddenDim });
 
         for (int layer = 0; layer < numLayers; layer++)
         {
@@ -33316,7 +33314,7 @@ public static class LayerHelper<T>
         // TransformerEncoderLayer (ViT's self-attention + FFN) + Flatten +
         // Dense forecast head.
 
-        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new ReshapeLayer<T>(new[] { numPatches, patchLength });
         yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDim, activationFunction: null);
 
         for (int layer = 0; layer < numLayers; layer++)
@@ -33358,7 +33356,7 @@ public static class LayerHelper<T>
         // Reshape into patches, then per-patch linear projection.
         // DenseLayer with weights [patchLength, encoderHiddenDim] applied along
         // the last axis gives exactly the per-patch projection.
-        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new ReshapeLayer<T>(new[] { numPatches, patchLength });
         yield return new DenseLayer<T>(inputSize: patchLength, outputSize: encoderHiddenDim, activationFunction: null);
 
         // === Encoder stack: numEncoderLayers × TransformerEncoderLayer ===
@@ -33437,7 +33435,6 @@ public static class LayerHelper<T>
         // attention block's own mask config.
 
         yield return new ReshapeLayer<T>(
-            new[] { contextLength * numCandlestickFeatures },
             new[] { numPatches, patchInputSize });
         yield return new DenseLayer<T>(inputSize: patchInputSize, outputSize: hiddenDimension, activationFunction: null);
 
@@ -33468,7 +33465,7 @@ public static class LayerHelper<T>
         // TOTO (observability time-series foundation model): patches are
         // sequence positions, same numPatches^2 * hiddenDim^2 bloat as the
         // other Foundation helpers. Rewrite to paper shape.
-        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new ReshapeLayer<T>(new[] { numPatches, patchLength });
         yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDimension, activationFunction: null);
 
         for (int layer = 0; layer < numLayers; layer++)
@@ -33498,7 +33495,7 @@ public static class LayerHelper<T>
         // YingLong (enterprise foundation model): same numPatches^2 *
         // hiddenDim^2 bloat as the other Foundation helpers. Rewrite to
         // paper shape.
-        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new ReshapeLayer<T>(new[] { numPatches, patchLength });
         yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDimension, activationFunction: null);
 
         for (int layer = 0; layer < numLayers; layer++)
@@ -33532,7 +33529,7 @@ public static class LayerHelper<T>
         // paper shape: Reshape → Dense(patch) → N × TransformerEncoderLayer
         // → Flatten → Dense(head).
 
-        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new ReshapeLayer<T>(new[] { numPatches, patchLength });
         yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDimension, activationFunction: null);
 
         for (int layer = 0; layer < numLayers; layer++)
@@ -33568,7 +33565,7 @@ public static class LayerHelper<T>
         // to per-token architecture: point input → per-point Dense embed to
         // hiddenDim → N × TransformerEncoderLayer → Flatten → Dense(head).
 
-        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { contextLength, 1 });
+        yield return new ReshapeLayer<T>(new[] { contextLength, 1 });
         yield return new DenseLayer<T>(inputSize: 1, outputSize: hiddenDimension, activationFunction: null);
 
         for (int layer = 0; layer < numLayers; layer++)
@@ -33602,7 +33599,7 @@ public static class LayerHelper<T>
         // patches to a frozen LLM's text-prototype embedding space via a
         // learned prototype bank and cosine-similarity alignment.
 
-        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new ReshapeLayer<T>(new[] { numPatches, patchLength });
         yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDimension, activationFunction: null);
 
         for (int layer = 0; layer < numLayers; layer++)
@@ -33650,7 +33647,7 @@ public static class LayerHelper<T>
         // [flat_hidden, bridge_dim] weight rather than stacking the full
         // bottleneck per block.
 
-        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new ReshapeLayer<T>(new[] { numPatches, patchLength });
         yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDimension, activationFunction: null);
 
         for (int layer = 0; layer < numLayers; layer++)
@@ -33955,7 +33952,7 @@ public static class LayerHelper<T>
         // head (smoke-test-usable via Flatten + Dense to contextLength) and
         // the forecast head (chained from the reconstruction).
 
-        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new ReshapeLayer<T>(new[] { numPatches, patchLength });
         yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDimension, activationFunction: null);
 
         for (int layer = 0; layer < numEncoderLayers; layer++)
@@ -33998,7 +33995,7 @@ public static class LayerHelper<T>
         // similarity-weighted masked reconstruction pre-training. Same
         // numPatches^2 * hiddenDim^2 bloat; rewrite to paper shape.
 
-        yield return new ReshapeLayer<T>(new[] { contextLength }, new[] { numPatches, patchLength });
+        yield return new ReshapeLayer<T>(new[] { numPatches, patchLength });
         yield return new DenseLayer<T>(inputSize: patchLength, outputSize: hiddenDimension, activationFunction: null);
 
         for (int layer = 0; layer < numLayers; layer++)

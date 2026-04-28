@@ -604,7 +604,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int[] inputShape = [32];
         int[] outputShape = [4, 8];
-        var layer = new ReshapeLayer<float>(inputShape, outputShape);
+        var layer = new ReshapeLayer<float>(outputShape);
         var input = CreateRandomTensor([2, 32]); // [batch, features]
 
         // Act
@@ -623,7 +623,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int[] inputShape = [24];
         int[] outputShape = [4, 6];
-        var layer = new ReshapeLayer<float>(inputShape, outputShape);
+        var layer = new ReshapeLayer<float>(outputShape);
         var input = CreateRandomTensor([1, 24]);
 
         // Act
@@ -647,7 +647,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int[] inputShape = [16];
         int[] outputShape = [4, 4];
-        var original = new ReshapeLayer<float>(inputShape, outputShape);
+        var original = new ReshapeLayer<float>(outputShape);
         var input = CreateRandomTensor([1, 16]);
 
         // Act

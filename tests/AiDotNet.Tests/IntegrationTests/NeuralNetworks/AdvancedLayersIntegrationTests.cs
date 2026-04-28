@@ -1079,7 +1079,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange - Reshape from [8, 4] to [32]
         int[] inputShape = [8, 4];
         int[] outputShape = [32];
-        var layer = new ReshapeLayer<float>(inputShape, outputShape);
+        var layer = new ReshapeLayer<float>(outputShape);
 
         var input = Tensor<float>.CreateRandom([2, 8, 4]); // batch + inputShape
 
@@ -1098,7 +1098,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange - Reshape from [16] to [4, 4]
         int[] inputShape = [16];
         int[] outputShape = [4, 4];
-        var layer = new ReshapeLayer<float>(inputShape, outputShape);
+        var layer = new ReshapeLayer<float>(outputShape);
 
         var input = Tensor<float>.CreateRandom([2, 16]);
 
@@ -1118,7 +1118,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [8, 4];
         int[] outputShape = [32];
-        var original = new ReshapeLayer<float>(inputShape, outputShape);
+        var original = new ReshapeLayer<float>(outputShape);
         var input = Tensor<float>.CreateRandom([1, 8, 4]);
 
         // Act

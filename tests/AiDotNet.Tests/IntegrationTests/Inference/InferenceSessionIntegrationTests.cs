@@ -539,7 +539,7 @@ public class InferenceSessionIntegrationTests
         var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
         {
             new InputLayer<float>(inputSize),
-            new ReshapeLayer<float>(new[] { FlatSize }, new[] { SequenceLength, EmbeddingDimension }),
+            new ReshapeLayer<float>(new[] { SequenceLength, EmbeddingDimension }),
             new MultiHeadAttentionLayer<float>(
                 sequenceLength: SequenceLength,
                 embeddingDimension: EmbeddingDimension,
@@ -592,7 +592,7 @@ public class InferenceSessionIntegrationTests
         var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
         {
             new InputLayer<float>(FlatSize),
-            new ReshapeLayer<float>(new[] { FlatSize }, new[] { SequenceLength, EmbeddingDimension }),
+            new ReshapeLayer<float>(new[] { SequenceLength, EmbeddingDimension }),
             new MultiHeadAttentionLayer<float>(
                 sequenceLength: SequenceLength,
                 embeddingDimension: EmbeddingDimension,

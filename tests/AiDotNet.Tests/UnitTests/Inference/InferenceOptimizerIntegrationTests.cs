@@ -380,7 +380,7 @@ public class InferenceOptimizerIntegrationTests
         var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
         {
             new InputLayer<float>(flatSize),
-            new ReshapeLayer<float>(new[] { flatSize }, new[] { seqLen, embDim }),
+            new ReshapeLayer<float>(new[] { seqLen, embDim }),
             mha,
             new FlattenLayer<float>(),
             new DenseLayer<float>(flatSize, flatSize,
@@ -417,7 +417,7 @@ public class InferenceOptimizerIntegrationTests
         var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
         {
             new InputLayer<float>(flatSize),
-            new ReshapeLayer<float>(new[] { flatSize }, new[] { seqLen, embDim }),
+            new ReshapeLayer<float>(new[] { seqLen, embDim }),
             gqa,
             new FlattenLayer<float>(),
             new DenseLayer<float>(flatSize, flatSize,
@@ -447,7 +447,7 @@ public class InferenceOptimizerIntegrationTests
         var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
         {
             new InputLayer<float>(flatSize),
-            new ReshapeLayer<float>(new[] { flatSize }, new[] { seqLen, embDim }),
+            new ReshapeLayer<float>(new[] { seqLen, embDim }),
             mha,
             new FlattenLayer<float>(),
             new DenseLayer<float>(flatSize, 16,

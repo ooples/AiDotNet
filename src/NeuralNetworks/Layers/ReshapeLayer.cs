@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.Projection)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }, new[] { 2, 2 }")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 2, 2 }")]
 public class ReshapeLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -126,16 +126,37 @@ public class ReshapeLayer<T> : LayerBase<T>
     /// The batch dimension (first dimension) is handled automatically and not included in these shapes.
     /// </para>
     /// </remarks>
-    public ReshapeLayer(int[] inputShape, int[] outputShape)
-        : base(inputShape, outputShape)
+    public ReshapeLayer(int[] outputShape)
+        : base(MakeUnknown(outputShape.Length), outputShape)
     {
-        _inputShape = inputShape;
+        _inputShape = Array.Empty<int>();
         _outputShape = outputShape;
+    }
 
-        if (inputShape.Aggregate(1, (a, b) => a * b) != outputShape.Aggregate(1, (a, b) => a * b))
-        {
-            throw new ArgumentException("Input and output shapes must have the same total number of elements.");
-        }
+    private static int[] MakeUnknown(int rank)
+    {
+        var s = new int[rank];
+        for (int i = 0; i < rank; i++) s[i] = -1;
+        return s;
+    }
+
+    /// <summary>
+    /// Resolves input shape on first forward; validates element-count compatibility with target output.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var shape = input.Shape.ToArray();
+        int inElems = 1;
+        for (int i = 0; i < shape.Length; i++) inElems *= shape[i];
+        int outElems = 1;
+        for (int i = 0; i < _outputShape.Length; i++) outElems *= _outputShape[i];
+        if (inElems != outElems)
+            throw new ArgumentException(
+                $"ReshapeLayer input element count ({inElems}) does not match output element count ({outElems}).",
+                nameof(input));
+
+        _inputShape = shape;
+        ResolveShapes(shape, _outputShape);
     }
 
     /// <summary>
@@ -174,6 +195,7 @@ public class ReshapeLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
         int batchSize = input.Shape[0];
         int[] targetShape = new int[_outputShape.Length + 1];

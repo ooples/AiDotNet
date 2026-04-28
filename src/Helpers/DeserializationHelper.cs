@@ -173,14 +173,14 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(ReshapeLayer<>))
         {
-            // ReshapeLayer(int[] inputShape, int[] outputShape)
-            var ctor = type.GetConstructor(new Type[] { typeof(int[]), typeof(int[]) });
+            // ReshapeLayer(int[] outputShape) — input shape resolved on first forward
+            var ctor = type.GetConstructor(new Type[] { typeof(int[]) });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find ReshapeLayer constructor with (int[], int[]).");
+                throw new InvalidOperationException("Cannot find ReshapeLayer constructor with (int[]).");
             }
 
-            instance = ctor.Invoke(new object[] { inputShape, outputShape });
+            instance = ctor.Invoke(new object[] { outputShape });
         }
         else if (genericDef == typeof(FlattenLayer<>))
         {
