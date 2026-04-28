@@ -3026,7 +3026,7 @@ public class AdvancedLayersIntegrationTests
         int[] cropBottom = [2, 2, 0];   // crop 2 from bottom of height, 2 from right of width, 0 from channels
         int[] cropLeft = [0, 0, 0];     // additional left cropping per dimension
         int[] cropRight = [0, 0, 0];    // additional right cropping per dimension
-        var layer = new CroppingLayer<float>(inputShape, cropTop, cropBottom, cropLeft, cropRight,
+        var layer = new CroppingLayer<float>(cropTop, cropBottom, cropLeft, cropRight,
             (IActivationFunction<float>)new IdentityActivation<float>());
 
         // Input: matches inputShape
@@ -3050,7 +3050,7 @@ public class AdvancedLayersIntegrationTests
         int[] cropBottom = [1, 1, 0];
         int[] cropLeft = [0, 0, 0];
         int[] cropRight = [0, 0, 0];
-        var original = new CroppingLayer<float>(inputShape, cropTop, cropBottom, cropLeft, cropRight,
+        var original = new CroppingLayer<float>(cropTop, cropBottom, cropLeft, cropRight,
             (IActivationFunction<float>)new IdentityActivation<float>());
         var input = Tensor<float>.CreateRandom([1, 16, 16, 3]);
 
