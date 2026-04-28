@@ -345,7 +345,7 @@ public class InferenceOptimizerTests
         var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
         {
             new InputLayer<float>(inputSize),
-            new AttentionLayer<float>(inputSize, attentionSize, activation: (AiDotNet.Interfaces.IActivationFunction<float>?)null),
+            new AttentionLayer<float>(attentionSize, activation: (AiDotNet.Interfaces.IActivationFunction<float>?)null),
             new DenseLayer<float>(attentionSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 

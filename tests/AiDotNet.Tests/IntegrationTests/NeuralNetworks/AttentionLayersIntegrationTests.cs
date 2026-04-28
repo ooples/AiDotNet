@@ -21,7 +21,7 @@ public class AttentionLayersIntegrationTests
         // Arrange - 2D input [batch, features]
         int inputSize = 64;
         int attentionSize = 32;
-        var layer = new AttentionLayer<float>(inputSize, attentionSize, (IActivationFunction<float>?)null);
+        var layer = new AttentionLayer<float>(attentionSize, (IActivationFunction<float>?)null);
         var input = CreateRandomTensor<float>([4, inputSize]);
 
         // Act
@@ -38,7 +38,7 @@ public class AttentionLayersIntegrationTests
         // Arrange - 3D input [batch, seq, features]
         int inputSize = 64;
         int attentionSize = 32;
-        var layer = new AttentionLayer<float>(inputSize, attentionSize, (IActivationFunction<float>?)null);
+        var layer = new AttentionLayer<float>(attentionSize, (IActivationFunction<float>?)null);
         var input = CreateRandomTensor<float>([2, 10, inputSize]);
 
         // Act
@@ -56,7 +56,7 @@ public class AttentionLayersIntegrationTests
         // Arrange - cross-attention with separate query and key/value inputs
         int inputSize = 64;
         int attentionSize = 32;
-        var layer = new AttentionLayer<float>(inputSize, attentionSize, (IActivationFunction<float>?)null);
+        var layer = new AttentionLayer<float>(attentionSize, (IActivationFunction<float>?)null);
         var query = CreateRandomTensor<float>([2, 8, inputSize]);
         var keyValue = CreateRandomTensor<float>([2, 12, inputSize]);
 
@@ -74,7 +74,7 @@ public class AttentionLayersIntegrationTests
         // Arrange - attention with mask
         int inputSize = 32;
         int attentionSize = 16;
-        var layer = new AttentionLayer<float>(inputSize, attentionSize, (IActivationFunction<float>?)null);
+        var layer = new AttentionLayer<float>(attentionSize, (IActivationFunction<float>?)null);
         var input = CreateRandomTensor<float>([2, 6, inputSize]);
         // Mask shape: [batch, queryLen, keyLen]
         var mask = CreateMaskTensor([2, 6, 6]);
@@ -93,7 +93,7 @@ public class AttentionLayersIntegrationTests
         // Arrange
         int inputSize = 32;
         int attentionSize = 16;
-        var original = new AttentionLayer<float>(inputSize, attentionSize, (IActivationFunction<float>?)null);
+        var original = new AttentionLayer<float>(attentionSize, (IActivationFunction<float>?)null);
         var input = CreateRandomTensor<float>([4, inputSize]);
         var originalOutput = original.Forward(input);
 
@@ -476,7 +476,7 @@ public class AttentionLayersIntegrationTests
         // Arrange
         int inputSize = 32;
         int attentionSize = 16;
-        var layer = new AttentionLayer<float>(inputSize, attentionSize, (IActivationFunction<float>?)null);
+        var layer = new AttentionLayer<float>(attentionSize, (IActivationFunction<float>?)null);
         var input = CreateRandomTensor<float>([1, 4, inputSize]);
 
         // Act
@@ -546,7 +546,7 @@ public class AttentionLayersIntegrationTests
         // Arrange
         int inputSize = 32;
         int attentionSize = 16;
-        var layer = new AttentionLayer<float>(inputSize, attentionSize, (IActivationFunction<float>?)null);
+        var layer = new AttentionLayer<float>(attentionSize, (IActivationFunction<float>?)null);
         layer.UseAuxiliaryLoss = true;
         var input = CreateRandomTensor<float>([2, 8, inputSize]);
 

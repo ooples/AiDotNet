@@ -3578,7 +3578,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 32;
         int attentionSize = 16;
-        var layer = new AttentionLayer<float>(inputSize, attentionSize,
+        var layer = new AttentionLayer<float>(attentionSize,
             (IActivationFunction<float>)new SoftmaxActivation<float>());
 
         // Input: [batch, sequenceLength, inputSize]
@@ -3598,7 +3598,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int attentionSize = 8;
-        var original = new AttentionLayer<float>(inputSize, attentionSize,
+        var original = new AttentionLayer<float>(attentionSize,
             (IActivationFunction<float>)new SoftmaxActivation<float>());
         var input = Tensor<float>.CreateRandom([1, 4, inputSize]);
 
