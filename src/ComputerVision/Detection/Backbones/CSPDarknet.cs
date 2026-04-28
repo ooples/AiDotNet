@@ -85,8 +85,7 @@ public class CSPDarknet<T> : BackboneBase<T>
             outChannels: _stageChannels[0] / 2,
             kernelSize: 3,
             stride: 2,
-            padding: 1,
-            useBias: false
+            padding: 1
         );
 
         // Build stages
@@ -231,8 +230,7 @@ internal class CSPBlock<T>
             outChannels: outChannels,
             kernelSize: 3,
             stride: stride,
-            padding: 1,
-            useBias: false
+            padding: 1
         );
 
         // Split path 1
@@ -241,8 +239,7 @@ internal class CSPBlock<T>
             outChannels: hiddenChannels,
             kernelSize: 1,
             stride: 1,
-            padding: 0,
-            useBias: false
+            padding: 0
         );
 
         // Split path 2 (goes through bottlenecks)
@@ -251,8 +248,7 @@ internal class CSPBlock<T>
             outChannels: hiddenChannels,
             kernelSize: 1,
             stride: 1,
-            padding: 0,
-            useBias: false
+            padding: 0
         );
 
         // Bottleneck blocks
@@ -268,8 +264,7 @@ internal class CSPBlock<T>
             outChannels: outChannels,
             kernelSize: 1,
             stride: 1,
-            padding: 0,
-            useBias: false
+            padding: 0
         );
     }
 
@@ -386,8 +381,7 @@ internal class BottleneckBlock<T>
             outChannels: hiddenChannels,
             kernelSize: 3,
             stride: 1,
-            padding: 1,
-            useBias: false
+            padding: 1
         );
 
         _cv2 = new Conv2D<T>(
@@ -395,8 +389,7 @@ internal class BottleneckBlock<T>
             outChannels: outChannels,
             kernelSize: 3,
             stride: 1,
-            padding: 1,
-            useBias: false
+            padding: 1
         );
     }
 

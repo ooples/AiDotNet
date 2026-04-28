@@ -299,8 +299,7 @@ internal class PatchEmbeddingBlock<T>
             outChannels: embedDim,
             kernelSize: patchSize,
             stride: patchSize,
-            padding: 0,
-            useBias: true
+            padding: 0
         );
     }
 

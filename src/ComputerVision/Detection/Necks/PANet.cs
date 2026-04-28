@@ -392,4 +392,30 @@ public class PANet<T> : NeckBase<T>
         }
         return result;
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Produces a true deep copy by reconstructing a fresh instance with the same input/output
+    /// channel configuration and round-tripping every weight tensor through the binary
+    /// <see cref="WriteParameters(BinaryWriter)"/>/<see cref="ReadParameters(BinaryReader)"/>
+    /// path. This guarantees every internal lateral/top-down/bottom-up/downsample tensor is a
+    /// fresh allocation in the clone.
+    /// </remarks>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        var clone = new PANet<T>((int[])_inputChannels.Clone(), _outputChannels);
+        using (var ms = new MemoryStream())
+        {
+            using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+            {
+                WriteParameters(writer);
+            }
+            ms.Position = 0;
+            using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+            {
+                clone.ReadParameters(reader);
+            }
+        }
+        return clone;
+    }
 }

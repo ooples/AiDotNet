@@ -141,14 +141,26 @@ public abstract class BackboneBase<T> : NeuralNetworkBase<T>, AiDotNet.Interface
     public override Tensor<T> Predict(Tensor<T> input)
     {
         var features = ExtractFeatures(input);
-        return features.Count > 0 ? features[features.Count - 1] : new Tensor<T>(new[] { 1, 0 });
+        if (features.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name}.ExtractFeatures returned no feature maps for input shape [{string.Join(",", input.Shape)}]. " +
+                $"A backbone must produce at least one feature map.");
+        }
+        return features[features.Count - 1];
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Backbones intentionally do not populate the inherited <c>Layers</c> list.
+    /// Each derived backbone (ResNet, CSPDarknet, EfficientNet, SwinTransformer) constructs
+    /// its own internal Conv2D / Dense / MultiHeadSelfAttention wrappers in its constructor
+    /// and orchestrates them directly inside <see cref="ExtractFeatures"/>. Parameter
+    /// serialization is handled by <see cref="WriteParameters"/> / <see cref="ReadParameters"/>
+    /// rather than the layer-list machinery, so this hook is a documented no-op.
+    /// </summary>
     protected override void InitializeLayers()
     {
-        // Backbones manage their own layer construction in derived ctors via Conv2D etc.
-        // Layers list stays empty; ExtractFeatures drives all forward computation.
+        // Intentional no-op — see XML doc above.
     }
 
     /// <inheritdoc />
@@ -179,24 +191,64 @@ public abstract class BackboneBase<T> : NeuralNetworkBase<T>, AiDotNet.Interface
         }
     };
 
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+    /// <summary>
+    /// Detection backbones are not standalone-trainable: they are trained as part of a
+    /// parent object/text detector (FasterRCNN, YOLOv8, DETR, …) which orchestrates the
+    /// joint forward/backward pass across backbone, neck, and head. Calling <c>Train</c>
+    /// directly on a backbone is almost always a programming error, so we fail fast.
+    /// </summary>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: detection backbones are trained as part of a parent " +
+            "detector (e.g. FasterRCNN, YOLOv8, DETR) and do not support standalone Train(). " +
+            "Train the parent detection model instead.");
+    }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters() => new Vector<T>(0);
+    /// <summary>
+    /// Backbone parameters live inside per-stage Conv2D/Dense/MultiHeadSelfAttention
+    /// wrappers and are serialized via <see cref="WriteParameters"/>/<see cref="ReadParameters"/>.
+    /// The flat-vector contract is not the right shape for backbone parameters, so
+    /// callers should round-trip through binary streams instead.
+    /// </summary>
+    public override Vector<T> GetParameters()
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: backbones do not expose a flat parameter vector. " +
+            "Use WriteParameters(BinaryWriter) / ReadParameters(BinaryReader) to round-trip " +
+            "weights, or train the backbone as part of a parent detection model.");
+    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters) { }
+    /// <summary>
+    /// See <see cref="GetParameters"/> for why a flat-vector setter is unsupported on backbones.
+    /// </summary>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: backbones do not accept a flat parameter vector. " +
+            "Use ReadParameters(BinaryReader) to load saved weights.");
+    }
 
-    /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters) { }
+    /// <summary>
+    /// See <see cref="GetParameters"/> for why a flat-vector update is unsupported on backbones.
+    /// </summary>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: backbones do not accept a flat parameter update vector. " +
+            "Update happens inside the parent detector's optimizer step.");
+    }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// See <see cref="GetParameters"/>. Backbones do not consume a flat parameter vector,
+    /// so <c>WithParameters</c> would degrade to a confusing partial-clone. Round-trip
+    /// weights through <see cref="WriteParameters"/> / <see cref="ReadParameters"/> instead.
+    /// </summary>
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {
-        var copy = DeepCopy();
-        InterfaceGuard.Parameterizable(copy).SetParameters(parameters);
-        return copy;
+        throw new NotSupportedException(
+            $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones. " +
+            "Use ReadParameters(BinaryReader) on a fresh instance.");
     }
 
     /// <inheritdoc />

@@ -95,8 +95,7 @@ public class EfficientNet<T> : BackboneBase<T>
             outChannels: _stemChannels,
             kernelSize: 3,
             stride: 2,
-            padding: 1,
-            useBias: false
+            padding: 1
         );
 
         // Build MBConv blocks
@@ -351,8 +350,7 @@ internal class MBConvBlock<T>
                 outChannels: hiddenDim,
                 kernelSize: 1,
                 stride: 1,
-                padding: 0,
-                useBias: false
+                padding: 0
             );
         }
 
@@ -363,8 +361,7 @@ internal class MBConvBlock<T>
             outChannels: hiddenDim,
             kernelSize: kernelSize,
             stride: stride,
-            padding: padding,
-            useBias: false
+            padding: padding
         );
 
         // Squeeze-and-Excitation
@@ -380,8 +377,7 @@ internal class MBConvBlock<T>
             outChannels: outChannels,
             kernelSize: 1,
             stride: 1,
-            padding: 0,
-            useBias: false
+            padding: 0
         );
     }
 

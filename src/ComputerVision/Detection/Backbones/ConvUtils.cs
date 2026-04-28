@@ -30,10 +30,40 @@ internal class Conv2D<T>
                         new Vector<T>(v.ToArray().AsSpan(0, _outChannels * _inChannels * _kernelSize * _kernelSize).ToArray()))
         : new Tensor<T>(new[] { _outChannels, _inChannels, _kernelSize, _kernelSize });
 
-    public Tensor<T>? Bias => null;
-
-    public Conv2D(int inChannels, int outChannels, int kernelSize, int stride = 1, int padding = 0, bool useBias = true)
+    /// <summary>
+    /// Bias tensor extracted from the underlying <see cref="ConvolutionalLayer{T}"/>'s parameter
+    /// vector. <see cref="ConvolutionalLayer{T}"/> always allocates a bias of length
+    /// <c>OutputDepth</c>; before the layer has been forward-resolved the parameter vector is
+    /// empty and we return an empty placeholder.
+    /// </summary>
+    public Tensor<T> Bias
     {
+        get
+        {
+            var p = _layer.GetParameters();
+            int weightLen = _outChannels * _inChannels * _kernelSize * _kernelSize;
+            if (p.Length < weightLen + _outChannels)
+                return new Tensor<T>(new[] { _outChannels });
+            var arr = new T[_outChannels];
+            for (int i = 0; i < _outChannels; i++) arr[i] = p[weightLen + i];
+            return new Tensor<T>(new[] { _outChannels }, new Vector<T>(arr));
+        }
+    }
+
+    /// <summary>
+    /// Constructs a 2D convolution. The underlying <see cref="ConvolutionalLayer{T}"/> always
+    /// allocates a bias term — there is no <c>useBias=false</c> mode at present, so callers
+    /// that previously paired conv with a following BatchNorm just carry redundant bias
+    /// parameters. This matches the legacy contract for the <c>useBias=true</c> case.
+    /// </summary>
+    public Conv2D(int inChannels, int outChannels, int kernelSize, int stride = 1, int padding = 0)
+    {
+        if (inChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inChannels), "inChannels must be positive.");
+        if (outChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outChannels), "outChannels must be positive.");
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize), "kernelSize must be positive.");
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride), "stride must be positive.");
+        if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding), "padding cannot be negative.");
+
         _inChannels = inChannels;
         _outChannels = outChannels;
         _kernelSize = kernelSize;
@@ -169,6 +199,13 @@ internal class MultiHeadSelfAttention<T>
 
     public MultiHeadSelfAttention(int dim, int numHeads)
     {
+        if (dim <= 0) throw new ArgumentOutOfRangeException(nameof(dim), "dim must be positive.");
+        if (numHeads <= 0) throw new ArgumentOutOfRangeException(nameof(numHeads), "numHeads must be positive.");
+        if (dim % numHeads != 0)
+            throw new ArgumentException(
+                $"dim ({dim}) must be evenly divisible by numHeads ({numHeads}); got remainder {dim % numHeads}.",
+                nameof(dim));
+
         _dim = dim;
         _numHeads = numHeads;
         _layer = new MultiHeadAttentionLayer<T>(numHeads, dim / numHeads, (Interfaces.IActivationFunction<T>?)null);

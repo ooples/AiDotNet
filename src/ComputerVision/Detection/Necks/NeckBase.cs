@@ -297,35 +297,79 @@ public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// <summary>
     /// Predicts by running the neck forward pass on a single feature map.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the underlying <see cref="Forward(List{Tensor{T}})"/> returns no
+    /// feature maps. Necks must always produce at least one output tensor; failing
+    /// fast surfaces broken neck implementations instead of propagating an empty tensor.
+    /// </exception>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         var features = Forward(new List<Tensor<T>> { input });
-        return features.Count > 0 ? features[0] : new Tensor<T>(new[] { 1, 0 });
+        if (features.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name}.Forward returned no feature maps for input shape [{string.Join(",", input.Shape)}]. " +
+                $"A detection neck must produce at least one feature map.");
+        }
+        return features[0];
     }
 
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+    /// <summary>
+    /// Detection necks (FPN, PANet, BiFPN) are not standalone-trainable: they are trained
+    /// as part of a parent detector that orchestrates the joint backbone+neck+head pass.
+    /// Calling <c>Train</c> directly on a neck is almost always a programming error.
+    /// </summary>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: detection necks are trained as part of a parent detector " +
+            "(e.g. FasterRCNN, YOLOv8) and do not support standalone Train(). " +
+            "Train the parent detection model instead.");
+    }
 
     /// <inheritdoc />
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters() => new Vector<T>(0);
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters) { }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    /// <summary>
+    /// Neck parameters live inside per-stage Conv2D wrappers and are serialized via
+    /// <c>WriteParameters</c>/<c>ReadParameters</c> on the concrete neck subclass.
+    /// The flat-vector contract is not the right shape for neck parameters, so callers
+    /// should round-trip through binary streams instead.
+    /// </summary>
+    public override Vector<T> GetParameters()
     {
-        var copy = DeepCopy();
-        ((IParameterizable<T, Tensor<T>, Tensor<T>>)copy).SetParameters(parameters);
-        return copy;
+        throw new NotSupportedException(
+            $"{GetType().Name}: necks do not expose a flat parameter vector. " +
+            "Use the concrete neck's WriteParameters(BinaryWriter) / ReadParameters(BinaryReader) " +
+            "to round-trip weights, or train as part of a parent detection model.");
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (NeckBase<T>)MemberwiseClone();
+    /// <summary>
+    /// See <see cref="GetParameters"/>.
+    /// </summary>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: necks do not accept a flat parameter vector. " +
+            "Use the concrete neck's ReadParameters(BinaryReader) to load saved weights.");
+    }
+
+    /// <summary>
+    /// See <see cref="GetParameters"/>.
+    /// </summary>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on necks. " +
+            "Use ReadParameters(BinaryReader) on a fresh instance.");
+    }
+
+    /// <summary>
+    /// Concrete necks are responsible for producing a true deep copy of their internal
+    /// Conv2D wrappers and config. Returning <see cref="object.MemberwiseClone"/> here
+    /// would silently share tensor references, so we require an explicit override.
+    /// </summary>
+    public override abstract IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy();
 
     #endregion
 }

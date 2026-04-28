@@ -302,4 +302,31 @@ public class FPN<T> : NeckBase<T>
         }
         return result;
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Produces a true deep copy by reconstructing a fresh instance with the same input/output
+    /// channel configuration and round-tripping all weights through the binary
+    /// <see cref="WriteParameters(BinaryWriter)"/>/<see cref="ReadParameters(BinaryReader)"/> path.
+    /// This guarantees every internal <see cref="Tensor{T}"/> in <c>_lateralWeights</c>,
+    /// <c>_lateralBiases</c>, <c>_outputWeights</c>, and <c>_outputBiases</c> is a fresh
+    /// allocation, so subsequent mutations on the original do not affect the clone.
+    /// </remarks>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        var clone = new FPN<T>((int[])_inputChannels.Clone(), _outputChannels);
+        using (var ms = new MemoryStream())
+        {
+            using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+            {
+                WriteParameters(writer);
+            }
+            ms.Position = 0;
+            using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+            {
+                clone.ReadParameters(reader);
+            }
+        }
+        return clone;
+    }
 }

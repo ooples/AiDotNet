@@ -69,8 +69,7 @@ public class ResNet<T> : BackboneBase<T>
             outChannels: 64,
             kernelSize: 7,
             stride: 2,
-            padding: 3,
-            useBias: false
+            padding: 3
         );
 
         // Get block counts for this variant
@@ -356,8 +355,7 @@ internal class ResidualBlock<T>
                 outChannels: outChannels,
                 kernelSize: 1,
                 stride: 1,
-                padding: 0,
-                useBias: false
+                padding: 0
             );
 
             _conv2 = new Conv2D<T>(
@@ -365,8 +363,7 @@ internal class ResidualBlock<T>
                 outChannels: outChannels,
                 kernelSize: 3,
                 stride: stride,
-                padding: 1,
-                useBias: false
+                padding: 1
             );
 
             _conv3 = new Conv2D<T>(
@@ -374,8 +371,7 @@ internal class ResidualBlock<T>
                 outChannels: outChannels * expansion,
                 kernelSize: 1,
                 stride: 1,
-                padding: 0,
-                useBias: false
+                padding: 0
             );
         }
         else
@@ -386,8 +382,7 @@ internal class ResidualBlock<T>
                 outChannels: outChannels,
                 kernelSize: 3,
                 stride: stride,
-                padding: 1,
-                useBias: false
+                padding: 1
             );
 
             _conv2 = new Conv2D<T>(
@@ -395,8 +390,7 @@ internal class ResidualBlock<T>
                 outChannels: outChannels * expansion,
                 kernelSize: 3,
                 stride: 1,
-                padding: 1,
-                useBias: false
+                padding: 1
             );
         }
 
@@ -407,8 +401,7 @@ internal class ResidualBlock<T>
                 outChannels: outChannels * expansion,
                 kernelSize: 1,
                 stride: stride,
-                padding: 0,
-                useBias: false
+                padding: 0
             );
         }
     }
