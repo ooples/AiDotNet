@@ -135,11 +135,10 @@ public class ConvolutionalLayersIntegrationTests
     public async Task DilatedConvolutionalLayer_Forward_ProducesValidOutput()
     {
         // Arrange: dilation=2 increases receptive field without increasing parameters
-        // Constructor: (inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, dilation, stride, padding, activation)
+        // Constructor (lazy): (outputDepth, kernelSize, dilation, stride, padding, activation)
         IActivationFunction<double> relu = new ReLUActivation<double>();
         var layer = new DilatedConvolutionalLayer<double>(
-            inputDepth: 3, outputDepth: 8, kernelSize: 3,
-            inputHeight: 16, inputWidth: 16, dilation: 2,
+            outputDepth: 8, kernelSize: 3, dilation: 2,
             stride: 1, padding: 2, activation: relu);
 
         var input = Tensor<double>.CreateRandom(3, 16, 16);
@@ -160,8 +159,7 @@ public class ConvolutionalLayersIntegrationTests
         // Arrange: dilation=4 for very large receptive field
         IActivationFunction<double> relu = new ReLUActivation<double>();
         var layer = new DilatedConvolutionalLayer<double>(
-            inputDepth: 1, outputDepth: 4, kernelSize: 3,
-            inputHeight: 32, inputWidth: 32, dilation: 4,
+            outputDepth: 4, kernelSize: 3, dilation: 4,
             stride: 1, padding: 4, activation: relu);
 
         var input = Tensor<double>.CreateRandom(1, 32, 32);

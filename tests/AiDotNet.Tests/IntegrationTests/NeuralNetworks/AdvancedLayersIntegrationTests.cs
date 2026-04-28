@@ -2635,9 +2635,9 @@ public class AdvancedLayersIntegrationTests
         int width = 32;
         int kernelSize = 3;
         int dilation = 2;
-        // Constructor: (inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, dilation, stride, padding, activation)
+        // Constructor (lazy): (outputDepth, kernelSize, dilation, stride, padding, activation)
         var layer = new DilatedConvolutionalLayer<float>(
-            inputChannels, outputChannels, kernelSize, height, width, dilation, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
+            outputChannels, kernelSize, dilation, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
 
         // Input: [batch, channels, height, width]
         var input = Tensor<float>.CreateRandom([2, inputChannels, height, width]);
@@ -2661,9 +2661,9 @@ public class AdvancedLayersIntegrationTests
         int width = 16;
         int kernelSize = 3;
         int dilation = 2;
-        // Constructor: (inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, dilation, stride, padding, activation)
+        // Constructor (lazy): (outputDepth, kernelSize, dilation, stride, padding, activation)
         var original = new DilatedConvolutionalLayer<float>(
-            inputChannels, outputChannels, kernelSize, height, width, dilation, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
+            outputChannels, kernelSize, dilation, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
         var input = Tensor<float>.CreateRandom([1, inputChannels, height, width]);
 
         // Act
