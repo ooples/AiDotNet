@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "4, 4, 1, 2, 3, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "2, 3, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public partial class LocallyConnectedLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -165,7 +165,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     /// For example, if processing 28x28 images, this would be 28.
     /// </para>
     /// </remarks>
-    private readonly int _inputHeight;
+    private int _inputHeight;
 
     /// <summary>
     /// The width of the input tensor.
@@ -179,7 +179,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     /// For example, if processing 28x28 images, this would be 28.
     /// </para>
     /// </remarks>
-    private readonly int _inputWidth;
+    private int _inputWidth;
 
     /// <summary>
     /// The number of channels in the input tensor.
@@ -196,7 +196,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     /// - For hidden layers: However many features the previous layer produced
     /// </para>
     /// </remarks>
-    private readonly int _inputChannels;
+    private int _inputChannels;
 
     /// <summary>
     /// The height of the output tensor.
@@ -215,7 +215,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     /// It's calculated as: (inputHeight - kernelSize) / stride + 1
     /// </para>
     /// </remarks>
-    private readonly int _outputHeight;
+    private int _outputHeight;
 
     /// <summary>
     /// The width of the output tensor.
@@ -234,7 +234,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     /// It's calculated as: (inputWidth - kernelSize) / stride + 1
     /// </para>
     /// </remarks>
-    private readonly int _outputWidth;
+    private int _outputWidth;
 
     /// <summary>
     /// The number of channels in the output tensor.
@@ -357,40 +357,30 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public LocallyConnectedLayer(
-        int inputHeight,
-        int inputWidth,
-        int inputChannels,
         int outputChannels,
         int kernelSize,
         int stride,
         IActivationFunction<T>? activationFunction = null)
         : base(
-            [inputHeight, inputWidth, inputChannels],
-            [
-                (inputHeight - kernelSize) / stride + 1,
-                (inputWidth - kernelSize) / stride + 1,
-                outputChannels
-            ],
+            [-1, -1, -1],
+            [-1, -1, outputChannels],
             activationFunction ?? new ReLUActivation<T>())
     {
-        _inputHeight = inputHeight;
-        _inputWidth = inputWidth;
-        _inputChannels = inputChannels;
-        _outputHeight = (inputHeight - kernelSize) / stride + 1;
-        _outputWidth = (inputWidth - kernelSize) / stride + 1;
+        if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
+
+        _inputHeight = -1;
+        _inputWidth = -1;
+        _inputChannels = -1;
+        _outputHeight = -1;
+        _outputWidth = -1;
         _outputChannels = outputChannels;
         _kernelSize = kernelSize;
         _stride = stride;
 
-        // Initialize weights and biases
-        _weights = new Tensor<T>([_outputHeight, _outputWidth, _outputChannels, _kernelSize, _kernelSize, _inputChannels]);
-        _biases = new Tensor<T>([_outputChannels]);
-
-        InitializeParameters();
-
-        // Register tensors for GPU memory persistence
-        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        _weights = new Tensor<T>([0, 0, 0, 0, 0, 0]);
+        _biases = new Tensor<T>([0]);
     }
 
     /// <summary>
@@ -422,40 +412,59 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public LocallyConnectedLayer(
-        int inputHeight,
-        int inputWidth,
-        int inputChannels,
         int outputChannels,
         int kernelSize,
         int stride,
-        IVectorActivationFunction<T>? vectorActivationFunction = null)
+        IVectorActivationFunction<T> vectorActivationFunction)
         : base(
-            [inputHeight, inputWidth, inputChannels],
-            [
-                (inputHeight - kernelSize) / stride + 1,
-                (inputWidth - kernelSize) / stride + 1,
-                outputChannels
-            ],
+            [-1, -1, -1],
+            [-1, -1, outputChannels],
             vectorActivationFunction ?? new ReLUActivation<T>())
     {
-        _inputHeight = inputHeight;
-        _inputWidth = inputWidth;
-        _inputChannels = inputChannels;
-        _outputHeight = (inputHeight - kernelSize) / stride + 1;
-        _outputWidth = (inputWidth - kernelSize) / stride + 1;
+        if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
+
+        _inputHeight = -1;
+        _inputWidth = -1;
+        _inputChannels = -1;
+        _outputHeight = -1;
+        _outputWidth = -1;
         _outputChannels = outputChannels;
         _kernelSize = kernelSize;
         _stride = stride;
 
-        // Initialize weights and biases
+        _weights = new Tensor<T>([0, 0, 0, 0, 0, 0]);
+        _biases = new Tensor<T>([0]);
+    }
+
+    /// <summary>
+    /// Resolves spatial dims and allocates per-position weights on first forward.
+    /// Output dim per axis: (input - kernelSize) / stride + 1. Layout is [H, W, C].
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        int b, h, w, c;
+        if (rank == 4) { b = input.Shape[0]; h = input.Shape[1]; w = input.Shape[2]; c = input.Shape[3]; }
+        else if (rank == 3) { b = 1; h = input.Shape[0]; w = input.Shape[1]; c = input.Shape[2]; }
+        else throw new ArgumentException(
+            $"LocallyConnectedLayer requires rank-3 [H,W,C] or rank-4 [B,H,W,C] input; got rank {rank}.",
+            nameof(input));
+
+        _inputHeight = h;
+        _inputWidth = w;
+        _inputChannels = c;
+        _outputHeight = (h - _kernelSize) / _stride + 1;
+        _outputWidth = (w - _kernelSize) / _stride + 1;
+
         _weights = new Tensor<T>([_outputHeight, _outputWidth, _outputChannels, _kernelSize, _kernelSize, _inputChannels]);
         _biases = new Tensor<T>([_outputChannels]);
-
         InitializeParameters();
-
-        // Register tensors for GPU memory persistence
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+        ResolveShapes(new[] { h, w, c }, new[] { _outputHeight, _outputWidth, _outputChannels });
     }
 
     /// <summary>
@@ -531,6 +540,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;

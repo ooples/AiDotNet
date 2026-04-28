@@ -2930,7 +2930,7 @@ public class AdvancedLayersIntegrationTests
         int kernelSize = 3;
         int stride = 1;
         var layer = new LocallyConnectedLayer<float>(
-            inputHeight, inputWidth, inputChannels, outputChannels, kernelSize, stride,
+            outputChannels, kernelSize, stride,
             (IActivationFunction<float>)new ReLUActivation<float>());
 
         // LocallyConnectedLayer expects NHWC format: [batch, height, width, channels]
@@ -2955,7 +2955,7 @@ public class AdvancedLayersIntegrationTests
         int kernelSize = 3;
         int stride = 1;
         var original = new LocallyConnectedLayer<float>(
-            inputHeight, inputWidth, inputChannels, outputChannels, kernelSize, stride,
+            outputChannels, kernelSize, stride,
             (IActivationFunction<float>)new ReLUActivation<float>());
         // LocallyConnectedLayer expects NHWC format: [batch, height, width, channels]
         var input = Tensor<float>.CreateRandom([1, inputHeight, inputWidth, inputChannels]);
