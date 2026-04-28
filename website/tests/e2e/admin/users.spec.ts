@@ -63,21 +63,30 @@ test.describe('Admin — users', () => {
       })
       .toBeLessThanOrEqual(totalBefore);
 
-    // Snapshot all row text atomically via allTextContents() instead of
-    // iterating with `visibleRows.nth(i).toContainText` — the per-row
-    // poll races with the async re-render: renderTable() awaits
-    // loadKeyCountsForPage() and replaces innerHTML mid-loop, so a row
-    // captured by count() can disappear by the time the toContainText
-    // assertion polls for it (the failure was "waiting for
-    // locator('#users-body tr').nth(4)" timing out at i=4 even though
-    // count() returned >= 5).
-    const rowTexts = await page.locator('#users-body tr').allTextContents();
+    // Snapshot the role cell from each row atomically via
+    // allTextContents() — read the 2nd <td> in each row (the role
+    // column per pages/admin/users/index.astro:241-243), not the whole
+    // row. Whole-row matching false-passes when an unrelated column
+    // happens to contain "admin" (e.g., a username "admin@…"). The
+    // atomic snapshot also avoids the per-row toContainText race:
+    // renderTable() awaits loadKeyCountsForPage() and replaces
+    // innerHTML mid-loop, so a row captured by count() can disappear
+    // before the next assertion polls for it (prior failure was
+    // "waiting for locator('#users-body tr').nth(4)" timing out at
+    // i=4 even though count() returned >= 5).
+    //
+    // The DB stores role as lowercase 'admin' or 'user' (loaded via
+    // profiles.select('role') and rendered with escapeHtml(role)
+    // unchanged), so match the exact lowercase string after trim.
+    const roleCellTexts = await page
+      .locator('#users-body tr td:nth-child(2)')
+      .allTextContents();
     expect(
-      rowTexts.length,
+      roleCellTexts.length,
       'filter=admin must return at least the signed-in admin; zero rows indicates a broken filter or a rolled-back profiles.role'
     ).toBeGreaterThanOrEqual(1);
-    for (const text of rowTexts) {
-      expect(text).toMatch(/admin/i);
+    for (const text of roleCellTexts) {
+      expect(text.trim()).toMatch(/^admin$/i);
     }
   });
 });
