@@ -2836,7 +2836,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [4, 8, 16];
         int axis = 1; // Mean over axis 1
-        var layer = new MeanLayer<float>(inputShape, axis);
+        var layer = new MeanLayer<float>(axis);
 
         var input = Tensor<float>.CreateRandom([2, 4, 8, 16]);
 
@@ -2853,7 +2853,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [4, 8];
         int axis = 0;
-        var original = new MeanLayer<float>(inputShape, axis);
+        var original = new MeanLayer<float>(axis);
         var input = Tensor<float>.CreateRandom([2, 4, 8]);
 
         // Act

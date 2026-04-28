@@ -1510,7 +1510,7 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(hidden2, encoderOutputSize, new IdentityActivation<T>() as IActivationFunction<T>);
 
             // Mean and LogVariance layers
-            yield return new MeanLayer<T>([encoderOutputSize], axis: 0);
+            yield return new MeanLayer<T>(0);
             yield return new LogVarianceLayer<T>([encoderOutputSize], axis: 0);
 
             // Decoder layers (mirror of encoder)
@@ -1549,7 +1549,7 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(pooledSize / 2, encoderOutputSize, new IdentityActivation<T>() as IActivationFunction<T>);
 
             // Mean and LogVariance layers
-            yield return new MeanLayer<T>([encoderOutputSize], axis: 0);
+            yield return new MeanLayer<T>(0);
             yield return new LogVarianceLayer<T>([encoderOutputSize], axis: 0);
 
             // Decoder layers
