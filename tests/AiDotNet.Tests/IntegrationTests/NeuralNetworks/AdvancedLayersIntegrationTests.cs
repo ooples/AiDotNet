@@ -4043,7 +4043,7 @@ public class AdvancedLayersIntegrationTests
         int numCapsules = 10;
         int capsuleDimension = 16;
         int numRoutingIterations = 3;
-        var layer = new CapsuleLayer<float>(inputCapsules, inputDimension, numCapsules, capsuleDimension, numRoutingIterations);
+        var layer = new CapsuleLayer<float>(numCapsules, capsuleDimension, numRoutingIterations);
 
         // Input: [batch, inputCapsules, inputDimension]
         var input = Tensor<float>.CreateRandom([2, inputCapsules, inputDimension]);
@@ -4065,7 +4065,7 @@ public class AdvancedLayersIntegrationTests
         int numCapsules = 5;
         int capsuleDimension = 8;
         int numRoutingIterations = 2;
-        var original = new CapsuleLayer<float>(inputCapsules, inputDimension, numCapsules, capsuleDimension, numRoutingIterations);
+        var original = new CapsuleLayer<float>(numCapsules, capsuleDimension, numRoutingIterations);
         var input = Tensor<float>.CreateRandom([1, inputCapsules, inputDimension]);
 
         // Act
