@@ -879,7 +879,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange - 3D pooling for volumetric data [channels, depth, height, width]
         int[] inputShape = [3, 8, 8, 8]; // C, D, H, W
         int poolSize = 2;
-        var layer = new MaxPool3DLayer<float>(inputShape, poolSize);
+        var layer = new MaxPool3DLayer<float>(poolSize);
 
         var input = Tensor<float>.CreateRandom([2, 3, 8, 8, 8]); // [batch, C, D, H, W]
 
@@ -901,7 +901,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange - input shape must be [channels, depth, height, width]
         int[] inputShape = [2, 4, 4, 4];
-        var original = new MaxPool3DLayer<float>(inputShape, 2);
+        var original = new MaxPool3DLayer<float>(2);
         var input = Tensor<float>.CreateRandom([1, 2, 4, 4, 4]);
 
         // Act

@@ -4039,7 +4039,6 @@ public static class LayerHelper<T>
             if (currentResolution >= 2)
             {
                 yield return new MaxPool3DLayer<T>(
-                    inputShape: [outputFilters, currentResolution, currentResolution, currentResolution],
                     poolSize: 2,
                     stride: 2);
                 currentResolution /= 2;
@@ -4157,7 +4156,6 @@ public static class LayerHelper<T>
             if (block < numEncoderBlocks - 1)
             {
                 yield return new MaxPool3DLayer<T>(
-                    inputShape: [outputFilters, currentResolution, currentResolution, currentResolution],
                     poolSize: 2,
                     stride: 2);
                 currentResolution /= 2;
