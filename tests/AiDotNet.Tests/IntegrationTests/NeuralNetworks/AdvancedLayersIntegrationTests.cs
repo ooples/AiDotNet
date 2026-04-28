@@ -2694,7 +2694,7 @@ public class AdvancedLayersIntegrationTests
         // SeparableConvolutionalLayer uses NHWC format: inputShape = [batch, height, width, channels]
         int[] inputShape = [batchSize, height, width, inputChannels];
         var layer = new SeparableConvolutionalLayer<float>(
-            inputShape, outputChannels, kernelSize, 1, 0, (IActivationFunction<float>)new IdentityActivation<float>());
+            outputChannels, kernelSize, 1, 0, (IActivationFunction<float>)new IdentityActivation<float>());
 
         // Input tensor matches inputShape: [batch, height, width, channels]
         var input = Tensor<float>.CreateRandom(inputShape);
@@ -2720,7 +2720,7 @@ public class AdvancedLayersIntegrationTests
         // SeparableConvolutionalLayer uses NHWC format: inputShape = [batch, height, width, channels]
         int[] inputShape = [batchSize, height, width, inputChannels];
         var original = new SeparableConvolutionalLayer<float>(
-            inputShape, outputChannels, kernelSize, 1, 0, (IActivationFunction<float>)new IdentityActivation<float>());
+            outputChannels, kernelSize, 1, 0, (IActivationFunction<float>)new IdentityActivation<float>());
         var input = Tensor<float>.CreateRandom(inputShape);
 
         // Act

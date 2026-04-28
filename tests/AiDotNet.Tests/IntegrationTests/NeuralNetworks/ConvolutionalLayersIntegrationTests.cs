@@ -206,11 +206,10 @@ public class ConvolutionalLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SeparableConvolutionalLayer_Forward_ProducesValidOutput()
     {
-        // Arrange - inputShape is [batch, height, width, channels]
-        int[] inputShape = [1, 8, 8, 3];
+        // Arrange - lazy ctor, NHWC input via forward
         IActivationFunction<double> relu = new ReLUActivation<double>();
         var layer = new SeparableConvolutionalLayer<double>(
-            inputShape: inputShape, outputDepth: 16, kernelSize: 3,
+            outputDepth: 16, kernelSize: 3,
             stride: 1, padding: 1, scalarActivation: relu);
 
         var input = Tensor<double>.CreateRandom(1, 8, 8, 3);

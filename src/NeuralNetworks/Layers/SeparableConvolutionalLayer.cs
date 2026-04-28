@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 8, 8, 1", TestConstructorArgs = "new[] { 1, 8, 8, 1 }, 2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 8, 8, 1", TestConstructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -174,7 +174,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// For example, an RGB image has 3 channels (red, green, blue), while a grayscale image has just 1 channel.
     /// </para>
     /// </remarks>
-    private readonly int _inputDepth;
+    private int _inputDepth;
 
     /// <summary>
     /// Number of channels in the output tensor.
@@ -385,30 +385,24 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// can detect more varieties of patterns.
     /// </para>
     /// </remarks>
-    public SeparableConvolutionalLayer(int[] inputShape, int outputDepth, int kernelSize, int stride = 1, int padding = 0, IActivationFunction<T>? scalarActivation = null)
-        : base(inputShape, CalculateOutputShape(inputShape, outputDepth, kernelSize, stride, padding), scalarActivation ?? new IdentityActivation<T>())
+    public SeparableConvolutionalLayer(int outputDepth, int kernelSize, int stride = 1, int padding = 0, IActivationFunction<T>? scalarActivation = null)
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, outputDepth },
+               scalarActivation ?? new IdentityActivation<T>())
     {
-        _inputDepth = inputShape[3];
+        if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth));
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
+        if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding));
+
+        _inputDepth = -1;
         _outputDepth = outputDepth;
         _kernelSize = kernelSize;
         _stride = stride;
         _padding = padding;
 
-        // Initialize depthwise kernels
-        _depthwiseKernels = new Tensor<T>([_inputDepth, _kernelSize, _kernelSize, 1]);
-
-        // Initialize pointwise kernels
-        _pointwiseKernels = new Tensor<T>([_inputDepth, 1, 1, _outputDepth]);
-
-        // Initialize biases
-        _biases = new Tensor<T>([_outputDepth]);
-
-        InitializeParameters();
-
-        // Register trainable parameters for GPU memory persistence
-        RegisterTrainableParameter(_depthwiseKernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_pointwiseKernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        _depthwiseKernels = new Tensor<T>([0, 0, 0, 0]);
+        _pointwiseKernels = new Tensor<T>([0, 0, 0, 0]);
+        _biases = new Tensor<T>([0]);
     }
 
     /// <summary>
@@ -440,30 +434,53 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// for their neural networks.
     /// </para>
     /// </remarks>
-    public SeparableConvolutionalLayer(int[] inputShape, int outputDepth, int kernelSize, int stride = 1, int padding = 0, IVectorActivationFunction<T>? vectorActivation = null)
-        : base(inputShape, CalculateOutputShape(inputShape, outputDepth, kernelSize, stride, padding), vectorActivation ?? new IdentityActivation<T>())
+    public SeparableConvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding, IVectorActivationFunction<T> vectorActivation)
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, outputDepth },
+               vectorActivation ?? new IdentityActivation<T>())
     {
-        _inputDepth = inputShape[3];
+        if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth));
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
+        if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding));
+
+        _inputDepth = -1;
         _outputDepth = outputDepth;
         _kernelSize = kernelSize;
         _stride = stride;
         _padding = padding;
 
-        // Initialize depthwise kernels
+        _depthwiseKernels = new Tensor<T>([0, 0, 0, 0]);
+        _pointwiseKernels = new Tensor<T>([0, 0, 0, 0]);
+        _biases = new Tensor<T>([0]);
+    }
+
+    /// <summary>
+    /// Resolves input depth from input.Shape (NHWC last axis) and output spatial dims on first forward.
+    /// Output dim per axis: (input - kernelSize + 2 * padding) / stride + 1.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        int b, h, w, c;
+        if (rank == 4) { b = input.Shape[0]; h = input.Shape[1]; w = input.Shape[2]; c = input.Shape[3]; }
+        else if (rank == 3) { b = 1; h = input.Shape[0]; w = input.Shape[1]; c = input.Shape[2]; }
+        else throw new ArgumentException(
+            $"SeparableConvolutionalLayer requires rank-3 [H,W,C] or rank-4 [B,H,W,C] input; got rank {rank}.",
+            nameof(input));
+
+        _inputDepth = c;
+        int outH = (h - _kernelSize + 2 * _padding) / _stride + 1;
+        int outW = (w - _kernelSize + 2 * _padding) / _stride + 1;
+
         _depthwiseKernels = new Tensor<T>([_inputDepth, _kernelSize, _kernelSize, 1]);
-
-        // Initialize pointwise kernels
         _pointwiseKernels = new Tensor<T>([_inputDepth, 1, 1, _outputDepth]);
-
-        // Initialize biases
         _biases = new Tensor<T>([_outputDepth]);
-
         InitializeParameters();
-
-        // Register trainable parameters for GPU memory persistence
         RegisterTrainableParameter(_depthwiseKernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_pointwiseKernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+        ResolveShapes(new[] { b, h, w, c }, new[] { b, outH, outW, _outputDepth });
     }
 
     /// <summary>
@@ -601,6 +618,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
 
         // Convert input from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
