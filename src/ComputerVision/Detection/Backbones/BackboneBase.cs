@@ -194,8 +194,15 @@ public abstract class BackboneBase<T> : NeuralNetworkBase<T>, AiDotNet.Interface
     }
 
     /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => (BackboneBase<T>)MemberwiseClone();
+    /// <remarks>
+    /// Concrete backbones (ResNet, CSPDarknet, EfficientNet, SwinTransformer) MUST
+    /// implement this by constructing a brand-new instance with their configured
+    /// variant/channel-multiplier parameters — <see cref="object.MemberwiseClone"/>
+    /// would alias the internal Conv2D / Dense / MultiHeadSelfAttention wrappers and
+    /// every nested tensor, so any framework path that deserializes into the returned
+    /// instance would also mutate the original model.
+    /// </remarks>
+    protected abstract override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance();
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>

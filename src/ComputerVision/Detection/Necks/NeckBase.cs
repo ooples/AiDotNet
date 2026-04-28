@@ -174,8 +174,12 @@ public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        int outHeight = height / 2;
-        int outWidth = width / 2;
+        // Use ceiling division so a 5x5 input produces a 3x3 output (matching the
+        // dynamic-spatial pyramid alignment used elsewhere). Floor division would
+        // silently drop the last row/column for odd-sized features and break
+        // multi-scale detection heads at non-power-of-two input sizes.
+        int outHeight = (height + 1) / 2;
+        int outWidth = (width + 1) / 2;
 
         var output = new Tensor<T>(new[] { batch, channels, outHeight, outWidth });
 
@@ -187,15 +191,27 @@ public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
                 {
                     for (int w = 0; w < outWidth; w++)
                     {
-                        // Max pooling 2x2
-                        T maxVal = input[b, c, h * 2, w * 2];
-                        T val1 = input[b, c, h * 2, w * 2 + 1];
-                        T val2 = input[b, c, h * 2 + 1, w * 2];
-                        T val3 = input[b, c, h * 2 + 1, w * 2 + 1];
-
-                        if (NumOps.GreaterThan(val1, maxVal)) maxVal = val1;
-                        if (NumOps.GreaterThan(val2, maxVal)) maxVal = val2;
-                        if (NumOps.GreaterThan(val3, maxVal)) maxVal = val3;
+                        int srcRow = h * 2;
+                        int srcCol = w * 2;
+                        // Max pooling 2x2 with bounds-checked sampling: the right/bottom
+                        // edge of an odd-sized window covers fewer than 4 source cells,
+                        // so we take the max only over the in-bounds entries.
+                        T maxVal = input[b, c, srcRow, srcCol];
+                        if (srcCol + 1 < width)
+                        {
+                            T v = input[b, c, srcRow, srcCol + 1];
+                            if (NumOps.GreaterThan(v, maxVal)) maxVal = v;
+                        }
+                        if (srcRow + 1 < height)
+                        {
+                            T v = input[b, c, srcRow + 1, srcCol];
+                            if (NumOps.GreaterThan(v, maxVal)) maxVal = v;
+                        }
+                        if (srcRow + 1 < height && srcCol + 1 < width)
+                        {
+                            T v = input[b, c, srcRow + 1, srcCol + 1];
+                            if (NumOps.GreaterThan(v, maxVal)) maxVal = v;
+                        }
 
                         output[b, c, h, w] = maxVal;
                     }

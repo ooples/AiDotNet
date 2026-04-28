@@ -581,10 +581,20 @@ public class BiFPN<T> : NeckBase<T>
     /// </summary>
     private static void CopyTensorInto(Tensor<T> src, Tensor<T> dst)
     {
-        if (src.Length != dst.Length)
+        if (src.Rank != dst.Rank || src.Length != dst.Length)
         {
             throw new InvalidOperationException(
-                $"DeepCopy tensor shape mismatch: src.Length={src.Length}, dst.Length={dst.Length}.");
+                $"DeepCopy tensor shape mismatch: src=[{string.Join(",", src._shape)}], " +
+                $"dst=[{string.Join(",", dst._shape)}].");
+        }
+        for (int i = 0; i < src.Rank; i++)
+        {
+            if (src._shape[i] != dst._shape[i])
+            {
+                throw new InvalidOperationException(
+                    $"DeepCopy tensor shape mismatch at axis {i}: src=[{string.Join(",", src._shape)}], " +
+                    $"dst=[{string.Join(",", dst._shape)}].");
+            }
         }
         for (int i = 0; i < src.Length; i++)
         {

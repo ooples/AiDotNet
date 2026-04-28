@@ -85,12 +85,16 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// </list>
     /// </remarks>
     /// <remarks>
-    /// The default uses <see cref="ReflectInstanceLayers"/> so that <c>Dispose</c>
-    /// reaches owned layers automatically; predictors that want zero reflection
-    /// cost should override this with explicit yields.
+    /// The default is empty: returning <see cref="ReflectInstanceLayers"/> as the
+    /// default would also enumerate injected/shared layers, and the first predictor
+    /// to dispose would tear down dependencies that other models still need.
+    /// <see cref="DisposeOnceGuard"/> only protects against double-dispose, not against
+    /// disposing a borrowed layer. Concrete predictors must opt in to owned-layer
+    /// enumeration by overriding this with either explicit field yields (recommended)
+    /// or <c>ReflectInstanceLayers(this)</c> when they own every reachable layer.
     /// </remarks>
     protected virtual IEnumerable<ILayer<T>> EnumerateLayers() =>
-        ReflectInstanceLayers(this);
+        Enumerable.Empty<ILayer<T>>();
 
     /// <summary>
     /// Walks an object's instance fields and yields anything that implements
@@ -463,11 +467,22 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Noise predictors are timestep-conditional: the model's output for the same input
+    /// at <c>t = 0</c> is different from the output at <c>t = 999</c>. Picking an
+    /// arbitrary default (the previous behavior of <c>t = 500</c>) returns the wrong
+    /// function for any scheduler whose noise schedule isn't centered on that timestep.
+    /// Callers must use <see cref="PredictNoise"/> directly with an explicit timestep
+    /// (and conditioning context, if applicable) instead.
+    /// </remarks>
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
-        // Suppress tape recording during inference
-        using var _ = new NoGradScope<T>();
-        return PredictNoise(input, 500, null);
+        throw new NotSupportedException(
+            $"{GetType().Name}: noise predictors are timestep-conditional and have no " +
+            "meaningful single-tensor Predict(input) default. Call PredictNoise(input, " +
+            "timestep, context?) directly with an explicit timestep, or run inference " +
+            "through the parent diffusion model's sampling loop which orchestrates the " +
+            "full timestep schedule.");
     }
 
     /// <inheritdoc />

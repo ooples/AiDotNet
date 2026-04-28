@@ -84,11 +84,14 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
     private Vector<T> _importanceScores;
 
     /// <summary>
-    /// Threshold for pruning singular values based on importance.
+    /// Pruning fraction (0.0–1.0): the bottom <c>_rankPruningThreshold</c> fraction of
+    /// active components, ranked by importance score, is dropped on each prune cycle.
     /// </summary>
     /// <remarks>
-    /// Components with importance scores below this threshold are candidates for pruning.
-    /// This value is typically set as a small fraction (e.g., 0.01 to 0.1).
+    /// Despite the historic "threshold" name, this is a count-based percentile, not a
+    /// score comparison: with <c>_rankPruningThreshold = 0.1</c>, the 10% lowest-scoring
+    /// components are pruned regardless of their absolute score values. Typical values
+    /// are 0.01–0.1. <see cref="_minRank"/> caps how aggressively this can shrink rank.
     /// </remarks>
     private readonly double _rankPruningThreshold;
 
@@ -307,6 +310,17 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
         int inputSize = matrixA.Rows;
         int outputSize = matrixB.Columns;
 
+        // Bail out before computing magnitudes if the gradient cache is empty —
+        // happens when UpdateImportanceScores fires before any backward pass has
+        // populated gradients (e.g., the very first PruningInterval-th forward in
+        // training mode). Indexing into a zero-length vector below would otherwise
+        // throw IndexOutOfRangeException.
+        int expectedGradLength = inputSize * _maxRank + _maxRank * outputSize;
+        if (loraGradients == null || loraGradients.Length < expectedGradLength)
+        {
+            return;
+        }
+
         // For each ACTIVE rank component (physical index in _activeIndices), compute the
         // gradient magnitude. We must use the physical index r, not the compacted slot,
         // because matrices A and B retain original-rank layout — column r of A and row r
@@ -411,8 +425,21 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
             _importanceScores[r] = NumOps.Zero;
         }
 
-        // Pack matrix A then matrix B back into the layer's flat parameter vector.
-        Vector<T> loraParams = new Vector<T>(_loraLayer.ParameterCount);
+        SyncMatricesToParameters(matrixA, matrixB);
+
+        _activeIndices = newActive;
+        _currentRank = componentsToKeep;
+    }
+
+    /// <summary>
+    /// Packs the current matrix A and matrix B values into the LoRA layer's flat
+    /// parameter vector while preserving any tail parameters (biases, scale factors)
+    /// that exist beyond the two matrices. Starting from a zero vector instead of
+    /// <see cref="ILayer{T}.GetParameters"/> would silently zero those tail params.
+    /// </summary>
+    private void SyncMatricesToParameters(Matrix<T> matrixA, Matrix<T> matrixB)
+    {
+        Vector<T> loraParams = _loraLayer.GetParameters();
         int idx = 0;
         for (int i = 0; i < matrixA.Rows; i++)
             for (int j = 0; j < matrixA.Columns; j++)
@@ -421,9 +448,6 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
             for (int j = 0; j < matrixB.Columns; j++)
                 loraParams[idx++] = matrixB[i, j];
         _loraLayer.SetParameters(loraParams);
-
-        _activeIndices = newActive;
-        _currentRank = componentsToKeep;
     }
 
     /// <summary>
@@ -483,16 +507,7 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
             _activeIndices.Add(r);
         }
 
-        // Pack matrix A then matrix B back into the layer's flat parameter vector.
-        Vector<T> loraParams = new Vector<T>(_loraLayer.ParameterCount);
-        int idx = 0;
-        for (int i = 0; i < matrixA.Rows; i++)
-            for (int j = 0; j < matrixA.Columns; j++)
-                loraParams[idx++] = matrixA[i, j];
-        for (int i = 0; i < matrixB.Rows; i++)
-            for (int j = 0; j < matrixB.Columns; j++)
-                loraParams[idx++] = matrixB[i, j];
-        _loraLayer.SetParameters(loraParams);
+        SyncMatricesToParameters(matrixA, matrixB);
 
         _currentRank = newRank;
     }

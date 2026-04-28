@@ -411,17 +411,31 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         // Compute test gradient at current parameters
         var testGradient = ComputeGradient(testInput, new Vector<T>(new[] { testLabel }));
 
-        // For each checkpoint, compute dot product contribution
+        // For each checkpoint, compute dot product contribution.
         foreach (var checkpointGrad in checkpointGradients)
         {
             if (checkpointGrad.Rows != numTrainingSamples)
-                throw new ArgumentException("Checkpoint gradients must have same number of rows as training data.");
+                throw new ArgumentException(
+                    $"Checkpoint gradient matrix has {checkpointGrad.Rows} rows but " +
+                    $"trainingData has {numTrainingSamples} rows.",
+                    nameof(checkpointGradients));
+
+            // Reject checkpoints whose parameter width doesn't exactly match the test
+            // gradient — silent truncation via Math.Min would produce numerically valid
+            // but mathematically wrong TracIn scores for any model whose parameter count
+            // changed between checkpoints (lazy-resolution growth, rank changes, etc.).
+            if (checkpointGrad.Columns != testGradient.Length)
+                throw new ArgumentException(
+                    $"Checkpoint gradient parameter width ({checkpointGrad.Columns}) does " +
+                    $"not match the test gradient parameter width ({testGradient.Length}). " +
+                    "TracIn requires every checkpoint snapshot to share the same parameter " +
+                    "vector layout as the model at scoring time.",
+                    nameof(checkpointGradients));
 
             for (int i = 0; i < numTrainingSamples; i++)
             {
                 double dot = 0;
-                int gradLen = Math.Min(testGradient.Length, checkpointGrad.Columns);
-                for (int j = 0; j < gradLen; j++)
+                for (int j = 0; j < testGradient.Length; j++)
                 {
                     dot += NumOps.ToDouble(testGradient[j]) * NumOps.ToDouble(checkpointGrad[i, j]);
                 }
@@ -584,35 +598,27 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
     /// <summary>
     /// Computes Hessian-vector product for a single sample.
     /// </summary>
+    /// <remarks>
+    /// Influence functions require a parameter-space Hessian-vector product:
+    /// <c>H_θ * v</c> where <c>H_θ = ∂²L/∂θ²</c>. The previous implementation perturbed
+    /// the <i>input</i> instead of the parameters and only iterated <c>input.Length</c>
+    /// dimensions, which silently skipped most of the parameter vector and produced
+    /// numerically valid but mathematically wrong IHVPs. AiDotNet does not currently
+    /// expose a generic per-sample parameter-Hessian path, so this method now fails
+    /// fast with <see cref="NotSupportedException"/> rather than returning misleading
+    /// scores. Implement a real parameter-space HVP (e.g. via Pearlmutter's trick or
+    /// double-backprop on the GradientTape) and route this call through it.
+    /// </remarks>
     private Vector<T> ComputeHessianVectorProduct(Vector<T> input, Vector<T> target, Vector<T> vector)
     {
-        // Use finite differences: H*v ≈ (gradient(params + epsilon*v) - gradient(params)) / epsilon
-        // Since we don't have direct parameter access, we approximate via input perturbations
-        double epsilon = 1e-5;
-
-        var baseGrad = ComputeGradient(input, target);
-        int n = baseGrad.Length;
-        var hvp = new Vector<T>(n);
-
-        // Approximate Hessian-vector product using second-order finite differences
-        for (int i = 0; i < n && i < input.Length; i++)
-        {
-            double vi = NumOps.ToDouble(vector[i % vector.Length]);
-            if (Math.Abs(vi) < 1e-10) continue;
-
-            var perturbedInput = input.Clone();
-            perturbedInput[i] = NumOps.Add(perturbedInput[i], NumOps.FromDouble(epsilon * vi));
-
-            var perturbedGrad = ComputeGradient(perturbedInput, target);
-
-            for (int j = 0; j < n && j < perturbedGrad.Length; j++)
-            {
-                double diff = (NumOps.ToDouble(perturbedGrad[j]) - NumOps.ToDouble(baseGrad[j])) / (epsilon * vi);
-                hvp[j] = NumOps.Add(hvp[j], NumOps.FromDouble(diff * vi));
-            }
-        }
-
-        return hvp;
+        throw new NotSupportedException(
+            "ComputeHessianVectorProduct: parameter-space Hessian-vector products are " +
+            "not yet implemented. The previous input-space finite-difference shortcut " +
+            "produced mathematically invalid influence scores for any model with " +
+            "more parameters than input dimensions, so it has been removed. " +
+            "Wire this through a real parameter-space HVP (Pearlmutter's trick / " +
+            "double-backprop on the GradientTape) before scoring with " +
+            "InverseHessianMethod.LiSSA, ConjugateGradient, or Direct.");
     }
 
     /// <summary>
@@ -700,7 +706,20 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
             var grad = ComputeGradient(_trainingData.GetRow(i),
                 new Vector<T>(new[] { _trainingLabels[i] }));
 
-            for (int j = 0; j < numParams && j < grad.Length; j++)
+            // Reject inconsistent gradient widths instead of silently truncating /
+            // zero-filling. A mismatch here means ComputeGradient is returning
+            // different parameter vectors for different samples — every downstream
+            // influence score would be quietly corrupted.
+            if (grad.Length != numParams)
+            {
+                throw new InvalidOperationException(
+                    $"ComputeGradient returned an inconsistent parameter vector for " +
+                    $"training sample {i}: expected length {numParams} (matching sample 0), " +
+                    $"got {grad.Length}. Influence scoring requires every training sample " +
+                    $"to share the same parameter vector layout.");
+            }
+
+            for (int j = 0; j < numParams; j++)
             {
                 _cachedTrainingGradients[i, j] = grad[j];
             }

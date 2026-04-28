@@ -39,6 +39,7 @@ public class EfficientNet<T> : BackboneBase<T>
     private readonly List<MBConvBlock<T>> _blocks;
     private readonly EfficientNetVariant _variant;
     private readonly int _stemChannels;
+    private readonly int _inChannels;
 
     /// <inheritdoc/>
     public override string Name => $"EfficientNet-{_variant}";
@@ -62,6 +63,7 @@ public class EfficientNet<T> : BackboneBase<T>
     public EfficientNet(EfficientNetVariant variant = EfficientNetVariant.B0, int inChannels = 3)
     {
         _variant = variant;
+        _inChannels = inChannels;
         _blocks = new List<MBConvBlock<T>>();
 
         // Get scaling factors for variant
@@ -292,6 +294,14 @@ public class EfficientNet<T> : BackboneBase<T>
         }
         return result;
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Constructs a fresh EfficientNet with the same variant and input-channel
+    /// configuration. All internal MBConvBlock and Conv2D layers are freshly allocated.
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        => new EfficientNet<T>(_variant, _inChannels);
 }
 
 /// <summary>

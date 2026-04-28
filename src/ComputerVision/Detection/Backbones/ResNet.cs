@@ -37,6 +37,7 @@ public class ResNet<T> : BackboneBase<T>
     private readonly Conv2D<T> _conv1;
     private readonly List<ResNetStage<T>> _stages;
     private readonly ResNetVariant _variant;
+    private readonly int _inChannels;
 
     /// <inheritdoc/>
     public override string Name => $"ResNet-{GetLayerCount(_variant)}";
@@ -55,6 +56,7 @@ public class ResNet<T> : BackboneBase<T>
     public ResNet(ResNetVariant variant = ResNetVariant.ResNet50, int inChannels = 3)
     {
         _variant = variant;
+        _inChannels = inChannels;
         _stages = new List<ResNetStage<T>>();
 
         // Base channels and expansion factor
@@ -247,6 +249,15 @@ public class ResNet<T> : BackboneBase<T>
 
         return output;
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Constructs a fresh ResNet with the same variant and input-channel configuration.
+    /// All internal Conv2D / ResidualBlock / Conv layers are freshly allocated; no state
+    /// is shared with the original.
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        => new ResNet<T>(_variant, _inChannels);
 }
 
 /// <summary>

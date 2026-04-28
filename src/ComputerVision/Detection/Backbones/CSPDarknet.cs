@@ -36,7 +36,9 @@ public class CSPDarknet<T> : BackboneBase<T>
     private readonly List<CSPBlock<T>> _stages;
     private readonly Conv2D<T> _stem;
     private readonly int _depth;
+    private readonly double _depthOriginal;
     private readonly double _widthMultiplier;
+    private readonly int _inChannels;
 
     /// <inheritdoc/>
     public override string Name => $"CSPDarknet-{_widthMultiplier:0.0}x";
@@ -67,8 +69,10 @@ public class CSPDarknet<T> : BackboneBase<T>
     /// <param name="inChannels">Number of input channels (default 3 for RGB).</param>
     public CSPDarknet(double depth = 1.0, double widthMultiplier = 1.0, int inChannels = 3)
     {
+        _depthOriginal = depth;
         _depth = Math.Max(1, (int)Math.Round(depth));
         _widthMultiplier = widthMultiplier;
+        _inChannels = inChannels;
         _stages = new List<CSPBlock<T>>();
 
         // Calculate channel sizes based on width multiplier
@@ -202,6 +206,15 @@ public class CSPDarknet<T> : BackboneBase<T>
         }
         return result;
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Constructs a fresh CSPDarknet with the same depth, width multiplier, and input
+    /// channel configuration. All internal CSPBlock and Conv2D layers are freshly
+    /// allocated; no state is shared with the original.
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        => new CSPDarknet<T>(_depthOriginal, _widthMultiplier, _inChannels);
 }
 
 /// <summary>

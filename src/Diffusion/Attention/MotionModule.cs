@@ -96,6 +96,9 @@ public class MotionModule<T> : LayerBase<T>
             spatialSize: spatialSize);
 
         int ffnHidden = channels * ffnMultiplier;
+        // Cast disambiguates between DenseLayer's IActivationFunction<T> and
+        // IVectorActivationFunction<T> ctor overloads — ActivationFunctionBase<T>
+        // implements both interfaces, so omitting the cast is a CS0121 ambiguity.
         _ffnIn = new DenseLayer<T>(ffnHidden, (IActivationFunction<T>)new GELUActivation<T>());
         _ffnOut = new DenseLayer<T>(channels, (IActivationFunction<T>)new IdentityActivation<T>());
 

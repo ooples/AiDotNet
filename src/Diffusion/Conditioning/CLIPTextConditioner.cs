@@ -290,7 +290,11 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
         var maskData = new Vector<T>(batchSize * MaxSequenceLength);
         for (int b = 0; b < batchSize; b++)
         {
-            tokenIds[b * MaxSequenceLength] = NumOps.FromDouble(1); // BOS
+            // OpenAI CLIP convention: BOS = '<|startoftext|>' = VocabSize - 2 (49406 for
+            // the standard 49408-token vocab), EOS = '<|endoftext|>' = VocabSize - 1 (49407).
+            // Using BOS = 1 here previously emitted the wrong embedding and broke
+            // round-tripping with pretrained CLIP weights.
+            tokenIds[b * MaxSequenceLength] = NumOps.FromDouble(VocabSize - 2);     // BOS
             tokenIds[b * MaxSequenceLength + 1] = NumOps.FromDouble(VocabSize - 1); // EOS
             // Active mask: 1 for BOS+EOS, 0 for the PAD tail.
             maskData[b * MaxSequenceLength] = NumOps.FromDouble(1.0);
@@ -333,7 +337,6 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
     /// </summary>
     private Vector<T> ApplyTransformerLayers(Vector<T> hidden, int seqLen)
     {
-        int headDim = HiddenSize / NumHeads;
         int weightsPerLayer = 12 * HiddenSize * HiddenSize + 4 * HiddenSize;
 
         for (int layer = 0; layer < NumLayers; layer++)
