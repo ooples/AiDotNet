@@ -125,11 +125,12 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
         if (attentionMask is not null)
         {
             var maskShape = attentionMask._shape;
-            if (maskShape.Length < 2 || maskShape[0] != batchSize || maskShape[1] != seqLen)
+            if (maskShape.Length != 2 || maskShape[0] != batchSize || maskShape[1] != seqLen)
             {
                 throw new ArgumentException(
                     $"attentionMask shape [{string.Join(",", maskShape)}] does not match " +
-                    $"tokenIds [{string.Join(",", shape)}]. Expected [batchSize={batchSize}, seqLen={seqLen}].",
+                    $"tokenIds [{string.Join(",", shape)}]. Expected exactly rank-2 " +
+                    $"[batchSize={batchSize}, seqLen={seqLen}] (no trailing singleton dims).",
                     nameof(attentionMask));
             }
         }
@@ -139,6 +140,11 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
 
         for (int b = 0; b < batchSize; b++)
         {
+            // Per-row mask vector — true means "this position is padded; zero its output
+            // embedding so EOS pooling can locate the last real token by non-zero scan
+            // even after LayerNorm / projection re-introduce values into masked rows."
+            var rowMasked = new bool[seqLen];
+
             // Token embedding lookup + position embedding
             var hidden = new Vector<T>(seqLen * HiddenSize);
             for (int s = 0; s < seqLen; s++)
@@ -163,6 +169,7 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
                         maskedOut = true;
                     }
                 }
+                rowMasked[s] = maskedOut;
 
                 for (int d = 0; d < HiddenSize; d++)
                 {
@@ -191,9 +198,27 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
             var projTensor = Tensor<T>.FromVector(_textProjection).Reshape(HiddenSize, EmbeddingDimension);
             var projected = Engine.TensorMatMul<T>(hiddenTensor, projTensor);
             var projVec = projected.Reshape(seqLen * EmbeddingDimension).ToVector();
+
+            // Re-zero masked positions AFTER projection: LayerNorm + matmul may have
+            // re-introduced non-zero values into rows whose input embedding was zero.
+            // The non-zero scan in FindEosPosition relies on padded rows being exactly
+            // zero, so we enforce that invariant here.
             int batchOffset = b * seqLen * EmbeddingDimension;
-            for (int idx = 0; idx < seqLen * EmbeddingDimension; idx++)
-                outputData[batchOffset + idx] = projVec[idx];
+            for (int s = 0; s < seqLen; s++)
+            {
+                if (rowMasked[s])
+                {
+                    int rowOff = s * EmbeddingDimension;
+                    for (int d = 0; d < EmbeddingDimension; d++)
+                        outputData[batchOffset + rowOff + d] = NumOps.Zero;
+                }
+                else
+                {
+                    int rowOff = s * EmbeddingDimension;
+                    for (int d = 0; d < EmbeddingDimension; d++)
+                        outputData[batchOffset + rowOff + d] = projVec[rowOff + d];
+                }
+            }
         }
 
         return new Tensor<T>(new[] { batchSize, seqLen, EmbeddingDimension }, outputData);
@@ -259,15 +284,23 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
     {
         // Empty string tokenized: [BOS, EOS, PAD, PAD, ...]
         var tokenIds = new Vector<T>(batchSize * MaxSequenceLength);
+        // Build a matching attention mask so the encoder treats only [BOS, EOS] as
+        // active text and zeroes the PAD tail. Without this, padded tokens would be
+        // encoded as real input and skew unconditional conditioning + EOS pooling.
+        var maskData = new Vector<T>(batchSize * MaxSequenceLength);
         for (int b = 0; b < batchSize; b++)
         {
             tokenIds[b * MaxSequenceLength] = NumOps.FromDouble(1); // BOS
             tokenIds[b * MaxSequenceLength + 1] = NumOps.FromDouble(VocabSize - 1); // EOS
-            // Rest is padding (0)
+            // Active mask: 1 for BOS+EOS, 0 for the PAD tail.
+            maskData[b * MaxSequenceLength] = NumOps.FromDouble(1.0);
+            maskData[b * MaxSequenceLength + 1] = NumOps.FromDouble(1.0);
+            // Rest is padding (0 token id, 0 mask) — already zero from default-init.
         }
 
         var input = new Tensor<T>(new[] { batchSize, MaxSequenceLength }, tokenIds);
-        return EncodeText(input);
+        var mask = new Tensor<T>(new[] { batchSize, MaxSequenceLength }, maskData);
+        return EncodeText(input, mask);
     }
 
     /// <inheritdoc />

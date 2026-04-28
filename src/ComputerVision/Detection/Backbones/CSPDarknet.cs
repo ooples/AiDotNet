@@ -142,7 +142,7 @@ public class CSPDarknet<T> : BackboneBase<T>
     }
 
     /// <inheritdoc/>
-    public override long GetParameterCount()
+    public override long GetBackboneParameterCount()
     {
         long count = _stem.GetParameterCount();
         for (int i = 0; i < _stages.Count; i++)

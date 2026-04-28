@@ -437,42 +437,6 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
     }
 
     /// <summary>
-    /// Computes numerical gradients using finite differences.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>WARNING:</b> This fallback computes INPUT gradients (∂L/∂x) instead of the
-    /// mathematically required PARAMETER gradients (∂L/∂θ). Influence functions fundamentally
-    /// require gradients with respect to model parameters. This fallback produces approximate
-    /// results that may not accurately reflect training point influence.</para>
-    /// <para>For correct influence function computation, the model must implement
-    /// <see cref="IInterpretableModel{T}"/> with proper parameter gradient support.</para>
-    /// </remarks>
-    private Vector<T> ComputeNumericalGradients(Vector<T> input, Vector<T> target)
-    {
-        // WARNING: This computes input gradients instead of parameter gradients.
-        // Influence functions require ∂L/∂θ, but we're computing ∂L/∂x as a proxy.
-        // Results are approximate and may be mathematically incorrect.
-        double epsilon = 1e-5;
-        var gradients = new Vector<T>(input.Length);
-
-        var prediction = _predictFunction(input);
-        double baseLoss = NumOps.ToDouble(_lossFunction(prediction, target));
-
-        for (int i = 0; i < input.Length; i++)
-        {
-            var perturbedInput = input.Clone();
-            perturbedInput[i] = NumOps.Add(perturbedInput[i], NumOps.FromDouble(epsilon));
-
-            var perturbedPrediction = _predictFunction(perturbedInput);
-            double perturbedLoss = NumOps.ToDouble(_lossFunction(perturbedPrediction, target));
-
-            gradients[i] = NumOps.FromDouble((perturbedLoss - baseLoss) / epsilon);
-        }
-
-        return gradients;
-    }
-
-    /// <summary>
     /// Computes inverse Hessian-vector product using the selected method.
     /// </summary>
     private Vector<T> ComputeInverseHessianVectorProduct(Vector<T> vector)
@@ -747,15 +711,21 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
     /// <summary>
     /// Computes the gradient of the loss for a single sample w.r.t. model parameters.
     /// </summary>
+    /// <remarks>
+    /// Constructor invariants guarantee exactly one of <c>_gradientFunction</c> or
+    /// <c>_network</c> is non-null, so the dispatch below is exhaustive. The previous
+    /// finite-difference fallback was dead code and has been removed; if a future
+    /// constructor relaxes the invariant, this method will throw fast instead of
+    /// silently returning approximate input-gradients (which is the wrong quantity
+    /// for influence functions).
+    /// </remarks>
     private Vector<T> ComputeGradient(Vector<T> input, Vector<T> target)
     {
-        // If an explicit gradient function was provided, use it
         if (_gradientFunction != null)
         {
             return _gradientFunction(input, target);
         }
 
-        // If we have a neural network, use tape-based gradient computation
         if (_network != null)
         {
             var inputTensor = Tensor<T>.FromVector(input);
@@ -763,22 +733,10 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
             return _network.ComputeGradients(inputTensor, targetTensor);
         }
 
-        // Fallback: numerical gradient of loss w.r.t. input (not parameters, but useful for influence)
-        var prediction = _predictFunction(input);
-        var baseLoss = _lossFunction(prediction, target);
-        var grad = new Vector<T>(input.Length);
-        var eps = NumOps.FromDouble(1e-5);
-
-        for (int i = 0; i < input.Length; i++)
-        {
-            var perturbed = input.Clone();
-            perturbed[i] = NumOps.Add(perturbed[i], eps);
-            var pertPred = _predictFunction(perturbed);
-            var pertLoss = _lossFunction(pertPred, target);
-            grad[i] = NumOps.Divide(NumOps.Subtract(pertLoss, baseLoss), eps);
-        }
-
-        return grad;
+        throw new InvalidOperationException(
+            "InfluenceFunctionExplainer was constructed without a network or gradient " +
+            "function. This should be unreachable given the constructor invariants; if " +
+            "you reach this branch, the constructor contract has been violated.");
     }
 
     /// <summary>

@@ -101,11 +101,15 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
         }
         if (options.LossType != null)
         {
-            if (options.LossType is not ("l2" or "logistic" or "poisson"))
+            // Normalize to lowercase + trim so callers passing "L2" or " l2 " hit the
+            // same code path as "l2". The downstream loss dispatch uses lowercase tokens.
+            var normalized = options.LossType.Trim().ToLowerInvariant();
+            if (normalized is not ("l2" or "logistic" or "poisson"))
                 throw new ArgumentException(
-                    $"LossType must be one of 'l2', 'logistic', 'poisson'; got '{options.LossType}'.",
+                    $"LossType must be one of 'l2', 'logistic', 'poisson' " +
+                    $"(case-insensitive, whitespace trimmed); got '{options.LossType}'.",
                     nameof(options.LossType));
-            LossType = options.LossType;
+            LossType = normalized;
         }
     }
 

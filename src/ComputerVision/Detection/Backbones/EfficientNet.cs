@@ -200,7 +200,7 @@ public class EfficientNet<T> : BackboneBase<T>
     }
 
     /// <inheritdoc/>
-    public override long GetParameterCount()
+    public override long GetBackboneParameterCount()
     {
         long count = _stem.GetParameterCount();
         foreach (var block in _blocks)

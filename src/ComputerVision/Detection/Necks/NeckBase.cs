@@ -295,23 +295,20 @@ public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     #region ModelBase Overrides
 
     /// <summary>
-    /// Predicts by running the neck forward pass on a single feature map.
+    /// Single-tensor <c>Predict</c> is not a meaningful operation for a detection neck:
+    /// concrete necks (FPN, PANet, BiFPN) operate on the full backbone feature pyramid
+    /// (a <see cref="List{Tensor}"/> with one tensor per level) and would fail their own
+    /// feature-count validation if handed a single tensor. Use
+    /// <see cref="Forward(List{Tensor{T}})"/> directly instead — that is the public API
+    /// for running a neck.
     /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when the underlying <see cref="Forward(List{Tensor{T}})"/> returns no
-    /// feature maps. Necks must always produce at least one output tensor; failing
-    /// fast surfaces broken neck implementations instead of propagating an empty tensor.
-    /// </exception>
+    /// <exception cref="NotSupportedException">Always.</exception>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        var features = Forward(new List<Tensor<T>> { input });
-        if (features.Count == 0)
-        {
-            throw new InvalidOperationException(
-                $"{GetType().Name}.Forward returned no feature maps for input shape [{string.Join(",", input.Shape)}]. " +
-                $"A detection neck must produce at least one feature map.");
-        }
-        return features[0];
+        throw new NotSupportedException(
+            $"{GetType().Name}: detection necks consume the full backbone feature pyramid, " +
+            "not a single tensor. Call Forward(List<Tensor<T>>) with one tensor per level " +
+            "instead, or run the parent detection model whose pipeline supplies the pyramid.");
     }
 
     /// <summary>

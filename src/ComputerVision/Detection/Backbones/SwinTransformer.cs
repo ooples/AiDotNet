@@ -197,7 +197,7 @@ public class SwinTransformer<T> : BackboneBase<T>
     }
 
     /// <inheritdoc/>
-    public override long GetParameterCount()
+    public override long GetBackboneParameterCount()
     {
         long count = _patchEmbed.GetParameterCount();
         for (int i = 0; i < _stages.Count; i++)

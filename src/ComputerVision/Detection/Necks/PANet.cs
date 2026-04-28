@@ -395,27 +395,48 @@ public class PANet<T> : NeckBase<T>
 
     /// <inheritdoc />
     /// <remarks>
-    /// Produces a true deep copy by reconstructing a fresh instance with the same input/output
-    /// channel configuration and round-tripping every weight tensor through the binary
-    /// <see cref="WriteParameters(BinaryWriter)"/>/<see cref="ReadParameters(BinaryReader)"/>
-    /// path. This guarantees every internal lateral/top-down/bottom-up/downsample tensor is a
-    /// fresh allocation in the clone.
+    /// Produces a bit-exact deep copy by reconstructing a fresh instance with the same
+    /// configuration and copying every weight tensor element-by-element in the native
+    /// <typeparamref name="T"/> domain. Avoids the binary <c>WriteParameters</c> path
+    /// because that round-trips through <c>double</c> and is lossy for non-<c>double</c>
+    /// numeric backends.
     /// </remarks>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
         var clone = new PANet<T>((int[])_inputChannels.Clone(), _outputChannels);
-        using (var ms = new MemoryStream())
+        for (int i = 0; i < _numLevels; i++)
         {
-            using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
-            {
-                WriteParameters(writer);
-            }
-            ms.Position = 0;
-            using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
-            {
-                clone.ReadParameters(reader);
-            }
+            CopyTensorInto(_lateralWeights[i], clone._lateralWeights[i]);
+            CopyTensorInto(_lateralBiases[i], clone._lateralBiases[i]);
+            CopyTensorInto(_topDownWeights[i], clone._topDownWeights[i]);
+            CopyTensorInto(_topDownBiases[i], clone._topDownBiases[i]);
+            CopyTensorInto(_bottomUpWeights[i], clone._bottomUpWeights[i]);
+            CopyTensorInto(_bottomUpBiases[i], clone._bottomUpBiases[i]);
+        }
+        // _downsampleWeights/_downsampleBiases run only at non-bottom levels; size matches
+        // the constructor's allocation regardless of _numLevels alignment.
+        for (int i = 0; i < _downsampleWeights.Count; i++)
+        {
+            CopyTensorInto(_downsampleWeights[i], clone._downsampleWeights[i]);
+            CopyTensorInto(_downsampleBiases[i], clone._downsampleBiases[i]);
         }
         return clone;
+    }
+
+    /// <summary>
+    /// Copies every element from <paramref name="src"/> into <paramref name="dst"/> in
+    /// native <typeparamref name="T"/> arithmetic. Both tensors must share the same shape.
+    /// </summary>
+    private static void CopyTensorInto(Tensor<T> src, Tensor<T> dst)
+    {
+        if (src.Length != dst.Length)
+        {
+            throw new InvalidOperationException(
+                $"DeepCopy tensor shape mismatch: src.Length={src.Length}, dst.Length={dst.Length}.");
+        }
+        for (int i = 0; i < src.Length; i++)
+        {
+            dst[i] = src[i];
+        }
     }
 }

@@ -1116,6 +1116,39 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     }
 
     /// <summary>
+    /// Patch-based ViT families that need a patch-divisible 112×112 (= lcm(14, 16))
+    /// input. Other vision models — CNN, FPN, U-Net, ResNet, EfficientNet style — get a
+    /// stride-2-pyramid-friendly 128×128 default instead, since 112 is not divisible
+    /// by 32. Allocated once at class load to avoid per-call array allocation in the
+    /// source generator's hot path.
+    /// </summary>
+    /// <remarks>
+    /// ViT-/14 family: DINOv2, DINOv3, SigLIP, InternViT, PerceptionEncoder, EVA, BEiT.
+    /// ViT-/16 family: ViT, SAM, RADIO, MobileSAM, Swin, MAE, MoCo.
+    /// </remarks>
+    private static readonly string[] s_patchVisionFamilies =
+    {
+        "ViT", "DINO", "SigLIP", "InternViT", "PerceptionEncoder",
+        "SAM", "MobileSAM", "RADIO", "Swin", "MAE", "MoCo",
+        "EVA", "BEiT", "DeiT", "PoolFormer", "PVT", "CrossViT", "PiT",
+    };
+
+    /// <summary>
+    /// Returns <c>true</c> for vision models in the patch-based ViT family. The check is
+    /// intentionally permissive (<c>StartsWith</c>) so derived/variant types
+    /// (e.g. <c>DINOv2Small</c>, <c>ViTHugePatch16</c>) inherit the right shape.
+    /// </summary>
+    private static bool IsPatchVisionModel(string className)
+    {
+        foreach (var prefix in s_patchVisionFamilies)
+        {
+            if (className.StartsWith(prefix, System.StringComparison.Ordinal))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Checks if a type IS exactly <c>NeuralNetworkArchitecture&lt;T&gt;</c> (not a derived type).
     /// Uses <see cref="SymbolEqualityComparer"/> for cross-assembly robustness, with a
     /// metadata-name fallback when the resolved compilation symbol is unavailable.
@@ -1127,33 +1160,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// <returns><c>true</c> when <paramref name="type"/> is exactly the open generic
     /// <c>NeuralNetworkArchitecture&lt;T&gt;</c>; <c>false</c> for derived types or
     /// non-generic types.</returns>
-    /// <summary>
-    /// Returns <c>true</c> for vision models in the patch-based ViT family that need a
-    /// patch-divisible (112×112 = lcm(14, 16)) input. Other vision models — CNN, FPN,
-    /// U-Net, ResNet, EfficientNet style — get a stride-2-pyramid-friendly default
-    /// (128×128) instead, since 112 is not divisible by 32.
-    /// </summary>
-    private static bool IsPatchVisionModel(string className)
-    {
-        // Patch-based ViT families (kept at 112×112).
-        // ViT-/14: DINOv2, DINOv3, SigLIP, InternViT, PerceptionEncoder, EVA, BEiT
-        // ViT-/16: ViT, SAM, RADIO, MobileSAM, Swin, MAE, MoCo
-        // The check is intentionally permissive (StartsWith) so derived/variant types
-        // (DINOv2Small, ViTHugePatch16, etc.) inherit the right shape.
-        string[] patchFamilies =
-        {
-            "ViT", "DINO", "SigLIP", "InternViT", "PerceptionEncoder",
-            "SAM", "MobileSAM", "RADIO", "Swin", "MAE", "MoCo",
-            "EVA", "BEiT", "DeiT", "PoolFormer", "PVT", "CrossViT", "PiT",
-        };
-        foreach (var prefix in patchFamilies)
-        {
-            if (className.StartsWith(prefix, System.StringComparison.Ordinal))
-                return true;
-        }
-        return false;
-    }
-
     private static bool IsExactlyArchitecture(ITypeSymbol type, INamedTypeSymbol? architectureSymbol)
     {
         if (type is not INamedTypeSymbol namedType || !namedType.IsGenericType)

@@ -305,28 +305,40 @@ public class FPN<T> : NeckBase<T>
 
     /// <inheritdoc />
     /// <remarks>
-    /// Produces a true deep copy by reconstructing a fresh instance with the same input/output
-    /// channel configuration and round-tripping all weights through the binary
-    /// <see cref="WriteParameters(BinaryWriter)"/>/<see cref="ReadParameters(BinaryReader)"/> path.
-    /// This guarantees every internal <see cref="Tensor{T}"/> in <c>_lateralWeights</c>,
-    /// <c>_lateralBiases</c>, <c>_outputWeights</c>, and <c>_outputBiases</c> is a fresh
-    /// allocation, so subsequent mutations on the original do not affect the clone.
+    /// Produces a bit-exact deep copy by reconstructing a fresh instance with the same
+    /// input/output channel configuration and copying every weight tensor element-by-element
+    /// in the native <typeparamref name="T"/> domain. Avoids the binary <c>WriteParameters</c>
+    /// path because that round-trips through <c>double</c> via
+    /// <c>NumOps.ToDouble</c>/<c>NumOps.FromDouble</c>, which is lossy for backends like
+    /// <c>decimal</c>, <c>Half</c>, or other non-<c>double</c> numeric types.
     /// </remarks>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
         var clone = new FPN<T>((int[])_inputChannels.Clone(), _outputChannels);
-        using (var ms = new MemoryStream())
+        for (int i = 0; i < _numLevels; i++)
         {
-            using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
-            {
-                WriteParameters(writer);
-            }
-            ms.Position = 0;
-            using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
-            {
-                clone.ReadParameters(reader);
-            }
+            CopyTensorInto(_lateralWeights[i], clone._lateralWeights[i]);
+            CopyTensorInto(_lateralBiases[i], clone._lateralBiases[i]);
+            CopyTensorInto(_outputWeights[i], clone._outputWeights[i]);
+            CopyTensorInto(_outputBiases[i], clone._outputBiases[i]);
         }
         return clone;
+    }
+
+    /// <summary>
+    /// Copies every element from <paramref name="src"/> into <paramref name="dst"/> in
+    /// native <typeparamref name="T"/> arithmetic. Both tensors must share the same shape.
+    /// </summary>
+    private static void CopyTensorInto(Tensor<T> src, Tensor<T> dst)
+    {
+        if (src.Length != dst.Length)
+        {
+            throw new InvalidOperationException(
+                $"DeepCopy tensor shape mismatch: src.Length={src.Length}, dst.Length={dst.Length}.");
+        }
+        for (int i = 0; i < src.Length; i++)
+        {
+            dst[i] = src[i];
+        }
     }
 }

@@ -70,8 +70,8 @@ public class MotionModule<T> : LayerBase<T>
         int spatialSize = 64,
         int ffnMultiplier = 4)
         : base(
-            new[] { 1, numFrames * spatialSize * spatialSize, channels },
-            new[] { 1, numFrames * spatialSize * spatialSize, channels })
+            new[] { spatialSize * spatialSize, numFrames, channels },
+            new[] { spatialSize * spatialSize, numFrames, channels })
     {
         if (channels <= 0)
             throw new ArgumentOutOfRangeException(nameof(channels), "Channels must be positive.");

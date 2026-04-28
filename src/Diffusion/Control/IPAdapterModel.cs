@@ -691,14 +691,46 @@ public class ImageEncoder<T>
     }
 
     /// <summary>
-    /// Splits a <c>[B, 3, imageSize, imageSize]</c> image into <c>[numPatches, patchDim]</c>
-    /// row-major patch tokens (B is collapsed; this simplified encoder processes one image
-    /// at a time). <c>patchDim = 3 * patchSize * patchSize</c> in row-major channel-first
-    /// layout matching the patch projection's expected input.
+    /// Splits a <c>[1, 3, imageSize, imageSize]</c> image into <c>[numPatches, patchDim]</c>
+    /// row-major patch tokens. This simplified encoder only supports batch size 1 — the
+    /// strides below would walk the wrong memory for any other batch dimension. Anything
+    /// outside the supported shape fails fast instead of corrupting the embedding.
     /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="image"/> is not exactly rank-4 with shape
+    /// <c>[1, 3, _imageSize, _imageSize]</c>.
+    /// </exception>
     private Tensor<T> FlattenPatches(Tensor<T> image)
     {
-        int channels = image.Shape.Length >= 4 ? image.Shape[1] : 3;
+        if (image.Shape.Length != 4)
+        {
+            throw new ArgumentException(
+                $"Expected image shape [B, C, H, W]; got rank {image.Shape.Length} " +
+                $"with shape [{string.Join(",", image.Shape)}].",
+                nameof(image));
+        }
+        if (image.Shape[0] != 1)
+        {
+            throw new ArgumentException(
+                $"ImageEncoder currently supports batch size 1 only; got batch={image.Shape[0]}. " +
+                "Loop over batch elements and call Encode per image until batched extraction is implemented.",
+                nameof(image));
+        }
+        if (image.Shape[1] != 3)
+        {
+            throw new ArgumentException(
+                $"ImageEncoder expects 3 input channels (RGB); got {image.Shape[1]}.",
+                nameof(image));
+        }
+        if (image.Shape[2] != _imageSize || image.Shape[3] != _imageSize)
+        {
+            throw new ArgumentException(
+                $"ImageEncoder expects spatial size {_imageSize}x{_imageSize}, got " +
+                $"{image.Shape[2]}x{image.Shape[3]}.",
+                nameof(image));
+        }
+
+        int channels = image.Shape[1];
         int patchDim = channels * _patchSize * _patchSize;
         int patchesPerSide = _imageSize / _patchSize;
 

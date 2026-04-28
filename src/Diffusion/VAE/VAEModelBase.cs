@@ -494,11 +494,23 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
             if (hasValidGradients)
                 return gradients;
         }
-        catch (Exception ex)
+        catch (NotSupportedException ex)
         {
+            // Subclass deliberately doesn't implement layer-level gradients (e.g. it
+            // hasn't overridden BackpropagateLossGradient yet) — fall back to SPSA.
             System.Diagnostics.Trace.TraceWarning(
-                $"VAE layer backpropagation failed, falling back to SPSA: {ex.Message}");
+                $"VAE layer backpropagation not implemented, falling back to SPSA: {ex.Message}");
         }
+        catch (NotImplementedException ex)
+        {
+            // Same intent as NotSupportedException; some subclasses use this variant.
+            System.Diagnostics.Trace.TraceWarning(
+                $"VAE layer backpropagation not implemented, falling back to SPSA: {ex.Message}");
+        }
+        // Other exceptions (shape bugs, broken overrides, serialization corruption,
+        // null derefs from incomplete state) are real implementation bugs — let them
+        // bubble up so regressions are caught at the test boundary instead of being
+        // silently masked by the SPSA fallback.
 
         // Fallback: SPSA (6 forward passes total vs 2N for finite differences)
         var parameters = GetParameters();
@@ -552,7 +564,12 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <param name="target">The target tensor for loss computation.</param>
     /// <param name="trainableParams">The trainable parameter tensors to compute gradients for.</param>
     /// <returns>Dictionary mapping each parameter tensor to its gradient.</returns>
-    public Dictionary<Tensor<T>, Tensor<T>> ComputeGradientsWithTape(
+    /// <remarks>
+    /// Internal training plumbing; library users should drive training through
+    /// <c>PredictionModelBuilder</c> and read results from <c>PredictionModelResult</c>
+    /// instead of calling this directly.
+    /// </remarks>
+    protected Dictionary<Tensor<T>, Tensor<T>> ComputeGradientsWithTape(
         Tensor<T> input,
         Tensor<T> target,
         Tensor<T>[] trainableParams)

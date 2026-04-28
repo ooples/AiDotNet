@@ -96,9 +96,27 @@ public abstract class BackboneBase<T> : NeuralNetworkBase<T>, AiDotNet.Interface
     public virtual void Unfreeze() => IsFrozen = false;
 
     /// <summary>
-    /// Gets the total number of parameters in the backbone (subclass-specific count).
+    /// Returns the total number of parameters owned by the backbone, computed by
+    /// summing across the backbone's internal Conv2D/Dense/MultiHeadSelfAttention
+    /// wrappers. Concrete backbones implement this. The inherited
+    /// <see cref="NeuralNetworkBase{T}.ParameterCount"/> property and
+    /// <see cref="NeuralNetworkBase{T}.GetParameterCount"/> method are overridden
+    /// below to dispatch to this value, so polymorphic callers via
+    /// <see cref="INeuralNetworkModel{T}"/> see the correct count.
     /// </summary>
-    public new abstract long GetParameterCount();
+    public abstract long GetBackboneParameterCount();
+
+    /// <inheritdoc />
+    public override int ParameterCount
+    {
+        get
+        {
+            long count = GetBackboneParameterCount();
+            // ParameterCount on the inherited contract is int; clamp to int.MaxValue
+            // to avoid overflow on extremely large backbones.
+            return count > int.MaxValue ? int.MaxValue : (int)count;
+        }
+    }
 
     /// <summary>
     /// Writes all parameters to a binary writer for serialization.

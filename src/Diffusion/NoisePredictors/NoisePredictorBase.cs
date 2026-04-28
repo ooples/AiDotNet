@@ -94,66 +94,122 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
 
     /// <summary>
     /// Walks an object's instance fields and yields anything that implements
-    /// <see cref="ILayer{T}"/>, including layers stored in collection fields.
-    /// Used as the default fallback for <see cref="EnumerateLayers"/> so concrete
-    /// predictors don't need to override just to get correct cleanup.
+    /// <see cref="ILayer{T}"/>, recursively descending into owned wrapper objects
+    /// (e.g. <c>DiTBlock</c>, <c>UNetEncoderStage</c>) so block-heavy predictors get
+    /// correct cleanup without each block needing to manually re-implement
+    /// <c>EnumerateLayers</c>. The cycle guard via <c>visited</c> prevents infinite
+    /// recursion on graphs that share sublayers.
     /// </summary>
     protected static IEnumerable<ILayer<T>> ReflectInstanceLayers(object root)
     {
         var visited = new HashSet<object>(AiDotNet.Helpers.TensorReferenceComparer<object>.Instance);
+        var stack = new Stack<object>();
         if (!visited.Add(root)) yield break;
+        stack.Push(root);
 
-        var type = root.GetType();
         const System.Reflection.BindingFlags fieldFlags =
             System.Reflection.BindingFlags.Instance |
             System.Reflection.BindingFlags.Public |
             System.Reflection.BindingFlags.NonPublic;
-        for (var t = type; t != null && t != typeof(object); t = t.BaseType)
-        {
-            foreach (var field in t.GetFields(fieldFlags | System.Reflection.BindingFlags.DeclaredOnly))
-            {
-                if (field.FieldType.IsValueType || field.FieldType == typeof(string)) continue;
-                object? value;
-                try { value = field.GetValue(root); }
-                catch (Exception ex)
-                {
-                    // Trace rather than silently skip — without this a private
-                    // field whose getter throws would leak its layer's resources
-                    // without any diagnostic trail at Dispose time.
-                    System.Diagnostics.Trace.TraceWarning(
-                        $"NoisePredictorBase.Dispose: skipping field '{field.Name}' " +
-                        $"on {t.Name} due to reflection read failure: {ex.GetType().Name}: {ex.Message}");
-                    continue;
-                }
-                if (value is null || !visited.Add(value)) continue;
 
-                if (value is ILayer<T> layer)
+        while (stack.Count > 0)
+        {
+            var current = stack.Pop();
+            var currentType = current.GetType();
+            for (var t = currentType; t != null && t != typeof(object); t = t.BaseType)
+            {
+                foreach (var field in t.GetFields(fieldFlags | System.Reflection.BindingFlags.DeclaredOnly))
                 {
-                    yield return layer;
-                }
-                else if (value is System.Collections.IDictionary dictionary)
-                {
-                    // Dictionary<K, V>.GetEnumerator yields KeyValuePair<K,V>,
-                    // not the values — so the generic IEnumerable branch below
-                    // would MISS layers held in the values slot. Handle
-                    // IDictionary explicitly so Dictionary<K, ILayer<T>> is
-                    // disposed correctly.
-                    foreach (System.Collections.DictionaryEntry entry in dictionary)
+                    if (field.FieldType.IsValueType || field.FieldType == typeof(string)) continue;
+
+                    object? value;
+                    try { value = field.GetValue(current); }
+                    catch (Exception ex)
                     {
-                        if (entry.Value is ILayer<T> nestedLayer && visited.Add(entry.Value))
-                            yield return nestedLayer;
+                        // Trace rather than silently skip — without this a private
+                        // field whose getter throws would leak its layer's resources
+                        // without any diagnostic trail at Dispose time.
+                        System.Diagnostics.Trace.TraceWarning(
+                            $"NoisePredictorBase.Dispose: skipping field '{field.Name}' " +
+                            $"on {t.Name} due to reflection read failure: {ex.GetType().Name}: {ex.Message}");
+                        continue;
                     }
-                }
-                else if (value is System.Collections.IEnumerable enumerable && value is not string)
-                {
-                    foreach (var item in enumerable)
+                    if (value is null || !visited.Add(value)) continue;
+
+                    if (value is ILayer<T> layer)
                     {
-                        if (item is ILayer<T> nestedLayer && visited.Add(item))
-                            yield return nestedLayer;
+                        yield return layer;
+                        // Layers may also own sublayers via reflectable fields
+                        // (composite layers, attention with internal projections);
+                        // descend into them too.
+                        stack.Push(value);
+                    }
+                    else if (value is System.Collections.IDictionary dictionary)
+                    {
+                        // Dictionary<K, V>.GetEnumerator yields KeyValuePair<K,V>,
+                        // not the values — so the generic IEnumerable branch below
+                        // would MISS layers held in the values slot. Handle
+                        // IDictionary explicitly so Dictionary<K, ILayer<T>> is
+                        // disposed correctly.
+                        foreach (System.Collections.DictionaryEntry entry in dictionary)
+                        {
+                            if (entry.Value is null || !visited.Add(entry.Value)) continue;
+                            if (entry.Value is ILayer<T> nestedLayer)
+                            {
+                                yield return nestedLayer;
+                                stack.Push(entry.Value);
+                            }
+                            else if (IsWalkableWrapper(entry.Value.GetType()))
+                            {
+                                stack.Push(entry.Value);
+                            }
+                        }
+                    }
+                    else if (value is System.Collections.IEnumerable enumerable && value is not string)
+                    {
+                        foreach (var item in enumerable)
+                        {
+                            if (item is null || !visited.Add(item)) continue;
+                            if (item is ILayer<T> nestedLayer)
+                            {
+                                yield return nestedLayer;
+                                stack.Push(item);
+                            }
+                            else if (IsWalkableWrapper(item.GetType()))
+                            {
+                                // Recurse into wrapper objects (DiTBlock, ResidualStage, etc.)
+                                // that hold layer fields but are not themselves layers.
+                                stack.Push(item);
+                            }
+                        }
+                    }
+                    else if (IsWalkableWrapper(value.GetType()))
+                    {
+                        // Recurse into single owned wrapper objects (e.g. an Encoder
+                        // composite that holds layers in its own fields).
+                        stack.Push(value);
                     }
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Returns true for reference types that look like AiDotNet-internal wrapper objects
+    /// worth descending into during layer enumeration. We exclude system types and
+    /// anything explicitly opt-out (e.g. tensor / vector containers) to keep the walk
+    /// bounded; wrappers inside this assembly's namespaces are fair game.
+    /// </summary>
+    private static bool IsWalkableWrapper(Type type)
+    {
+        if (type.IsPrimitive || type.IsEnum) return false;
+        var ns = type.Namespace ?? string.Empty;
+        if (ns.StartsWith("System", StringComparison.Ordinal)) return false;
+        // Avoid recursing into low-level numeric containers — their fields are arrays
+        // of T, not layers, and walking them adds noise for no benefit.
+        if (ns.StartsWith("AiDotNet.Tensors", StringComparison.Ordinal)) return false;
+        if (type.Name == "Vector`1" || type.Name == "Matrix`1" || type.Name == "Tensor`1") return false;
+        return true;
     }
 
     /// <summary>
@@ -312,8 +368,22 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         int embeddingDimension,
         int headCount,
         IActivationFunction<T>? activation = null)
-        => new MultiHeadAttentionLayer<T>(headCount, (embeddingDimension) / (headCount), 
+    {
+        if (sequenceLength <= 0) throw new ArgumentOutOfRangeException(nameof(sequenceLength), "sequenceLength must be positive.");
+        if (embeddingDimension <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDimension), "embeddingDimension must be positive.");
+        if (headCount <= 0) throw new ArgumentOutOfRangeException(nameof(headCount), "headCount must be positive.");
+        if (embeddingDimension % headCount != 0)
+        {
+            throw new ArgumentException(
+                $"embeddingDimension ({embeddingDimension}) must be evenly divisible by " +
+                $"headCount ({headCount}); got remainder {embeddingDimension % headCount}. " +
+                "Integer division would silently produce a narrower attention layer than requested.",
+                nameof(embeddingDimension));
+        }
+
+        return new MultiHeadAttentionLayer<T>(headCount, embeddingDimension / headCount,
             activation, InitializationStrategies<T>.Lazy);
+    }
 
     /// <summary>
     /// Creates a <see cref="SelfAttentionLayer{T}"/> with lazy Q/K/V weight
@@ -679,30 +749,45 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     }
 
     /// <summary>
-    /// Computes gradients using the Tensors GradientTape for automatic differentiation.
-    /// This is the preferred training path — gradients are computed by recording all
-    /// engine ops during the forward pass and then running reverse-mode AD.
+    /// Computes gradients using the engine's <see cref="GradientTape{T}"/> for automatic
+    /// differentiation. This is the preferred training path — gradients are computed by
+    /// recording all engine ops during the forward pass and then running reverse-mode AD.
     /// </summary>
     /// <param name="input">The input tensor.</param>
     /// <param name="target">The target tensor for loss computation.</param>
     /// <param name="trainableParams">The trainable parameter tensors to compute gradients for.</param>
+    /// <param name="lossBuilder">
+    /// Optional callback that builds a scalar loss tensor from the recorded
+    /// <c>(predicted, target)</c> pair using engine ops (so the tape can differentiate
+    /// through it). When <c>null</c>, an MSE loss is used as a sensible default. Pass a
+    /// non-null builder when the caller's training loop uses a different objective —
+    /// otherwise gradients would silently optimize the wrong loss.
+    /// </param>
     /// <returns>Dictionary mapping each parameter tensor to its gradient.</returns>
     public Dictionary<Tensor<T>, Tensor<T>> ComputeGradientsWithTape(
         Tensor<T> input,
         Tensor<T> target,
-        Tensor<T>[] trainableParams)
+        Tensor<T>[] trainableParams,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>>? lossBuilder = null)
     {
         using var tape = new GradientTape<T>();
 
         // Forward pass (recorded by the engine)
         var predicted = Forward(input);
 
-        // Compute MSE loss using tape-recorded engine ops
-        var diff = Engine.TensorSubtract(predicted, target);
-        var squared = Engine.TensorMultiply(diff, diff);
-        // ReduceMean with all axes produces a scalar tensor that the tape can differentiate
-        var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
-        var loss = Engine.ReduceMean(squared, allAxes, keepDims: false);
+        Tensor<T> loss;
+        if (lossBuilder is not null)
+        {
+            loss = lossBuilder(predicted, target);
+        }
+        else
+        {
+            // Default: MSE = mean((predicted - target)^2). Tape-recorded so AD works.
+            var diff = Engine.TensorSubtract(predicted, target);
+            var squared = Engine.TensorMultiply(diff, diff);
+            var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+            loss = Engine.ReduceMean(squared, allAxes, keepDims: false);
+        }
 
         // Reverse-mode AD: compute gradients for all trainable parameters
         return tape.ComputeGradients(loss, trainableParams);

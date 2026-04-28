@@ -532,27 +532,63 @@ public class BiFPN<T> : NeckBase<T>
 
     /// <inheritdoc />
     /// <remarks>
-    /// Produces a true deep copy by reconstructing a fresh instance with the same
-    /// input channels, output channels, and repeat count, then round-tripping every weight
-    /// through the binary <see cref="WriteParameters(BinaryWriter)"/>/<see cref="ReadParameters(BinaryReader)"/>
-    /// path. This guarantees every internal lateral/top-down/bottom-up tensor is a fresh
-    /// allocation in the clone.
+    /// Produces a bit-exact deep copy by reconstructing a fresh instance with the same
+    /// input channels, output channels, and repeat count, then copying every weight
+    /// tensor element-by-element in the native <typeparamref name="T"/> domain. Avoids
+    /// the binary <c>WriteParameters</c> path because that round-trips through
+    /// <c>double</c> and is lossy for non-<c>double</c> numeric backends.
     /// </remarks>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
         var clone = new BiFPN<T>((int[])_inputChannels.Clone(), _outputChannels, _numRepeats);
-        using (var ms = new MemoryStream())
+
+        for (int i = 0; i < _lateralWeights.Count; i++)
         {
-            using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
-            {
-                WriteParameters(writer);
-            }
-            ms.Position = 0;
-            using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
-            {
-                clone.ReadParameters(reader);
-            }
+            CopyTensorInto(_lateralWeights[i], clone._lateralWeights[i]);
+            CopyTensorInto(_lateralBiases[i], clone._lateralBiases[i]);
         }
+
+        // _topDownFusionWeights and _bottomUpFusionWeights are List<List<Tensor<T>>>
+        // (per-repeat × per-level slots).
+        for (int r = 0; r < _topDownFusionWeights.Count; r++)
+        {
+            for (int i = 0; i < _topDownFusionWeights[r].Count; i++)
+                CopyTensorInto(_topDownFusionWeights[r][i], clone._topDownFusionWeights[r][i]);
+        }
+        for (int r = 0; r < _bottomUpFusionWeights.Count; r++)
+        {
+            for (int i = 0; i < _bottomUpFusionWeights[r].Count; i++)
+                CopyTensorInto(_bottomUpFusionWeights[r][i], clone._bottomUpFusionWeights[r][i]);
+        }
+
+        for (int i = 0; i < _topDownConvWeights.Count; i++)
+        {
+            CopyTensorInto(_topDownConvWeights[i], clone._topDownConvWeights[i]);
+            CopyTensorInto(_topDownConvBiases[i], clone._topDownConvBiases[i]);
+        }
+        for (int i = 0; i < _bottomUpConvWeights.Count; i++)
+        {
+            CopyTensorInto(_bottomUpConvWeights[i], clone._bottomUpConvWeights[i]);
+            CopyTensorInto(_bottomUpConvBiases[i], clone._bottomUpConvBiases[i]);
+        }
+
         return clone;
+    }
+
+    /// <summary>
+    /// Copies every element from <paramref name="src"/> into <paramref name="dst"/> in
+    /// native <typeparamref name="T"/> arithmetic. Both tensors must share the same shape.
+    /// </summary>
+    private static void CopyTensorInto(Tensor<T> src, Tensor<T> dst)
+    {
+        if (src.Length != dst.Length)
+        {
+            throw new InvalidOperationException(
+                $"DeepCopy tensor shape mismatch: src.Length={src.Length}, dst.Length={dst.Length}.");
+        }
+        for (int i = 0; i < src.Length; i++)
+        {
+            dst[i] = src[i];
+        }
     }
 }
