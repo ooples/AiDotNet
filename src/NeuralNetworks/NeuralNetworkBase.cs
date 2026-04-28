@@ -3305,79 +3305,116 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (_savedOriginalParameters == null)
             return;
 
-        // For each layer, copy updated data from the current (view) tensors
-        // back to the saved original tensors, then restore the originals.
+        // ParameterBuffer architecture (TapeStepContext.ValidateBufferAlignment
+        // line 358 of AiDotNet.Tensors): when paramBuffer is non-null,
+        // EVERY parameter passed to the optimizer step MUST be a view into
+        // that buffer's storage. The check is enforced via
+        // ReferenceEquals(parameters[i]._storage, bufferStorage). Layers
+        // therefore have to keep their _* fields pointing at buffer views
+        // during training — that's the design contract.
+        //
+        // An unconditional SetTrainableParameters(originals) here would
+        // VIOLATE that contract: layer fields would get swapped back to
+        // standalone originals at end-of-step, the next step's forward
+        // would run on originals, the tape would record gradients keyed
+        // by originals, and TapeStepContext would reject the params-vs-
+        // buffer mismatch on the next iteration's optimizer step (or —
+        // worse, before the upstream Tensors validation landed — silently
+        // accept the mismatch and the optimizer would update buffer
+        // storage that was no longer reachable from any layer's forward
+        // pass).
+        //
+        // Strategy — two-pass walk over the saved layers:
+        //   Pass 1: detect structural change AND sync view→original data
+        //           for stable layers in a single sweep. Save
+        //           (trainable, originals) pairs for stable layers so
+        //           pass 2 can restore them if the buffer is going to
+        //           be invalidated.
+        //   Pass 2: only fires if anyStructureChanged is true. Swap
+        //           EVERY recorded stable-layer's fields back to
+        //           originals — even layers we'd otherwise leave on
+        //           buffer-views need this when the buffer is about to
+        //           be invalidated below by InvalidateParameterCountCache,
+        //           because the next CollectParameters call must build
+        //           a fresh buffer from the originals (any layer still
+        //           holding orphaned buffer-view refs would either get
+        //           its data lost or trigger a buffer-alignment
+        //           mismatch on the rebuild). This makes the restore
+        //           order-independent: detecting a structure change
+        //           late in pass 1 must NOT leave earlier stable
+        //           layers stuck on orphaned views.
         bool anyStructureChanged = false;
+        var stableRestoreCandidates =
+            new List<(ITrainableLayer<T> Trainable, IReadOnlyList<Tensor<T>> Originals)>();
+
         foreach (var (layer, originals) in _savedOriginalParameters)
         {
-            if (layer is ITrainableLayer<T> trainable)
+            if (layer is not ITrainableLayer<T> trainable)
             {
-                var currentViews = trainable.GetTrainableParameters();
+                continue;
+            }
 
-                // If parameter count or sizes changed (e.g., DenseLayer lazy initialization
-                // resized weights during the first forward pass), skip restoration for this
-                // layer — the pre-init parameters are meaningless and the layer now has the
-                // correct shape for the actual input data.
-                if (currentViews.Count != originals.Count)
-                {
-                    anyStructureChanged = true;
-                    continue;
-                }
+            var currentViews = trainable.GetTrainableParameters();
 
-                bool sizeChanged = false;
-                for (int i = 0; i < originals.Count; i++)
-                {
-                    if (currentViews[i].Length != originals[i].Length)
-                    {
-                        sizeChanged = true;
-                        break;
-                    }
-                }
-                if (sizeChanged)
-                {
-                    anyStructureChanged = true;
-                    continue;
-                }
+            // If parameter count or sizes changed (e.g., DenseLayer or
+            // EmbeddingLayer lazy initialization resized weights during
+            // the first forward pass), skip restoration for this layer
+            // — the pre-init parameters are meaningless and the layer
+            // now has the correct shape for the actual input data.
+            if (currentViews.Count != originals.Count)
+            {
+                anyStructureChanged = true;
+                continue;
+            }
 
-                // ParameterBuffer architecture (TapeStepContext.ValidateBufferAlignment
-                // line 358 of AiDotNet.Tensors): when paramBuffer is non-null,
-                // EVERY parameter passed to the optimizer step MUST be a view into
-                // that buffer's storage. The check is enforced via
-                // ReferenceEquals(parameters[i]._storage, bufferStorage). Layers
-                // therefore have to keep their _* fields pointing at buffer views
-                // during training — that's the design contract.
-                //
-                // The unconditional SetTrainableParameters(originals) below
-                // VIOLATED that contract: it swapped each layer's fields back to
-                // the standalone originals at end-of-step, and the next step's
-                // forward then ran on originals, the tape recorded gradients
-                // keyed by originals, and TapeStepContext rejected the
-                // params-vs-buffer mismatch on the next iteration's optimizer
-                // step (or — worse, before the upstream Tensors validation
-                // landed — silently accepted the mismatch and the optimizer
-                // updated buffer storage that was no longer reachable from
-                // any layer's forward pass).
-                //
-                // Fix: copy view→original data so external observers (Clone /
-                // Serialize / GetTrainableParameters from user code) see
-                // up-to-date weights, but DO NOT swap layer fields back to
-                // originals when the buffer is being preserved for the next
-                // step. Restore-back is correct ONLY when structure changed
-                // (lazy resize) — in that case the buffer is going to be
-                // invalidated below anyway via InvalidateParameterCountCache,
-                // and the next step rebuilds buffer + views from the originals.
-                for (int i = 0; i < originals.Count; i++)
+            bool sizeChanged = false;
+            for (int i = 0; i < originals.Count; i++)
+            {
+                if (currentViews[i].Length != originals[i].Length)
                 {
-                    // Bulk copy via Engine — zero-alloc, SIMD-accelerated
-                    Engine.TensorCopy(currentViews[i], originals[i]);
-                }
-
-                if (anyStructureChanged)
-                {
-                    trainable.SetTrainableParameters(originals);
+                    sizeChanged = true;
+                    break;
                 }
             }
+            if (sizeChanged)
+            {
+                anyStructureChanged = true;
+                continue;
+            }
+
+            // Stable layer: copy view→original data so external
+            // observers (Clone / Serialize / GetTrainableParameters
+            // from user code) see up-to-date weights. Defer the
+            // swap-back decision to pass 2 once we know whether ANY
+            // layer in this batch changed structure — restore-back is
+            // correct only when the buffer is being invalidated.
+            for (int i = 0; i < originals.Count; i++)
+            {
+                Engine.TensorCopy(currentViews[i], originals[i]);
+            }
+            stableRestoreCandidates.Add((trainable, originals));
         }
+
+        if (anyStructureChanged)
+        {
+            // Buffer is going to be invalidated below via
+            // InvalidateParameterCountCache. Restore EVERY stable
+            // layer's field references back to originals so the next
+            // CollectParameters call rebuilds buffer + views from a
+            // consistent set of standalone tensors. Order-independent:
+            // even if the structure-change layer was processed last,
+            // earlier stable layers still get their fields swapped
+            // back here.
+            foreach (var (trainable, originals) in stableRestoreCandidates)
+            {
+                trainable.SetTrainableParameters(originals);
+            }
+        }
+        // else: keep stable layers' fields pointing at buffer views —
+        // the tape, optimizer, and layer all agree on the same tensor
+        // reference, the data sync above means the originals also hold
+        // the post-step weights, and external observers see correct
+        // values.
 
         _savedOriginalParameters = null;
 

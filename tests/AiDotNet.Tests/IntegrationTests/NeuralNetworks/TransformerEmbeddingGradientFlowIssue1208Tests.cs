@@ -198,6 +198,31 @@ public class TransformerEmbeddingGradientFlowIssue1208Tests
             $"sum of 28 pairs = {pairwiseSum:E3}. Pre-fix every pair " +
             $"is exactly 0; with working gradient flow the encoder " +
             $"learns to differentiate distinct token ids.");
+
+        // Stronger signal: argmax-accuracy on the identity task. After
+        // 25 epochs (200 iters / 8 classes) on a trivially-learnable
+        // task, the model must be assigning input k to class k for a
+        // majority of inputs. Pre-fix every prediction is the same
+        // class regardless of input (max accuracy = 1/V = 12.5%).
+        // Post-fix healthy runs hit 6–8/8 correct; we require ≥ 4/8
+        // (50%) so the test isn't brittle to seed-dependent local
+        // minima while still catching the "model isn't learning the
+        // mapping" failure mode.
+        int correct = 0;
+        for (int k = 0; k < 8; k++)
+        {
+            var pred = new Tensor<float>([8]);
+            for (int j = 0; j < 8; j++) pred[j] = logits[k][j];
+            int predicted = ArgMax(pred);
+            if (predicted == k) correct++;
+            _output.WriteLine($"input {k} → argmax = {predicted} (expected {k})");
+        }
+        Assert.True(correct >= 4,
+            $"Transformer learned the identity mapping for fewer than " +
+            $"half of the 8 classes (issue #1208): {correct}/8 correct. " +
+            $"Pre-fix accuracy is 1/8 (every input maps to the same class); " +
+            $"with working gradient flow the model converges most of the " +
+            $"way to perfect 8/8 on this trivially-learnable task.");
     }
 
     /// <summary>
