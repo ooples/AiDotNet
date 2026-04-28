@@ -2444,7 +2444,6 @@ public static class LayerHelper<T>
         // Note: memoryDimension must match the memory vector dimension (embeddingSize),
         // since memory in MemoryNetwork has shape [memorySize, embeddingSize]
         yield return new MemoryReadLayer<T>(
-            inputDimension: embeddingSize,
             memoryDimension: embeddingSize,
             outputDimension: embeddingSize,
             activationFunction: new ReLUActivation<T>() as IActivationFunction<T>
@@ -2460,7 +2459,6 @@ public static class LayerHelper<T>
         // Memory Write Layer
         // Note: memoryDimension must match the memory vector dimension (embeddingSize)
         yield return new MemoryWriteLayer<T>(
-            inputDimension: hiddenSize,
             memoryDimension: embeddingSize,
             activationFunction: new TanhActivation<T>() as IActivationFunction<T>
         );
@@ -2752,12 +2750,11 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(controllerSize, new TanhActivation<T>() as IActivationFunction<T>);
 
         // Read heads - typically use content-based addressing with cosine similarity
-        yield return new MemoryReadLayer<T>(controllerSize, memoryVectorSize, memoryVectorSize,
+        yield return new MemoryReadLayer<T>(memoryVectorSize, memoryVectorSize,
             new SigmoidActivation<T>() as IActivationFunction<T>);
 
         // Write heads - typically use gated mechanism with sigmoid for gates
         yield return new MemoryWriteLayer<T>(
-            controllerSize,
             memoryVectorSize,
             new TanhActivation<T>() as IActivationFunction<T>
         );

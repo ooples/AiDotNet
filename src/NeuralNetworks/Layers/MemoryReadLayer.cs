@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Memory)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, NormalizesInput = true, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, NormalizesInput = true, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -267,24 +267,45 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// is carefully chosen to prevent vanishing or exploding gradients during training.
     /// </para>
     /// </remarks>
-    public MemoryReadLayer(int inputDimension, int memoryDimension, int outputDimension, IActivationFunction<T>? activationFunction = null)
-        : base([inputDimension], [outputDimension], activationFunction ?? new IdentityActivation<T>())
+    public MemoryReadLayer(int memoryDimension, int outputDimension, IActivationFunction<T>? activationFunction = null)
+        : base(new[] { -1 }, new[] { outputDimension }, activationFunction ?? new IdentityActivation<T>())
     {
+        if (memoryDimension <= 0) throw new ArgumentOutOfRangeException(nameof(memoryDimension));
+        if (outputDimension <= 0) throw new ArgumentOutOfRangeException(nameof(outputDimension));
+
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastAttentionSparsityLoss = NumOps.Zero;
 
-        _keyWeights = new Tensor<T>([inputDimension, memoryDimension]);
+        _memoryDimension = memoryDimension;
+        _keyWeights = new Tensor<T>([0, 0]);
         _valueWeights = new Tensor<T>([memoryDimension, outputDimension]);
         _outputWeights = new Tensor<T>([outputDimension, outputDimension]);
         _outputBias = new Tensor<T>([outputDimension]);
+    }
 
+    private int _memoryDimension;
+
+    /// <summary>
+    /// Resolves input feature size from input.Shape on first forward and allocates key weights.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"MemoryReadLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+
+        int inputDimension = input.Shape[rank - 1];
+        int outputDimension = OutputShape[0];
+
+        _keyWeights = new Tensor<T>([inputDimension, _memoryDimension]);
         InitializeParameters();
-
-        // Register trainable parameters for GPU memory optimization
         RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+
+        ResolveShapes(new[] { inputDimension }, new[] { outputDimension });
     }
 
     /// <summary>
@@ -313,24 +334,20 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// that consider the relationships between different outputs in your memory reading operation.
     /// </para>
     /// </remarks>
-    public MemoryReadLayer(int inputDimension, int memoryDimension, int outputDimension, IVectorActivationFunction<T>? activationFunction = null)
-        : base([inputDimension], [outputDimension], activationFunction ?? new IdentityActivation<T>())
+    public MemoryReadLayer(int memoryDimension, int outputDimension, IVectorActivationFunction<T> activationFunction)
+        : base(new[] { -1 }, new[] { outputDimension }, activationFunction ?? new IdentityActivation<T>())
     {
+        if (memoryDimension <= 0) throw new ArgumentOutOfRangeException(nameof(memoryDimension));
+        if (outputDimension <= 0) throw new ArgumentOutOfRangeException(nameof(outputDimension));
+
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastAttentionSparsityLoss = NumOps.Zero;
 
-        _keyWeights = new Tensor<T>([inputDimension, memoryDimension]);
+        _memoryDimension = memoryDimension;
+        _keyWeights = new Tensor<T>([0, 0]);
         _valueWeights = new Tensor<T>([memoryDimension, outputDimension]);
         _outputWeights = new Tensor<T>([outputDimension, outputDimension]);
         _outputBias = new Tensor<T>([outputDimension]);
-
-        InitializeParameters();
-
-        // Register trainable parameters for GPU memory optimization
-        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -633,6 +650,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         // Support single-argument Forward by using an identity-like memory matrix
         // This allows MemoryReadLayer to work in generic layer pipelines
         int memoryDimension = _keyWeights.Shape[1]; // Get memory dimension from key weights
