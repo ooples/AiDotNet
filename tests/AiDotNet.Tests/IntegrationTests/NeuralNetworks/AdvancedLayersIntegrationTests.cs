@@ -1709,7 +1709,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [64];
-        var layer = new ActivationLayer<float>(inputShape, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new ActivationLayer<float>((IActivationFunction<float>)new ReLUActivation<float>());
 
         var input = Tensor<float>.CreateRandom([4, 64]);
         // Make some values negative
@@ -1733,7 +1733,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [32];
-        var layer = new ActivationLayer<float>(inputShape, (IActivationFunction<float>)new SigmoidActivation<float>());
+        var layer = new ActivationLayer<float>((IActivationFunction<float>)new SigmoidActivation<float>());
 
         var input = Tensor<float>.CreateRandom([2, 32]);
 
@@ -1753,7 +1753,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [32];
-        var layer = new ActivationLayer<float>(inputShape, (IActivationFunction<float>)new TanhActivation<float>());
+        var layer = new ActivationLayer<float>((IActivationFunction<float>)new TanhActivation<float>());
 
         var input = Tensor<float>.CreateRandom([2, 32]);
 
@@ -1774,7 +1774,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [16];
-        var original = new ActivationLayer<float>(inputShape, (IActivationFunction<float>)new ReLUActivation<float>());
+        var original = new ActivationLayer<float>((IActivationFunction<float>)new ReLUActivation<float>());
         var input = Tensor<float>.CreateRandom([2, 16]);
 
         // Act

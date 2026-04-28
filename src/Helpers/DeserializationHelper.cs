@@ -1402,20 +1402,20 @@ public static class DeserializationHelper
 
         if (vectorActivationType.IsInstanceOfType(activationFunction))
         {
-            var ctor = type.GetConstructor(new Type[] { typeof(int[]), vectorActivationType });
+            var ctor = type.GetConstructor(new Type[] { vectorActivationType });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find ActivationLayer constructor with (int[], IVectorActivationFunction<T>).");
+                throw new InvalidOperationException("Cannot find ActivationLayer constructor with (IVectorActivationFunction<T>).");
             }
-            return ctor.Invoke(new object[] { inputShape, activationFunction });
+            return ctor.Invoke(new object[] { activationFunction });
         }
 
-        var scalarCtor = type.GetConstructor(new Type[] { typeof(int[]), scalarActivationType });
+        var scalarCtor = type.GetConstructor(new Type[] { scalarActivationType });
         if (scalarCtor is null)
         {
-            throw new InvalidOperationException("Cannot find ActivationLayer constructor with (int[], IActivationFunction<T>).");
+            throw new InvalidOperationException("Cannot find ActivationLayer constructor with (IActivationFunction<T>).");
         }
-        return scalarCtor.Invoke(new object[] { inputShape, activationFunction });
+        return scalarCtor.Invoke(new object[] { activationFunction });
     }
 
     /// <summary>

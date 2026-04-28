@@ -672,7 +672,7 @@ public class CoreLayersIntegrationTests
     {
         // Arrange
         int[] shape = [8, 16];
-        var layer = new ActivationLayer<float>(shape, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new ActivationLayer<float>((IActivationFunction<float>)new ReLUActivation<float>());
 
         // Create input with positive and negative values
         var input = new Tensor<float>([2, 8, 16]);
@@ -704,7 +704,7 @@ public class CoreLayersIntegrationTests
     {
         // Arrange
         int[] shape = [8, 16];
-        var layer = new ActivationLayer<float>(shape, (IActivationFunction<float>)new SigmoidActivation<float>());
+        var layer = new ActivationLayer<float>((IActivationFunction<float>)new SigmoidActivation<float>());
         var input = CreateRandomTensor([2, 8, 16]);
 
         // Act
@@ -723,7 +723,7 @@ public class CoreLayersIntegrationTests
     {
         // Arrange
         int[] shape = [8, 16];
-        var layer = new ActivationLayer<float>(shape, (IActivationFunction<float>)new TanhActivation<float>());
+        var layer = new ActivationLayer<float>((IActivationFunction<float>)new TanhActivation<float>());
         var input = CreateRandomTensor([2, 8, 16]);
 
         // Act
@@ -743,7 +743,7 @@ public class CoreLayersIntegrationTests
     {
         // Arrange
         int[] shape = [4, 8];
-        var original = new ActivationLayer<float>(shape, (IActivationFunction<float>)new ReLUActivation<float>());
+        var original = new ActivationLayer<float>((IActivationFunction<float>)new ReLUActivation<float>());
         var input = CreateRandomTensor([1, 4, 8]);
 
         // Act

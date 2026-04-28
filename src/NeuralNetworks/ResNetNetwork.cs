@@ -291,7 +291,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
 
         // ReLU activation
         layers.Add(new ActivationLayer<T>(
-            inputShape: [currentChannels, currentHeight, currentWidth],
             activationFunction: new ActivationFunctions.ReLUActivation<T>()));
 
         // Max pooling: 3x3 pool, stride 2
