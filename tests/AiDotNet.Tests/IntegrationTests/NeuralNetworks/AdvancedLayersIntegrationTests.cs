@@ -1647,7 +1647,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [8, 8, 3]; // H, W, C
-        var layer = new FlattenLayer<float>(inputShape);
+        var layer = new FlattenLayer<float>();
 
         var input = Tensor<float>.CreateRandom([2, 8, 8, 3]);
 
@@ -1666,7 +1666,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [4, 4, 4, 8]; // D, H, W, C
-        var layer = new FlattenLayer<float>(inputShape);
+        var layer = new FlattenLayer<float>();
 
         var input = Tensor<float>.CreateRandom([2, 4, 4, 4, 8]);
 
@@ -1686,7 +1686,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [4, 4, 2];
-        var original = new FlattenLayer<float>(inputShape);
+        var original = new FlattenLayer<float>();
         var input = Tensor<float>.CreateRandom([1, 4, 4, 2]);
 
         // Act

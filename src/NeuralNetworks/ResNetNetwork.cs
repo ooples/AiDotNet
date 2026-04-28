@@ -376,8 +376,7 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
         layers.Add(AdaptiveAveragePoolingLayer<T>.GlobalPool());
 
         // Flatten for FC layer
-        layers.Add(new FlattenLayer<T>(
-            inputShape: [finalChannels, 1, 1]));
+        layers.Add(new FlattenLayer<T>());
 
         // Fully connected classifier
         if (config.IncludeClassifier)

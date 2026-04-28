@@ -485,7 +485,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     public async Task FlattenLayer_PreservesValues()
     {
         // FlattenLayer should reshape [batch, h, w] -> [batch, h*w]
-        var layer = new FlattenLayer<double>(new[] { 2, 3 }); // 2x3 input
+        var layer = new FlattenLayer<double>(); // 2x3 input
 
         var input = new Tensor<double>(new[] { 1, 2, 3 });
         input[0, 0, 0] = 1.0; input[0, 0, 1] = 2.0; input[0, 0, 2] = 3.0;

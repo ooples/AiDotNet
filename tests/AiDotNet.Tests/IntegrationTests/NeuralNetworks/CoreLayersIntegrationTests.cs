@@ -538,7 +538,7 @@ public class CoreLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [8, 8, 3];
-        var layer = new FlattenLayer<float>(inputShape);
+        var layer = new FlattenLayer<float>();
         var input = CreateRandomTensor([2, 8, 8, 3]); // [batch, height, width, channels]
 
         // Act
@@ -555,7 +555,7 @@ public class CoreLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [4, 4, 2];
-        var layer = new FlattenLayer<float>(inputShape);
+        var layer = new FlattenLayer<float>();
         var input = CreateRandomTensor([1, 4, 4, 2]);
 
         // Act
@@ -578,7 +578,7 @@ public class CoreLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [4, 4, 2];
-        var original = new FlattenLayer<float>(inputShape);
+        var original = new FlattenLayer<float>();
         var input = CreateRandomTensor([1, 4, 4, 2]);
 
         // Act

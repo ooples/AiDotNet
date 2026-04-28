@@ -515,7 +515,7 @@ public static class LayerHelper<T>
         }
 
         // Flatten layer
-        yield return new FlattenLayer<T>(inputShape: inputShape);
+        yield return new FlattenLayer<T>();
 
         // Calculate the output size of the convolutional layers
         int convOutputSize = filterCount * inputShape[1] * inputShape[2];
@@ -619,7 +619,7 @@ public static class LayerHelper<T>
 
         // Flatten before fully connected layers
         int flattenedSize = currentChannels * currentHeight * currentWidth;
-        yield return new FlattenLayer<T>(inputShape: [currentChannels, currentHeight, currentWidth]);
+        yield return new FlattenLayer<T>();
 
         // Classifier (fully connected layers) - only if included. The three FC
         // layers are the dominant memory cost of VGG (FC1 alone is ~822 MB at
@@ -717,10 +717,10 @@ public static class LayerHelper<T>
         );
 
         // Flatten the output
-        yield return new FlattenLayer<T>([historyWindowSize, 16]);
+        yield return new FlattenLayer<T>();
 
         // Flatten the output of LSTM layers
-        yield return new FlattenLayer<T>([historyWindowSize, 32]);
+        yield return new FlattenLayer<T>();
 
         // Dense layers for further processing
         yield return new DenseLayer<T>(historyWindowSize * 32, 64, new ReLUActivation<T>() as IActivationFunction<T>);
@@ -3270,7 +3270,7 @@ public static class LayerHelper<T>
         // Input layer (flattening if necessary)
         if (inputShape.Length > 1)
         {
-            yield return new FlattenLayer<T>(inputShape);
+            yield return new FlattenLayer<T>();
         }
 
         // First hidden layer
@@ -4051,7 +4051,7 @@ public static class LayerHelper<T>
             activationFunction: (IActivationFunction<T>?)null);
 
         // Flatten [filters, 1, 1, 1] → [filters] for the dense classification head
-        yield return new FlattenLayer<T>([finalFilters, 1, 1, 1]);
+        yield return new FlattenLayer<T>();
 
         // Dense output layer for classification
         IActivationFunction<T> outputActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
@@ -4583,7 +4583,7 @@ public static class LayerHelper<T>
         yield return new AdaptiveAveragePoolingLayer<T>(1, 1);
 
         // Flatten
-        yield return new FlattenLayer<T>([currentChannels, 1, 1]);
+        yield return new FlattenLayer<T>();
 
         // Classification head per Huang et al. 2017: outputs raw logits (no softmax).
         // Must be paired with one of the *WithLogits losses, which apply the activation
@@ -4716,7 +4716,7 @@ public static class LayerHelper<T>
         yield return new AdaptiveAveragePoolingLayer<T>(1, 1);
 
         // Flatten
-        yield return new FlattenLayer<T>([headChannels, 1, 1]);
+        yield return new FlattenLayer<T>();
 
         // Classification head — outputs raw logits. Pair with CrossEntropyWithLogitsLoss<T>
         // (multi-class) or BinaryCrossEntropyWithLogitsLoss<T> (binary). The probability-
@@ -4843,7 +4843,7 @@ public static class LayerHelper<T>
         yield return new AdaptiveAveragePoolingLayer<T>(1, 1);
 
         // Flatten
-        yield return new FlattenLayer<T>([finalConvChannels, 1, 1]);
+        yield return new FlattenLayer<T>();
 
         // Classification head — outputs raw logits. Pair with CrossEntropyWithLogitsLoss<T>
         // (multi-class) or BinaryCrossEntropyWithLogitsLoss<T> (binary).
@@ -4954,7 +4954,7 @@ public static class LayerHelper<T>
             activationFunction: new HardSwishActivation<T>());
 
         // Flatten
-        yield return new FlattenLayer<T>([finalChannels, 1, 1]);
+        yield return new FlattenLayer<T>();
 
         // Classification head — outputs raw logits. Pair with CrossEntropyWithLogitsLoss<T>
         // (multi-class) or BinaryCrossEntropyWithLogitsLoss<T> (binary).
@@ -13716,7 +13716,7 @@ public static class LayerHelper<T>
             inputSize: hiddenDim,
             outputSize: outputPatchLength,
             activationFunction: null);
-        yield return new FlattenLayer<T>(new[] { numPatches, outputPatchLength });
+        yield return new FlattenLayer<T>();
     }
 
     /// <summary>
@@ -30010,7 +30010,7 @@ public static class LayerHelper<T>
         }
 
         // Flatten
-        yield return new FlattenLayer<T>([(currentFilters / 2), currentHeight, currentWidth]);
+        yield return new FlattenLayer<T>();
 
         // Dense layers
         int flattenedSize = (currentFilters / 2) * currentHeight * currentWidth;
@@ -32960,7 +32960,7 @@ public static class LayerHelper<T>
         }
 
         // === Forecast Head (default task) ===
-        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDim });
+        yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>(
             inputSize: numPatches * hiddenDim,
             outputSize: forecastHorizon,
@@ -32990,7 +32990,7 @@ public static class LayerHelper<T>
             inputSize: hiddenDim,
             outputSize: patchLength,
             activationFunction: null);
-        yield return new FlattenLayer<T>(new[] { numPatches, patchLength });
+        yield return new FlattenLayer<T>();
     }
 
     /// <summary>
@@ -33095,7 +33095,7 @@ public static class LayerHelper<T>
         }
 
         // === Forecast head ===
-        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDim });
+        yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>(
             inputSize: numPatches * hiddenDim,
             outputSize: forecastHorizon,
@@ -33137,7 +33137,7 @@ public static class LayerHelper<T>
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDim });
+        yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: forecastHorizon, activationFunction: null);
     }
 
@@ -33202,7 +33202,7 @@ public static class LayerHelper<T>
         // forecast we flatten the full sequence and project to forecastHorizon
         // via a single linear. Weight is [numPatches · hiddenDim, forecastHorizon]
         // = 64·1024 × 96 × 8B ≈ 48 MiB at paper defaults, tractable.
-        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDim });
+        yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: forecastHorizon, activationFunction: null);
     }
 
@@ -33246,7 +33246,7 @@ public static class LayerHelper<T>
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        yield return new FlattenLayer<T>(new[] { 1, hiddenDim });
+        yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>(inputSize: hiddenDim, outputSize: forecastHorizon, activationFunction: null);
     }
 
@@ -33325,7 +33325,7 @@ public static class LayerHelper<T>
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDim });
+        yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: forecastHorizon, activationFunction: null);
     }
 
@@ -33447,7 +33447,7 @@ public static class LayerHelper<T>
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDimension });
+        yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: forecastHorizon * numCandlestickFeatures, activationFunction: null);
     }
 
@@ -33477,7 +33477,7 @@ public static class LayerHelper<T>
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDimension });
+        yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
     }
 
@@ -33507,7 +33507,7 @@ public static class LayerHelper<T>
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDimension });
+        yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
     }
 
@@ -33541,7 +33541,7 @@ public static class LayerHelper<T>
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDimension });
+        yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
     }
 
@@ -33577,7 +33577,7 @@ public static class LayerHelper<T>
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        yield return new FlattenLayer<T>(new[] { contextLength, hiddenDimension });
+        yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
     }
 
@@ -33621,7 +33621,7 @@ public static class LayerHelper<T>
         yield return new PrototypeAlignmentLayer<T>(textEmbeddingDimension, numPrototypes);
 
         // Forecast head from prototype-aligned space
-        yield return new FlattenLayer<T>(new[] { numPatches, textEmbeddingDimension });
+        yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>(inputSize: numPatches * textEmbeddingDimension, outputSize: forecastHorizon, activationFunction: null);
     }
 
@@ -33660,7 +33660,7 @@ public static class LayerHelper<T>
         }
 
         // Flatten then bridge the non-stationarity bottleneck
-        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDimension });
+        yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: bridgeDimension, activationFunction: new GELUActivation<T>());
         yield return new DenseLayer<T>(inputSize: bridgeDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
 
@@ -33971,7 +33971,7 @@ public static class LayerHelper<T>
         }
 
         // Reconstruction head
-        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDimension });
+        yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: contextLength, activationFunction: null);
 
         // Forecast head (chained from reconstruction)
@@ -34009,7 +34009,7 @@ public static class LayerHelper<T>
 
         // Reconstruction head (similarity-weighted; the per-patch
         // similarity aggregation is a SimMTM-specific follow-up step)
-        yield return new FlattenLayer<T>(new[] { numPatches, hiddenDimension });
+        yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: contextLength, activationFunction: null);
 
         // Forecast head (chained from reconstruction)

@@ -184,14 +184,14 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(FlattenLayer<>))
         {
-            // FlattenLayer(int[] inputShape)
-            var ctor = type.GetConstructor(new Type[] { typeof(int[]) });
+            // FlattenLayer() — lazy: input shape resolved on first forward
+            var ctor = type.GetConstructor(Type.EmptyTypes);
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find FlattenLayer constructor with (int[]).");
+                throw new InvalidOperationException("Cannot find FlattenLayer parameterless constructor.");
             }
 
-            instance = ctor.Invoke(new object[] { inputShape });
+            instance = ctor.Invoke(new object[0]);
         }
         else if (genericDef == typeof(TransposeLayer<>))
         {

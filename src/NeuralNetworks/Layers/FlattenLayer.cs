@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.Projection)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 2, 2", TestConstructorArgs = "new[] { 1, 2, 2 }")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 2, 2", TestConstructorArgs = "")]
 public class FlattenLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -165,21 +165,33 @@ public class FlattenLayer<T> : LayerBase<T>
     /// For example:
     /// ```csharp
     /// // Create a flatten layer for 28×28 grayscale images
-    /// var flattenLayer = new FlattenLayer<float>(new int[] { 28, 28, 1 });
+    /// var flattenLayer = new FlattenLayer<float>();
     /// 
     /// // Create a flatten layer for output from a convolutional layer with 64 feature maps of size 7×7
-    /// var flattenConvOutput = new FlattenLayer<float>(new int[] { 7, 7, 64 });
+    /// var flattenConvOutput = new FlattenLayer<float>();
     /// ```
     /// 
     /// The constructor automatically calculates how large the output vector will be
     /// by multiplying all the dimensions together.
     /// </para>
     /// </remarks>
-    public FlattenLayer(int[] inputShape)
-        : base(inputShape, [inputShape.Aggregate(1, (a, b) => a * b)])
+    public FlattenLayer()
+        : base(new[] { -1 }, new[] { -1 })
     {
-        _inputShape = inputShape;
-        _outputSize = inputShape.Aggregate(1, (a, b) => a * b);
+        _inputShape = Array.Empty<int>();
+        _outputSize = -1;
+    }
+
+    /// <summary>
+    /// Resolves shape on first forward by reading input.Shape and computing the flattened output size.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var shape = input.Shape.ToArray();
+        _inputShape = shape;
+        _outputSize = 1;
+        for (int i = 0; i < shape.Length; i++) _outputSize *= shape[i];
+        ResolveShapes(shape, new[] { _outputSize });
     }
 
     /// <summary>
@@ -215,6 +227,7 @@ public class FlattenLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
 
         // Handle truly unbatched 1D input

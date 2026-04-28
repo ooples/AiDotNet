@@ -545,7 +545,7 @@ public class InferenceSessionIntegrationTests
                 embeddingDimension: EmbeddingDimension,
                 headCount: HeadCount,
                 activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>()),
-            new FlattenLayer<float>(new[] { SequenceLength, EmbeddingDimension }),
+            new FlattenLayer<float>(),
             multi,
             new DenseLayer<float>(outputSize, outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
@@ -599,7 +599,7 @@ public class InferenceSessionIntegrationTests
                 headCount: HeadCount,
                 activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
             ,
-            new FlattenLayer<float>(new[] { SequenceLength, EmbeddingDimension }),
+            new FlattenLayer<float>(),
             new DenseLayer<float>(FlatSize, FlatSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 
