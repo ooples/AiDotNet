@@ -259,9 +259,7 @@ public class RRDBNetGenerator<T> : LayerBase<T>
                 activationFunction: null);
 
             // PixelShuffle: 2x upscaling
-            _pixelShuffleLayers[i] = new PixelShuffleLayer<T>(
-                [numFeatures * 4, currentHeight, currentWidth],
-                upscaleFactor: 2);
+            _pixelShuffleLayers[i] = new PixelShuffleLayer<T>(upscaleFactor: 2);
 
             currentHeight *= 2;
             currentWidth *= 2;

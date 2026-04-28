@@ -7386,9 +7386,7 @@ public static class LayerHelper<T>
                 activationFunction: new ReLUActivation<T>() as IActivationFunction<T>);
 
             // Pixel shuffle: [C*4, H, W] -> [C, H*2, W*2]
-            yield return new PixelShuffleLayer<T>(
-                inputShape: [numFeatures * 4, currentHeight, currentWidth],
-                upscaleFactor: 2);
+            yield return new PixelShuffleLayer<T>(upscaleFactor: 2);
 
             currentHeight *= 2;
             currentWidth *= 2;
@@ -7456,9 +7454,7 @@ public static class LayerHelper<T>
             yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1,
                 new ReLUActivation<T>() as IActivationFunction<T>);
 
-            yield return new PixelShuffleLayer<T>(
-                inputShape: [numFeatures * 4, currentHeight, currentWidth],
-                upscaleFactor: 2);
+            yield return new PixelShuffleLayer<T>(upscaleFactor: 2);
 
             currentHeight *= 2;
             currentWidth *= 2;
@@ -7902,20 +7898,20 @@ public static class LayerHelper<T>
             currentDim /= 2;
             h *= 2; w *= 2;
             yield return new ConvolutionalLayer<T>(currentDim * 4, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
-            yield return new PixelShuffleLayer<T>([currentDim * 4, h / 2, w / 2], 2);
+            yield return new PixelShuffleLayer<T>(2);
         }
 
         // Upscaling for super-resolution (pixel shuffle for efficient upsampling)
         if (scaleFactor >= 2)
         {
             yield return new ConvolutionalLayer<T>(currentDim * 4, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
-            yield return new PixelShuffleLayer<T>([currentDim * 4, h, w], 2);
+            yield return new PixelShuffleLayer<T>(2);
             h *= 2; w *= 2;
         }
         if (scaleFactor >= 4)
         {
             yield return new ConvolutionalLayer<T>(currentDim * 4, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
-            yield return new PixelShuffleLayer<T>([currentDim * 4, h, w], 2);
+            yield return new PixelShuffleLayer<T>(2);
             h *= 2; w *= 2;
         }
 
@@ -8016,7 +8012,7 @@ public static class LayerHelper<T>
             if (i > 0 && channelMults[i - 1] != channelMults[^1])
             {
                 yield return new ConvolutionalLayer<T>(currentDim * 4, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-                yield return new PixelShuffleLayer<T>([currentDim * 4, h, w], 2);
+                yield return new PixelShuffleLayer<T>(2);
                 h *= 2; w *= 2;
             }
         }
@@ -8103,7 +8099,7 @@ public static class LayerHelper<T>
 
             // Upsample using pixel shuffle
             yield return new ConvolutionalLayer<T>(outChannels * 4, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-            yield return new PixelShuffleLayer<T>([outChannels * 4, h, w], 2);
+            yield return new PixelShuffleLayer<T>(2);
             h *= 2; w *= 2;
             currentChannels = outChannels;
 
@@ -8940,10 +8936,10 @@ public static class LayerHelper<T>
         // Upsampling with PixelShuffle (sub-pixel convolution)
         // Conv produces numFeatures*4 channels, PixelShuffle rearranges to numFeatures channels at 2x resolution
         yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
-        yield return new PixelShuffleLayer<T>([numFeatures * 4, h, w], 2);
+        yield return new PixelShuffleLayer<T>(2);
         h *= 2; w *= 2;
         yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
-        yield return new PixelShuffleLayer<T>([numFeatures * 4, h, w], 2);
+        yield return new PixelShuffleLayer<T>(2);
         h *= 2; w *= 2;
 
         // Output
@@ -30388,7 +30384,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numUpsample; i++)
         {
             int[] inputShape = [1, numFeatures * 4, currentHeight, currentWidth];
-            yield return new PixelShuffleLayer<T>(inputShape, 2);
+            yield return new PixelShuffleLayer<T>(2);
             currentHeight *= 2;
             currentWidth *= 2;
         }
