@@ -34,8 +34,19 @@ test.describe('Pricing Page', () => {
   });
 
   test('CTA buttons render', async ({ page }) => {
-    const ctaButtons = page.getByRole('link', { name: /Install|Subscribe|Contact|Get Started/i });
-    const count = await ctaButtons.count();
+    // PricingCard renders the Stripe-checkout CTAs (Subscribe on Pro /
+    // Enterprise tiers, Get Free License on Community) as <button>
+    // elements — the click handler triggers a JS-driven Stripe Checkout
+    // flow, not a navigation. Plain non-Stripe CTAs (e.g., Contact)
+    // render as <a> with an href. Match either role so the test reflects
+    // the real page semantics; if `getByRole('link', …)` were the only
+    // selector, healthy pages would fail because Subscribe is correctly
+    // a button.
+    const namePattern = /Install|Subscribe|Contact|Get Started|Get Free License/i;
+    const ctas = page
+      .getByRole('button', { name: namePattern })
+      .or(page.getByRole('link', { name: namePattern }));
+    const count = await ctas.count();
     expect(count).toBeGreaterThanOrEqual(2);
   });
 

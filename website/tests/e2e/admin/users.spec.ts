@@ -63,13 +63,21 @@ test.describe('Admin — users', () => {
       })
       .toBeLessThanOrEqual(totalBefore);
 
-    const visibleRows = page.locator('#users-body tr');
-    const count = await visibleRows.count();
-    expect(count,
+    // Snapshot all row text atomically via allTextContents() instead of
+    // iterating with `visibleRows.nth(i).toContainText` — the per-row
+    // poll races with the async re-render: renderTable() awaits
+    // loadKeyCountsForPage() and replaces innerHTML mid-loop, so a row
+    // captured by count() can disappear by the time the toContainText
+    // assertion polls for it (the failure was "waiting for
+    // locator('#users-body tr').nth(4)" timing out at i=4 even though
+    // count() returned >= 5).
+    const rowTexts = await page.locator('#users-body tr').allTextContents();
+    expect(
+      rowTexts.length,
       'filter=admin must return at least the signed-in admin; zero rows indicates a broken filter or a rolled-back profiles.role'
     ).toBeGreaterThanOrEqual(1);
-    for (let i = 0; i < count; i++) {
-      await expect(visibleRows.nth(i)).toContainText(/admin/i);
+    for (const text of rowTexts) {
+      expect(text).toMatch(/admin/i);
     }
   });
 });
