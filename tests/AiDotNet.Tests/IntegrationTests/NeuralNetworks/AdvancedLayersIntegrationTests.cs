@@ -991,7 +991,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [10, 32]; // sequence, features
-        var layer = new MaskingLayer<float>(inputShape, maskValue: 0);
+        var layer = new MaskingLayer<float>(maskValue: 0);
 
         var input = Tensor<float>.CreateRandom([2, 10, 32]);
 
@@ -1008,7 +1008,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [5, 16];
-        var original = new MaskingLayer<float>(inputShape);
+        var original = new MaskingLayer<float>();
         var input = Tensor<float>.CreateRandom([1, 5, 16]);
 
         // Act
