@@ -3347,6 +3347,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // lookup matches. Copy view → original data so external
                 // observers (Clone / Serialize / GetTrainableParameters
                 // from user code) still see up-to-date weights.
+                //
+                // (This is an AiDotNet-side cache-staleness bug, separate
+                // from the upstream tape-tracking defects fixed in
+                // AiDotNet.Tensors 0.58.1 / 0.58.2 — both are needed.)
                 for (int i = 0; i < originals.Count; i++)
                 {
                     // Bulk copy via Engine — zero-alloc, SIMD-accelerated

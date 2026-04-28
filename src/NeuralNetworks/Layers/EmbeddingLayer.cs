@@ -557,48 +557,28 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         else
         {
             // Standard embedding lookup for integer token indices.
-            // The upstream tape-tracking fix for
-            // Engine.TensorEmbeddingLookup landed in
-            // AiDotNet.Tensors 0.58.1 (ooples/AiDotNet.Tensors#255),
-            // but a deeper tape-chaining defect remains: the
-            // resulting gradient is computed by the backward function
-            // but accumulated under a Tensor<T> reference that
-            // doesn't match the user-facing _embeddingTensor — so
-            // grads[_embeddingTensor] in TrainWithTape misses every
-            // step. Same defect affects 3 of 4 MultiHeadAttention
-            // weights. Tracked at ooples/AiDotNet.Tensors#257 with
-            // full repro + instrumentation evidence. Until the audit
-            // recommended in #257 lands, route the embedding gradient
-            // through Engine.TensorMatMul (verified end-to-end to key
-            // correctly) so the model trains.
-            //
-            //     out = OneHot(indices, V) @ E
-            //     dL/dE = OneHot^T @ dL/d(out)
-            //
-            // Inference takes the fast eager TensorEmbeddingLookup
-            // path (no tape, no [N, V] one-hot allocation).
+            // Engine.TensorEmbeddingLookup is now fully tape-aware:
+            //   * #255 (Tensors 0.58.1): added DifferentiableOps.RecordUnary
+            //     so dL/dE is computed by the backward function.
+            //   * #257 (Tensors 0.58.2): preserved original tensor
+            //     refs across .Contiguous() rebind in MatMul +
+            //     broadcast/conv/norm/SDPA ops, so the computed
+            //     gradient now keys correctly against
+            //     _embeddingTensor (and the 3 MultiHeadAttention
+            //     Q/K/V weights that hit the same defect).
+            // Both training and inference go through the fast eager
+            // row-gather path — the prior issue #1208 workaround
+            // (one-hot @ E matmul) is no longer needed and would
+            // just allocate an extra [N, V] tensor per training
+            // step.
             int totalIndices = input.Length;
-            if (IsTrainingMode)
+            var flatIndices = new Tensor<int>([totalIndices]);
+            for (int i = 0; i < totalIndices; i++)
             {
-                var oneHot = new Tensor<T>([totalIndices, vocabularySize]);
-                for (int i = 0; i < totalIndices; i++)
-                {
-                    int index = Convert.ToInt32(NumOps.ToDouble(input.Data.Span[i]));
-                    if (index < 0 || index >= vocabularySize) index = 0;
-                    oneHot[i, index] = NumOps.One;
-                }
-                flatOutput = Engine.TensorMatMul(oneHot, _embeddingTensor);
+                int index = Convert.ToInt32(NumOps.ToDouble(input.Data.Span[i]));
+                flatIndices[i] = index;
             }
-            else
-            {
-                var flatIndices = new Tensor<int>([totalIndices]);
-                for (int i = 0; i < totalIndices; i++)
-                {
-                    int index = Convert.ToInt32(NumOps.ToDouble(input.Data.Span[i]));
-                    flatIndices[i] = index;
-                }
-                flatOutput = Engine.TensorEmbeddingLookup<T, int>(_embeddingTensor, flatIndices);
-            }
+            flatOutput = Engine.TensorEmbeddingLookup<T, int>(_embeddingTensor, flatIndices);
         }
 
         // Calculate output shape
