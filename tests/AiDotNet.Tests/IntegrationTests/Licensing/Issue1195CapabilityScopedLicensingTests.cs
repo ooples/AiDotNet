@@ -287,6 +287,13 @@ public class Issue1195CapabilityScopedLicensingTests
     [Fact]
     public void TrialCounter_TicksOnceOnUpstreamLayer_ZeroOnTensorLayer()
     {
+        // AIDOTNET_LICENSE_KEY is process-wide. Capture the prior
+        // value and restore it in the finally block so this test
+        // doesn't leak state into later licensing tests (which would
+        // become order-dependent — e.g., a downstream test that
+        // expects a real key would silently exercise the trial
+        // fallback path instead).
+        string? originalLicenseEnv = Environment.GetEnvironmentVariable("AIDOTNET_LICENSE_KEY");
         Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", null);
 
         string tempDir = Path.Combine(Path.GetTempPath(), "aidotnet-issue1195-counter-" + Guid.NewGuid().ToString("N"));
@@ -350,6 +357,7 @@ public class Issue1195CapabilityScopedLicensingTests
         }
         finally
         {
+            Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", originalLicenseEnv);
             try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); }
             catch { /* best effort */ }
         }

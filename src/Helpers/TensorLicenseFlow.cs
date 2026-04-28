@@ -104,10 +104,7 @@ internal static class TensorLicenseFlow
             // outside TargetInvocationException. The bridge must never
             // fault the upstream persistence path.
             System.Diagnostics.Trace.TraceWarning(
-                $"TensorLicenseFlow: failed to set tensor-layer license key: {ex.GetType().Name}" +
-                ((ex as TargetInvocationException)?.InnerException is { } inner
-                    ? $" ({inner.GetType().Name}: {inner.Message})"
-                    : $": {ex.Message}"));
+                $"TensorLicenseFlow: failed to set tensor-layer license key: {DescribeExceptionType(ex)}");
             return NoopScope.Instance;
         }
     }
@@ -145,10 +142,7 @@ internal static class TensorLicenseFlow
                 or TargetParameterCountException)
         {
             System.Diagnostics.Trace.TraceWarning(
-                $"TensorLicenseFlow: failed to enter tensor-layer InternalOperation: {ex.GetType().Name}" +
-                ((ex as TargetInvocationException)?.InnerException is { } inner
-                    ? $" ({inner.GetType().Name}: {inner.Message})"
-                    : $": {ex.Message}"));
+                $"TensorLicenseFlow: failed to enter tensor-layer InternalOperation: {DescribeExceptionType(ex)}");
             return NoopScope.Instance;
         }
     }
@@ -214,7 +208,7 @@ internal static class TensorLicenseFlow
                 // Reflection probing must never fault the upstream
                 // persistence path. Log and degrade to no-op.
                 System.Diagnostics.Trace.TraceWarning(
-                    $"TensorLicenseFlow: reflection probing failed: {ex.GetType().Name}: {ex.Message}");
+                    $"TensorLicenseFlow: reflection probing failed: {DescribeExceptionType(ex)}");
             }
             finally
             {
@@ -259,12 +253,28 @@ internal static class TensorLicenseFlow
             // path: log and degrade to no-op so the upstream guard still
             // runs. Includes the inner exception type for triage.
             System.Diagnostics.Trace.TraceWarning(
-                $"TensorLicenseFlow: failed to build tensor-layer license key: {ex.GetType().Name}" +
-                ((ex as TargetInvocationException)?.InnerException is { } inner
-                    ? $" ({inner.GetType().Name}: {inner.Message})"
-                    : $": {ex.Message}"));
+                $"TensorLicenseFlow: failed to build tensor-layer license key: {DescribeExceptionType(ex)}");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Builds a redaction-safe diagnostic string for an exception:
+    /// the outer type name and (when wrapped in
+    /// <see cref="TargetInvocationException"/>) the inner type name.
+    /// Deliberately omits <c>ex.Message</c> and stack traces — these
+    /// can include reflection-surfaced license-key content or other
+    /// sensitive config in the licensing path. Type names alone are
+    /// enough to triage the failure category without leaking secrets
+    /// to operator-readable trace logs.
+    /// </summary>
+    private static string DescribeExceptionType(Exception ex)
+    {
+        if ((ex as TargetInvocationException)?.InnerException is { } inner)
+        {
+            return $"{ex.GetType().Name} ({inner.GetType().Name})";
+        }
+        return ex.GetType().Name;
     }
 
     private sealed class NoopScope : IDisposable
