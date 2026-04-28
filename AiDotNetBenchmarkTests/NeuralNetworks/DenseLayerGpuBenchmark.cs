@@ -47,7 +47,7 @@ public class DenseLayerGpuBenchmark
 
         // Initialize the dense layer with specified dimensions
         // Cast to IActivationFunction to avoid ambiguous constructor
-        _denseLayer = new DenseLayer<float>(MatrixSize, MatrixSize, (IActivationFunction<float>)new ReLUActivation<float>());
+        _denseLayer = new DenseLayer<float>(MatrixSize, (IActivationFunction<float>)new ReLUActivation<float>());
 
         // Create input tensor with deterministic values
         _inputData = new float[BatchSize * MatrixSize];
