@@ -213,7 +213,7 @@ public class PoolingLayersIntegrationTests
         int inputWidth = 16;
         int outputHeight = 4;
         int outputWidth = 4;
-        var layer = new AdaptiveAveragePoolingLayer<float>(inputChannels, inputHeight, inputWidth, outputHeight, outputWidth);
+        var layer = new AdaptiveAveragePoolingLayer<float>(outputHeight, outputWidth);
         var input = CreateRandomTensor<float>([inputChannels, inputHeight, inputWidth]);
 
         // Act
@@ -228,7 +228,7 @@ public class PoolingLayersIntegrationTests
     public async Task AdaptiveAveragePoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
-        var original = new AdaptiveAveragePoolingLayer<float>(4, 16, 16, 4, 4);
+        var original = new AdaptiveAveragePoolingLayer<float>(4, 4);
         var input = CreateRandomTensor<float>([4, 16, 16]);
         var originalOutput = original.Forward(input);
 

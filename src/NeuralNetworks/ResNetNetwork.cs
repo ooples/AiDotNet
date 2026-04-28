@@ -373,10 +373,7 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
 
         // Global average pooling
         int finalChannels = baseChannels[3] * expansion; // 512 for BasicBlock, 2048 for Bottleneck
-        layers.Add(AdaptiveAveragePoolingLayer<T>.GlobalPool(
-            inputChannels: finalChannels,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth));
+        layers.Add(AdaptiveAveragePoolingLayer<T>.GlobalPool());
 
         // Flatten for FC layer
         layers.Add(new FlattenLayer<T>(

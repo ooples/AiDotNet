@@ -2748,7 +2748,7 @@ public class AdvancedLayersIntegrationTests
         int outputHeight = 4;
         int outputWidth = 4;
         var layer = new AdaptiveAveragePoolingLayer<float>(
-            inputChannels, inputHeight, inputWidth, outputHeight, outputWidth);
+            outputHeight, outputWidth);
 
         // Input: [batch, channels, height, width]
         var input = Tensor<float>.CreateRandom([2, inputChannels, inputHeight, inputWidth]);
@@ -2769,8 +2769,7 @@ public class AdvancedLayersIntegrationTests
         int inputChannels = 3;
         int inputHeight = 16;
         int inputWidth = 16;
-        var original = new AdaptiveAveragePoolingLayer<float>(
-            inputChannels, inputHeight, inputWidth, 2, 2);
+        var original = new AdaptiveAveragePoolingLayer<float>(2, 2);
         var input = Tensor<float>.CreateRandom([1, inputChannels, inputHeight, inputWidth]);
 
         // Act

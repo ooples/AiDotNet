@@ -4586,7 +4586,7 @@ public static class LayerHelper<T>
             activationFunction: new ReLUActivation<T>());
 
         // Global average pooling
-        yield return new AdaptiveAveragePoolingLayer<T>(currentChannels, currentHeight, currentWidth, 1, 1);
+        yield return new AdaptiveAveragePoolingLayer<T>(1, 1);
 
         // Flatten
         yield return new FlattenLayer<T>([currentChannels, 1, 1]);
@@ -4719,7 +4719,7 @@ public static class LayerHelper<T>
             activationFunction: new SwishActivation<T>());
 
         // Global average pooling
-        yield return new AdaptiveAveragePoolingLayer<T>(headChannels, currentHeight, currentWidth, 1, 1);
+        yield return new AdaptiveAveragePoolingLayer<T>(1, 1);
 
         // Flatten
         yield return new FlattenLayer<T>([headChannels, 1, 1]);
@@ -4846,7 +4846,7 @@ public static class LayerHelper<T>
             activationFunction: new ReLU6Activation<T>());
 
         // Global average pooling
-        yield return new AdaptiveAveragePoolingLayer<T>(finalConvChannels, currentHeight, currentWidth, 1, 1);
+        yield return new AdaptiveAveragePoolingLayer<T>(1, 1);
 
         // Flatten
         yield return new FlattenLayer<T>([finalConvChannels, 1, 1]);
@@ -4945,7 +4945,7 @@ public static class LayerHelper<T>
             activationFunction: new HardSwishActivation<T>());
 
         // Global average pooling
-        yield return new AdaptiveAveragePoolingLayer<T>(penultimateChannels, currentHeight, currentWidth, 1, 1);
+        yield return new AdaptiveAveragePoolingLayer<T>(1, 1);
 
         // Final classification layers
         int finalChannels = isLarge ? 1280 : 1024;
