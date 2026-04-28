@@ -27,7 +27,7 @@ namespace AiDotNetTestConsole
             int stride = 2;
             int padding = 1;
 
-            var layer = new DeconvolutionalLayer<double>(new int[] { batchSize, inputDepth, inputH, inputW }, outputDepth, kernelSize, stride, padding, (IActivationFunction<double>)new AiDotNet.ActivationFunctions.ReLUActivation<double>());
+            var layer = new DeconvolutionalLayer<double>(outputDepth, kernelSize, stride, padding, (IActivationFunction<double>)new AiDotNet.ActivationFunctions.ReLUActivation<double>());
 
             Console.WriteLine($"Input Shape: {string.Join(", ", input.Shape)}");
             Console.WriteLine($"Kernel Size: {kernelSize}, Stride: {stride}, Padding: {padding}");

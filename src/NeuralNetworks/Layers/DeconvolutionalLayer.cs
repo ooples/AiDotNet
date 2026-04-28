@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Upsampling)]
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "new[] { 1, 1, 4, 4 }, 2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public partial class DeconvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -196,7 +196,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// representing many different detected features.
     /// </para>
     /// </remarks>
-    public int InputDepth { get; }
+    public int InputDepth { get; private set; }
 
     /// <summary>
     /// Gets the depth (number of channels) of the output data.
@@ -340,25 +340,51 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// that will be improved during training.
     /// </para>
     /// </remarks>
-    public DeconvolutionalLayer(int[] inputShape, int outputDepth, int kernelSize, int stride = 1, int padding = 0,
+    public DeconvolutionalLayer(int outputDepth, int kernelSize, int stride = 1, int padding = 0,
                                 IActivationFunction<T>? activationFunction = null)
-        : base(inputShape, CalculateOutputShape(inputShape, outputDepth, kernelSize, stride, padding),
+        : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 },
                activationFunction ?? new ReLUActivation<T>())
     {
-        InputDepth = inputShape[1];
+        if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth));
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
+        if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding));
+
+        InputDepth = -1;
         OutputDepth = outputDepth;
         KernelSize = kernelSize;
         Stride = stride;
         Padding = padding;
 
-        _kernels = new Tensor<T>([InputDepth, OutputDepth, KernelSize, KernelSize]);
+        _kernels = new Tensor<T>([0, 0, 0, 0]);
+        _biases = new Tensor<T>([0]);
+    }
+
+    /// <summary>
+    /// Resolves input shape on first forward (PyTorch ConvTranspose2d-style).
+    /// Output spatial dim per axis: (input - 1) * stride - 2 * padding + kernelSize.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        int c, h, w;
+        if (rank == 4) { c = input.Shape[1]; h = input.Shape[2]; w = input.Shape[3]; }
+        else if (rank == 3) { c = input.Shape[0]; h = input.Shape[1]; w = input.Shape[2]; }
+        else throw new ArgumentException(
+            $"DeconvolutionalLayer requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {rank}.",
+            nameof(input));
+
+        InputDepth = c;
+        int outH = (h - 1) * Stride - 2 * Padding + KernelSize;
+        int outW = (w - 1) * Stride - 2 * Padding + KernelSize;
+
+        _kernels = new Tensor<T>([c, OutputDepth, KernelSize, KernelSize]);
         _biases = new Tensor<T>([OutputDepth]);
-
         InitializeParameters();
-
-        // Register trainable parameters for GPU memory persistence
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+        ResolveShapes(new[] { c, h, w }, new[] { OutputDepth, outH, outW });
     }
 
     /// <summary>
@@ -389,63 +415,24 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// needs to be applied to groups of outputs rather than individual values.
     /// </para>
     /// </remarks>
-    public DeconvolutionalLayer(int[] inputShape, int outputDepth, int kernelSize, int stride = 1, int padding = 0,
-                                IVectorActivationFunction<T>? vectorActivationFunction = null)
-        : base(inputShape, CalculateOutputShape(inputShape, outputDepth, kernelSize, stride, padding),
+    public DeconvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding,
+                                IVectorActivationFunction<T> vectorActivationFunction)
+        : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 },
                vectorActivationFunction ?? new ReLUActivation<T>())
     {
-        InputDepth = inputShape[1];
+        if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth));
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
+        if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding));
+
+        InputDepth = -1;
         OutputDepth = outputDepth;
         KernelSize = kernelSize;
         Stride = stride;
         Padding = padding;
 
-        _kernels = new Tensor<T>([InputDepth, OutputDepth, KernelSize, KernelSize]);
-        _biases = new Tensor<T>([OutputDepth]);
-
-        InitializeParameters();
-
-        // Register trainable parameters for GPU memory persistence
-        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
-    }
-
-    /// <summary>
-    /// Calculates the output shape after applying the deconvolution operation.
-    /// </summary>
-    /// <param name="inputShape">The shape of the input data.</param>
-    /// <param name="outputDepth">The number of output channels to create.</param>
-    /// <param name="kernelSize">The size of each filter kernel.</param>
-    /// <param name="stride">The step size for positioning the kernel.</param>
-    /// <param name="padding">The amount of padding to apply.</param>
-    /// <returns>The calculated output shape after deconvolution.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the output shape of the data after applying the deconvolution operation.
-    /// The formula used is (inputDim - 1) * stride - 2 * padding + kernelSize, which determines
-    /// how much the spatial dimensions will increase.
-    /// </para>
-    /// <para><b>For Beginners:</b> This calculates how big your output will be after enlarging the input.
-    /// 
-    /// The formula takes into account:
-    /// - How big your input is
-    /// - How much enlargement to apply (stride)
-    /// - How big your pattern generators are (kernel size)
-    /// - Any adjustments needed (padding)
-    /// 
-    /// For example, if you have a 16×16 input and use stride 2, kernel size 3, and no padding:
-    /// - The output height will be (16-1)*2 - 0 + 3 = 33
-    /// - The output width will be (16-1)*2 - 0 + 3 = 33
-    /// 
-    /// So your 16×16 input becomes approximately 33×33 output (about 4 times larger in area).
-    /// </para>
-    /// </remarks>
-    private static int[] CalculateOutputShape(int[] inputShape, int outputDepth, int kernelSize, int stride, int padding)
-    {
-        int outputHeight = (inputShape[2] - 1) * stride - 2 * padding + kernelSize;
-        int outputWidth = (inputShape[3] - 1) * stride - 2 * padding + kernelSize;
-
-        return [inputShape[0], outputDepth, outputHeight, outputWidth];
+        _kernels = new Tensor<T>([0, 0, 0, 0]);
+        _biases = new Tensor<T>([0]);
     }
 
     /// <summary>
@@ -504,6 +491,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
 
         // Get the fused activation type for optimal GPU/CPU performance

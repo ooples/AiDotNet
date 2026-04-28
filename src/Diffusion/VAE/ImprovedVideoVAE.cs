@@ -151,7 +151,6 @@ public class ImprovedVideoVAE<T> : VAEModelBase<T>
         {
             int outChannels = i == 0 ? _baseChannels : _baseChannels * multipliers[i - 1];
             _decoderLayers.Add(new DeconvolutionalLayer<T>(
-                inputShape: [1, channels, 8, 8],
                 outputDepth: outChannels,
                 kernelSize: 4, stride: 2, padding: 1,
                 activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));

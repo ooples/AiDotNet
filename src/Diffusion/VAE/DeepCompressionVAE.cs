@@ -144,7 +144,6 @@ public class DeepCompressionVAE<T> : VAEModelBase<T>
                 ? (IActivationFunction<T>)new TanhActivation<T>()
                 : (IActivationFunction<T>)new GELUActivation<T>();
             _decoderLayers.Add(new DeconvolutionalLayer<T>(
-                inputShape: [1, channels, 8, 8],
                 outputDepth: outChannels,
                 kernelSize: 4, stride: 2, padding: 1,
                 activationFunction: activation));

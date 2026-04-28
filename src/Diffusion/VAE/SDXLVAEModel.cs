@@ -181,7 +181,6 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
             if (level > 0)
             {
                 _decoderLayers.Add(new DeconvolutionalLayer<T>(
-                    inputShape: [1, channels, 16, 16],
                     outputDepth: channels,
                     kernelSize: 4, stride: 2, padding: 1,
                     activationFunction: new IdentityActivation<T>()));

@@ -322,7 +322,7 @@ public class AdvancedLayersIntegrationTests
         int kernelSize = 3;
         int stride = 2;
         int padding = 1;
-        var layer = new DeconvolutionalLayer<float>(inputShape, outputDepth, kernelSize, stride, padding, (IActivationFunction<float>?)null);
+        var layer = new DeconvolutionalLayer<float>(outputDepth, kernelSize, stride, padding, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([1, 4, 8, 8]);
 
@@ -344,7 +344,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [1, 4, 8, 8];
-        var original = new DeconvolutionalLayer<float>(inputShape, 2, 3, 2, 1, (IActivationFunction<float>?)null);
+        var original = new DeconvolutionalLayer<float>(2, 3, 2, 1, (IActivationFunction<float>?)null);
 
         // Act
         var clone = original.Clone();
@@ -620,7 +620,7 @@ public class AdvancedLayersIntegrationTests
         var convOutput = conv.Forward(Tensor<float>.CreateRandom(convInputShape));
         int[] deconvInputShape = [convOutput.Shape[0], convOutput.Shape[1], convOutput.Shape[2], convOutput.Shape[3]];
 
-        var deconv = new DeconvolutionalLayer<float>(deconvInputShape, 4, 3, 2, 1, (IActivationFunction<float>?)null); // Upsample
+        var deconv = new DeconvolutionalLayer<float>(4, 3, 2, 1, (IActivationFunction<float>?)null); // Upsample
 
         var input = Tensor<float>.CreateRandom(convInputShape);
 

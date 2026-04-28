@@ -7641,9 +7641,9 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Decoder with upsampling to restore original resolution
-        yield return new DeconvolutionalLayer<T>([1, numFeatures * 2, h, w], numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new DeconvolutionalLayer<T>(numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h *= 2; w *= 2;
-        yield return new DeconvolutionalLayer<T>([1, numFeatures, h, w], numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new DeconvolutionalLayer<T>(numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h *= 2; w *= 2;
 
         // Output head (residual prediction at original resolution)
@@ -28742,7 +28742,7 @@ public static class LayerHelper<T>
             if (level > 0)
             {
                 yield return new DeconvolutionalLayer<T>(
-                    [1, outC, h, w], outC, 4, 2, 1, identity);
+                    outC, 4, 2, 1, identity);
                 h *= 2;
                 w *= 2;
             }
@@ -28877,7 +28877,7 @@ public static class LayerHelper<T>
             if (level > 0)
             {
                 yield return new DeconvolutionalLayer<T>(
-                    [1, outC, h, w], outC, 4, 2, 1, identity);
+                    outC, 4, 2, 1, identity);
                 h *= 2;
                 w *= 2;
             }
@@ -29055,7 +29055,7 @@ public static class LayerHelper<T>
             if (level > 0)
             {
                 yield return new DeconvolutionalLayer<T>(
-                    [1, channels, h, w], channels, 4, 2, 1, identity);
+                    channels, 4, 2, 1, identity);
                 h *= 2;
                 w *= 2;
             }
@@ -29390,7 +29390,7 @@ public static class LayerHelper<T>
             if (level > 0)
             {
                 yield return new DeconvolutionalLayer<T>(
-                    [1, channels, h, w], channels, 4, 2, 1, identity);
+                    channels, 4, 2, 1, identity);
                 h *= 2;
                 w *= 2;
             }
@@ -29910,13 +29910,13 @@ public static class LayerHelper<T>
 
             if (i < numStages - 1)
             {
-                yield return new DeconvolutionalLayer<T>(decoderInputShape, outChannels, kernelSize, stride, kernelSize / 2,
+                yield return new DeconvolutionalLayer<T>(outChannels, kernelSize, stride, kernelSize / 2,
                     (IActivationFunction<T>)new LeakyReLUActivation<T>());
                 yield return new BatchNormalizationLayer<T>();
             }
             else
             {
-                yield return new DeconvolutionalLayer<T>(decoderInputShape, outChannels, kernelSize, stride, kernelSize / 2,
+                yield return new DeconvolutionalLayer<T>(outChannels, kernelSize, stride, kernelSize / 2,
                     (IActivationFunction<T>?)null);
             }
 

@@ -179,7 +179,6 @@ public class UpBlock<T> : LayerBase<T>
         if (hasUpsample)
         {
             _upsample = new DeconvolutionalLayer<T>(
-                inputShape: new[] { 1, inChannels, inputSpatialSize, inputSpatialSize },
                 outputDepth: outChannels,
                 kernelSize: 4,
                 stride: 2,
