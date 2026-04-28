@@ -413,7 +413,7 @@ public class CoreLayersIntegrationTests
         int poolSize = 2;
         int stride = 2;
 
-        var layer = new AveragePoolingLayer<float>([channels, inputHeight, inputWidth], poolSize, stride);
+        var layer = new AveragePoolingLayer<float>(poolSize, stride);
         var input = Create4DInput(2, channels, inputHeight, inputWidth);
 
         // Act
@@ -433,7 +433,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int channels = 1;
         int size = 4;
-        var layer = new AveragePoolingLayer<float>([channels, size, size], 2, 2);
+        var layer = new AveragePoolingLayer<float>(2, 2);
 
         // Create input with known values
         var input = new Tensor<float>([1, 1, 4, 4]);

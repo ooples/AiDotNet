@@ -130,7 +130,6 @@ public class TransitionLayer<T> : LayerBase<T>
         // After 1x1 conv, dimensions are same
         // Then 2x2 avg pool with stride 2 halves dimensions
         _pool = new AveragePoolingLayer<T>(
-            inputShape: [OutputChannels, inputHeight, inputWidth],
             poolSize: 2,
             strides: 2);
 

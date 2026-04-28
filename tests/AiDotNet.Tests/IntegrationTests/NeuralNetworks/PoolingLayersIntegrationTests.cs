@@ -89,7 +89,7 @@ public class PoolingLayersIntegrationTests
         int[] inputShape = [4, 10, 10];
         int poolSize = 2;
         int stride = 2;
-        var layer = new AveragePoolingLayer<float>(inputShape, poolSize, stride);
+        var layer = new AveragePoolingLayer<float>(poolSize, stride);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act
@@ -110,7 +110,7 @@ public class PoolingLayersIntegrationTests
         int[] inputShape = [4, 8, 8];
         int poolSize = 2;
         int stride = 2;
-        var layer = new AveragePoolingLayer<float>(inputShape, poolSize, stride);
+        var layer = new AveragePoolingLayer<float>(poolSize, stride);
         var input = CreateRandomTensor<float>([3, 4, 8, 8]);
 
         // Act
@@ -131,7 +131,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [4, 8, 8];
-        var original = new AveragePoolingLayer<float>(inputShape, 2, 2);
+        var original = new AveragePoolingLayer<float>(2, 2);
         var input = CreateRandomTensor<float>(inputShape);
         var originalOutput = original.Forward(input);
 
@@ -332,7 +332,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [4, 8, 8];
-        var layer = new AveragePoolingLayer<float>(inputShape, 2, 2);
+        var layer = new AveragePoolingLayer<float>(2, 2);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act - Training mode
@@ -372,7 +372,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange - 3x3 pooling
         int[] inputShape = [2, 9, 9];
-        var layer = new AveragePoolingLayer<float>(inputShape, 3, 3);
+        var layer = new AveragePoolingLayer<float>(3, 3);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act

@@ -114,7 +114,7 @@ public class LayerMathematicalTests2
     [Fact(Timeout = 120000)]
     public async Task AvgPool2D_ComputesAverage()
     {
-        var layer = new AveragePoolingLayer<double>([1, 2, 2], 2, 2);
+        var layer = new AveragePoolingLayer<double>(2, 2);
 
         // [[1, 3], [2, 4]]
         var data = new double[] { 1.0, 3.0, 2.0, 4.0 };
