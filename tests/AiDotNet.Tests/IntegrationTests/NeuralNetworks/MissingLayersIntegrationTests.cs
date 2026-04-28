@@ -123,11 +123,9 @@ public class MissingLayersIntegrationTests
         int outputChannels = 4;
 
         var layer = new DiffusionConvLayer<float>(
-            inputChannels,
             outputChannels,
             numTimeScales: 2,
             numEigenvectors: 4,
-            numVertices: numVertices,
             activation: (IActivationFunction<float>)new ReLUActivation<float>());
         layer.SetLaplacian(CreateIdentityMatrix(numVertices));
 
