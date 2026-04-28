@@ -13544,7 +13544,7 @@ public static class LayerHelper<T>
         int inputSize = numFeatures * (1 + numLags);
 
         // === Input Embedding: per-token projection of lag features → hiddenDim ===
-        yield return new FeedForwardLayer<T>(inputSize, hiddenDim, (IActivationFunction<T>?)null);
+        yield return new FeedForwardLayer<T>(hiddenDim, (IActivationFunction<T>?)null);
 
         // === Llama-style Transformer Layers ===
         for (int layer = 0; layer < numLayers; layer++)
@@ -13559,7 +13559,7 @@ public static class LayerHelper<T>
 
         // === Distribution Output Head ===
         // Student-t distribution: output mu, sigma, nu (3 params per forecast step)
-        yield return new FeedForwardLayer<T>(hiddenDim, forecastHorizon * 3, (IActivationFunction<T>?)null);
+        yield return new FeedForwardLayer<T>(forecastHorizon * 3, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -13646,7 +13646,7 @@ public static class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>();
 
         // === Language Model Head: project hiddenDim → numTokens (per-position logits) ===
-        yield return new FeedForwardLayer<T>(hiddenDim, numTokens, (IActivationFunction<T>?)null);
+        yield return new FeedForwardLayer<T>(numTokens, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -13692,7 +13692,7 @@ public static class LayerHelper<T>
         // All operations are per-patch on hiddenDim, NOT flattened.
 
         // === Patch Embedding: project numFeatures to hiddenDim per patch ===
-        yield return new FeedForwardLayer<T>(numFeatures, hiddenDim, (IActivationFunction<T>?)null);
+        yield return new FeedForwardLayer<T>(hiddenDim, (IActivationFunction<T>?)null);
 
         // === Masked Encoder Transformer ===
         for (int i = 0; i < numLayers; i++)
@@ -13708,8 +13708,8 @@ public static class LayerHelper<T>
         // === Mixture Distribution Output Head ===
         // Per paper: predict mixture params per position (weight, mean, variance per mixture)
         int distributionParams = numMixtures * 3;
-        yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim / 2, (IActivationFunction<T>)new GELUActivation<T>());
-        yield return new FeedForwardLayer<T>(hiddenDim / 2, distributionParams, (IActivationFunction<T>?)null);
+        yield return new FeedForwardLayer<T>(hiddenDim / 2, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new FeedForwardLayer<T>(distributionParams, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -13759,7 +13759,7 @@ public static class LayerHelper<T>
         int ffnDim = llmDim * 4;
 
         // === Patch Embedding: per-patch projection ===
-        yield return new FeedForwardLayer<T>(numFeatures * patchLength, llmDim, (IActivationFunction<T>?)null);
+        yield return new FeedForwardLayer<T>(llmDim, (IActivationFunction<T>?)null);
         yield return new LayerNormalizationLayer<T>();
 
         // === Reprogramming Transformer ===
@@ -13778,8 +13778,8 @@ public static class LayerHelper<T>
 
         // === Final Layer Norm + Output Projection ===
         yield return new LayerNormalizationLayer<T>();
-        yield return new FeedForwardLayer<T>(llmDim, llmDim / 4, (IActivationFunction<T>)new GELUActivation<T>());
-        yield return new FeedForwardLayer<T>(llmDim / 4, forecastHorizon, (IActivationFunction<T>?)null);
+        yield return new FeedForwardLayer<T>(llmDim / 4, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new FeedForwardLayer<T>(forecastHorizon, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -13838,19 +13838,19 @@ public static class LayerHelper<T>
         var gelu = (IActivationFunction<T>)new GELUActivation<T>();
 
         // === Input Embedding: per-token projection [numFeatures] → [hiddenDim] ===
-        yield return new FeedForwardLayer<T>(numFeatures, hiddenDim, gelu);
+        yield return new FeedForwardLayer<T>(hiddenDim, gelu);
 
         // === Multi-Scale Temporal Processing ===
         // Per paper: multi-scale 1D convolutions capture local patterns at different granularities.
         // Each scale uses a different kernel size on the temporal dimension.
         for (int scale = 0; scale < numScales; scale++)
         {
-            yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim, gelu);
+            yield return new FeedForwardLayer<T>(hiddenDim, gelu);
             yield return new LayerNormalizationLayer<T>();
         }
 
         // === Scale Aggregation: fuse multi-scale features ===
-        yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim, gelu);
+        yield return new FeedForwardLayer<T>(hiddenDim, gelu);
 
         // === Transformer Encoder Stack ===
         // Per paper: standard pre-norm transformer layers for global temporal dependencies.
@@ -13875,16 +13875,16 @@ public static class LayerHelper<T>
                 // of one per sequence, breaking downstream output-shape contracts.
                 yield return new GlobalPoolingLayer<T>(
                     PoolingType.Average, (IActivationFunction<T>?)null);
-                yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim, gelu);
-                yield return new FeedForwardLayer<T>(hiddenDim, numClasses, (IActivationFunction<T>?)null);
+                yield return new FeedForwardLayer<T>(hiddenDim, gelu);
+                yield return new FeedForwardLayer<T>(numClasses, (IActivationFunction<T>?)null);
                 break;
 
             case "anomaly":
             case "imputation":
                 // Reconstruction: per-token projection (no pooling — we want one
                 // numFeatures-dimensional output per timestep).
-                yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim / 2, gelu);
-                yield return new FeedForwardLayer<T>(hiddenDim / 2, numFeatures, (IActivationFunction<T>?)null);
+                yield return new FeedForwardLayer<T>(hiddenDim / 2, gelu);
+                yield return new FeedForwardLayer<T>(numFeatures, (IActivationFunction<T>?)null);
                 break;
 
             case "forecasting":
@@ -13895,8 +13895,8 @@ public static class LayerHelper<T>
                 // single forecastHorizon vector for the whole sequence.
                 yield return new GlobalPoolingLayer<T>(
                     PoolingType.Average, (IActivationFunction<T>?)null);
-                yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim / 2, gelu);
-                yield return new FeedForwardLayer<T>(hiddenDim / 2, forecastHorizon, (IActivationFunction<T>?)null);
+                yield return new FeedForwardLayer<T>(hiddenDim / 2, gelu);
+                yield return new FeedForwardLayer<T>(forecastHorizon, (IActivationFunction<T>?)null);
                 break;
         }
     }
@@ -13951,7 +13951,7 @@ public static class LayerHelper<T>
         int ffnDim = hiddenDim * 4;
 
         // === Patch Embedding: per-patch projection ===
-        yield return new FeedForwardLayer<T>(numFeatures * patchLength, hiddenDim, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new FeedForwardLayer<T>(hiddenDim, (IActivationFunction<T>)new GELUActivation<T>());
 
         // === GPT-Style Transformer Stack ===
         for (int i = 0; i < numLayers; i++)
@@ -13963,7 +13963,7 @@ public static class LayerHelper<T>
 
         // === Final Norm + Forecast Head ===
         yield return new LayerNormalizationLayer<T>();
-        yield return new FeedForwardLayer<T>(hiddenDim, forecastHorizon, (IActivationFunction<T>?)null);
+        yield return new FeedForwardLayer<T>(forecastHorizon, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -14011,7 +14011,7 @@ public static class LayerHelper<T>
         int ffnDim = hiddenDim * 4;
 
         // === Input Embedding: per-token projection ===
-        yield return new FeedForwardLayer<T>(numFeatures, hiddenDim, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new FeedForwardLayer<T>(hiddenDim, (IActivationFunction<T>)new GELUActivation<T>());
 
         // === Large Transformer Backbone ===
         for (int i = 0; i < numLayers; i++)
@@ -14023,7 +14023,7 @@ public static class LayerHelper<T>
 
         // === Final Norm + Forecast Head ===
         yield return new LayerNormalizationLayer<T>();
-        yield return new FeedForwardLayer<T>(hiddenDim, forecastHorizon, (IActivationFunction<T>?)null);
+        yield return new FeedForwardLayer<T>(forecastHorizon, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -14094,7 +14094,7 @@ public static class LayerHelper<T>
 
         // === Output Projection ===
         // Per-token projection from modelDim to forecast values, then pool across sequence.
-        yield return new FeedForwardLayer<T>(modelDim, forecastHorizon, (IActivationFunction<T>?)null);
+        yield return new FeedForwardLayer<T>(forecastHorizon, (IActivationFunction<T>?)null);
     }
 
     /// <summary>

@@ -387,12 +387,10 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Standard transformer FFN: Linear(embed -> ff) + GELU + Linear(ff -> embed)
         _feedForward1 = new FeedForwardLayer<T>(
-            _embeddingSize,
             _feedForwardDim,
             new GELUActivation<T>() as IActivationFunction<T>);
 
         _feedForward2 = new FeedForwardLayer<T>(
-            _feedForwardDim,
             _embeddingSize,
             (IActivationFunction<T>?)null); // No activation on projection layer
 

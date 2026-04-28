@@ -178,7 +178,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 64;
         int outputSize = 32;
-        var layer = new FeedForwardLayer<float>(inputSize, outputSize, (IActivationFunction<float>?)null);
+        var layer = new FeedForwardLayer<float>(outputSize, (IActivationFunction<float>?)null);
 
         int batchSize = 4;
         var input = Tensor<float>.CreateRandom([batchSize, inputSize]);
@@ -200,7 +200,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 32;
         int outputSize = 16;
-        var original = new FeedForwardLayer<float>(inputSize, outputSize, (IActivationFunction<float>?)null);
+        var original = new FeedForwardLayer<float>(outputSize, (IActivationFunction<float>?)null);
 
         // Act
         var clone = original.Clone();
@@ -217,7 +217,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 64;
         int outputSize = 32;
-        var layer = new FeedForwardLayer<float>(inputSize, outputSize, (IActivationFunction<float>?)null);
+        var layer = new FeedForwardLayer<float>(outputSize, (IActivationFunction<float>?)null);
 
         // Act
         int paramCount = layer.ParameterCount;
@@ -234,7 +234,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 32;
         int outputSize = 16;
-        var layer = new FeedForwardLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new FeedForwardLayer<float>(outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
 
         // Use negative inputs to verify ReLU
         var input = Tensor<float>.CreateDefault([2, inputSize], -1.0f);
@@ -597,7 +597,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int size = 64;
         int[] inputShape = [size];
-        var innerLayer = new FeedForwardLayer<float>(size, size, (IActivationFunction<float>?)null);
+        var innerLayer = new FeedForwardLayer<float>(size, (IActivationFunction<float>?)null);
         var residualLayer = new ResidualLayer<float>(innerLayer, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, size]);
@@ -685,7 +685,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 1024;
         int outputSize = 2048;
-        var layer = new FeedForwardLayer<float>(inputSize, outputSize, (IActivationFunction<float>?)null);
+        var layer = new FeedForwardLayer<float>(outputSize, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([1, inputSize]);
 

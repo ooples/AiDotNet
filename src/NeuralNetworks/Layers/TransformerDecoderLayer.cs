@@ -590,9 +590,9 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _norm2 = new LayerNormalizationLayer<T>();
 
         // Feed-forward layer (with activation) - expands to hidden dimension
-        _feedForward = new FeedForwardLayer<T>(_embeddingSize, _feedForwardDim, activation);
+        _feedForward = new FeedForwardLayer<T>(_feedForwardDim, activation);
         // Projection layer (no activation) - projects back to embedding size
-        _feedForwardProjection = new FeedForwardLayer<T>(_feedForwardDim, _embeddingSize, (IActivationFunction<T>?)null);
+        _feedForwardProjection = new FeedForwardLayer<T>(_embeddingSize, (IActivationFunction<T>?)null);
         _norm3 = new LayerNormalizationLayer<T>();
 
         // Initialize NumOps-based fields
@@ -656,9 +656,9 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _norm2 = new LayerNormalizationLayer<T>();
 
         // Feed-forward layer (with vector activation) - expands to hidden dimension
-        _feedForward = new FeedForwardLayer<T>(_embeddingSize, _feedForwardDim, activation);
+        _feedForward = new FeedForwardLayer<T>(_feedForwardDim, activation);
         // Projection layer (no activation) - projects back to embedding size
-        _feedForwardProjection = new FeedForwardLayer<T>(_feedForwardDim, _embeddingSize, (IActivationFunction<T>?)null);
+        _feedForwardProjection = new FeedForwardLayer<T>(_embeddingSize, (IActivationFunction<T>?)null);
         _norm3 = new LayerNormalizationLayer<T>();
 
         // Initialize NumOps-based fields

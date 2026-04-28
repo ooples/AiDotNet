@@ -156,8 +156,8 @@ public class DecoderLayer<T> : LayerBase<T>
         _crossAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
 
         // Standard transformer FFN: Linear(input -> ff) + activation + Linear(ff -> input)
-        _feedForward1 = new FeedForwardLayer<T>(inputSize, feedForwardSize, activation);
-        _feedForward2 = new FeedForwardLayer<T>(feedForwardSize, inputSize, (IActivationFunction<T>?)null);
+        _feedForward1 = new FeedForwardLayer<T>(feedForwardSize, activation);
+        _feedForward2 = new FeedForwardLayer<T>(inputSize, (IActivationFunction<T>?)null);
 
         InputSize = inputSize;
 
@@ -189,8 +189,8 @@ public class DecoderLayer<T> : LayerBase<T>
         _crossAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
 
         // Standard transformer FFN: Linear(input -> ff) + activation + Linear(ff -> input)
-        _feedForward1 = new FeedForwardLayer<T>(inputSize, feedForwardSize, activation);
-        _feedForward2 = new FeedForwardLayer<T>(feedForwardSize, inputSize, (IVectorActivationFunction<T>?)null);
+        _feedForward1 = new FeedForwardLayer<T>(feedForwardSize, (IActivationFunction<T>?)activation);
+        _feedForward2 = new FeedForwardLayer<T>(inputSize, (IActivationFunction<T>?)null);
 
         InputSize = inputSize;
 

@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.FeedForward)]
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)new AiDotNet.ActivationFunctions.LeakyReLUActivation<double>()")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)new AiDotNet.ActivationFunctions.LeakyReLUActivation<double>()")]
 public partial class FeedForwardLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -403,34 +403,27 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// ```csharp
     /// // Create a layer with 784 inputs (e.g., from a 28×28 image), 
     /// // 128 outputs, and ReLU activation
-    /// var hiddenLayer = new FeedForwardLayer<float>(784, 128, new ReLUActivation<float>());
+    /// var hiddenLayer = new FeedForwardLayer<float>(128, new ReLUActivation<float>());
     /// 
     /// // Create an output layer with 128 inputs (from previous layer),
     /// // 10 outputs (e.g., for 10 classes), and Softmax activation
-    /// var outputLayer = new FeedForwardLayer<float>(128, 10, new SoftmaxActivation<float>());
+    /// var outputLayer = new FeedForwardLayer<float>(10, new SoftmaxActivation<float>());
     /// ```
     /// 
     /// The constructor automatically initializes weights and biases with appropriate
     /// starting values to begin training.
     /// </para>
     /// </remarks>
-    public FeedForwardLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
-        : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
+    public FeedForwardLayer(int outputSize, IActivationFunction<T>? activationFunction = null)
+        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
     {
-        // Fail fast on bad dimensions: zero/negative would silently produce
-        // ParameterCount = 0/negative and confuse downstream code (e.g., the
-        // tape collector and parameter-shape assertions).
-        if (inputSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(inputSize), inputSize, "Input size must be positive.");
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize), outputSize, "Output size must be positive.");
 
-        _inputSize = inputSize;
+        _inputSize = -1;
         _outputSize = outputSize;
 
-        // Defer weight allocation to first Forward() call via EnsureInitialized().
-        // For large layers (e.g., 768→3072 = 2.3M params), this avoids expensive
-        // Tensor.CreateRandom + initialization during model construction.
+        // Always lazy: weights allocated on first forward.
         _weights = Tensor<T>.Empty();
         _biases = Tensor<T>.Empty();
         _weightsGradient = Tensor<T>.Empty();
@@ -438,6 +431,20 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
         Input = Tensor<T>.Empty();
         Output = Tensor<T>.Empty();
         _isInitialized = false;
+    }
+
+    /// <summary>
+    /// Resolves input feature size from input.Shape[^1] on first forward.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"FeedForwardLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+        int inputSize = input.Shape[rank - 1];
+        _inputSize = inputSize;
+        ResolveShapes(new[] { inputSize }, new[] { _outputSize });
     }
 
     /// <summary>
@@ -468,16 +475,13 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// which is perfect for classification tasks.
     /// </para>
     /// </remarks>
-    public FeedForwardLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? activationFunction = null)
-        : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
+    public FeedForwardLayer(int outputSize, IVectorActivationFunction<T> activationFunction)
+        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
     {
-        // Fail fast on bad dimensions — see scalar-activation overload above for rationale.
-        if (inputSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(inputSize), inputSize, "Input size must be positive.");
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize), outputSize, "Output size must be positive.");
 
-        _inputSize = inputSize;
+        _inputSize = -1;
         _outputSize = outputSize;
 
         _weights = Tensor<T>.Empty();
@@ -516,6 +520,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         EnsureInitialized();
         Input = input;
 
