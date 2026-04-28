@@ -40,6 +40,19 @@ comment on column public.license_activations.last_seen_package is
     '(e.g., "AiDotNet", "AiDotNet.Tensors"). NULL for clients on SDK versions that pre-date issue #1195. '
     'NOT used for authorisation — capability gating happens client-side.';
 
+-- Drop the prior 4-arg overload before redefining. `create or replace
+-- function` only matches an exact parameter signature; this migration
+-- adds a fifth parameter (`p_package`), which would otherwise create a
+-- second overload alongside the old one. Two overloads would (a) make
+-- subsequent `comment on function public.validate_license_key`
+-- ambiguous (SQLSTATE 42725 — "function name is not unique", which is
+-- exactly how this migration first failed in the deploy pipeline on
+-- 2026-04-28), and (b) cause runtime ambiguity on calls that match
+-- both signatures via defaults. Old callers that pass 2–4 arguments
+-- still resolve cleanly to the new 5-arg function via the
+-- `p_package default null` default, so this is backwards-compatible.
+drop function if exists public.validate_license_key(text, text, text, text);
+
 create or replace function public.validate_license_key(
     p_license_key text,
     p_machine_id_hash text,
@@ -172,5 +185,14 @@ begin
 end;
 $$;
 
-comment on function public.validate_license_key is
+-- DROP wipes the ACL grant from the prior migration
+-- (`20260314000002_license_activations.sql`). Re-apply the same
+-- service_role-only execution policy on the new 5-arg overload so
+-- the validation endpoint keeps working; anon callers stay denied.
+revoke execute on function public.validate_license_key(text, text, text, text, text) from anon;
+grant execute on function public.validate_license_key(text, text, text, text, text) to service_role;
+
+-- Explicit argument list disambiguates the COMMENT even if a future
+-- migration adds another overload before this one is dropped.
+comment on function public.validate_license_key(text, text, text, text, text) is
     'Validates a license key and registers/updates a machine activation. Returns JSON with valid, tier, capabilities, error fields. Capabilities array shape introduced for AiDotNet.Tensors capability-scoped enforcement (issue #1195).';
