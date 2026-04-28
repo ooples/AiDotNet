@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4, 4", TestConstructorArgs = "new[] { 1, 4, 4 }, AiDotNet.Enums.PoolingType.Max")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4, 4", TestConstructorArgs = "AiDotNet.Enums.PoolingType.Max")]
 public class GlobalPoolingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -203,10 +203,26 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// The output will always have spatial dimensions of 1×1, preserving the batch size and number of channels.
     /// </para>
     /// </remarks>
-    public GlobalPoolingLayer(int[] inputShape, PoolingType poolingType, IActivationFunction<T>? activationFunction = null)
-        : base(inputShape, CalculateOutputShape(inputShape), activationFunction ?? new IdentityActivation<T>())
+    public GlobalPoolingLayer(PoolingType poolingType, IActivationFunction<T>? activationFunction = null)
+        : base(new[] { -1, -1, -1 }, new[] { -1, 1, 1 }, activationFunction ?? new IdentityActivation<T>())
     {
         _poolingType = poolingType;
+    }
+
+    /// <summary>
+    /// Resolves input shape on first forward (PyTorch-style). Output spatial dims are
+    /// always 1×1 — global pooling reduces each channel to a single scalar.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        int c, h, w;
+        if (rank == 4) { c = input.Shape[1]; h = input.Shape[2]; w = input.Shape[3]; }
+        else if (rank == 3) { c = input.Shape[0]; h = input.Shape[1]; w = input.Shape[2]; }
+        else throw new ArgumentException(
+            $"GlobalPoolingLayer requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {rank}.",
+            nameof(input));
+        ResolveShapes(new[] { c, h, w }, new[] { c, 1, 1 });
     }
 
     /// <summary>
@@ -236,8 +252,8 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// For most cases, the standard constructor with regular activation functions is sufficient.
     /// </para>
     /// </remarks>
-    public GlobalPoolingLayer(int[] inputShape, PoolingType poolingType, IVectorActivationFunction<T> vectorActivationFunction)
-        : base(inputShape, CalculateOutputShape(inputShape), vectorActivationFunction)
+    public GlobalPoolingLayer(PoolingType poolingType, IVectorActivationFunction<T> vectorActivationFunction)
+        : base(new[] { -1, -1, -1 }, new[] { -1, 1, 1 }, vectorActivationFunction)
     {
         _poolingType = poolingType;
     }
@@ -338,6 +354,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
 
         // Industry-standard: dynamically determine axes based on input rank

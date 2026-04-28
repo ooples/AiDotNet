@@ -141,7 +141,7 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(NeuralNetworks.Layers.GlobalPoolingLayer<>))
         {
-            // GlobalPoolingLayer(int[] inputShape, PoolingType poolingType, IActivationFunction<T>?)
+            // GlobalPoolingLayer(PoolingType poolingType, IActivationFunction<T>?) — lazy ctor.
             var poolingTypeStr = additionalParams != null && additionalParams.TryGetValue("PoolingType", out var ptVal)
                 ? ptVal as string : null;
             var poolingType = !string.IsNullOrEmpty(poolingTypeStr) && Enum.TryParse<Enums.PoolingType>(poolingTypeStr, out var pt)
@@ -151,15 +151,13 @@ public static class DeserializationHelper
             object? activation = TryRestoreActivation<T>(additionalParams);
 
             var ctor = type.GetConstructors()
-                .FirstOrDefault(c => c.GetParameters().Length >= 2 &&
-                    c.GetParameters()[0].ParameterType == typeof(int[]) &&
-                    c.GetParameters()[1].ParameterType == typeof(Enums.PoolingType));
+                .FirstOrDefault(c => c.GetParameters().Length >= 1 &&
+                    c.GetParameters()[0].ParameterType == typeof(Enums.PoolingType));
             if (ctor is null)
                 throw new InvalidOperationException("Cannot find GlobalPoolingLayer constructor.");
             var args = new object?[ctor.GetParameters().Length];
-            args[0] = inputShape;
-            args[1] = poolingType;
-            if (args.Length > 2) args[2] = activation;
+            args[0] = poolingType;
+            if (args.Length > 1) args[1] = activation;
             instance = ctor.Invoke(args);
         }
         else if (genericDef == typeof(InputLayer<>))

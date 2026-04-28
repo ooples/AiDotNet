@@ -2387,7 +2387,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         // GlobalPoolingLayer uses NHWC format: inputShape = [batch, height, width, channels]
         int[] inputShape = [4, 16, 16, 3];
-        var layer = new GlobalPoolingLayer<float>(inputShape, PoolingType.Max);
+        var layer = new GlobalPoolingLayer<float>(PoolingType.Max);
 
         // Input tensor = [batch, height, width, channels]
         var input = Tensor<float>.CreateRandom([4, 16, 16, 3]);
@@ -2407,7 +2407,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         // GlobalPoolingLayer uses NHWC format: inputShape = [batch, height, width, channels]
         int[] inputShape = [2, 16, 16, 3];
-        var layer = new GlobalPoolingLayer<float>(inputShape, PoolingType.Average);
+        var layer = new GlobalPoolingLayer<float>(PoolingType.Average);
         var input = Tensor<float>.CreateRandom([2, 16, 16, 3]);
 
         // Act
@@ -2424,7 +2424,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         // GlobalPoolingLayer uses NHWC format: inputShape = [batch, height, width, channels]
         int[] inputShape = [1, 8, 8, 2];
-        var original = new GlobalPoolingLayer<float>(inputShape, PoolingType.Max);
+        var original = new GlobalPoolingLayer<float>(PoolingType.Max);
         var input = Tensor<float>.CreateRandom([1, 8, 8, 2]);
 
         // Act

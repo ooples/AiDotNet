@@ -1049,7 +1049,6 @@ public static class LayerHelper<T>
 
         // Global average pooling
         yield return new GlobalPoolingLayer<T>(
-            inputShape: [currentDepth, currentHeight, currentWidth],
             poolingType: PoolingType.Average,
             activationFunction: new IdentityActivation<T>()
         );
@@ -1729,7 +1728,7 @@ public static class LayerHelper<T>
         {
             // Global average pooling over sequence dimension
             // Input: [batch, seq, dim] -> Output: [batch, dim]
-            yield return new GlobalPoolingLayer<T>([maxSequenceLength, modelDimension], PoolingType.Average, (IActivationFunction<T>?)null);
+            yield return new GlobalPoolingLayer<T>(PoolingType.Average, (IActivationFunction<T>?)null);
         }
 
         // Add the final projection layer
@@ -4056,7 +4055,6 @@ public static class LayerHelper<T>
 
         // Global average pooling to aggregate spatial information
         yield return new GlobalPoolingLayer<T>(
-            inputShape: [finalFilters, currentResolution, currentResolution, currentResolution],
             poolingType: PoolingType.Average,
             activationFunction: (IActivationFunction<T>?)null);
 
@@ -4345,7 +4343,6 @@ public static class LayerHelper<T>
         // Global pooling to aggregate edge features
         // Note: MeshCNN typically uses a simple max/avg over all edges
         yield return new GlobalPoolingLayer<T>(
-            inputShape: [currentChannels],
             poolingType: useGlobalAveragePooling ? PoolingType.Average : PoolingType.Max,
             activationFunction: (IActivationFunction<T>?)null);
 
@@ -4463,7 +4460,6 @@ public static class LayerHelper<T>
 
         // Global pooling to aggregate vertex features
         yield return new GlobalPoolingLayer<T>(
-            inputShape: [currentChannels],
             poolingType: useGlobalAveragePooling ? PoolingType.Average : PoolingType.Max,
             activationFunction: (IActivationFunction<T>?)null);
 
@@ -7773,7 +7769,6 @@ public static class LayerHelper<T>
 
         // Global average pooling to get fixed-size feature vector
         yield return new GlobalPoolingLayer<T>(
-            inputShape: [128, h, w],
             poolingType: PoolingType.Average);
 
         // Output: 6 parameters for affine transformation
@@ -7845,7 +7840,6 @@ public static class LayerHelper<T>
 
         // Global average pooling for CLS-like token
         yield return new GlobalPoolingLayer<T>(
-            inputShape: [embedDim, patchH, patchW],
             poolingType: PoolingType.Average);
 
         // Projection to shared embedding space (512 is common for CLIP-like models)
@@ -8517,7 +8511,7 @@ public static class LayerHelper<T>
     {
         // Input: [numFeatures, h, w] from CreateSAM2MaskDecoderLayers
         // Global pool then predict IoU for each mask candidate
-        yield return new GlobalPoolingLayer<T>([numFeatures, featureHeight, featureWidth], PoolingType.Average);
+        yield return new GlobalPoolingLayer<T>(PoolingType.Average);
         yield return new DenseLayer<T>(numFeatures, numMaskCandidates, new SigmoidActivation<T>() as IActivationFunction<T>);
     }
 
@@ -8541,7 +8535,7 @@ public static class LayerHelper<T>
     {
         // Input: [numFeatures, h, w] from CreateSAM2MaskDecoderLayers
         // Global pool then predict occlusion probability
-        yield return new GlobalPoolingLayer<T>([numFeatures, featureHeight, featureWidth], PoolingType.Average);
+        yield return new GlobalPoolingLayer<T>(PoolingType.Average);
         yield return new DenseLayer<T>(numFeatures, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
     }
 
@@ -8624,7 +8618,7 @@ public static class LayerHelper<T>
         // Classification head with global average pooling
         // First reduce features, then pool to 1x1, then classify
         yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new GlobalPoolingLayer<T>([numFeatures, featH, featW], PoolingType.Average);
+        yield return new GlobalPoolingLayer<T>(PoolingType.Average);
         // After global pooling, shape is [numFeatures, 1, 1] - use DenseLayer for final classification
         yield return new DenseLayer<T>(numFeatures, numClasses, new SoftmaxActivation<T>() as IActivationFunction<T>);
 
@@ -8860,7 +8854,7 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(fusedChannels, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Global average pooling
-        yield return new GlobalPoolingLayer<T>([fusedChannels, h, w], PoolingType.Average);
+        yield return new GlobalPoolingLayer<T>(PoolingType.Average);
 
         // Classification head
         yield return new DenseLayer<T>(fusedChannels, numClasses, new SoftmaxActivation<T>() as IActivationFunction<T>);
@@ -14168,7 +14162,7 @@ public static class LayerHelper<T>
                 // mandatory — without it the head emits one prediction per token instead
                 // of one per sequence, breaking downstream output-shape contracts.
                 yield return new GlobalPoolingLayer<T>(
-                    [contextLength, hiddenDim], PoolingType.Average, (IActivationFunction<T>?)null);
+                    PoolingType.Average, (IActivationFunction<T>?)null);
                 yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim, gelu);
                 yield return new FeedForwardLayer<T>(hiddenDim, numClasses, (IActivationFunction<T>?)null);
                 break;
@@ -14188,7 +14182,7 @@ public static class LayerHelper<T>
                 // pooling the head emits forecastHorizon values per token instead of a
                 // single forecastHorizon vector for the whole sequence.
                 yield return new GlobalPoolingLayer<T>(
-                    [contextLength, hiddenDim], PoolingType.Average, (IActivationFunction<T>?)null);
+                    PoolingType.Average, (IActivationFunction<T>?)null);
                 yield return new FeedForwardLayer<T>(hiddenDim, hiddenDim / 2, gelu);
                 yield return new FeedForwardLayer<T>(hiddenDim / 2, forecastHorizon, (IActivationFunction<T>?)null);
                 break;
@@ -33053,7 +33047,6 @@ public static class LayerHelper<T>
         // GlobalPoolingLayer with PoolingType.Average on rank-3 [B, numPatches,
         // hiddenDim] input reduces over axis 1 to produce [B, hiddenDim].
         yield return new GlobalPoolingLayer<T>(
-            inputShape: new[] { numPatches, hiddenDim },
             poolingType: AiDotNet.Enums.PoolingType.Average);
         yield return new DenseLayer<T>(
             inputSize: hiddenDim,

@@ -153,7 +153,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange - 3D input [channels, height, width]
         int[] inputShape = [8, 7, 7];
-        var layer = new GlobalPoolingLayer<float>(inputShape, PoolingType.Max);
+        var layer = new GlobalPoolingLayer<float>(PoolingType.Max);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act
@@ -170,7 +170,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [8, 7, 7];
-        var layer = new GlobalPoolingLayer<float>(inputShape, PoolingType.Average);
+        var layer = new GlobalPoolingLayer<float>(PoolingType.Average);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act
@@ -187,7 +187,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [8, 7, 7];
-        var original = new GlobalPoolingLayer<float>(inputShape, PoolingType.Max);
+        var original = new GlobalPoolingLayer<float>(PoolingType.Max);
         var input = CreateRandomTensor<float>(inputShape);
         var originalOutput = original.Forward(input);
 
