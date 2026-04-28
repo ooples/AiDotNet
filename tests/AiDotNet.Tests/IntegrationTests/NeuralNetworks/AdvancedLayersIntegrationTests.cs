@@ -1845,7 +1845,7 @@ public class AdvancedLayersIntegrationTests
         // Input shape includes batch dimension; padding must match full input dimensions
         int[] inputShape = [2, 8, 8, 3];
         int[] padding = [0, 2, 2, 0]; // No batch pad, pad H and W by 2, no channel pad
-        var layer = new PaddingLayer<float>(inputShape, padding, (IActivationFunction<float>?)null);
+        var layer = new PaddingLayer<float>(padding, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, 8, 8, 3]);
 
@@ -1864,7 +1864,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [1, 4, 4, 2];
         int[] padding = [0, 1, 1, 0];
-        var original = new PaddingLayer<float>(inputShape, padding, (IActivationFunction<float>?)null);
+        var original = new PaddingLayer<float>(padding, (IActivationFunction<float>?)null);
         var input = Tensor<float>.CreateRandom([1, 4, 4, 2]);
 
         // Act
