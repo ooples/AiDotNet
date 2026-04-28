@@ -210,7 +210,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
     // =====================================================
 
     [Fact(Timeout = 120000)]
-    public async Task OutputShape_ShouldMatchInputShape()
+    public virtual async Task OutputShape_ShouldMatchInputShape()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
@@ -272,7 +272,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
     // =====================================================
 
     [Fact(Timeout = 120000)]
-    public async Task NoiseSchedule_ShouldBeMonotonic()
+    public virtual async Task NoiseSchedule_ShouldBeMonotonic()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
