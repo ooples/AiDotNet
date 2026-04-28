@@ -259,7 +259,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [32];
-        var layer = new ResidualLayer<float>(inputShape, null, (IActivationFunction<float>?)null);
+        var layer = new ResidualLayer<float>(null, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, 32]);
 
@@ -278,7 +278,7 @@ public class AdvancedLayersIntegrationTests
         int size = 32;
         int[] inputShape = [size];
         var innerLayer = new DenseLayer<float>(size, size);
-        var layer = new ResidualLayer<float>(inputShape, innerLayer, (IActivationFunction<float>?)null);
+        var layer = new ResidualLayer<float>(innerLayer, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, size]);
 
@@ -298,7 +298,7 @@ public class AdvancedLayersIntegrationTests
         int size = 32;
         int[] inputShape = [size];
         var innerLayer = new DenseLayer<float>(size, size);
-        var original = new ResidualLayer<float>(inputShape, innerLayer, (IActivationFunction<float>?)null);
+        var original = new ResidualLayer<float>(innerLayer, (IActivationFunction<float>?)null);
 
         // Act
         var clone = original.Clone();
@@ -598,7 +598,7 @@ public class AdvancedLayersIntegrationTests
         int size = 64;
         int[] inputShape = [size];
         var innerLayer = new FeedForwardLayer<float>(size, size, (IActivationFunction<float>?)null);
-        var residualLayer = new ResidualLayer<float>(inputShape, innerLayer, (IActivationFunction<float>?)null);
+        var residualLayer = new ResidualLayer<float>(innerLayer, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, size]);
 
@@ -640,9 +640,9 @@ public class AdvancedLayersIntegrationTests
         int size = 32;
         int[] inputShape = [size];
 
-        var block1 = new ResidualLayer<float>(inputShape, new DenseLayer<float>(size, size), (IActivationFunction<float>?)null);
-        var block2 = new ResidualLayer<float>(inputShape, new DenseLayer<float>(size, size), (IActivationFunction<float>?)null);
-        var block3 = new ResidualLayer<float>(inputShape, new DenseLayer<float>(size, size), (IActivationFunction<float>?)null);
+        var block1 = new ResidualLayer<float>(new DenseLayer<float>(size, size), (IActivationFunction<float>?)null);
+        var block2 = new ResidualLayer<float>(new DenseLayer<float>(size, size), (IActivationFunction<float>?)null);
+        var block3 = new ResidualLayer<float>(new DenseLayer<float>(size, size), (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, size]);
 

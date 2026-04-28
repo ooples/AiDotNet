@@ -920,7 +920,6 @@ public static class LayerHelper<T>
             for (int j = 0; j < blockSize; j++)
             {
                 yield return new ResidualLayer<T>(
-                    inputShape: [currentSize],
                     innerLayer: new DenseLayer<T>(currentSize, currentSize, hiddenActivation),
                     activationFunction: new LeakyReLUActivation<T>()
                 );
@@ -1090,7 +1089,6 @@ public static class LayerHelper<T>
         }
 
         yield return new ResidualLayer<T>(
-             inputShape: [outputDepth, height, width],
              innerLayer: innerLayer,
              activationFunction: new IdentityActivation<T>()
          );
@@ -3915,7 +3913,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numResidualBlocks; i++)
         {
             yield return new ResidualLayer<T>(
-                [hiddenLayerSize],
                 new DenseLayer<T>(hiddenLayerSize, hiddenLayerSize, hiddenActivation),
                 hiddenActivation);
         }

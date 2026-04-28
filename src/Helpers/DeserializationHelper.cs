@@ -1010,7 +1010,7 @@ public static class DeserializationHelper
 
             // Create ResidualLayer directly to avoid constructor ambiguity
             object? residualActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            instance = new ResidualLayer<T>(inputShape, innerLayer, residualActivation as IActivationFunction<T>);
+            instance = new ResidualLayer<T>(innerLayer, residualActivation as IActivationFunction<T>);
         }
         else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".MambaBlock`1"))
         {
