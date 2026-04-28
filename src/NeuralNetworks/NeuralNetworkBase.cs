@@ -3339,18 +3339,33 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     continue;
                 }
 
-                // Issue #1208: only swap layer fields back to the
-                // originals when structure changed (lazy resize). For
-                // stable iterations keep buffer-views as the live
-                // references — the optimizer/tape and the layer all
-                // agree on the same tensor reference, and `grads[param]`
-                // lookup matches. Copy view → original data so external
-                // observers (Clone / Serialize / GetTrainableParameters
-                // from user code) still see up-to-date weights.
+                // ParameterBuffer architecture (TapeStepContext.ValidateBufferAlignment
+                // line 358 of AiDotNet.Tensors): when paramBuffer is non-null,
+                // EVERY parameter passed to the optimizer step MUST be a view into
+                // that buffer's storage. The check is enforced via
+                // ReferenceEquals(parameters[i]._storage, bufferStorage). Layers
+                // therefore have to keep their _* fields pointing at buffer views
+                // during training — that's the design contract.
                 //
-                // (This is an AiDotNet-side cache-staleness bug, separate
-                // from the upstream tape-tracking defects fixed in
-                // AiDotNet.Tensors 0.58.1 / 0.58.2 — both are needed.)
+                // The unconditional SetTrainableParameters(originals) below
+                // VIOLATED that contract: it swapped each layer's fields back to
+                // the standalone originals at end-of-step, and the next step's
+                // forward then ran on originals, the tape recorded gradients
+                // keyed by originals, and TapeStepContext rejected the
+                // params-vs-buffer mismatch on the next iteration's optimizer
+                // step (or — worse, before the upstream Tensors validation
+                // landed — silently accepted the mismatch and the optimizer
+                // updated buffer storage that was no longer reachable from
+                // any layer's forward pass).
+                //
+                // Fix: copy view→original data so external observers (Clone /
+                // Serialize / GetTrainableParameters from user code) see
+                // up-to-date weights, but DO NOT swap layer fields back to
+                // originals when the buffer is being preserved for the next
+                // step. Restore-back is correct ONLY when structure changed
+                // (lazy resize) — in that case the buffer is going to be
+                // invalidated below anyway via InvalidateParameterCountCache,
+                // and the next step rebuilds buffer + views from the originals.
                 for (int i = 0; i < originals.Count; i++)
                 {
                     // Bulk copy via Engine — zero-alloc, SIMD-accelerated
