@@ -1511,7 +1511,7 @@ public static class LayerHelper<T>
 
             // Mean and LogVariance layers
             yield return new MeanLayer<T>(0);
-            yield return new LogVarianceLayer<T>([encoderOutputSize], axis: 0);
+            yield return new LogVarianceLayer<T>(0);
 
             // Decoder layers (mirror of encoder)
             yield return new DenseLayer<T>(latentSize, hidden2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
@@ -1550,7 +1550,7 @@ public static class LayerHelper<T>
 
             // Mean and LogVariance layers
             yield return new MeanLayer<T>(0);
-            yield return new LogVarianceLayer<T>([encoderOutputSize], axis: 0);
+            yield return new LogVarianceLayer<T>(0);
 
             // Decoder layers
             yield return new DenseLayer<T>(latentSize, pooledSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
