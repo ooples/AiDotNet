@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -199,8 +199,8 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
 
             for (int layer = 0; layer < _options.NumLayers; layer++)
             {
-                Layers.Add(new FullyConnectedLayer<T>(embDim, ffnDim, gelu));
-                Layers.Add(new FullyConnectedLayer<T>(ffnDim, embDim, identity));
+                Layers.Add(new FullyConnectedLayer<T>(ffnDim, gelu));
+                Layers.Add(new FullyConnectedLayer<T>(embDim, identity));
             }
             _usingCustomLayers = false;
         }
@@ -219,7 +219,7 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
         for (int c = 0; c < _numColumns; c++)
         {
             int colWidth = _colWidths[c];
-            _colEmbeddings.Add(new FullyConnectedLayer<T>(colWidth, embDim, identity));
+            _colEmbeddings.Add(new FullyConnectedLayer<T>(embDim, identity));
         }
 
         // Q/K/V projections per transformer layer
@@ -228,9 +228,9 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
         _valueLayers.Clear();
         for (int layer = 0; layer < _options.NumLayers; layer++)
         {
-            _queryLayers.Add(new FullyConnectedLayer<T>(embDim, embDim, identity));
-            _keyLayers.Add(new FullyConnectedLayer<T>(embDim, embDim, identity));
-            _valueLayers.Add(new FullyConnectedLayer<T>(embDim, embDim, identity));
+            _queryLayers.Add(new FullyConnectedLayer<T>(embDim, identity));
+            _keyLayers.Add(new FullyConnectedLayer<T>(embDim, identity));
+            _valueLayers.Add(new FullyConnectedLayer<T>(embDim, identity));
         }
 
         // Column decoders
@@ -238,7 +238,7 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
         for (int c = 0; c < _numColumns; c++)
         {
             int colWidth = _colWidths[c];
-            _colDecoders.Add(new FullyConnectedLayer<T>(embDim, colWidth, identity));
+            _colDecoders.Add(new FullyConnectedLayer<T>(colWidth, identity));
         }
 
         // Rebuild Layers (FFN blocks) if not using custom layers
@@ -250,8 +250,8 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
 
             for (int layer = 0; layer < _options.NumLayers; layer++)
             {
-                Layers.Add(new FullyConnectedLayer<T>(embDim, ffnDim, gelu));
-                Layers.Add(new FullyConnectedLayer<T>(ffnDim, embDim, identity));
+                Layers.Add(new FullyConnectedLayer<T>(ffnDim, gelu));
+                Layers.Add(new FullyConnectedLayer<T>(embDim, identity));
             }
         }
     }

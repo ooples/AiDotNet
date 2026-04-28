@@ -100,7 +100,6 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
 
         // Classification head: Linear layer from embedding dimension to number of classes
         _classificationHead = new FullyConnectedLayer<T>(
-            Options.EmbeddingDimension,
             numClasses,
             (IActivationFunction<T>?)null);  // No activation, softmax applied separately
     }

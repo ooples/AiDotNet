@@ -87,7 +87,6 @@ public class TabTransformerClassifier<T> : TabTransformerBase<T>
 
         // Classification head
         _classificationHead = new FullyConnectedLayer<T>(
-            MLPOutputDimension,
             numClasses,
             (IActivationFunction<T>?)null);
     }

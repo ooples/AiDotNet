@@ -338,7 +338,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         // Input: [1, 2] (batch=1)
         // W: [3, 2] (outputSize x inputSize)
         // bias: [3]
-        var layer = new FullyConnectedLayer<double>(2, 3, (IActivationFunction<double>?)null);
+        var layer = new FullyConnectedLayer<double>(3, (IActivationFunction<double>?)null);
 
         // Set known weights and biases
         // Parameters: [weights (3*2=6), biases (3)] = 9 total
@@ -371,7 +371,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     public async Task FullyConnectedLayer_Forward_BatchProcessing()
     {
         // Test with batch size 2
-        var layer = new FullyConnectedLayer<double>(2, 2, (IActivationFunction<double>?)null);
+        var layer = new FullyConnectedLayer<double>(2, (IActivationFunction<double>?)null);
 
         var parameters = new Vector<double>(6);
         // Weights [2x2]: identity matrix
@@ -399,7 +399,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     public async Task FullyConnectedLayer_ParameterCount()
     {
         // FC layer with inputSize=3, outputSize=2 should have 3*2 + 2 = 8 parameters
-        var layer = new FullyConnectedLayer<double>(3, 2, (IActivationFunction<double>?)null);
+        var layer = new FullyConnectedLayer<double>(2, (IActivationFunction<double>?)null);
         Assert.Equal(8, layer.ParameterCount);
     }
 

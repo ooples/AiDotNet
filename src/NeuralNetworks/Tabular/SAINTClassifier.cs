@@ -86,7 +86,6 @@ public class SAINTClassifier<T> : SAINTBase<T>
 
         // Classification head
         _classificationHead = new FullyConnectedLayer<T>(
-            MLPOutputDimension,
             numClasses,
             (IActivationFunction<T>?)null);
     }

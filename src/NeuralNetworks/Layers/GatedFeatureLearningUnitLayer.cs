@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 
@@ -57,12 +57,10 @@ public class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
         _outputDim = outputDim;
 
         // Feature transformation with ReLU
-        _featureTransform = new FullyConnectedLayer<T>(
-            inputDim, outputDim, new ReLUActivation<T>() as IActivationFunction<T>);
+        _featureTransform = new FullyConnectedLayer<T>(outputDim, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Gate transformation (no activation, sigmoid applied manually)
-        _gateTransform = new FullyConnectedLayer<T>(
-            inputDim, outputDim, (IActivationFunction<T>?)null);
+        _gateTransform = new FullyConnectedLayer<T>(outputDim, (IActivationFunction<T>?)null);
     }
 
     /// <summary>

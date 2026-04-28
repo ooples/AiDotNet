@@ -17913,7 +17913,7 @@ public static class LayerHelper<T>
         var silu = (IActivationFunction<T>)new SiLUActivation<T>();
 
         // 1. Timestep projection (sinusoidal embedding → learned projection)
-        yield return new FullyConnectedLayer<T>(timestepEmbeddingDim, timestepEmbeddingDim, silu);
+        yield return new FullyConnectedLayer<T>(timestepEmbeddingDim, silu);
 
         // 2. Denoiser hidden layers
         int prevDim = inputDim;
@@ -17930,7 +17930,7 @@ public static class LayerHelper<T>
         }
 
         // 3. Output projection (FullyConnectedLayer per TabDDPM architecture)
-        yield return new FullyConnectedLayer<T>(prevDim, outputDim, (IActivationFunction<T>)new IdentityActivation<T>());
+        yield return new FullyConnectedLayer<T>(outputDim, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     /// <summary>
@@ -18092,37 +18092,37 @@ public static class LayerHelper<T>
         for (int i = 0; i < encoderDims.Length; i++)
         {
             int layerInput = i == 0 ? dataWidth : encoderDims[i - 1];
-            yield return new FullyConnectedLayer<T>(layerInput, encoderDims[i], identity);
+            yield return new FullyConnectedLayer<T>(encoderDims[i], identity);
         }
 
         // VAE heads (mean + log-variance)
         int lastEncoderDim = encoderDims.Length > 0 ? encoderDims[^1] : dataWidth;
-        yield return new FullyConnectedLayer<T>(lastEncoderDim, latentDim, identity); // mean
-        yield return new FullyConnectedLayer<T>(lastEncoderDim, latentDim, identity); // logvar
+        yield return new FullyConnectedLayer<T>(latentDim, identity); // mean
+        yield return new FullyConnectedLayer<T>(latentDim, identity); // logvar
 
         // Decoder layers (reverse of encoder) with BatchNorm
         for (int i = encoderDims.Length - 1; i >= 0; i--)
         {
             int layerInput = i == encoderDims.Length - 1 ? latentDim : encoderDims[i + 1];
-            yield return new FullyConnectedLayer<T>(layerInput, encoderDims[i], identity);
+            yield return new FullyConnectedLayer<T>(encoderDims[i], identity);
             yield return new BatchNormalizationLayer<T>();
         }
 
         // Decoder output
         int lastDecoderDim = encoderDims.Length > 0 ? encoderDims[0] : latentDim;
-        yield return new FullyConnectedLayer<T>(lastDecoderDim, dataWidth, identity);
+        yield return new FullyConnectedLayer<T>(dataWidth, identity);
 
         // Discriminator layers
         for (int i = 0; i < discriminatorDims.Length; i++)
         {
             int layerInput = i == 0 ? dataWidth : discriminatorDims[i - 1];
-            yield return new FullyConnectedLayer<T>(layerInput, discriminatorDims[i], identity);
+            yield return new FullyConnectedLayer<T>(discriminatorDims[i], identity);
             yield return new DropoutLayer<T>(discriminatorDropout);
         }
 
         // Discriminator output
         int lastDiscDim = discriminatorDims.Length > 0 ? discriminatorDims[^1] : dataWidth;
-        yield return new FullyConnectedLayer<T>(lastDiscDim, 1, identity);
+        yield return new FullyConnectedLayer<T>(1, identity);
     }
 
     /// <summary>
@@ -19913,7 +19913,7 @@ public static class LayerHelper<T>
         // Band-level RNN layers: process each band independently
         for (int i = 0; i < numBandRnnLayers; i++)
         {
-            yield return new FullyConnectedLayer<T>(numBands * bandRnnHiddenSize, numBands * bandRnnHiddenSize, (IActivationFunction<T>?)null);
+            yield return new FullyConnectedLayer<T>(numBands * bandRnnHiddenSize, (IActivationFunction<T>?)null);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
@@ -20133,14 +20133,14 @@ public static class LayerHelper<T>
         // Bidirectional RNN stack (simulated as FC + LayerNorm)
         for (int i = 0; i < numRnnLayers; i++)
         {
-            yield return new FullyConnectedLayer<T>(rnnHiddenSize, rnnHiddenSize * 2, reluActivation);
+            yield return new FullyConnectedLayer<T>(rnnHiddenSize * 2, reluActivation);
             yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(rnnHiddenSize * 2, rnnHiddenSize, reluActivation);
+            yield return new FullyConnectedLayer<T>(rnnHiddenSize, reluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Beat activation output
-        yield return new FullyConnectedLayer<T>(rnnHiddenSize, 1, identityActivation);
+        yield return new FullyConnectedLayer<T>(1, identityActivation);
     }
 
     /// <summary>
@@ -20161,14 +20161,14 @@ public static class LayerHelper<T>
         // Onset detection layers
         for (int i = 0; i < numOnsetLayers; i++)
         {
-            yield return new FullyConnectedLayer<T>(onsetHiddenDim, onsetHiddenDim, reluActivation);
+            yield return new FullyConnectedLayer<T>(onsetHiddenDim, reluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Tempo bin classifier
-        yield return new FullyConnectedLayer<T>(onsetHiddenDim, onsetHiddenDim * 2, reluActivation);
-        yield return new FullyConnectedLayer<T>(onsetHiddenDim * 2, numTempoBins, identityActivation);
+        yield return new FullyConnectedLayer<T>(onsetHiddenDim * 2, reluActivation);
+        yield return new FullyConnectedLayer<T>(numTempoBins, identityActivation);
     }
 
     /// <summary>
@@ -20220,15 +20220,15 @@ public static class LayerHelper<T>
         // Encoder layers
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * 2, reluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim * 2, reluActivation);
             yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(hiddenDim * 2, hiddenDim, reluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim, reluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Pitch bin classification head
-        yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim, reluActivation);
-        yield return new FullyConnectedLayer<T>(hiddenDim, numPitchBins, identityActivation);
+        yield return new FullyConnectedLayer<T>(hiddenDim, reluActivation);
+        yield return new FullyConnectedLayer<T>(numPitchBins, identityActivation);
     }
 
     /// <summary>
@@ -20287,14 +20287,14 @@ public static class LayerHelper<T>
         for (int i = 0; i < numEncoderBlocks; i++)
         {
             int nextFilters = Math.Min(filters * 2, 512);
-            yield return new FullyConnectedLayer<T>(filters, nextFilters, reluActivation);
+            yield return new FullyConnectedLayer<T>(nextFilters, reluActivation);
             yield return new BatchNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             filters = nextFilters;
         }
 
         // Embedding projection
-        yield return new FullyConnectedLayer<T>(filters, embeddingDim, identityActivation);
+        yield return new FullyConnectedLayer<T>(embeddingDim, identityActivation);
     }
 
     /// <summary>
@@ -20356,8 +20356,8 @@ public static class LayerHelper<T>
             yield return new LayerNormalizationLayer<T>();
 
             // Convolution module (simulated as FC + activation + FC)
-            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * 2, geluActivation);
-            yield return new FullyConnectedLayer<T>(hiddenDim * 2, hiddenDim, identityActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim * 2, geluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim, identityActivation);
             yield return new LayerNormalizationLayer<T>();
 
             // Second FFN (half-step)
@@ -20388,19 +20388,19 @@ public static class LayerHelper<T>
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
 
         // Input projection
-        yield return new FullyConnectedLayer<T>(frameSize, hiddenDim, reluActivation);
+        yield return new FullyConnectedLayer<T>(hiddenDim, reluActivation);
         yield return new BatchNormalizationLayer<T>();
 
         // Lightweight encoder layers
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim, reluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim, reluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Binary classification output
-        yield return new FullyConnectedLayer<T>(hiddenDim, 1, identityActivation);
+        yield return new FullyConnectedLayer<T>(1, identityActivation);
     }
 
     /// <summary>
@@ -20425,15 +20425,15 @@ public static class LayerHelper<T>
             for (int s = 0; s < subBlocksPerBlock; s++)
             {
                 // Depth-wise + point-wise (simulated as FC pairs)
-                yield return new FullyConnectedLayer<T>(filters, filters, reluActivation);
+                yield return new FullyConnectedLayer<T>(filters, reluActivation);
                 yield return new BatchNormalizationLayer<T>();
                 if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             }
         }
 
         // Epilogue: reduce to binary classification
-        yield return new FullyConnectedLayer<T>(filters, filters / 2, reluActivation);
-        yield return new FullyConnectedLayer<T>(filters / 2, 1, identityActivation);
+        yield return new FullyConnectedLayer<T>(filters / 2, reluActivation);
+        yield return new FullyConnectedLayer<T>(1, identityActivation);
     }
 
     #endregion
@@ -20449,21 +20449,21 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
         // Token embedding projection
-        yield return new FullyConnectedLayer<T>(semanticVocabSize, semanticDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(semanticDim, geluActivation);
 
         // Transformer layers for semantic modeling
         for (int i = 0; i < numSemanticLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(numSemanticHeads, (semanticDim) / (numSemanticHeads));
             yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(semanticDim, semanticDim * 4, geluActivation);
-            yield return new FullyConnectedLayer<T>(semanticDim * 4, semanticDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(semanticDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(semanticDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Output projection to vocabulary
-        yield return new FullyConnectedLayer<T>(semanticDim, semanticVocabSize, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(semanticVocabSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -20508,21 +20508,21 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
         // Codec embedding projection
-        yield return new FullyConnectedLayer<T>(codebookSize, hiddenDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
 
         // Transformer layers with causal masking
         for (int i = 0; i < numLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * 4, geluActivation);
-            yield return new FullyConnectedLayer<T>(hiddenDim * 4, hiddenDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Output projection to codebook
-        yield return new FullyConnectedLayer<T>(hiddenDim, codebookSize, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(codebookSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>Creates default layers for VALL-E AR stage.</summary>
@@ -20534,21 +20534,21 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
         // Input embedding: phoneme + codec
-        yield return new FullyConnectedLayer<T>(codebookSize, arHiddenDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(arHiddenDim, geluActivation);
 
         // AR transformer layers
         for (int i = 0; i < numARLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(numARHeads, (arHiddenDim) / (numARHeads));
             yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(arHiddenDim, arHiddenDim * 4, geluActivation);
-            yield return new FullyConnectedLayer<T>(arHiddenDim * 4, arHiddenDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(arHiddenDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(arHiddenDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Output projection to first codebook
-        yield return new FullyConnectedLayer<T>(arHiddenDim, codebookSize, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(codebookSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>Creates default layers for YuE semantic stage.</summary>
@@ -20560,21 +20560,21 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
         // Lyrics + style embedding projection
-        yield return new FullyConnectedLayer<T>(lyricsVocabSize, semanticDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(semanticDim, geluActivation);
 
         // Deep transformer for long-form generation
         for (int i = 0; i < numSemanticLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(numSemanticHeads, (semanticDim) / (numSemanticHeads));
             yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(semanticDim, semanticDim * 4, geluActivation);
-            yield return new FullyConnectedLayer<T>(semanticDim * 4, semanticDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(semanticDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(semanticDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Output projection
-        yield return new FullyConnectedLayer<T>(semanticDim, semanticDim, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(semanticDim, (IActivationFunction<T>?)null);
     }
 
     /// <summary>Creates default layers for Fish Speech semantic LM.</summary>
@@ -20586,21 +20586,21 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
         // Text + GFSQ token embedding
-        yield return new FullyConnectedLayer<T>(codebookSize, semanticDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(semanticDim, geluActivation);
 
         // Transformer layers
         for (int i = 0; i < numSemanticLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(numSemanticHeads, (semanticDim) / (numSemanticHeads));
             yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(semanticDim, semanticDim * 4, geluActivation);
-            yield return new FullyConnectedLayer<T>(semanticDim * 4, semanticDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(semanticDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(semanticDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Output projection to GFSQ codebook
-        yield return new FullyConnectedLayer<T>(semanticDim, codebookSize, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(codebookSize, (IActivationFunction<T>?)null);
     }
 
     #endregion
@@ -20620,18 +20620,18 @@ public static class LayerHelper<T>
         {
             yield return new MultiHeadAttentionLayer<T>(numAudioEncoderHeads, (audioEncoderDim) / (numAudioEncoderHeads));
             yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(audioEncoderDim, audioEncoderDim * 4, geluActivation);
-            yield return new FullyConnectedLayer<T>(audioEncoderDim * 4, audioEncoderDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(audioEncoderDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(audioEncoderDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Perceiver adapter: project audio to LM space
-        yield return new FullyConnectedLayer<T>(audioEncoderDim, lmHiddenDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(lmHiddenDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
         // Output projection
-        yield return new FullyConnectedLayer<T>(lmHiddenDim, lmHiddenDim, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(lmHiddenDim, (IActivationFunction<T>?)null);
     }
 
     /// <summary>Creates default layers for SALMONN (dual encoder + Q-Former).</summary>
@@ -20643,11 +20643,11 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
         // Speech encoder projection (Whisper output -> common dim)
-        yield return new FullyConnectedLayer<T>(speechEncoderDim, qFormerDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(qFormerDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
         // Audio encoder projection (BEATs output -> common dim)
-        yield return new FullyConnectedLayer<T>(audioEncoderDim, qFormerDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(qFormerDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
         // Window-level Q-Former layers
@@ -20655,18 +20655,18 @@ public static class LayerHelper<T>
         {
             yield return new MultiHeadAttentionLayer<T>(12, (qFormerDim) / (12));
             yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(qFormerDim, qFormerDim * 4, geluActivation);
-            yield return new FullyConnectedLayer<T>(qFormerDim * 4, qFormerDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(qFormerDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(qFormerDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Project Q-Former output to LM input space
-        yield return new FullyConnectedLayer<T>(qFormerDim, lmHiddenDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(lmHiddenDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
         // Output projection
-        yield return new FullyConnectedLayer<T>(lmHiddenDim, lmHiddenDim, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(lmHiddenDim, (IActivationFunction<T>?)null);
     }
 
     #endregion
@@ -20682,7 +20682,7 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
         // Convolutional feature extractor (simplified)
-        yield return new FullyConnectedLayer<T>(512, hiddenDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
         // Transformer encoder layers
@@ -20690,14 +20690,14 @@ public static class LayerHelper<T>
         {
             yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(hiddenDim, feedForwardDim, geluActivation);
-            yield return new FullyConnectedLayer<T>(feedForwardDim, hiddenDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(feedForwardDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Final projection
-        yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(hiddenDim, (IActivationFunction<T>?)null);
     }
 
     /// <summary>Creates default layers for MERT music foundation model.</summary>
@@ -20709,7 +20709,7 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
         // Convolutional feature extractor (tuned for music at 24kHz)
-        yield return new FullyConnectedLayer<T>(512, hiddenDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
         // Transformer encoder layers with music-aware attention
@@ -20717,14 +20717,14 @@ public static class LayerHelper<T>
         {
             yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads));
             yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(hiddenDim, feedForwardDim, geluActivation);
-            yield return new FullyConnectedLayer<T>(feedForwardDim, hiddenDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(feedForwardDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Final projection
-        yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(hiddenDim, (IActivationFunction<T>?)null);
     }
 
     #endregion
@@ -20742,7 +20742,7 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
         // Conv subsampling front-end (mel features -> encoder dim)
-        yield return new FullyConnectedLayer<T>(numMels, encoderDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(encoderDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
         // Conformer-style encoder layers
@@ -20750,23 +20750,23 @@ public static class LayerHelper<T>
         {
             yield return new MultiHeadAttentionLayer<T>(numEncoderHeads, (encoderDim) / (numEncoderHeads));
             yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(encoderDim, encoderDim * 4, geluActivation);
-            yield return new FullyConnectedLayer<T>(encoderDim * 4, encoderDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(encoderDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(encoderDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Prediction network (LSTM-like via FC layers)
-        yield return new FullyConnectedLayer<T>(embeddingDim, predictionDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(predictionDim, geluActivation);
         for (int i = 0; i < numPredictionLayers; i++)
         {
-            yield return new FullyConnectedLayer<T>(predictionDim, predictionDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(predictionDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
         }
 
         // Joint network (combines encoder + predictor)
-        yield return new FullyConnectedLayer<T>(encoderDim + predictionDim, jointDim, geluActivation);
-        yield return new FullyConnectedLayer<T>(jointDim, vocabSize, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(jointDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>Creates default layers for Zipformer (U-Net-style multi-resolution encoder).</summary>
@@ -20779,7 +20779,7 @@ public static class LayerHelper<T>
         int numStacks = encoderDims.Length;
 
         // Conv subsampling front-end
-        yield return new FullyConnectedLayer<T>(numMels, encoderDims[0], geluActivation);
+        yield return new FullyConnectedLayer<T>(encoderDims[0], geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
         // U-Net encoder stacks (each at different temporal resolution)
@@ -20793,7 +20793,7 @@ public static class LayerHelper<T>
             // Dimension projection between stacks
             if (dim != prevDim)
             {
-                yield return new FullyConnectedLayer<T>(prevDim, dim, geluActivation);
+                yield return new FullyConnectedLayer<T>(dim, geluActivation);
                 yield return new LayerNormalizationLayer<T>();
             }
 
@@ -20802,8 +20802,8 @@ public static class LayerHelper<T>
             {
                 yield return new MultiHeadAttentionLayer<T>(heads, (dim) / (heads));
                 yield return new LayerNormalizationLayer<T>();
-                yield return new FullyConnectedLayer<T>(dim, dim * 4, geluActivation);
-                yield return new FullyConnectedLayer<T>(dim * 4, dim, geluActivation);
+                yield return new FullyConnectedLayer<T>(dim * 4, geluActivation);
+                yield return new FullyConnectedLayer<T>(dim, geluActivation);
                 yield return new LayerNormalizationLayer<T>();
                 if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             }
@@ -20812,7 +20812,7 @@ public static class LayerHelper<T>
         }
 
         // CTC output projection
-        yield return new FullyConnectedLayer<T>(prevDim, vocabSize, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>Creates default layers for Fast Conformer (8x downsampled Conformer).</summary>
@@ -20826,17 +20826,17 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
         // 8x depthwise-separable convolution downsampling front-end
-        yield return new FullyConnectedLayer<T>(numMels, encoderDim / 2, geluActivation);
+        yield return new FullyConnectedLayer<T>(encoderDim / 2, geluActivation);
         yield return new LayerNormalizationLayer<T>();
-        yield return new FullyConnectedLayer<T>(encoderDim / 2, encoderDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(encoderDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
         // Conformer encoder layers (macaron-style: FF / Attention / Conv / FF)
         for (int i = 0; i < numLayers; i++)
         {
             // First half-step feed-forward
-            yield return new FullyConnectedLayer<T>(encoderDim, feedForwardDim, geluActivation);
-            yield return new FullyConnectedLayer<T>(feedForwardDim, encoderDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(feedForwardDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(encoderDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
 
             // Multi-head self-attention
@@ -20844,15 +20844,15 @@ public static class LayerHelper<T>
             yield return new LayerNormalizationLayer<T>();
 
             // Second half-step feed-forward
-            yield return new FullyConnectedLayer<T>(encoderDim, feedForwardDim, geluActivation);
-            yield return new FullyConnectedLayer<T>(feedForwardDim, encoderDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(feedForwardDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(encoderDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
 
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // CTC output projection
-        yield return new FullyConnectedLayer<T>(encoderDim, vocabSize, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
 
     #endregion
@@ -20869,34 +20869,34 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
         // Text encoder (transformer-based)
-        yield return new FullyConnectedLayer<T>(numMels, textEncoderDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(textEncoderDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
         for (int i = 0; i < numTextEncoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(numTextEncoderHeads, (textEncoderDim) / (numTextEncoderHeads));
             yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(textEncoderDim, textEncoderDim * 4, geluActivation);
-            yield return new FullyConnectedLayer<T>(textEncoderDim * 4, textEncoderDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(textEncoderDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(textEncoderDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Duration predictor
-        yield return new FullyConnectedLayer<T>(textEncoderDim, textEncoderDim, geluActivation);
-        yield return new FullyConnectedLayer<T>(textEncoderDim, 1, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(textEncoderDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(1, (IActivationFunction<T>?)null);
 
         // Flow matching decoder (U-Net blocks)
-        yield return new FullyConnectedLayer<T>(textEncoderDim, decoderDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(decoderDim, geluActivation);
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new FullyConnectedLayer<T>(decoderDim, decoderDim * 2, geluActivation);
+            yield return new FullyConnectedLayer<T>(decoderDim * 2, geluActivation);
             yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(decoderDim * 2, decoderDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(decoderDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
         }
 
         // Output projection to mel-spectrogram
-        yield return new FullyConnectedLayer<T>(decoderDim, numMels, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(numMels, (IActivationFunction<T>?)null);
     }
 
     /// <summary>Creates default layers for BigVGAN universal vocoder.</summary>
@@ -20909,7 +20909,7 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
         // Input projection (mel-spectrogram to initial channels)
-        yield return new FullyConnectedLayer<T>(numMels, upsampleInitialChannel, geluActivation);
+        yield return new FullyConnectedLayer<T>(upsampleInitialChannel, geluActivation);
 
         // Upsampling + MRF blocks with Snake-like activation
         int ch = upsampleInitialChannel;
@@ -20919,13 +20919,13 @@ public static class LayerHelper<T>
             if (nextCh < 32) nextCh = 32;
 
             // Transposed convolution approximated by FC upsample
-            yield return new FullyConnectedLayer<T>(ch, nextCh, geluActivation);
+            yield return new FullyConnectedLayer<T>(nextCh, geluActivation);
             yield return new LayerNormalizationLayer<T>();
 
             // Multi-Receptive Field Fusion (MRF) blocks
             for (int b = 0; b < numResBlocks; b++)
             {
-                yield return new FullyConnectedLayer<T>(nextCh, nextCh, geluActivation);
+                yield return new FullyConnectedLayer<T>(nextCh, geluActivation);
                 yield return new LayerNormalizationLayer<T>();
             }
 
@@ -20934,7 +20934,7 @@ public static class LayerHelper<T>
         }
 
         // Output projection to waveform
-        yield return new FullyConnectedLayer<T>(ch, 1, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(1, (IActivationFunction<T>?)null);
     }
 
     /// <summary>Creates default layers for Vocos ISTFT vocoder.</summary>
@@ -20946,21 +20946,21 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
         // Input projection (mel or codec tokens to hidden)
-        yield return new FullyConnectedLayer<T>(numMels, hiddenDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
         // ConvNeXt backbone blocks
         for (int i = 0; i < numBackboneBlocks; i++)
         {
-            yield return new FullyConnectedLayer<T>(hiddenDim, intermediateDim, geluActivation);
-            yield return new FullyConnectedLayer<T>(intermediateDim, hiddenDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(intermediateDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // ISTFT head: predict magnitude and phase
-        yield return new FullyConnectedLayer<T>(hiddenDim, numFrequencyBins, (IActivationFunction<T>?)null);
-        yield return new FullyConnectedLayer<T>(numFrequencyBins, numFrequencyBins, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(numFrequencyBins, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(numFrequencyBins, (IActivationFunction<T>?)null);
     }
 
     #endregion
@@ -20979,20 +20979,20 @@ public static class LayerHelper<T>
         int numFreqBins = fftSize / 2 + 1;
 
         // Input projection from frequency bins to encoder dimension
-        yield return new FullyConnectedLayer<T>(numFreqBins, encoderDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(encoderDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
         // Encoder layers (spectral feature extraction)
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new FullyConnectedLayer<T>(encoderDim, encoderDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(encoderDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // EQ parameter prediction: 3 params per band (gain, frequency, Q)
         int outputDim = numBands * 3;
-        yield return new FullyConnectedLayer<T>(encoderDim, outputDim, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(outputDim, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -21011,7 +21011,7 @@ public static class LayerHelper<T>
         for (int d = 0; d < depth; d++)
         {
             int outChannels = currentChannels * channelGrowth;
-            yield return new FullyConnectedLayer<T>(currentChannels, outChannels, geluActivation);
+            yield return new FullyConnectedLayer<T>(outChannels, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentChannels = outChannels;
@@ -21020,7 +21020,7 @@ public static class LayerHelper<T>
         // LSTM bottleneck
         for (int i = 0; i < numLSTMLayers; i++)
         {
-            yield return new FullyConnectedLayer<T>(lstmHiddenSize, lstmHiddenSize, geluActivation);
+            yield return new FullyConnectedLayer<T>(lstmHiddenSize, geluActivation);
             yield return new LayerNormalizationLayer<T>();
         }
 
@@ -21028,14 +21028,14 @@ public static class LayerHelper<T>
         for (int d = depth - 1; d >= 0; d--)
         {
             int outChannels = d > 0 ? hiddenChannels * (int)Math.Pow(channelGrowth, d) : hiddenChannels;
-            yield return new FullyConnectedLayer<T>(currentChannels, outChannels, geluActivation);
+            yield return new FullyConnectedLayer<T>(outChannels, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentChannels = outChannels;
         }
 
         // Output projection back to 1 channel (mono clean audio)
-        yield return new FullyConnectedLayer<T>(hiddenChannels, 1, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(1, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -21050,14 +21050,14 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
         // Input projection
-        yield return new FullyConnectedLayer<T>(1, hiddenDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
         // Residual blocks for feature extraction
         for (int i = 0; i < numResBlocks; i++)
         {
-            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * 2, geluActivation);
-            yield return new FullyConnectedLayer<T>(hiddenDim * 2, hiddenDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim * 2, geluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
@@ -21065,16 +21065,16 @@ public static class LayerHelper<T>
         // Self-attention layers for global context
         for (int i = 0; i < numAttentionLayers; i++)
         {
-            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
         }
 
         // Upsample projection: expand output dimension by upsample factor
-        yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * upsampleFactor, geluActivation);
+        yield return new FullyConnectedLayer<T>(hiddenDim * upsampleFactor, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
         // Output projection to waveform
-        yield return new FullyConnectedLayer<T>(hiddenDim * upsampleFactor, upsampleFactor, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(upsampleFactor, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -21092,29 +21092,29 @@ public static class LayerHelper<T>
         int currentDim = 1; // mono audio input
         foreach (int ch in encoderChannels)
         {
-            yield return new FullyConnectedLayer<T>(currentDim, ch, geluActivation);
+            yield return new FullyConnectedLayer<T>(ch, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentDim = ch;
         }
 
         // Bottleneck projection to codebook dimension
-        yield return new FullyConnectedLayer<T>(currentDim, encoderDim, geluActivation);
-        yield return new FullyConnectedLayer<T>(encoderDim, codebookDim, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(encoderDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(codebookDim, (IActivationFunction<T>?)null);
 
         // Decoder: progressive upsampling (mirror of encoder)
-        yield return new FullyConnectedLayer<T>(codebookDim, encoderDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(encoderDim, geluActivation);
         currentDim = encoderDim;
         for (int i = encoderChannels.Length - 1; i >= 0; i--)
         {
-            yield return new FullyConnectedLayer<T>(currentDim, encoderChannels[i], geluActivation);
+            yield return new FullyConnectedLayer<T>(encoderChannels[i], geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentDim = encoderChannels[i];
         }
 
         // Output projection to mono waveform
-        yield return new FullyConnectedLayer<T>(currentDim, 1, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(1, (IActivationFunction<T>?)null);
     }
 
     #endregion
@@ -21137,7 +21137,7 @@ public static class LayerHelper<T>
         int currentDim = numMels;
         foreach (int ch in cnnChannels)
         {
-            yield return new FullyConnectedLayer<T>(currentDim, ch, reluActivation);
+            yield return new FullyConnectedLayer<T>(ch, reluActivation);
             yield return new BatchNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentDim = ch;
@@ -21148,13 +21148,13 @@ public static class LayerHelper<T>
         for (int i = 0; i < numRNNLayers; i++)
         {
             int inputDim = i == 0 ? currentDim : rnnOutputDim;
-            yield return new FullyConnectedLayer<T>(inputDim, rnnOutputDim, reluActivation);
+            yield return new FullyConnectedLayer<T>(rnnOutputDim, reluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Frame-level classifier (sigmoid applied in post-processing)
-        yield return new FullyConnectedLayer<T>(rnnOutputDim, numClasses, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(numClasses, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -21177,7 +21177,7 @@ public static class LayerHelper<T>
             // Frequency-dynamic kernel generation (per-group FC)
             for (int g = 0; g < numFrequencyGroups; g++)
             {
-                yield return new FullyConnectedLayer<T>(currentDim / numFrequencyGroups,
+                yield return new FullyConnectedLayer<T>(
                     ch / numFrequencyGroups, reluActivation);
             }
             yield return new BatchNormalizationLayer<T>();
@@ -21186,7 +21186,7 @@ public static class LayerHelper<T>
         }
 
         // Embedding projection
-        yield return new FullyConnectedLayer<T>(currentDim, embeddingDim, reluActivation);
+        yield return new FullyConnectedLayer<T>(embeddingDim, reluActivation);
         yield return new LayerNormalizationLayer<T>();
 
         // Bidirectional GRU layers
@@ -21194,13 +21194,13 @@ public static class LayerHelper<T>
         for (int i = 0; i < numRNNLayers; i++)
         {
             int inputDim = i == 0 ? embeddingDim : rnnOutputDim;
-            yield return new FullyConnectedLayer<T>(inputDim, rnnOutputDim, reluActivation);
+            yield return new FullyConnectedLayer<T>(rnnOutputDim, reluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Frame-level classifier
-        yield return new FullyConnectedLayer<T>(rnnOutputDim, numClasses, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(numClasses, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -21220,28 +21220,28 @@ public static class LayerHelper<T>
         int currentDim = numMels;
         foreach (int ch in encoderChannels)
         {
-            yield return new FullyConnectedLayer<T>(currentDim, ch, geluActivation);
+            yield return new FullyConnectedLayer<T>(ch, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentDim = ch;
         }
 
         // CLAP conditioning projection (text embedding -> FiLM parameters)
-        yield return new FullyConnectedLayer<T>(clapEmbeddingDim, separationDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(separationDim, geluActivation);
 
         // Separation layers (conditioned transformer blocks)
         for (int i = 0; i < numSeparationLayers; i++)
         {
             int inputDim = i == 0 ? currentDim : separationDim;
-            yield return new FullyConnectedLayer<T>(inputDim, separationDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(separationDim, geluActivation);
             yield return new LayerNormalizationLayer<T>();
             // Self-attention (simulated)
-            yield return new FullyConnectedLayer<T>(separationDim, separationDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(separationDim, geluActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // Classification head
-        yield return new FullyConnectedLayer<T>(separationDim, numClasses, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(numClasses, (IActivationFunction<T>?)null);
     }
 
     #endregion

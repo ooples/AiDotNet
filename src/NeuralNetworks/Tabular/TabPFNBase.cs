@@ -120,7 +120,6 @@ public abstract class TabPFNBase<T>
 
         // Feature encoder
         _featureEncoder = new FullyConnectedLayer<T>(
-            numNumericalFeatures,
             embDim,
             Options.HiddenActivation ?? new GELUActivation<T>());
 
@@ -131,7 +130,6 @@ public abstract class TabPFNBase<T>
         for (int i = 0; i < cardinalities.Length; i++)
         {
             _categoricalEncoders[i] = new FullyConnectedLayer<T>(
-                cardinalities[i],
                 embDim,
                 (IActivationFunction<T>?)null);
         }
@@ -165,7 +163,6 @@ public abstract class TabPFNBase<T>
         {
             bool isLast = i == mlpDims.Length - 1;
             _outputMLP[i] = new FullyConnectedLayer<T>(
-                inputDim,
                 mlpDims[i],
                 isLast ? null : Options.HiddenActivation ?? new GELUActivation<T>());
             inputDim = mlpDims[i];
@@ -477,12 +474,10 @@ public abstract class TabPFNBase<T>
 
             // Feed-forward network
             _ff1 = new FullyConnectedLayer<TBlock>(
-                embeddingDim,
                 ffDim,
                 new GELUActivation<TBlock>() as IActivationFunction<TBlock>);
 
             _ff2 = new FullyConnectedLayer<TBlock>(
-                ffDim,
                 embeddingDim,
                 (IActivationFunction<TBlock>?)null);
 

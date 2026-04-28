@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -181,8 +181,8 @@ public class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabular
 
             for (int l = 0; l < _options.NumLayers; l++)
             {
-                Layers.Add(new FullyConnectedLayer<T>(d, _options.FeedForwardDimension, relu));
-                Layers.Add(new FullyConnectedLayer<T>(_options.FeedForwardDimension, d, identity));
+                Layers.Add(new FullyConnectedLayer<T>(_options.FeedForwardDimension, relu));
+                Layers.Add(new FullyConnectedLayer<T>(d, identity));
             }
             _usingCustomLayers = false;
         }
@@ -206,10 +206,10 @@ public class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabular
 
         for (int l = 0; l < _options.NumLayers; l++)
         {
-            _attentionQueryLayers.Add(new FullyConnectedLayer<T>(d, d, identity));
-            _attentionKeyLayers.Add(new FullyConnectedLayer<T>(d, d, identity));
-            _attentionValueLayers.Add(new FullyConnectedLayer<T>(d, d, identity));
-            _attentionOutputLayers.Add(new FullyConnectedLayer<T>(d, d, identity));
+            _attentionQueryLayers.Add(new FullyConnectedLayer<T>(d, identity));
+            _attentionKeyLayers.Add(new FullyConnectedLayer<T>(d, identity));
+            _attentionValueLayers.Add(new FullyConnectedLayer<T>(d, identity));
+            _attentionOutputLayers.Add(new FullyConnectedLayer<T>(d, identity));
 
             // FFN layers reference the Layers list for user-overridable layers
             if (!_usingCustomLayers && Layers.Count >= (l + 1) * 2)
@@ -219,8 +219,8 @@ public class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabular
             }
             else
             {
-                _ffnLayer1s.Add(new FullyConnectedLayer<T>(d, _options.FeedForwardDimension, relu));
-                _ffnLayer2s.Add(new FullyConnectedLayer<T>(_options.FeedForwardDimension, d, identity));
+                _ffnLayer1s.Add(new FullyConnectedLayer<T>(_options.FeedForwardDimension, relu));
+                _ffnLayer2s.Add(new FullyConnectedLayer<T>(d, identity));
             }
         }
     }
@@ -236,7 +236,7 @@ public class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabular
 
         for (int col = 0; col < _seqLength; col++)
         {
-            _outputHeads.Add(new FullyConnectedLayer<T>(d, _vocabSizes[col], identity));
+            _outputHeads.Add(new FullyConnectedLayer<T>(_vocabSizes[col], identity));
         }
     }
 

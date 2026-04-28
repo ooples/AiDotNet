@@ -116,7 +116,6 @@ public abstract class SAINTBase<T>
 
         // Numerical feature embedding
         _numericalEmbedding = new FullyConnectedLayer<T>(
-            1,
             Options.EmbeddingDimension,
             Options.HiddenActivation ?? new GELUActivation<T>());
 
@@ -164,7 +163,6 @@ public abstract class SAINTBase<T>
             // Feed-forward network
             _ffnLayers.Add(new FullyConnectedLayer<T>(
                 Options.EmbeddingDimension,
-                Options.EmbeddingDimension,
                 Options.HiddenActivation ?? new GELUActivation<T>()));
 
             // Layer normalizations
@@ -186,7 +184,6 @@ public abstract class SAINTBase<T>
         foreach (var hiddenDim in Options.MLPHiddenDimensions)
         {
             _mlpLayers.Add(new FullyConnectedLayer<T>(
-                mlpInput,
                 hiddenDim,
                 Options.HiddenActivation ?? new GELUActivation<T>()));
             mlpInput = hiddenDim;

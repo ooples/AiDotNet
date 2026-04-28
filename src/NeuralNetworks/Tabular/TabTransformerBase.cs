@@ -203,7 +203,6 @@ public abstract class TabTransformerBase<T>
         foreach (int hiddenDim in Options.MLPHiddenDimensions)
         {
             var layer = new FullyConnectedLayer<T>(
-                prevDim,
                 hiddenDim,
                 new ReLUActivation<T>() as IActivationFunction<T>);
             _mlpLayers.Add(layer);

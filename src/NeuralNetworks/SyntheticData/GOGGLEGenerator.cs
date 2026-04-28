@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -193,8 +193,8 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             int latentDim = _options.LatentDimension;
             var relu = new ReLUActivation<T>() as IActivationFunction<T>;
 
-            Layers.Add(new FullyConnectedLayer<T>(latentDim, hiddenDim, relu));
-            Layers.Add(new FullyConnectedLayer<T>(hiddenDim, hiddenDim, relu));
+            Layers.Add(new FullyConnectedLayer<T>(hiddenDim, relu));
+            Layers.Add(new FullyConnectedLayer<T>(hiddenDim, relu));
             _usingCustomLayers = false;
         }
     }
@@ -213,23 +213,23 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         for (int i = 0; i < _options.NumGNNLayers; i++)
         {
             int layerInput = i == 0 ? _dataWidth : hiddenDim;
-            _gnnLayers.Add(new FullyConnectedLayer<T>(layerInput, hiddenDim, relu));
+            _gnnLayers.Add(new FullyConnectedLayer<T>(hiddenDim, relu));
         }
 
         int lastDim = _options.NumGNNLayers > 0 ? hiddenDim : _dataWidth;
-        _meanHead = new FullyConnectedLayer<T>(lastDim, _options.LatentDimension, identity);
-        _logvarHead = new FullyConnectedLayer<T>(lastDim, _options.LatentDimension, identity);
+        _meanHead = new FullyConnectedLayer<T>(_options.LatentDimension, identity);
+        _logvarHead = new FullyConnectedLayer<T>(_options.LatentDimension, identity);
 
         // Decoder output layer
-        _decoderOutput = new FullyConnectedLayer<T>(hiddenDim, _dataWidth, identity);
+        _decoderOutput = new FullyConnectedLayer<T>(_dataWidth, identity);
 
         // Rebuild Layers (decoder MLP) if not using custom layers
         if (!_usingCustomLayers)
         {
             Layers.Clear();
             int latentDim = _options.LatentDimension;
-            Layers.Add(new FullyConnectedLayer<T>(latentDim, hiddenDim, relu));
-            Layers.Add(new FullyConnectedLayer<T>(hiddenDim, hiddenDim, relu));
+            Layers.Add(new FullyConnectedLayer<T>(hiddenDim, relu));
+            Layers.Add(new FullyConnectedLayer<T>(hiddenDim, relu));
         }
 
         // Initialize adjacency matrix

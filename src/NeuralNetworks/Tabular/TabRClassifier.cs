@@ -99,7 +99,6 @@ public class TabRClassifier<T> : TabRBase<T>
 
         // Classification head
         _classificationHead = new FullyConnectedLayer<T>(
-            Options.EmbeddingDimension,
             numClasses,
             (IActivationFunction<T>?)null);
     }

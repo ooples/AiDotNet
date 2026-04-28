@@ -204,8 +204,7 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         }
 
         // Timestep projection is always internal
-        _timestepProjection = new FullyConnectedLayer<T>(
-            _options.TimestepEmbeddingDimension, _options.TimestepEmbeddingDimension,
+        _timestepProjection = new FullyConnectedLayer<T>(_options.TimestepEmbeddingDimension,
             new SiLUActivation<T>() as IActivationFunction<T>);
     }
 
@@ -234,12 +233,12 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
         if (_numNumericalFeatures > 0)
         {
-            _numericalOutputHead = new FullyConnectedLayer<T>(lastHidden, _numNumericalFeatures, identity);
+            _numericalOutputHead = new FullyConnectedLayer<T>(_numNumericalFeatures, identity);
         }
 
         if (_totalCategoricalWidth > 0)
         {
-            _categoricalOutputHead = new FullyConnectedLayer<T>(lastHidden, _totalCategoricalWidth, identity);
+            _categoricalOutputHead = new FullyConnectedLayer<T>(_totalCategoricalWidth, identity);
         }
     }
 

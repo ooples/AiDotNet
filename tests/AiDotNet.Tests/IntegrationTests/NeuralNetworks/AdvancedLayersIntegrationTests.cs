@@ -3226,7 +3226,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 64;
         int outputSize = 32;
-        var layer = new FullyConnectedLayer<float>(inputSize, outputSize,
+        var layer = new FullyConnectedLayer<float>(outputSize,
             (IActivationFunction<float>)new ReLUActivation<float>());
 
         // Input: [batch, inputSize]
@@ -3246,7 +3246,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 32;
         int outputSize = 16;
-        var original = new FullyConnectedLayer<float>(inputSize, outputSize,
+        var original = new FullyConnectedLayer<float>(outputSize,
             (IActivationFunction<float>)new ReLUActivation<float>());
         var input = Tensor<float>.CreateRandom([2, inputSize]);
 

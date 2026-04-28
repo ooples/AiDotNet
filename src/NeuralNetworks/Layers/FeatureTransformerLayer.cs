@@ -134,7 +134,7 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
         for (int i = 0; i < _numSharedLayers; i++)
         {
             // FC layer with doubled output for GLU (half for value, half for gate)
-            var fc = new FullyConnectedLayer<T>(currentDim, hiddenDim, (IActivationFunction<T>?)null);
+            var fc = new FullyConnectedLayer<T>(hiddenDim, (IActivationFunction<T>?)null);
             _sharedFCLayers.Add(fc);
 
             // Ghost Batch Normalization
@@ -155,7 +155,7 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
 
         for (int i = 0; i < _numStepSpecificLayers; i++)
         {
-            var fc = new FullyConnectedLayer<T>(currentDim, hiddenDim, (IActivationFunction<T>?)null);
+            var fc = new FullyConnectedLayer<T>(hiddenDim, (IActivationFunction<T>?)null);
             _stepFCLayers.Add(fc);
 
             var bn = new GhostBatchNormalization<T>(hiddenDim, _virtualBatchSize, _momentum, _epsilon);

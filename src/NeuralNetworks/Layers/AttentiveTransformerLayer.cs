@@ -1,4 +1,4 @@
-﻿using AiDotNet.Autodiff;
+using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Tabular;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -97,7 +97,7 @@ public class AttentiveTransformerLayer<T> : LayerBase<T>
         _relaxationFactor = relaxationFactor;
 
         // FC layer maps processed features to attention logits
-        _fcLayer = new FullyConnectedLayer<T>(inputDim, outputDim, (IActivationFunction<T>?)null);
+        _fcLayer = new FullyConnectedLayer<T>(outputDim, (IActivationFunction<T>?)null);
 
         // Ghost Batch Normalization for regularization
         _bnLayer = new GhostBatchNormalization<T>(outputDim, virtualBatchSize, momentum, epsilon);

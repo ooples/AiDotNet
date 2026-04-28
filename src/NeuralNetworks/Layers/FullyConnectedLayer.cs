@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public partial class FullyConnectedLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -249,28 +249,47 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     /// ```csharp
     /// // Create a hidden layer with 784 inputs (e.g., from a 28×28 image), 
     /// // 128 outputs, and ReLU activation
-    /// var hiddenLayer = new FullyConnectedLayer<float>(784, 128);
+    /// var hiddenLayer = new FullyConnectedLayer<float>(128);
     /// 
     /// // Create an output layer with 128 inputs (from previous layer),
     /// // 10 outputs (e.g., for 10 classes), and Sigmoid activation
-    /// var outputLayer = new FullyConnectedLayer<float>(128, 10, new SigmoidActivation<float>());
+    /// var outputLayer = new FullyConnectedLayer<float>(10, new SigmoidActivation<float>());
     /// ```
     /// 
     /// The constructor automatically initializes weights with appropriate small random
     /// values that help training converge effectively.
     /// </para>
     /// </remarks>
-    public FullyConnectedLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
-        : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
+    public FullyConnectedLayer(int outputSize, IActivationFunction<T>? activationFunction = null)
+        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
     {
+        if (outputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize));
+
+        _weights = new Tensor<T>([0, 0]);
+        _biases = new Tensor<T>([outputSize]);
+    }
+
+    /// <summary>
+    /// Resolves input feature size from input.Shape[^1] on first forward and allocates weights.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"FullyConnectedLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+
+        int inputSize = input.Shape[rank - 1];
+        int outputSize = OutputShape[0];
+
         _weights = new Tensor<T>([outputSize, inputSize]);
         _biases = new Tensor<T>([outputSize]);
-
         InitializeParameters();
-
-        // Register tensors for GPU memory persistence
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+        ResolveShapes(new[] { inputSize }, new[] { outputSize });
     }
 
     /// <summary>
@@ -300,24 +319,21 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     /// For example:
     /// ```csharp
     /// // Create an output layer with Softmax activation for multi-class classification
-    /// var outputLayer = new FullyConnectedLayer<float>(256, 10, new SoftmaxActivation<float>());
+    /// var outputLayer = new FullyConnectedLayer<float>(10, new SoftmaxActivation<float>());
     /// ```
     /// 
     /// Softmax makes sure that increasing one output decreases all others,
     /// which is perfect for classification tasks where outputs represent class probabilities.
     /// </para>
     /// </remarks>
-    public FullyConnectedLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? vectorActivationFunction = null)
-        : base([inputSize], [outputSize], vectorActivationFunction ?? new ReLUActivation<T>())
+    public FullyConnectedLayer(int outputSize, IVectorActivationFunction<T> vectorActivationFunction)
+        : base(new[] { -1 }, new[] { outputSize }, vectorActivationFunction ?? new ReLUActivation<T>())
     {
-        _weights = new Tensor<T>([outputSize, inputSize]);
+        if (outputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize));
+
+        _weights = new Tensor<T>([0, 0]);
         _biases = new Tensor<T>([outputSize]);
-
-        InitializeParameters();
-
-        // Register tensors for GPU memory persistence
-        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -388,6 +404,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         // Auto-reshape 1D input to [1, N] for matmul compatibility
         _inputWas1D = input.Shape.Length == 1;
         if (_inputWas1D)

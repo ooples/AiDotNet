@@ -85,7 +85,6 @@ public class NODERegression<T> : NODEBase<T>
 
         // Regression head maps from tree output to predictions
         _regressionHead = new FullyConnectedLayer<T>(
-            TreeOutputDimension,
             outputDimension,
             (IActivationFunction<T>?)null);
     }

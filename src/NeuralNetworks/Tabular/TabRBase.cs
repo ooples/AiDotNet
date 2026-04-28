@@ -1,4 +1,4 @@
-﻿using AiDotNet.Models.Options;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -152,7 +152,6 @@ public abstract class TabRBase<T>
         for (int i = 0; i < Options.NumLayers; i++)
         {
             var layer = new FullyConnectedLayer<T>(
-                prevDim,
                 Options.EmbeddingDimension,
                 new ReLUActivation<T>() as IActivationFunction<T>);
             _encoderLayers.Add(layer);
@@ -172,7 +171,6 @@ public abstract class TabRBase<T>
         {
             int inputDim = i == 0 ? contextInputDim : Options.EmbeddingDimension;
             var layer = new FullyConnectedLayer<T>(
-                inputDim,
                 Options.EmbeddingDimension,
                 new ReLUActivation<T>() as IActivationFunction<T>);
             _contextLayers.Add(layer);
@@ -185,14 +183,10 @@ public abstract class TabRBase<T>
 
         // Initialize attention projections
         int headDim = Options.EmbeddingDimension / Options.NumAttentionHeads;
-        _queryProjection = new FullyConnectedLayer<T>(
-            Options.EmbeddingDimension, Options.EmbeddingDimension, (IActivationFunction<T>?)null);
-        _keyProjection = new FullyConnectedLayer<T>(
-            Options.EmbeddingDimension, Options.EmbeddingDimension, (IActivationFunction<T>?)null);
-        _valueProjection = new FullyConnectedLayer<T>(
-            Options.EmbeddingDimension, Options.EmbeddingDimension, (IActivationFunction<T>?)null);
-        _outputProjection = new FullyConnectedLayer<T>(
-            Options.EmbeddingDimension, Options.EmbeddingDimension, (IActivationFunction<T>?)null);
+        _queryProjection = new FullyConnectedLayer<T>(Options.EmbeddingDimension, (IActivationFunction<T>?)null);
+        _keyProjection = new FullyConnectedLayer<T>(Options.EmbeddingDimension, (IActivationFunction<T>?)null);
+        _valueProjection = new FullyConnectedLayer<T>(Options.EmbeddingDimension, (IActivationFunction<T>?)null);
+        _outputProjection = new FullyConnectedLayer<T>(Options.EmbeddingDimension, (IActivationFunction<T>?)null);
     }
 
     /// <summary>

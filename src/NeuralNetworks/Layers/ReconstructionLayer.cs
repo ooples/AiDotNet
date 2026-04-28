@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -195,9 +195,9 @@ public class ReconstructionLayer<T> : LayerBase<T>
         hiddenActivation ??= new ReLUActivation<T>();
         outputActivation ??= new SigmoidActivation<T>();
 
-        _fc1 = new FullyConnectedLayer<T>(inputDimension, hidden1Dimension, hiddenActivation);
-        _fc2 = new FullyConnectedLayer<T>(hidden1Dimension, hidden2Dimension, hiddenActivation);
-        _fc3 = new FullyConnectedLayer<T>(hidden2Dimension, outputDimension, outputActivation);
+        _fc1 = new FullyConnectedLayer<T>(hidden1Dimension, hiddenActivation);
+        _fc2 = new FullyConnectedLayer<T>(hidden2Dimension, hiddenActivation);
+        _fc3 = new FullyConnectedLayer<T>(outputDimension, outputActivation);
 
         RegisterSubLayer(_fc1);
         RegisterSubLayer(_fc2);
@@ -251,9 +251,9 @@ public class ReconstructionLayer<T> : LayerBase<T>
         hiddenVectorActivation ??= new ReLUActivation<T>();
         outputVectorActivation ??= new SigmoidActivation<T>();
 
-        _fc1 = new FullyConnectedLayer<T>(inputDimension, hidden1Dimension, hiddenVectorActivation);
-        _fc2 = new FullyConnectedLayer<T>(hidden1Dimension, hidden2Dimension, hiddenVectorActivation);
-        _fc3 = new FullyConnectedLayer<T>(hidden2Dimension, outputDimension, outputVectorActivation);
+        _fc1 = new FullyConnectedLayer<T>(hidden1Dimension, hiddenVectorActivation);
+        _fc2 = new FullyConnectedLayer<T>(hidden2Dimension, hiddenVectorActivation);
+        _fc3 = new FullyConnectedLayer<T>(outputDimension, outputVectorActivation);
 
         RegisterSubLayer(_fc1);
         RegisterSubLayer(_fc2);

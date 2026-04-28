@@ -74,14 +74,10 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>
         _dropoutRate = dropoutRate;
 
         // Initialize attention projections
-        _queryProjection = new FullyConnectedLayer<T>(
-            embeddingDim, embeddingDim, (Interfaces.IActivationFunction<T>?)null);
-        _keyProjection = new FullyConnectedLayer<T>(
-            embeddingDim, embeddingDim, (Interfaces.IActivationFunction<T>?)null);
-        _valueProjection = new FullyConnectedLayer<T>(
-            embeddingDim, embeddingDim, (Interfaces.IActivationFunction<T>?)null);
-        _outputProjection = new FullyConnectedLayer<T>(
-            embeddingDim, embeddingDim, (Interfaces.IActivationFunction<T>?)null);
+        _queryProjection = new FullyConnectedLayer<T>(embeddingDim, (Interfaces.IActivationFunction<T>?)null);
+        _keyProjection = new FullyConnectedLayer<T>(embeddingDim, (Interfaces.IActivationFunction<T>?)null);
+        _valueProjection = new FullyConnectedLayer<T>(embeddingDim, (Interfaces.IActivationFunction<T>?)null);
+        _outputProjection = new FullyConnectedLayer<T>(embeddingDim, (Interfaces.IActivationFunction<T>?)null);
 
         // Initialize layer normalization parameters
         _layerNormGamma = Tensor<T>.CreateDefault([embeddingDim], NumOps.One);

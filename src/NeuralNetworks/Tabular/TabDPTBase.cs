@@ -117,7 +117,6 @@ public abstract class TabDPTBase<T>
 
         // Feature projection for numerical features
         _featureProjection = new FullyConnectedLayer<T>(
-            numNumericalFeatures,
             embDim,
             Options.InputActivation ?? new ReLUActivation<T>());
 
@@ -128,7 +127,6 @@ public abstract class TabDPTBase<T>
         for (int i = 0; i < cardinalities.Length; i++)
         {
             _categoricalEmbeddings[i] = new FullyConnectedLayer<T>(
-                cardinalities[i],
                 embDim,
                 (IActivationFunction<T>?)null);
         }
@@ -166,7 +164,6 @@ public abstract class TabDPTBase<T>
         {
             bool isLast = i == mlpDims.Length - 1;
             _mlpLayers[i] = new FullyConnectedLayer<T>(
-                inputDim,
                 mlpDims[i],
                 isLast ? null : Options.HiddenActivation ?? new GELUActivation<T>());
             inputDim = mlpDims[i];
@@ -393,12 +390,10 @@ public abstract class TabDPTBase<T>
 
             // Feed-forward network
             _ff1 = new FullyConnectedLayer<TBlock>(
-                embeddingDim,
                 ffDim,
                 new GELUActivation<TBlock>() as IActivationFunction<TBlock>);
 
             _ff2 = new FullyConnectedLayer<TBlock>(
-                ffDim,
                 embeddingDim,
                 (IActivationFunction<TBlock>?)null);
 

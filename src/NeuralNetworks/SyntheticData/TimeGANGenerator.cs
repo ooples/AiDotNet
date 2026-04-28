@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -186,7 +186,7 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
             for (int i = 0; i < _options.NumLayers; i++)
             {
-                Layers.Add(new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity));
+                Layers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
             }
             _usingCustomLayers = false;
         }
@@ -204,7 +204,7 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             for (int i = 0; i < _options.NumLayers; i++)
             {
                 int layerInput = i == 0 ? hiddenDim : hiddenDim;
-                Layers.Add(new FullyConnectedLayer<T>(layerInput, hiddenDim, identity));
+                Layers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
             }
         }
 
@@ -216,35 +216,35 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         for (int i = 0; i < _options.NumLayers; i++)
         {
             int layerInput = i == 0 ? _dataWidth : hiddenDim;
-            _embedderLayers.Add(new FullyConnectedLayer<T>(layerInput, hiddenDim, identity));
+            _embedderLayers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
         }
-        _embedderOutput = new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity);
+        _embedderOutput = new FullyConnectedLayer<T>(hiddenDim, identity);
 
         // Recovery
         _recoveryLayers.Clear();
         for (int i = 0; i < _options.NumLayers; i++)
         {
-            _recoveryLayers.Add(new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity));
+            _recoveryLayers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
         }
-        _recoveryOutput = new FullyConnectedLayer<T>(hiddenDim, _dataWidth, identity);
+        _recoveryOutput = new FullyConnectedLayer<T>(_dataWidth, identity);
 
         // Supervisor
         _supervisorLayers.Clear();
         for (int i = 0; i < _options.NumLayers - 1; i++)
         {
-            _supervisorLayers.Add(new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity));
+            _supervisorLayers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
         }
-        _supervisorOutput = new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity);
+        _supervisorOutput = new FullyConnectedLayer<T>(hiddenDim, identity);
 
         // Discriminator
         _discriminatorLayers.Clear();
         _discDropoutLayers.Clear();
         for (int i = 0; i < _options.NumLayers; i++)
         {
-            _discriminatorLayers.Add(new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity));
+            _discriminatorLayers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
             _discDropoutLayers.Add(new DropoutLayer<T>(_options.DiscriminatorDropout));
         }
-        _discriminatorOutput = new FullyConnectedLayer<T>(hiddenDim, 1, identity);
+        _discriminatorOutput = new FullyConnectedLayer<T>(1, identity);
     }
 
     #endregion

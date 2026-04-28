@@ -145,7 +145,6 @@ public abstract class AutoIntBase<T>
         foreach (var hiddenDim in Options.MLPHiddenDimensions)
         {
             _mlpLayers.Add(new FullyConnectedLayer<T>(
-                mlpInput,
                 hiddenDim,
                 Options.HiddenActivation ?? new ReLUActivation<T>()));
             mlpInput = hiddenDim;
