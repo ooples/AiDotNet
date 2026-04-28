@@ -4413,7 +4413,6 @@ public static class LayerHelper<T>
 
             // SpiralConv layer
             yield return new SpiralConvLayer<T>(
-                inputChannels: currentChannels,
                 outputChannels: outChannels,
                 spiralLength: spiralLength,
                 activationFunction: new ReLUActivation<T>());

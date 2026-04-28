@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
-[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "8, 3", TestConstructorArgs = "3, 6, 3, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var s = new int[8, 3]; for (int i = 0; i < 8; i++) for (int j = 0; j < 3; j++) s[i, j] = (i * 2 + j + 1) % 8; ((AiDotNet.NeuralNetworks.Layers.SpiralConvLayer<double>)layer).SetSpiralIndices(s);")]
+[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "8, 3", TestConstructorArgs = "6, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var s = new int[8, 3]; for (int i = 0; i < 8; i++) for (int j = 0; j < 3; j++) s[i, j] = (i * 2 + j + 1) % 8; ((AiDotNet.NeuralNetworks.Layers.SpiralConvLayer<double>)layer).SetSpiralIndices(s);")]
 public partial class SpiralConvLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -430,27 +430,23 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public SpiralConvLayer(
-        int inputChannels,
         int outputChannels,
         int spiralLength,
-        int numVertices = 1,
         IActivationFunction<T>? activationFunction = null)
         : base(
-            [numVertices, inputChannels],
-            [numVertices, outputChannels],
+            new[] { -1, -1 },
+            new[] { -1, outputChannels },
             activationFunction ?? new ReLUActivation<T>())
     {
-        ValidateParameters(inputChannels, outputChannels, spiralLength);
+        if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
+        if (spiralLength <= 0) throw new ArgumentOutOfRangeException(nameof(spiralLength));
 
-        InputChannels = inputChannels;
+        InputChannels = -1;
         OutputChannels = outputChannels;
         SpiralLength = spiralLength;
 
-        int weightSize = inputChannels * spiralLength;
-        _weights = new Tensor<T>([outputChannels, weightSize]);
-        _biases = new Tensor<T>([outputChannels]);
-
-        InitializeWeights();
+        _weights = new Tensor<T>([0, 0]);
+        _biases = new Tensor<T>([0]);
     }
 
     /// <summary>
@@ -463,27 +459,48 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     /// <param name="vectorActivation">Vector activation function to apply.</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when parameters are non-positive.</exception>
     public SpiralConvLayer(
-        int inputChannels,
         int outputChannels,
         int spiralLength,
-        int numVertices = 1,
-        IVectorActivationFunction<T>? vectorActivation = null)
+        IVectorActivationFunction<T> vectorActivation)
         : base(
-            [numVertices, inputChannels],
-            [numVertices, outputChannels],
+            new[] { -1, -1 },
+            new[] { -1, outputChannels },
             vectorActivation ?? new ReLUActivation<T>())
     {
-        ValidateParameters(inputChannels, outputChannels, spiralLength);
+        if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
+        if (spiralLength <= 0) throw new ArgumentOutOfRangeException(nameof(spiralLength));
 
-        InputChannels = inputChannels;
+        InputChannels = -1;
         OutputChannels = outputChannels;
         SpiralLength = spiralLength;
 
-        int weightSize = inputChannels * spiralLength;
-        _weights = new Tensor<T>([outputChannels, weightSize]);
-        _biases = new Tensor<T>([outputChannels]);
+        _weights = new Tensor<T>([0, 0]);
+        _biases = new Tensor<T>([0]);
+    }
 
+    /// <summary>
+    /// Resolves input channels and vertex count from input.Shape on first forward
+    /// (rank-2 [V,C] or rank-3 [B,V,C]) and allocates weights+biases.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        int v, c;
+        if (rank == 3) { v = input.Shape[1]; c = input.Shape[2]; }
+        else if (rank == 2) { v = input.Shape[0]; c = input.Shape[1]; }
+        else throw new ArgumentException(
+            $"SpiralConvLayer requires rank-2 [V,C] or rank-3 [B,V,C] input; got rank {rank}.",
+            nameof(input));
+
+        InputChannels = c;
+        int weightSize = c * SpiralLength;
+        _weights = new Tensor<T>([OutputChannels, weightSize]);
+        _biases = new Tensor<T>([OutputChannels]);
         InitializeWeights();
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+        ResolveShapes(new[] { v, c }, new[] { v, OutputChannels });
     }
 
     #endregion
@@ -600,6 +617,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         if (_spiralIndices == null)
         {
             throw new InvalidOperationException(
@@ -961,13 +979,15 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
 
         if (UsingVectorActivation)
         {
+            var vAct = VectorActivation ?? throw new InvalidOperationException(
+                "UsingVectorActivation is true but VectorActivation is null.");
             copy = new SpiralConvLayer<T>(
-                InputChannels, OutputChannels, SpiralLength, InputShape[0], VectorActivation);
+                OutputChannels, SpiralLength, vAct);
         }
         else
         {
             copy = new SpiralConvLayer<T>(
-                InputChannels, OutputChannels, SpiralLength, InputShape[0], ScalarActivation);
+                OutputChannels, SpiralLength, ScalarActivation);
         }
 
         copy.SetParameters(GetParameters());

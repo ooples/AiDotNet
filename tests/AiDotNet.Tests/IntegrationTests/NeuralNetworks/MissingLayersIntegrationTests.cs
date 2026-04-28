@@ -194,10 +194,8 @@ public class MissingLayersIntegrationTests
         int spiralLength = 3;
 
         var layer = new SpiralConvLayer<float>(
-            inputChannels,
             outputChannels,
             spiralLength,
-            numVertices,
             activationFunction: new ReLUActivation<float>());
         layer.SetTrainingMode(true);
         layer.SetSpiralIndices(CreateSpiralIndices(numVertices, spiralLength));
