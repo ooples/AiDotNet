@@ -135,6 +135,8 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         _trainingData = trainingData;
         Guard.NotNull(trainingLabels);
         _trainingLabels = trainingLabels;
+        ValidateTrainingShapes(trainingData, trainingLabels);
+        ValidateHyperparameters(damping, maxIterations, recursionDepth, scale);
         _method = method;
         _damping = damping;
         _maxIterations = maxIterations;
@@ -147,6 +149,61 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
             var tensor = Tensor<T>.FromRowMatrix(new Matrix<T>(new[] { input }));
             return network.Predict(tensor).ToVector();
         };
+    }
+
+    /// <summary>
+    /// Asserts that the training matrix has at least one row and that the label vector
+    /// length matches <see cref="Matrix{T}.Rows"/>. Catching these mismatches here surfaces
+    /// the configuration bug at the call site instead of crashing later inside
+    /// random-row sampling or the per-example gradient loop.
+    /// </summary>
+    private static void ValidateTrainingShapes(Matrix<T> trainingData, Vector<T> trainingLabels)
+    {
+        if (trainingData.Rows <= 0)
+        {
+            throw new ArgumentException(
+                "trainingData must contain at least one row.", nameof(trainingData));
+        }
+        if (trainingData.Columns <= 0)
+        {
+            throw new ArgumentException(
+                "trainingData must contain at least one feature column.", nameof(trainingData));
+        }
+        if (trainingLabels.Length != trainingData.Rows)
+        {
+            throw new ArgumentException(
+                $"trainingLabels.Length ({trainingLabels.Length}) must equal " +
+                $"trainingData.Rows ({trainingData.Rows}).",
+                nameof(trainingLabels));
+        }
+    }
+
+    /// <summary>
+    /// Asserts that all numeric hyperparameters are in their valid ranges. Defends
+    /// against negative damping, non-positive iteration counts, etc.
+    /// </summary>
+    private static void ValidateHyperparameters(double damping, int maxIterations, int recursionDepth, double scale)
+    {
+        if (damping < 0 || double.IsNaN(damping) || double.IsInfinity(damping))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(damping), $"damping must be a finite non-negative number; got {damping}.");
+        }
+        if (maxIterations <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maxIterations), $"maxIterations must be > 0; got {maxIterations}.");
+        }
+        if (recursionDepth <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(recursionDepth), $"recursionDepth must be > 0; got {recursionDepth}.");
+        }
+        if (scale <= 0 || double.IsNaN(scale) || double.IsInfinity(scale))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(scale), $"scale must be a finite positive number; got {scale}.");
+        }
     }
 
     /// <summary>
@@ -193,6 +250,8 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         _trainingData = trainingData;
         Guard.NotNull(trainingLabels);
         _trainingLabels = trainingLabels;
+        ValidateTrainingShapes(trainingData, trainingLabels);
+        ValidateHyperparameters(damping, maxIterations, recursionDepth, scale);
         _method = method;
         _damping = damping;
         _maxIterations = maxIterations;

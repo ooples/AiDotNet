@@ -1,4 +1,3 @@
-#pragma warning disable CS0649, CS0414, CS0169
 ﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -236,13 +235,29 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
-        // Forward through LoRA layer with pruned components
-        // The LoRA layer matrices have been pruned by PruneRank() - zeroing out low-importance components
-        // So this Forward call only uses the top _currentRank components (others contribute zero)
+        // Forward through LoRA layer with pruned components.
+        // The LoRA layer matrices have been pruned by PruneRank() — zeroing out
+        // low-importance components — so this Forward call only uses the top
+        // _currentRank components (others contribute zero).
         Tensor<T> loraOutput = _loraLayer.Forward(input);
 
-        // Sum the outputs (pruning is already applied via zeroed matrix elements)
+        // Sum the outputs (pruning is already applied via zeroed matrix elements).
         Tensor<T> result = Engine.TensorAdd(baseOutput, loraOutput);
+
+        // Drive the automatic pruning schedule: every _pruningInterval forward
+        // passes (during training mode), refresh importance scores from the latest
+        // gradients and trim the rank. The base layer is frozen, so this is a
+        // training-time-only operation; we gate on IsTrainingMode so inference
+        // calls never trigger a rank change.
+        if (IsTrainingMode && _pruningInterval > 0)
+        {
+            _stepCount++;
+            if (_stepCount % _pruningInterval == 0)
+            {
+                UpdateImportanceScores();
+                PruneRank();
+            }
+        }
 
         return result;
     }

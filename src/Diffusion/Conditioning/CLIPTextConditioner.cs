@@ -102,11 +102,37 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// This is a teaching-grade CLIP text encoder: it implements the embedding lookup,
+    /// position embeddings, layer-norm, residual connections, final projection, and
+    /// applies an attention mask, but the per-block "attention" and "MLP" are linear
+    /// projections rather than full multi-head attention with QKV+softmax. That keeps
+    /// the implementation accessible and avoids pulling in a full transformer stack on
+    /// this side of the diffusion conditioner — but it is intentionally not byte-equal
+    /// to the reference CLIP weights. Treat this as a structurally-correct CLIP that
+    /// trains end-to-end inside AiDotNet, not as a drop-in replacement for OpenAI's
+    /// pretrained CLIP.
+    /// </para>
+    /// </remarks>
     public override Tensor<T> EncodeText(Tensor<T> tokenIds, Tensor<T>? attentionMask = null)
     {
         var shape = tokenIds._shape;
         int batchSize = shape[0];
         int seqLen = shape.Length > 1 ? shape[1] : MaxSequenceLength;
+
+        // Validate attention mask shape if provided.
+        if (attentionMask is not null)
+        {
+            var maskShape = attentionMask._shape;
+            if (maskShape.Length < 2 || maskShape[0] != batchSize || maskShape[1] != seqLen)
+            {
+                throw new ArgumentException(
+                    $"attentionMask shape [{string.Join(",", maskShape)}] does not match " +
+                    $"tokenIds [{string.Join(",", shape)}]. Expected [batchSize={batchSize}, seqLen={seqLen}].",
+                    nameof(attentionMask));
+            }
+        }
 
         // Output shape: [batchSize, seqLen, embeddingDim]
         var outputData = new Vector<T>(batchSize * seqLen * EmbeddingDimension);
@@ -124,16 +150,37 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
                     : 0;
                 tokenId = Math.Max(0, Math.Min(tokenId, VocabSize - 1));
 
+                // Apply attention mask: zero out padded positions before they enter the
+                // transformer chain so they cannot influence later positions through the
+                // residual pathway. (Without true multi-head attention with softmax over
+                // mask, this is the strictest enforcement available here.)
+                bool maskedOut = false;
+                if (attentionMask is not null)
+                {
+                    int maskFlatIdx = b * seqLen + s;
+                    if (NumOps.ToDouble(attentionMask[maskFlatIdx]) == 0.0)
+                    {
+                        maskedOut = true;
+                    }
+                }
+
                 for (int d = 0; d < HiddenSize; d++)
                 {
-                    // Token embedding + position embedding
-                    T tokenEmb = TokenEmbeddings[tokenId * HiddenSize + d];
-                    T posEmb = PositionEmbeddings[s * HiddenSize + d];
-                    hidden[s * HiddenSize + d] = NumOps.Add(tokenEmb, posEmb);
+                    if (maskedOut)
+                    {
+                        hidden[s * HiddenSize + d] = NumOps.Zero;
+                    }
+                    else
+                    {
+                        // Token embedding + position embedding
+                        T tokenEmb = TokenEmbeddings[tokenId * HiddenSize + d];
+                        T posEmb = PositionEmbeddings[s * HiddenSize + d];
+                        hidden[s * HiddenSize + d] = NumOps.Add(tokenEmb, posEmb);
+                    }
                 }
             }
 
-            // Apply transformer layers (simplified forward pass)
+            // Apply transformer layers (linear-projection variant — see XML doc above).
             hidden = ApplyTransformerLayers(hidden, seqLen);
 
             // Apply final layer norm
@@ -153,19 +200,26 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// CLIP defines the pooled output as the embedding at the EOS token position. Because
+    /// <see cref="EncodeText"/> zeros out padded positions when an attention mask is supplied,
+    /// the EOS position is the last sequence index whose embedding has any non-zero
+    /// magnitude. We scan from the right and take that index; if the entire sequence is
+    /// zeroed (degenerate input), we fall back to position 0 to avoid emitting a zero
+    /// pooled vector that downstream cosine similarities can't normalize.
+    /// </remarks>
     public override Tensor<T> GetPooledEmbedding(Tensor<T> sequenceEmbeddings)
     {
         var shape = sequenceEmbeddings._shape;
         int batchSize = shape[0];
         int seqLen = shape[1];
 
-        // CLIP pooled output = EOS token embedding (last non-padding token)
+        // CLIP pooled output = EOS token embedding (last non-padding token).
         var pooledData = new Vector<T>(batchSize * EmbeddingDimension);
 
         for (int b = 0; b < batchSize; b++)
         {
-            // Find last non-zero token position (EOS position)
-            int eosPos = seqLen - 1;
+            int eosPos = FindEosPosition(sequenceEmbeddings, b, seqLen);
 
             for (int d = 0; d < EmbeddingDimension; d++)
             {
@@ -175,6 +229,29 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
         }
 
         return new Tensor<T>(new[] { batchSize, EmbeddingDimension }, pooledData);
+    }
+
+    /// <summary>
+    /// Scans backwards through a batch row to locate the last sequence position with any
+    /// non-zero embedding value — the EOS position once padded tail tokens have been
+    /// zeroed by <see cref="EncodeText"/>'s attention-mask handling. Falls back to 0 for
+    /// fully-zeroed rows.
+    /// </summary>
+    private int FindEosPosition(Tensor<T> sequenceEmbeddings, int batch, int seqLen)
+    {
+        int rowOffset = batch * seqLen * EmbeddingDimension;
+        for (int s = seqLen - 1; s >= 0; s--)
+        {
+            int posOffset = rowOffset + s * EmbeddingDimension;
+            for (int d = 0; d < EmbeddingDimension; d++)
+            {
+                if (NumOps.ToDouble(sequenceEmbeddings[posOffset + d]) != 0.0)
+                {
+                    return s;
+                }
+            }
+        }
+        return 0;
     }
 
     /// <inheritdoc />
@@ -264,14 +341,25 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
     }
 
     /// <summary>
-    /// Applies a linear projection to each position in the sequence.
+    /// Applies a linear projection to each position in the sequence. Fails fast if the
+    /// requested weight slice does not fit inside the supplied weight buffer — silent
+    /// truncation to zeros would corrupt downstream attention/MLP outputs without
+    /// surfacing the configuration error.
     /// </summary>
     private Vector<T> LinearProject(Vector<T> input, Vector<T> weights, int weightOffset, int inDim, int outDim, int seqLen)
     {
-        // Extract weight subvector and reshape to [inDim, outDim]
         var wSize = inDim * outDim;
+        if (weightOffset < 0 || weightOffset + wSize > weights.Length)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(weightOffset),
+                $"LinearProject requires {wSize} weights starting at offset {weightOffset}, " +
+                $"but the weight buffer only has {weights.Length} elements. " +
+                $"This indicates a transformer-layer offset miscount in the CLIP weight layout.");
+        }
+
         var wSlice = new Vector<T>(wSize);
-        for (int i = 0; i < wSize && weightOffset + i < weights.Length; i++)
+        for (int i = 0; i < wSize; i++)
             wSlice[i] = weights[weightOffset + i];
 
         // [seqLen, inDim] @ [inDim, outDim] = [seqLen, outDim] — vectorized
@@ -289,10 +377,23 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
         return copy;
     }
 
+    /// <summary>
+    /// Extracts a contiguous subvector. Fails fast if the requested slice would extend
+    /// past the source buffer — silent zero-fill on out-of-bounds reads previously
+    /// produced corrupt LayerNorm gamma/beta and MLP weights without surfacing the
+    /// configuration error.
+    /// </summary>
     private static Vector<T> ExtractSubVector(Vector<T> source, int offset, int length)
     {
+        if (offset < 0 || length < 0 || offset + length > source.Length)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(offset),
+                $"ExtractSubVector requires {length} elements starting at offset {offset}, " +
+                $"but the source buffer only has {source.Length} elements.");
+        }
         var result = new Vector<T>(length);
-        for (int i = 0; i < length && offset + i < source.Length; i++)
+        for (int i = 0; i < length; i++)
             result[i] = source[offset + i];
         return result;
     }

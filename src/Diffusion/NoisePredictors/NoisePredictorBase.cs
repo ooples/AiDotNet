@@ -76,18 +76,21 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <list type="number">
     /// <item>Override and yield specific field references explicitly
     /// (recommended — zero reflection cost, explicit ownership).</item>
-    /// <item>Opt in to <see cref="ReflectInstanceLayers"/> explicitly via
-    /// <c>protected override IEnumerable&lt;ILayer&lt;T&gt;&gt; EnumerateLayers() =&gt; ReflectInstanceLayers(this);</c>.
-    /// The reflector walks fields plus <see cref="System.Collections.IEnumerable"/>
-    /// and <see cref="System.Collections.IDictionary"/> elements that
-    /// implement <see cref="ILayer{T}"/>, but does NOT recurse into
-    /// arbitrary nested reference-type objects — a
-    /// <c>List&lt;DiTBlock&gt;</c> where <c>DiTBlock</c> only holds layer
-    /// <i>properties</i> is not discovered.</item>
+    /// <item>Accept the reflective default (<see cref="ReflectInstanceLayers"/>) which
+    /// walks fields plus <see cref="System.Collections.IEnumerable"/> and
+    /// <see cref="System.Collections.IDictionary"/> elements that implement
+    /// <see cref="ILayer{T}"/>, but does NOT recurse into arbitrary nested
+    /// reference-type objects — a <c>List&lt;DiTBlock&gt;</c> where <c>DiTBlock</c>
+    /// only holds layer <i>properties</i> is not discovered.</item>
     /// </list>
     /// </remarks>
+    /// <remarks>
+    /// The default uses <see cref="ReflectInstanceLayers"/> so that <c>Dispose</c>
+    /// reaches owned layers automatically; predictors that want zero reflection
+    /// cost should override this with explicit yields.
+    /// </remarks>
     protected virtual IEnumerable<ILayer<T>> EnumerateLayers() =>
-        Enumerable.Empty<ILayer<T>>();
+        ReflectInstanceLayers(this);
 
     /// <summary>
     /// Walks an object's instance fields and yields anything that implements
@@ -635,6 +638,22 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     #region IGradientComputable<T, Tensor<T>, Tensor<T>> Implementation
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Noise predictors compute gradients via the engine's <see cref="GradientTape{T}"/>:
+    /// every Engine op recorded during <see cref="PredictNoise"/> contributes a
+    /// <c>GradFn</c> entry, so reverse-mode AD via
+    /// <see cref="ComputeGradientsWithTape"/> produces exact per-tensor gradients
+    /// without a manual backward pass through layers (<see cref="ILayer{T}"/> has no
+    /// <c>Backward</c> in this codebase — autodiff is tape-only).
+    /// </para>
+    /// <para>
+    /// The default implementation throws because the base class cannot enumerate the
+    /// concrete predictor's trainable tensors. Concrete predictors must override either
+    /// <see cref="ComputeGradients"/> directly or implement a tape-based path on top of
+    /// <see cref="ComputeGradientsWithTape"/>.
+    /// </para>
+    /// </remarks>
     public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
     {
         if (input == null)
@@ -642,22 +661,12 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         if (target == null)
             throw new ArgumentNullException(nameof(target));
 
-        var effectiveLossFunction = lossFunction ?? LossFunction;
-
-        // Layer-level backpropagation: forward through layers, compute loss gradient,
-        // then backpropagate through the layer chain for exact gradients.
-        // Forward pass
-        var predicted = Forward(input);
-
-        // Compute loss gradient: d(loss)/d(predicted)
-        var lossGrad = effectiveLossFunction.CalculateDerivative(
-            predicted.ToVector(), target.ToVector());
-        var lossGradTensor = new Tensor<T>(predicted._shape, lossGrad);
-
-        // Backpropagate through all layers
-
-        // Extract parameter gradients from layers
-        return GetParameterGradients();
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement ComputeGradients. " +
+            "Override this method on the concrete predictor and route through " +
+            "ComputeGradientsWithTape with the predictor's collected trainable tensors. " +
+            "AiDotNet has no per-layer Backward; autodiff goes through the GradientTape " +
+            "(see DiffusionModelBase.ComputeGradients for the canonical pattern).");
     }
 
     /// <summary>
