@@ -768,7 +768,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputDim = 64;
         int outputDim = 32;
-        var layer = new GatedLinearUnitLayer<float>(inputDim, outputDim, (IActivationFunction<float>?)null);
+        var layer = new GatedLinearUnitLayer<float>(outputDim, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([4, inputDim]);
 
@@ -786,7 +786,7 @@ public class AdvancedLayersIntegrationTests
     public async Task GatedLinearUnitLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
-        var original = new GatedLinearUnitLayer<float>(32, 16, (IActivationFunction<float>?)null);
+        var original = new GatedLinearUnitLayer<float>(16, (IActivationFunction<float>?)null);
         var input = Tensor<float>.CreateRandom([2, 32]);
 
         // Act
@@ -804,7 +804,7 @@ public class AdvancedLayersIntegrationTests
     public async Task GatedLinearUnitLayer_ParameterCount_IsPositive()
     {
         // Arrange
-        var layer = new GatedLinearUnitLayer<float>(64, 32, (IActivationFunction<float>?)null);
+        var layer = new GatedLinearUnitLayer<float>(32, (IActivationFunction<float>?)null);
 
         // Act
         int paramCount = layer.ParameterCount;
