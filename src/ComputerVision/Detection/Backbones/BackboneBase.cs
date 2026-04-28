@@ -1,6 +1,8 @@
 using System.IO;
+using AiDotNet.Enums;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Detection.Backbones;
@@ -10,26 +12,24 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Detection backbones extend <see cref="NeuralNetworkBase{T}"/> so they satisfy the
+/// <see cref="AiDotNet.Interfaces.INeuralNetworkModel{T}"/> contract that the test
+/// auto-generator and other consumers expect, while also implementing
+/// <see cref="AiDotNet.Interfaces.IFeatureMapProvider{T}"/> for multi-scale feature
+/// extraction needed by detection heads (FPN, anchor generators, DETR transformer).
+/// </para>
 /// <para><b>For Beginners:</b> A backbone network is the first part of a detection model.
 /// It takes an input image and extracts meaningful features at multiple scales.
 /// Think of it as the "eyes" of the detector that learns to recognize patterns like
 /// edges, textures, and shapes.</para>
-///
-/// <para>Common backbones include:
-/// - ResNet: Residual networks with skip connections
-/// - CSPDarknet: Used in YOLO models, efficient for real-time detection
-/// - Swin Transformer: Vision transformer with shifted windows
-/// - EfficientNet: Scalable and efficient convolutional network
-/// </para>
 /// </remarks>
-public abstract class BackboneBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public abstract class BackboneBase<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.IFeatureMapProvider<T>
 {
-    // Engine and NumOps inherited from ModelBase
-
     /// <summary>
-    /// Whether the backbone is in training mode.
+    /// Whether the backbone is in training mode (separate from base IsTrainingMode for backwards compat).
     /// </summary>
-    protected bool IsTrainingMode;
+    protected new bool IsTrainingMode;
 
     /// <summary>
     /// Whether the backbone weights are frozen (not updated during training).
@@ -44,26 +44,23 @@ public abstract class BackboneBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// <summary>
     /// Number of output channels for each feature level.
     /// </summary>
-    /// <remarks>
-    /// <para>Modern detectors use multi-scale features. This array contains the
-    /// number of channels at each scale, typically from high resolution (small objects)
-    /// to low resolution (large objects).</para>
-    /// </remarks>
     public abstract int[] OutputChannels { get; }
 
     /// <summary>
     /// The stride (downsampling factor) at each feature level.
     /// </summary>
-    /// <remarks>
-    /// <para>A stride of 8 means the feature map is 1/8 the size of the input.
-    /// Common strides are [8, 16, 32] for 3-level feature pyramids.</para>
-    /// </remarks>
     public abstract int[] Strides { get; }
 
     /// <summary>
-    /// Creates a new backbone with numeric operations for type T.
+    /// Creates a new backbone with a default dynamic-spatial architecture.
     /// </summary>
     protected BackboneBase()
+        : base(NeuralNetworkArchitecture<T>.CreateDynamicSpatial(
+                inputType: InputType.ThreeDimensional,
+                taskType: NeuralNetworkTaskType.ImageClassification,
+                channels: 3,
+                outputSize: 1),
+              new MeanSquaredErrorLoss<T>())
     {
         IsTrainingMode = false;
         IsFrozen = false;
@@ -74,75 +71,53 @@ public abstract class BackboneBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// </summary>
     /// <param name="input">Input image tensor with shape [batch, channels, height, width].</param>
     /// <returns>List of feature maps at different scales, from highest to lowest resolution.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method runs the input image through the backbone
-    /// and returns feature maps at multiple scales. Small objects need high-resolution
-    /// features, while large objects are detected in low-resolution features.</para>
-    /// </remarks>
     public abstract List<Tensor<T>> ExtractFeatures(Tensor<T> input);
+
+    /// <inheritdoc />
+    public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
 
     /// <summary>
     /// Sets whether the backbone is in training mode.
     /// </summary>
-    /// <param name="training">True for training, false for inference.</param>
-    public virtual void SetTrainingMode(bool training)
+    public override void SetTrainingMode(bool training)
     {
         IsTrainingMode = training;
+        base.SetTrainingMode(training);
     }
 
     /// <summary>
     /// Freezes the backbone weights so they are not updated during training.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> When fine-tuning a pre-trained model on a small dataset,
-    /// it's often beneficial to freeze the backbone and only train the detection head.
-    /// This prevents the backbone from "forgetting" its pre-trained features.</para>
-    /// </remarks>
-    public virtual void Freeze()
-    {
-        IsFrozen = true;
-    }
+    public virtual void Freeze() => IsFrozen = true;
 
     /// <summary>
     /// Unfreezes the backbone weights for training.
     /// </summary>
-    public virtual void Unfreeze()
-    {
-        IsFrozen = false;
-    }
+    public virtual void Unfreeze() => IsFrozen = false;
 
     /// <summary>
-    /// Gets the total number of parameters in the backbone.
+    /// Gets the total number of parameters in the backbone (subclass-specific count).
     /// </summary>
-    /// <returns>Number of trainable parameters.</returns>
-    public abstract long GetParameterCount();
+    public new abstract long GetParameterCount();
 
     /// <summary>
     /// Writes all parameters to a binary writer for serialization.
     /// </summary>
-    /// <param name="writer">The binary writer to write to.</param>
     public abstract void WriteParameters(BinaryWriter writer);
 
     /// <summary>
     /// Reads parameters from a binary reader for deserialization.
     /// </summary>
-    /// <param name="reader">The binary reader to read from.</param>
     public abstract void ReadParameters(BinaryReader reader);
 
     /// <summary>
     /// Gets the expected input size for this backbone.
     /// </summary>
-    /// <returns>Tuple of (height, width) for optimal input size.</returns>
-    public virtual (int Height, int Width) GetExpectedInputSize()
-    {
-        return (640, 640); // Default size for most detection models
-    }
+    public virtual (int Height, int Width) GetExpectedInputSize() => (640, 640);
 
     /// <summary>
     /// Validates that the input tensor has the correct shape.
     /// </summary>
-    /// <param name="input">Input tensor to validate.</param>
-    /// <exception cref="ArgumentException">Thrown if the input shape is invalid.</exception>
     protected void ValidateInput(Tensor<T> input)
     {
         if (input.Rank != 4)
@@ -160,28 +135,61 @@ public abstract class BackboneBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         }
     }
 
-    #region ModelBase Overrides
+    #region NeuralNetworkBase Overrides
 
-    /// <summary>
-    /// Predicts by running feature extraction and returning the first feature map.
-    /// </summary>
+    /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
         var features = ExtractFeatures(input);
-        return features.Count > 0 ? features[0] : new Tensor<T>(new[] { 1, 0 });
+        return features.Count > 0 ? features[features.Count - 1] : new Tensor<T>(new[] { 1, 0 });
     }
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+    protected override void InitializeLayers()
+    {
+        // Backbones manage their own layer construction in derived ctors via Conv2D etc.
+        // Layers list stays empty; ExtractFeatures drives all forward computation.
+    }
 
     /// <inheritdoc />
-    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        WriteParameters(writer);
+    }
+
+    /// <inheritdoc />
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        ReadParameters(reader);
+    }
+
+    /// <inheritdoc />
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        => (BackboneBase<T>)MemberwiseClone();
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
+    {
+        Name = Name,
+        AdditionalInfo = new Dictionary<string, object>
+        {
+            ["BackboneName"] = Name,
+            ["OutputChannels"] = OutputChannels,
+            ["Strides"] = Strides
+        }
+    };
+
+    /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
 
     /// <inheritdoc />
     public override Vector<T> GetParameters() => new Vector<T>(0);
 
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters) { }
+
+    /// <inheritdoc />
+    public override void UpdateParameters(Vector<T> parameters) { }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
@@ -201,30 +209,12 @@ public abstract class BackboneBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 /// <summary>
 /// Feature map output from a backbone network.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class FeatureMap<T>
 {
-    /// <summary>
-    /// The feature tensor with shape [batch, channels, height, width].
-    /// </summary>
     public Tensor<T> Features { get; set; }
-
-    /// <summary>
-    /// The stride (downsampling factor) of this feature map.
-    /// </summary>
     public int Stride { get; set; }
-
-    /// <summary>
-    /// The level index in the feature pyramid (0 = highest resolution).
-    /// </summary>
     public int Level { get; set; }
 
-    /// <summary>
-    /// Creates a new feature map.
-    /// </summary>
-    /// <param name="features">The feature tensor.</param>
-    /// <param name="stride">The downsampling stride.</param>
-    /// <param name="level">The pyramid level index.</param>
     public FeatureMap(Tensor<T> features, int stride, int level)
     {
         Features = features;
@@ -232,14 +222,7 @@ public class FeatureMap<T>
         Level = level;
     }
 
-    /// <summary>
-    /// Gets the spatial dimensions of the feature map.
-    /// </summary>
     public (int Height, int Width) SpatialSize => (Features.Shape[2], Features.Shape[3]);
-
-    /// <summary>
-    /// Gets the number of channels in the feature map.
-    /// </summary>
     public int Channels => Features.Shape[1];
 }
 
@@ -248,28 +231,9 @@ public class FeatureMap<T>
 /// </summary>
 public class BackboneConfig
 {
-    /// <summary>
-    /// Whether to use pre-trained weights.
-    /// </summary>
     public bool UsePretrained { get; set; } = true;
-
-    /// <summary>
-    /// Whether to freeze the backbone during training.
-    /// </summary>
     public bool Freeze { get; set; } = false;
-
-    /// <summary>
-    /// Which feature levels to output (e.g., [2, 3, 4] for P3, P4, P5).
-    /// </summary>
     public int[] OutputLevels { get; set; } = new[] { 2, 3, 4 };
-
-    /// <summary>
-    /// URL to download pre-trained weights from.
-    /// </summary>
     public string? WeightsUrl { get; set; }
-
-    /// <summary>
-    /// Random seed for weight initialization.
-    /// </summary>
     public int? RandomSeed { get; set; } = 42;
 }

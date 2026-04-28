@@ -64,12 +64,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                                      // the generator was emitting throwing factories and 14
                                      // SDXLVAEModelTests failures per shard. Manual tests cover
                                      // VAE invariants where needed.
-        "BackboneBase",              // Detection backbones (ResNet/CSPDarknet/EfficientNet/
-                                     // SwinTransformer): extend ModelBase<T,Tensor<T>,Tensor<T>>
-                                     // but do NOT implement INeuralNetworkModel<T>. Until they
-                                     // are rewritten on NeuralNetworkBase (issue #1209), the
-                                     // generator's UsesTensorInput → NeuralNetwork routing
-                                     // emits incompatible scaffolds. Manual tests cover them.
     ];
 
     // Formerly a list of diffusion variants with non-standard UNet input
