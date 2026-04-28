@@ -1032,7 +1032,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange - Split tensor along last dimension
         int[] inputShape = [32];
         int numSplits = 4;
-        var layer = new SplitLayer<float>(inputShape, numSplits);
+        var layer = new SplitLayer<float>(numSplits);
 
         var input = Tensor<float>.CreateRandom([2, 32]);
 
@@ -1055,7 +1055,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [16];
-        var original = new SplitLayer<float>(inputShape, 2);
+        var original = new SplitLayer<float>(2);
         var input = Tensor<float>.CreateRandom([1, 16]);
 
         // Act
