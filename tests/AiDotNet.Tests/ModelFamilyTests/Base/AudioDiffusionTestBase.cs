@@ -18,7 +18,7 @@ public abstract class AudioDiffusionTestBase : LatentDiffusionTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
         var output = model.Predict(input);
         Assert.True(output.Length > 0, "Audio diffusion produced empty output.");
@@ -32,7 +32,7 @@ public abstract class AudioDiffusionTestBase : LatentDiffusionTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
         var output = model.Predict(input);
 
