@@ -15,13 +15,15 @@ public class AudioLDMModelTests : DiffusionModelTestBase
     // caused LatentDiffusionModelBase.Generate to reshape the input to
     // [1, 8, ...] before handing it to a UNet expecting 4, throwing
     // "Expected input depth 4, but got 8" during forward.
-    protected override int[] InputShape => [1, 8, 16, 16];
-    protected override int[] OutputShape => [1, 8, 16, 16];
+    private const int LatentChannels = AudioLDMModel<double>.AUDIOLDM_LATENT_CHANNELS;
+
+    protected override int[] InputShape => [1, LatentChannels, 16, 16];
+    protected override int[] OutputShape => [1, LatentChannels, 16, 16];
 
     protected override IDiffusionModel<double> CreateModel()
     {
         var unet = new UNetNoisePredictor<double>(
-            inputChannels: 8, outputChannels: 8,
+            inputChannels: LatentChannels, outputChannels: LatentChannels,
             baseChannels: 64, channelMultipliers: [1, 2, 4],
             numResBlocks: 1, attentionResolutions: [1, 2],
             contextDim: 0, numHeads: 4, inputHeight: 16, seed: 42);
