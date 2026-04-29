@@ -84,6 +84,14 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
     protected virtual int[] InputShape => [1, 4];
     protected virtual int[] OutputShape => [1, 4];
 
+    /// <summary>
+    /// Number of training iterations used by post-training invariants. Virtual
+    /// so paper-scale Foundation models can override down to fit the xunit
+    /// 120s per-test timeout. Default chosen to match the existing baseline
+    /// in <see cref="Training_ShouldReducePredictionError"/>.
+    /// </summary>
+    protected virtual int TrainingIterations => 10;
+
     protected Tensor<double> CreateRandomTensor(int[] shape, Random rng)
     {
         var tensor = new Tensor<double>(shape);
@@ -121,7 +129,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         double initialError = ComputeMSE(initialOutput, target);
 
         // Train
-        for (int i = 0; i < 10; i++)
+        for (int i = 0; i < TrainingIterations; i++)
             model.Train(input, target);
 
         // Final error
@@ -254,7 +262,10 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
-        for (int i = 0; i < 5; i++)
+        // Half-iterations baseline: a sanity probe that finite-output holds
+        // even before full training has converged.
+        int finiteCheckIters = Math.Max(1, TrainingIterations / 2);
+        for (int i = 0; i < finiteCheckIters; i++)
             model.Train(input, target);
 
         var output = model.Predict(input);
