@@ -55,6 +55,18 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     private bool _disposed;
 
     /// <summary>
+    /// Throws <see cref="ObjectDisposedException"/> when the predictor has already
+    /// been disposed. Public entry points that touch <see cref="_compileHost"/>,
+    /// the timestep-embedding cache, or the layer graph must call this first so
+    /// post-Dispose use surfaces a predictable error instead of arbitrary downstream
+    /// failures from torn-down resources.
+    /// </summary>
+    protected void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName);
+    }
+
+    /// <summary>
     /// Concrete predictors can override to expose their <see cref="ILayer{T}"/>
     /// instances for (a) Dispose cascade — pool-rented weight tensors return to
     /// the allocator, and (b) future compilation features (plan serialization,
@@ -461,6 +473,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public virtual Tensor<T> GetTimestepEmbedding(int timestep)
     {
+        ThrowIfDisposed();
         if (_timestepEmbeddingCache.TryGetValue(timestep, out var cached))
             return cached;
 
@@ -491,6 +504,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        ThrowIfDisposed();
         // Compute gradients and apply them
         var gradients = ComputeGradients(input, expectedOutput, LossFunction);
         var learningRate = NumOps.FromDouble(1e-4);
@@ -553,6 +567,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public virtual byte[] Serialize()
     {
+        ThrowIfDisposed();
         ModelPersistenceGuard.EnforceBeforeSerialize();
         using var stream = new MemoryStream();
         SaveState(stream);
@@ -562,6 +577,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public virtual void Deserialize(byte[] data)
     {
+        ThrowIfDisposed();
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         using var stream = new MemoryStream(data);
         LoadState(stream);
@@ -589,6 +605,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
+        ThrowIfDisposed();
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path cannot be null or whitespace.", nameof(filePath));
 
@@ -601,6 +618,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public virtual void LoadModel(string filePath)
     {
+        ThrowIfDisposed();
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path cannot be null or whitespace.", nameof(filePath));
 
@@ -619,6 +637,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public virtual void SaveState(Stream stream)
     {
+        ThrowIfDisposed();
         if (stream == null)
             throw new ArgumentNullException(nameof(stream));
         if (!stream.CanWrite)
@@ -644,6 +663,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public virtual void LoadState(Stream stream)
     {
+        ThrowIfDisposed();
         if (stream == null)
             throw new ArgumentNullException(nameof(stream));
         if (!stream.CanRead)
