@@ -749,6 +749,23 @@ public partial class Conv3DLayer<T> : LayerBase<T>
     /// <exception cref="ArgumentException">Thrown when parameter count does not match expected.</exception>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Round-trip from saved parameters: derive inputChannels from vector length.
+        // Layout: kernels [outputChannels, inputChannels, K, K, K] + biases [outputChannels].
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            int kernelVol = OutputChannels * KernelSize * KernelSize * KernelSize;
+            if (OutputChannels <= 0 || kernelVol <= 0)
+                throw new InvalidOperationException(
+                    "Cannot SetParameters on deferred-shape Conv3DLayer before OutputChannels/KernelSize are known.");
+            int candidateInputChannels = (parameters.Length - OutputChannels) / kernelVol;
+            if (candidateInputChannels <= 0
+                || candidateInputChannels * kernelVol + OutputChannels != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer inputChannels for Conv3DLayer from {parameters.Length} parameters.");
+            ResolveFromShape(new[] { candidateInputChannels, 1, 1, 1 });
+        }
+
         int expected = _kernels.Length + _biases.Length;
         if (parameters.Length != expected)
             throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");

@@ -786,17 +786,21 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        // Deferred-shape layers cloned before their first Forward have no
-        // resolved InputDepth — passing -1 into the Tensor ctor would
-        // throw on shape validation. Accept an empty vector as a no-op so
-        // Clone roundtrip works on uninitialised conditioning branches;
-        // reject non-empty input that wouldn't fit any meaningful shape.
+        // Round-trip from saved parameters: derive inputDepth from vector length.
+        // Layout: kernels [inputDepth, outputDepth, K, K] + biases [outputDepth].
         if (!IsShapeResolved)
         {
             if (parameters.Length == 0) return;
-            throw new InvalidOperationException(
-                "Cannot SetParameters with non-empty data on a deferred-shape DeconvolutionalLayer " +
-                "before its first Forward — the input depth has not been resolved yet.");
+            int kernelArea = OutputDepth * KernelSize * KernelSize;
+            if (OutputDepth <= 0 || kernelArea <= 0)
+                throw new InvalidOperationException(
+                    "Cannot SetParameters on deferred-shape DeconvolutionalLayer before OutputDepth/KernelSize are known.");
+            int candidateInputDepth = (parameters.Length - OutputDepth) / kernelArea;
+            if (candidateInputDepth <= 0
+                || candidateInputDepth * kernelArea + OutputDepth != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer inputDepth for DeconvolutionalLayer from {parameters.Length} parameters.");
+            ResolveFromShape(new[] { candidateInputDepth, 1, 1 });
         }
 
         int expectedLength = _kernels.Length + _biases.Length;

@@ -1439,18 +1439,28 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        // Mirror GetParameters: a deferred-shape layer that was Cloned
-        // before its first Forward has no concrete kernel/bias storage to
-        // copy into, and the source-side GetParameters returned an empty
-        // vector. Accept the empty vector as a no-op so Clone roundtrip
-        // works on uninitialised conditioning branches; reject non-empty
-        // input that wouldn't fit any meaningful shape.
+        // Round-trip from saved parameters: derive inputDepth from vector length.
+        // Layout: kernels [outputDepth, inputDepth, kernelSize, kernelSize] + biases [outputDepth].
+        // inputDepth = (length - outputDepth) / (outputDepth * kernelSize * kernelSize).
         if (!IsShapeResolved)
         {
             if (parameters.Length == 0) return;
-            throw new InvalidOperationException(
-                "Cannot SetParameters with non-empty data on a deferred-shape ConvolutionalLayer " +
-                "before its first Forward — the input depth has not been resolved yet.");
+            int kernelArea = OutputDepth * KernelSize * KernelSize;
+            if (OutputDepth <= 0 || kernelArea <= 0)
+                throw new InvalidOperationException(
+                    "Cannot SetParameters on deferred-shape ConvolutionalLayer before OutputDepth/KernelSize are known.");
+            int candidateInputDepth = (parameters.Length - OutputDepth) / kernelArea;
+            if (candidateInputDepth <= 0
+                || candidateInputDepth * kernelArea + OutputDepth != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer inputDepth for ConvolutionalLayer from {parameters.Length} parameters " +
+                    $"(outputDepth={OutputDepth}, kernelSize={KernelSize}).");
+            // Convolutional layers need a 3D inputShape [C, H, W]; H/W can't be
+            // derived from the parameter vector alone. ResolveFromShape with
+            // dummy spatial dims = 1 — kernels and biases only depend on
+            // inputDepth/outputDepth/kernelSize, so spatial dims here are
+            // immaterial for SetParameters.
+            ResolveFromShape(new[] { candidateInputDepth, 1, 1 });
         }
 
         EnsureInitialized();
