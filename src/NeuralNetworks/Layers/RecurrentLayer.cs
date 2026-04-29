@@ -84,6 +84,23 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     private Tensor<T> _biases;
 
     /// <summary>
+    /// Resolved input feature size. <c>-1</c> until the lazy ctor's first forward
+    /// reads it from <c>input.Shape[^1]</c>.
+    /// </summary>
+    private int _inputSize;
+
+    /// <summary>
+    /// Hidden state size — fixed at construction.
+    /// </summary>
+    private readonly int _hiddenSize;
+
+    /// <summary>
+    /// True once weight tensors are allocated. Eager ctors set this <c>true</c> at
+    /// construction; lazy ctors flip it inside <see cref="EnsureInitialized"/>.
+    /// </summary>
+    private bool _isInitialized;
+
+    /// <summary>
     /// Gets the total number of trainable parameters in this recurrent layer.
     /// </summary>
     /// <remarks>
@@ -228,6 +245,9 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     public RecurrentLayer(int inputSize, int hiddenSize, IActivationFunction<T>? activationFunction = null)
         : base([inputSize], [hiddenSize], activationFunction ?? new TanhActivation<T>())
     {
+        _inputSize = inputSize;
+        _hiddenSize = hiddenSize;
+
         _inputWeights = new Tensor<T>([hiddenSize, inputSize]);
         _hiddenWeights = new Tensor<T>([hiddenSize, hiddenSize]);
         _biases = new Tensor<T>([hiddenSize]);
@@ -238,6 +258,8 @@ public partial class RecurrentLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_inputWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_hiddenWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+        _isInitialized = true;
     }
 
     /// <summary>
@@ -270,6 +292,9 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     public RecurrentLayer(int inputSize, int hiddenSize, IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base([inputSize], [hiddenSize], vectorActivationFunction ?? new TanhActivation<T>())
     {
+        _inputSize = inputSize;
+        _hiddenSize = hiddenSize;
+
         _inputWeights = new Tensor<T>([hiddenSize, inputSize]);
         _hiddenWeights = new Tensor<T>([hiddenSize, hiddenSize]);
         _biases = new Tensor<T>([hiddenSize]);
@@ -280,6 +305,106 @@ public partial class RecurrentLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_inputWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_hiddenWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Lazy ctor: input feature size resolved from <c>input.Shape[^1]</c> on first
+    /// <see cref="Forward(Tensor{T})"/>; weights allocated then.
+    /// </summary>
+    /// <param name="hiddenSize">Hidden state size (number of recurrent units).</param>
+    /// <param name="activationFunction">Hidden-state activation (default tanh).</param>
+    public RecurrentLayer(int hiddenSize, IActivationFunction<T>? activationFunction = null)
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, activationFunction ?? new TanhActivation<T>())
+    {
+        if (hiddenSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenSize), "hiddenSize must be positive.");
+
+        _inputSize = -1;
+        _hiddenSize = hiddenSize;
+
+        _inputWeights = new Tensor<T>(new[] { 0, 0 });
+        _hiddenWeights = new Tensor<T>(new[] { 0, 0 });
+        _biases = new Tensor<T>(new[] { 0 });
+
+        _isInitialized = false;
+    }
+
+    /// <summary>
+    /// Lazy ctor with vector activation.
+    /// </summary>
+    public RecurrentLayer(int hiddenSize, IVectorActivationFunction<T> vectorActivationFunction)
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, vectorActivationFunction)
+    {
+        if (hiddenSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenSize), "hiddenSize must be positive.");
+
+        _inputSize = -1;
+        _hiddenSize = hiddenSize;
+
+        _inputWeights = new Tensor<T>(new[] { 0, 0 });
+        _hiddenWeights = new Tensor<T>(new[] { 0, 0 });
+        _biases = new Tensor<T>(new[] { 0 });
+
+        _isInitialized = false;
+    }
+
+    /// <summary>
+    /// Resolves <see cref="_inputSize"/> from <c>input.Shape[^1]</c> and propagates the
+    /// full shape into the layer's resolved input/output shapes.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        if (IsShapeResolved) return;
+        if (input.Shape.Length < 1)
+            throw new ArgumentException(
+                $"RecurrentLayer requires rank>=1 input; got rank {input.Shape.Length}.", nameof(input));
+
+        if (_inputSize < 0)
+        {
+            _inputSize = input.Shape[input.Shape.Length - 1];
+        }
+
+        var resolvedInput = new int[input.Shape.Length];
+        var resolvedOutput = new int[input.Shape.Length];
+        for (int i = 0; i < input.Shape.Length; i++)
+        {
+            resolvedInput[i] = input.Shape[i];
+            resolvedOutput[i] = input.Shape[i];
+        }
+        resolvedOutput[resolvedOutput.Length - 1] = _hiddenSize;
+
+        ResolveShapes(resolvedInput, resolvedOutput);
+    }
+
+    /// <summary>
+    /// Allocates input/hidden weight tensors and biases using the resolved
+    /// <see cref="_inputSize"/> and <see cref="_hiddenSize"/>.
+    /// </summary>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+
+        lock (InitializationLock)
+        {
+            if (_isInitialized) return;
+            if (_inputSize <= 0)
+                throw new InvalidOperationException(
+                    "RecurrentLayer.EnsureInitialized called before _inputSize was resolved.");
+
+            _inputWeights = new Tensor<T>(new[] { _hiddenSize, _inputSize });
+            _hiddenWeights = new Tensor<T>(new[] { _hiddenSize, _hiddenSize });
+            _biases = new Tensor<T>(new[] { _hiddenSize });
+
+            InitializeParameters();
+
+            RegisterTrainableParameter(_inputWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_hiddenWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+            _isInitialized = true;
+        }
     }
 
     /// <summary>
@@ -313,6 +438,9 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy ctor path: resolve _inputSize and allocate weights on first call.
+        EnsureInitializedFromInput(input);
+
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
