@@ -517,6 +517,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        if (!IsShapeResolved) return new Vector<T>(0);
         // Flatten weight tensor and concatenate with biases
         int weightCount = _weights.Shape[0] * _weights.Shape[1];
         int biasCount = _biases.Shape[0];

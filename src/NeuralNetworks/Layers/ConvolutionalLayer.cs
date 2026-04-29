@@ -1366,6 +1366,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
+        if (!IsShapeResolved) return new Vector<T>(0);
         EnsureInitialized();
         // Bulk copy from contiguous tensor storage — replaces 4-nested scalar loops
         return Vector<T>.Concatenate(

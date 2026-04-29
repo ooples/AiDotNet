@@ -68,4 +68,22 @@ public abstract class GaussianProcessBase<T> : ModelBase<T, Matrix<T>, Vector<T>
         ((IParameterizable<T, Matrix<T>, Vector<T>>)clone).SetParameters(parameters);
         return clone;
     }
+
+    // --- IDisposable (IGaussianProcess<T> : System.IDisposable) ---
+
+    private bool _disposed;
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Releases resources held by this GP. Override + call base for kernel/cache cleanup.</summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+    }
 }

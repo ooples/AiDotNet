@@ -727,6 +727,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        if (!IsShapeResolved) return new Vector<T>(0);
         EnsureInitialized();
         // Bulk copy from contiguous tensor storage — replaces nested scalar loops
         return Vector<T>.Concatenate(

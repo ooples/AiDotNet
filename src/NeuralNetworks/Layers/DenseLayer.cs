@@ -1139,9 +1139,11 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Ensure weights and biases are initialized (supports lazy initialization)
+        // Lazy layer pre-Forward: return empty so callers walking layer graphs
+        // (clone-via-serialize, ParameterCount aggregation) don't trigger
+        // EnsureInitialized which would overflow on the -1 sentinel.
+        if (!IsShapeResolved) return new Vector<T>(0);
         EnsureInitialized();
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_weights.Data),
             Vector<T>.FromMemory(_biases.Data));
