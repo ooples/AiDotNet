@@ -55,6 +55,17 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
     private readonly Func<Vector<T>, Vector<T>> _predictFunction;
     private readonly Func<Vector<T>, Vector<T>, T> _lossFunction;
     private readonly Func<Vector<T>, Vector<T>, Vector<T>>? _gradientFunction;
+    /// <summary>
+    /// Optional caller-supplied parameter-space Hessian-vector product
+    /// <c>(input, target, vector) -&gt; H_θ * vector</c>. Required for any
+    /// <see cref="ComputeInfluence"/>-style call. AiDotNet does not yet ship a
+    /// generic per-sample parameter-Hessian path (would need Pearlmutter's
+    /// trick or double-backprop on the GradientTape), so callers must supply
+    /// this when constructing the explainer if they want non-trivial influence
+    /// scoring. When null, public influence-scoring methods throw
+    /// <see cref="NotSupportedException"/> at the entry point with clear guidance.
+    /// </summary>
+    private readonly Func<Vector<T>, Vector<T>, Vector<T>, Vector<T>>? _hvpFunction;
     private readonly Matrix<T> _trainingData;
     private readonly Vector<T> _trainingLabels;
     private readonly InverseHessianMethod _method;
@@ -125,7 +136,8 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         int maxIterations = 100,
         int recursionDepth = 5000,
         double scale = 10.0,
-        int? randomState = null)
+        int? randomState = null,
+        Func<Vector<T>, Vector<T>, Vector<T>, Vector<T>>? hvpFunction = null)
     {
         Guard.NotNull(network);
         _network = network;
@@ -143,6 +155,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         _recursionDepth = recursionDepth;
         _scale = scale;
         _randomState = randomState;
+        _hvpFunction = hvpFunction;
 
         _predictFunction = input =>
         {
@@ -238,7 +251,8 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         int maxIterations = 100,
         int recursionDepth = 5000,
         double scale = 10.0,
-        int? randomState = null)
+        int? randomState = null,
+        Func<Vector<T>, Vector<T>, Vector<T>, Vector<T>>? hvpFunction = null)
     {
         Guard.NotNull(predictFunction);
         _predictFunction = predictFunction;
@@ -258,6 +272,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         _recursionDepth = recursionDepth;
         _scale = scale;
         _randomState = randomState;
+        _hvpFunction = hvpFunction;
     }
 
     /// <summary>
@@ -285,6 +300,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
     /// </remarks>
     public InfluenceFunctionResult<T> ComputeInfluence(Vector<T> testInput, T testLabel)
     {
+        EnsureHvpAvailable();
         // Step 1: Compute gradient of test loss w.r.t. parameters
         var testGradient = ComputeGradient(testInput, new Vector<T>(new[] { testLabel }));
 
@@ -344,6 +360,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
     /// </remarks>
     public SelfInfluenceResult<T> ComputeSelfInfluence()
     {
+        EnsureHvpAvailable();
         EnsureTrainingGradientsComputed();
 
         var selfInfluences = new Vector<T>(_trainingData.Rows);
@@ -611,14 +628,30 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
     /// </remarks>
     private Vector<T> ComputeHessianVectorProduct(Vector<T> input, Vector<T> target, Vector<T> vector)
     {
+        // Public entry points (ComputeInfluence, ComputeAverageInfluence, etc.) call
+        // EnsureHvpAvailable first, so by the time we reach this method _hvpFunction
+        // is guaranteed non-null. The null-forgiving assert keeps the contract local.
+        var hvp = _hvpFunction!;
+        return hvp(input, target, vector);
+    }
+
+    /// <summary>
+    /// Throws <see cref="NotSupportedException"/> with clear guidance if the caller did
+    /// not supply an <c>hvpFunction</c> at construction time. Public influence-scoring
+    /// methods invoke this BEFORE doing any work so users find out at the entry point
+    /// rather than after the gradient cache is populated.
+    /// </summary>
+    private void EnsureHvpAvailable()
+    {
+        if (_hvpFunction is not null) return;
         throw new NotSupportedException(
-            "ComputeHessianVectorProduct: parameter-space Hessian-vector products are " +
-            "not yet implemented. The previous input-space finite-difference shortcut " +
-            "produced mathematically invalid influence scores for any model with " +
-            "more parameters than input dimensions, so it has been removed. " +
-            "Wire this through a real parameter-space HVP (Pearlmutter's trick / " +
-            "double-backprop on the GradientTape) before scoring with " +
-            "InverseHessianMethod.LiSSA, ConjugateGradient, or Direct.");
+            "InfluenceFunctionExplainer requires a parameter-space Hessian-vector " +
+            "product function. AiDotNet does not yet ship a generic per-sample " +
+            "parameter-Hessian path (would need Pearlmutter's trick or double-backprop " +
+            "on the GradientTape). Pass the optional 'hvpFunction' argument to either " +
+            "constructor: a delegate (input, target, vector) => H_θ * vector, computed " +
+            "via your model's autodiff stack. Without it, ComputeInfluence and the " +
+            "iterative IHVP methods (LiSSA, ConjugateGradient, Direct) cannot run.");
     }
 
     /// <summary>
