@@ -70,83 +70,16 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </code>
     /// </example>
     /// </remarks>
-    protected virtual IEnumerable<IDisposable> EnumerateDisposableComponents() =>
-        ReflectInstanceDisposables(this);
-
-    /// <summary>
-    /// Walks an object's instance fields and yields anything that implements
-    /// <see cref="IDisposable"/>. Used as the default fallback for
-    /// <see cref="EnumerateDisposableComponents"/> so concrete subclasses don't
-    /// need to override just to get correct cleanup.
-    /// </summary>
-    /// <remarks>
-    /// Uses a <see cref="HashSet{Object}"/> of visited references to avoid
-    /// double-yielding when the same disposable is reachable from multiple
-    /// fields (e.g., a predictor stored as both an interface and a concrete
-    /// type alias). Skips primitives, value types, strings, and the model's
-    /// own scheduler (handled separately in Dispose).
-    /// </remarks>
-    private static IEnumerable<IDisposable> ReflectInstanceDisposables(object root)
+    protected virtual IEnumerable<IDisposable> EnumerateDisposableComponents()
     {
-        var visited = new HashSet<object>(Helpers.TensorReferenceComparer<object>.Instance);
-        if (!visited.Add(root)) yield break;
-
-        var type = root.GetType();
-        const System.Reflection.BindingFlags fieldFlags =
-            System.Reflection.BindingFlags.Instance |
-            System.Reflection.BindingFlags.Public |
-            System.Reflection.BindingFlags.NonPublic;
-        for (var t = type; t != null && t != typeof(object); t = t.BaseType)
-        {
-            foreach (var field in t.GetFields(fieldFlags | System.Reflection.BindingFlags.DeclaredOnly))
-            {
-                if (field.FieldType.IsValueType || field.FieldType == typeof(string)) continue;
-                // Skip _scheduler — Dispose(bool) handles it explicitly. Yielding
-                // it here would cause a double-dispose attempt on the cascade.
-                if (field.Name == "_scheduler") continue;
-                object? value;
-                try { value = field.GetValue(root); }
-                catch (Exception ex)
-                {
-                    // Trace the read failure rather than silently skip — without
-                    // this a private field whose getter throws would leak its
-                    // disposable resource without any diagnostic trail.
-                    System.Diagnostics.Trace.TraceWarning(
-                        $"DiffusionModelBase.Dispose: skipping field '{field.Name}' " +
-                        $"on {t.Name} due to reflection read failure: {ex.GetType().Name}: {ex.Message}");
-                    continue;
-                }
-                if (value is null) continue;
-                if (!visited.Add(value)) continue;
-                if (value is IDisposable disposable)
-                {
-                    yield return disposable;
-                }
-                else if (value is System.Collections.IDictionary dictionary)
-                {
-                    // Dictionary<K, V>.GetEnumerator yields KeyValuePair<K,V>,
-                    // not the values — so the generic IEnumerable branch below
-                    // would MISS disposables held in the values slot. Handle
-                    // IDictionary explicitly by walking values through
-                    // DictionaryEntry, which gives us the value directly.
-                    foreach (System.Collections.DictionaryEntry entry in dictionary)
-                    {
-                        if (entry.Value is IDisposable nested && visited.Add(entry.Value))
-                            yield return nested;
-                    }
-                }
-                else if (value is System.Collections.IEnumerable enumerable && value is not string)
-                {
-                    // Walk collections that hold disposables (e.g.,
-                    // List<IDisposable>). Dictionary is handled above.
-                    foreach (var item in enumerable)
-                    {
-                        if (item is IDisposable nested && visited.Add(item))
-                            yield return nested;
-                    }
-                }
-            }
-        }
+        // Default: yield nothing. Concrete diffusion models that own disposable
+        // components (noise predictor, VAE, conditioner, scheduler, etc.) must
+        // override this and explicitly yield only the components THIS model owns.
+        // We do not reflect over instance fields here because that would also
+        // tear down injected/shared dependencies (e.g., a tokenizer or text
+        // encoder shared across multiple pipelines), creating cross-instance
+        // lifecycle breakage.
+        yield break;
     }
 
     private bool _disposed;
@@ -339,9 +272,18 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             // Predict the noise
             var noisePrediction = PredictNoise(sampleTensor, timestep);
 
-            // Copy prediction to pre-allocated vector (avoids ToVector() allocation)
+            // Copy prediction to pre-allocated vector (avoids ToVector() allocation).
+            // Fail fast on length mismatch — silently truncating or leaving stale
+            // values in noisePredVec would produce corrupted denoising steps.
             var predSpan = noisePrediction.AsSpan();
-            for (int idx = 0; idx < predSpan.Length && idx < noisePredVec.Length; idx++)
+            if (predSpan.Length != noisePredVec.Length)
+            {
+                throw new InvalidOperationException(
+                    $"PredictNoise output length ({predSpan.Length}) does not match the " +
+                    $"latent/sample length ({noisePredVec.Length}). Check that the noise " +
+                    $"predictor's output shape matches the input tensor shape.");
+            }
+            for (int idx = 0; idx < predSpan.Length; idx++)
                 noisePredVec[idx] = predSpan[idx];
 
             // Perform one denoising step
@@ -391,6 +333,14 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     public abstract Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep);
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Strict single-timestep contract. Multi-timestep batch processing (different
+    /// timesteps per sample) is not implemented at the base level — concrete
+    /// diffusion variants that need per-sample timesteps must override this and
+    /// loop over the batch. Passing a multi-element <paramref name="timesteps"/>
+    /// throws <see cref="NotSupportedException"/> rather than silently using
+    /// only <c>timesteps[0]</c> and corrupting the loss.
+    /// </remarks>
     public virtual T ComputeLoss(Tensor<T> cleanSamples, Tensor<T> noise, int[] timesteps)
     {
         if (cleanSamples == null)
@@ -399,12 +349,18 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             throw new ArgumentNullException(nameof(noise));
         if (timesteps == null || timesteps.Length == 0)
             throw new ArgumentException("Timesteps must be a non-empty array.", nameof(timesteps));
+        if (timesteps.Length != 1)
+        {
+            throw new NotSupportedException(
+                $"DiffusionModelBase.ComputeLoss requires exactly one timestep " +
+                $"(got {timesteps.Length}). Override this method in subclasses that need " +
+                $"per-sample timesteps to loop over the batch and accumulate per-sample loss.");
+        }
 
         var cleanVector = cleanSamples.ToVector();
         var noiseVector = noise.ToVector();
 
-        // Add noise to clean samples at the given timesteps
-        // For simplicity, we use the first timestep (batch processing would use different timesteps per sample)
+        // Add noise to clean samples at the given timestep.
         var noisySample = _scheduler.AddNoise(cleanVector, noiseVector, timesteps[0]);
 
         // Create tensor for noise prediction
