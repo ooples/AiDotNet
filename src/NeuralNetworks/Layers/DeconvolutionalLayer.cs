@@ -781,6 +781,22 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        // Round-trip from saved parameters: derive inputDepth from vector length.
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            int kernelArea = OutputDepth * KernelSize * KernelSize;
+            if (OutputDepth <= 0 || kernelArea <= 0)
+                throw new InvalidOperationException(
+                    "Cannot SetParameters on deferred-shape DeconvolutionalLayer before OutputDepth/KernelSize are known.");
+            int candidateInputDepth = (parameters.Length - OutputDepth) / kernelArea;
+            if (candidateInputDepth <= 0
+                || candidateInputDepth * kernelArea + OutputDepth != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer inputDepth for DeconvolutionalLayer from {parameters.Length} parameters.");
+            ResolveFromShape(new[] { candidateInputDepth, 1, 1 });
+        }
+
         int expectedLength = _kernels.Length + _biases.Length;
         if (parameters.Length != expectedLength)
         {

@@ -1429,6 +1429,24 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Round-trip from saved parameters: derive inputDepth from vector length.
+        // Layout: kernels [outputDepth, inputDepth, K, K] + biases [outputDepth].
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            int kernelArea = OutputDepth * KernelSize * KernelSize;
+            if (OutputDepth <= 0 || kernelArea <= 0)
+                throw new InvalidOperationException(
+                    "Cannot SetParameters on deferred-shape ConvolutionalLayer before OutputDepth/KernelSize are known.");
+            int candidateInputDepth = (parameters.Length - OutputDepth) / kernelArea;
+            if (candidateInputDepth <= 0
+                || candidateInputDepth * kernelArea + OutputDepth != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer inputDepth for ConvolutionalLayer from {parameters.Length} parameters.");
+            // Spatial dims dummy=1: kernels/biases depend only on channel counts and kernel size.
+            ResolveFromShape(new[] { candidateInputDepth, 1, 1 });
+        }
+
         EnsureInitialized();
         int kernelLen = _kernels.Length;
         int biasLen = _biases.Shape[0];
