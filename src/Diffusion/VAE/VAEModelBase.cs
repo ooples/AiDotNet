@@ -469,7 +469,12 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         // populate. We then push the loss derivative back through the layer chain via
         // BackpropagateLossGradient, and finally read accumulated gradients via the
         // concrete VAE's GetParameterGradients override.
-        try
+        //
+        // Capability gate: subclasses opt out of exact gradients by overriding
+        // SupportsExactGradients => false. Routing the choice through a non-throwing
+        // capability flag is cleaner than catching NotSupportedException and avoids
+        // exception-driven control flow on the hot training path.
+        if (SupportsExactGradients)
         {
             var predicted = ForwardForTraining(input);
 
@@ -494,23 +499,6 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
             if (hasValidGradients)
                 return gradients;
         }
-        catch (NotSupportedException ex)
-        {
-            // Subclass deliberately doesn't implement layer-level gradients (e.g. it
-            // hasn't overridden BackpropagateLossGradient yet) — fall back to SPSA.
-            System.Diagnostics.Trace.TraceWarning(
-                $"VAE layer backpropagation not implemented, falling back to SPSA: {ex.Message}");
-        }
-        catch (NotImplementedException ex)
-        {
-            // Same intent as NotSupportedException; some subclasses use this variant.
-            System.Diagnostics.Trace.TraceWarning(
-                $"VAE layer backpropagation not implemented, falling back to SPSA: {ex.Message}");
-        }
-        // Other exceptions (shape bugs, broken overrides, serialization corruption,
-        // null derefs from incomplete state) are real implementation bugs — let them
-        // bubble up so regressions are caught at the test boundary instead of being
-        // silently masked by the SPSA fallback.
 
         // Fallback: SPSA (6 forward passes total vs 2N for finite differences).
         // Snapshot parameters BEFORE the perturbation loop and always restore them in a
@@ -602,24 +590,30 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     }
 
     /// <summary>
+    /// Whether this VAE supports exact (layer-level) gradients via
+    /// <see cref="BackpropagateLossGradient"/>. Default <c>false</c> — concrete VAEs
+    /// that implement a real layer-level backward pass must override this to <c>true</c>
+    /// AND override <see cref="BackpropagateLossGradient"/>. When this is <c>false</c>,
+    /// <see cref="ComputeGradients"/> skips the exact-gradient path entirely and goes
+    /// straight to SPSA without exception-driven control flow.
+    /// </summary>
+    protected virtual bool SupportsExactGradients => false;
+
+    /// <summary>
     /// Pushes a loss gradient tensor (shape matching the decoder's output) back through
     /// the decoder and encoder layer chain so each layer's parameter gradient cache is
-    /// populated. Concrete VAEs that don't have a tape-level backward path should
-    /// throw <see cref="NotSupportedException"/> from this override; the
-    /// <c>ComputeGradients</c> exception handler will catch it and fall through to SPSA.
+    /// populated. Default implementation is a no-op so VAEs that don't support exact
+    /// gradients (the common case) don't have to override anything.
     /// </summary>
-    /// <remarks>
-    /// Made abstract instead of a no-op virtual: a silent default would let concrete
-    /// VAEs forget the override and quietly degrade to stale/zero gradients before
-    /// reaching the SPSA fallback. Forcing every subclass to make an explicit choice
-    /// (implement, or throw NotSupportedException) ensures the fallback path is hit
-    /// only when the model author has acknowledged it.
-    /// </remarks>
     /// <param name="lossGradient">
     /// dL/dy for the decoder's output. Shape must match what <see cref="ForwardForTraining"/>
     /// returned.
     /// </param>
-    protected abstract void BackpropagateLossGradient(Tensor<T> lossGradient);
+    protected virtual void BackpropagateLossGradient(Tensor<T> lossGradient)
+    {
+        // Default no-op. Override and set SupportsExactGradients => true to enable
+        // the exact-gradient path in ComputeGradients.
+    }
 
     /// <summary>
     /// Extracts accumulated parameter gradients from all encoder/decoder/norm layers after
