@@ -106,6 +106,13 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     private DenseLayer<T> _contextProj;
     private readonly List<MMDiTBlock> _jointBlocks;
     private readonly List<MMDiTSingleBlock> _singleBlocks;
+    /// <summary>
+    /// True when this predictor created the joint/single blocks itself (defaults or
+    /// architecture-driven), false when they were supplied by the caller via
+    /// customJointBlocks/customSingleBlocks. Determines what Dispose tears down:
+    /// caller-supplied blocks are NOT owned and must not be disposed.
+    /// </summary>
+    private readonly bool _ownsBlocks;
     private LayerNormalizationLayer<T> _finalNorm;
     private DenseLayer<T> _outputProj;
     private DenseLayer<T> _adalnModulation;
@@ -230,6 +237,9 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
         _jointBlocks = new List<MMDiTBlock>();
         _singleBlocks = new List<MMDiTSingleBlock>();
+        // Own the blocks unless the caller supplied them — in the latter case
+        // the caller is responsible for the block's lifetime.
+        _ownsBlocks = !(customJointBlocks != null && customJointBlocks.Count > 0);
 
         InitializeLayers(architecture, customJointBlocks, customSingleBlocks);
     }
@@ -356,6 +366,61 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
                 MLP2 = LazyDense(mlpHidden, _hiddenSize),
                 AdaLN = LazyDense(timeEmbedDim, _hiddenSize * 3)
             });
+        }
+    }
+
+    /// <summary>
+    /// Yields only the layers this predictor owns so <see cref="NoisePredictorBase{T}.Dispose(bool)"/>
+    /// tears down their pool-rented weight tensors. Caller-supplied <c>customJointBlocks</c> /
+    /// <c>customSingleBlocks</c> are skipped — disposing them would break callers that share
+    /// blocks across multiple pipelines.
+    /// </summary>
+    protected override IEnumerable<ILayer<T>> EnumerateLayers()
+    {
+        // Top-level predictor-owned layers (always created here).
+        yield return _patchEmbed;
+        yield return _timeEmbed1;
+        yield return _timeEmbed2;
+        yield return _contextProj;
+        yield return _finalNorm;
+        yield return _adalnModulation;
+        yield return _outputProj;
+
+        if (!_ownsBlocks) yield break;
+
+        // Joint and single blocks: only enumerate sublayers when this predictor
+        // created them. Caller-supplied blocks are external resources.
+        foreach (var b in _jointBlocks)
+        {
+            yield return b.ImageNorm1;
+            yield return b.ImageNorm2;
+            yield return b.ImageMLP1;
+            yield return b.ImageMLP2;
+            yield return b.ImageAdaLN;
+            yield return b.ImageQProj;
+            yield return b.ImageKProj;
+            yield return b.ImageVProj;
+            yield return b.ImageOutProj;
+            yield return b.TextNorm1;
+            yield return b.TextNorm2;
+            yield return b.TextMLP1;
+            yield return b.TextMLP2;
+            yield return b.TextAdaLN;
+            yield return b.TextQProj;
+            yield return b.TextKProj;
+            yield return b.TextVProj;
+            yield return b.TextOutProj;
+        }
+        foreach (var s in _singleBlocks)
+        {
+            yield return s.Norm;
+            yield return s.QProj;
+            yield return s.KProj;
+            yield return s.VProj;
+            yield return s.OutProj;
+            yield return s.MLP1;
+            yield return s.MLP2;
+            yield return s.AdaLN;
         }
     }
 
