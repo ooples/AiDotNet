@@ -145,15 +145,28 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
         target = EnsureTargetMatchesPredicted(predicted, target);
-        // Categorical CE = -mean(target * log(predicted + eps)). The
-        // model's last layer is responsible for producing a proper
-        // probability distribution — we only add a small epsilon to
-        // avoid log(0) on any class the target happens to ignore.
+        // Categorical CE per sample = -Σ_class target * log(predicted + eps),
+        // summed over the class (last) axis, then averaged over any remaining
+        // batch / sequence axes. This matches PyTorch's
+        // nn.CrossEntropyLoss(reduction='mean') and the scalar
+        // CalculateLoss(Vector, Vector) above — both of which sum (do not
+        // average) across classes. Averaging over the class axis here would
+        // silently divide the loss and the back-propagated gradient by V,
+        // which is the 1/V scaling reported in issue #1191.
         var safePredicted = Engine.TensorAddScalar(predicted, NumOps.FromDouble(1e-7));
         var logP = Engine.TensorLog(safePredicted);
         var product = Engine.TensorMultiply(target, logP);
-        var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();
-        var mean = Engine.ReduceMean(product, allAxes, keepDims: false);
+
+        int lastAxis = product.Shape.Length - 1;
+        var perSample = Engine.ReduceSum(product, new[] { lastAxis }, keepDims: false);
+
+        // For 1D inputs (a single unbatched sample), perSample is rank-0 —
+        // there are no batch axes to average over.
+        if (perSample.Shape.Length == 0)
+            return Engine.TensorNegate(perSample);
+
+        var batchAxes = Enumerable.Range(0, perSample.Shape.Length).ToArray();
+        var mean = Engine.ReduceMean(perSample, batchAxes, keepDims: false);
         return Engine.TensorNegate(mean);
     }
 }

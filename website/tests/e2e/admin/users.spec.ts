@@ -63,13 +63,35 @@ test.describe('Admin — users', () => {
       })
       .toBeLessThanOrEqual(totalBefore);
 
-    const visibleRows = page.locator('#users-body tr');
-    const count = await visibleRows.count();
-    expect(count,
-      'filter=admin must return at least the signed-in admin; zero rows indicates a broken filter or a rolled-back profiles.role'
-    ).toBeGreaterThanOrEqual(1);
-    for (let i = 0; i < count; i++) {
-      await expect(visibleRows.nth(i)).toContainText(/admin/i);
-    }
+    // Read role cells from each row's 2nd <td> (the role column per
+    // pages/admin/users/index.astro:241-243), NOT the whole row —
+    // whole-row matching false-passes when any other column contains
+    // "admin" (e.g., a username "admin@…").
+    //
+    // Wrap the read in expect.poll so the assertion retries until the
+    // filtered re-render has fully landed AND every visible row's
+    // role cell is "admin". A single allTextContents() snapshot would
+    // race the swap: the user-count poll above tolerates equality
+    // (`<= totalBefore`), so the table can still be mid-swap with
+    // mixed rows when the role-cell snapshot is captured. Polling
+    // the role-column predicate itself converges deterministically
+    // once renderTable() finishes its innerHTML write.
+    //
+    // The DB stores role as lowercase 'admin' / 'user' (loaded via
+    // profiles.select('role') and rendered with escapeHtml(role)
+    // unchanged), so the cell text is the literal lowercase string
+    // after trim.
+    await expect.poll(async () => {
+      const roleCellTexts = await page
+        .locator('#users-body tr td:nth-child(2)')
+        .allTextContents();
+      if (roleCellTexts.length < 1) return false;
+      return roleCellTexts.every((text) => /^admin$/i.test(text.trim()));
+    }, {
+      timeout: 10_000,
+      message:
+        'filter=admin must return at least the signed-in admin and every visible row must show role=admin; ' +
+        'zero rows or any non-admin row indicates a broken filter or a rolled-back profiles.role',
+    }).toBe(true);
   });
 });

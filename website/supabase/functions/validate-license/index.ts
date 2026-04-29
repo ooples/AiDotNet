@@ -21,6 +21,15 @@ interface ValidateRequest {
   machine_id_hash: string;
   hostname?: string;
   os_description?: string;
+  // Issue #1195: optional analytics tag identifying which client package
+  // made this validation call (e.g., "AiDotNet", "AiDotNet.Tensors").
+  // The server does NOT gate on this field — it always returns the full
+  // capability set the user's tier authorises, and each package locally
+  // verifies the specific capability it cares about. Passing `package`
+  // is purely a hint so dashboards can break validation traffic down by
+  // SDK origin. Omitted by clients on older SDK versions; we accept that
+  // and just don't tag those rows.
+  package?: string;
 }
 
 serve(async (req: Request) => {
@@ -64,12 +73,17 @@ serve(async (req: Request) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Call the validate_license_key database function
+    // Call the validate_license_key database function. `package` is an
+    // analytics hint introduced by issue #1195; the RPC stores it on the
+    // activation row. Older clients that don't send the field pass null,
+    // which the SQL function treats as "no package tag" and leaves the
+    // existing value untouched.
     const { data, error } = await supabase.rpc("validate_license_key", {
       p_license_key: body.license_key,
       p_machine_id_hash: body.machine_id_hash,
       p_hostname: body.hostname ?? null,
       p_os_description: body.os_description ?? null,
+      p_package: body.package ?? null,
     });
 
     if (error) {

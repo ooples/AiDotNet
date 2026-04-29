@@ -556,17 +556,28 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         }
         else
         {
-            // Standard embedding lookup for integer token indices
+            // Standard embedding lookup for integer token indices.
+            // Engine.TensorEmbeddingLookup is now fully tape-aware:
+            //   * #255 (Tensors 0.58.1): added DifferentiableOps.RecordUnary
+            //     so dL/dE is computed by the backward function.
+            //   * #257 (Tensors 0.58.2): preserved original tensor
+            //     refs across .Contiguous() rebind in MatMul +
+            //     broadcast/conv/norm/SDPA ops, so the computed
+            //     gradient now keys correctly against
+            //     _embeddingTensor (and the 3 MultiHeadAttention
+            //     Q/K/V weights that hit the same defect).
+            // Both training and inference go through the fast eager
+            // row-gather path — the prior issue #1208 workaround
+            // (one-hot @ E matmul) is no longer needed and would
+            // just allocate an extra [N, V] tensor per training
+            // step.
             int totalIndices = input.Length;
             var flatIndices = new Tensor<int>([totalIndices]);
-
             for (int i = 0; i < totalIndices; i++)
             {
                 int index = Convert.ToInt32(NumOps.ToDouble(input.Data.Span[i]));
                 flatIndices[i] = index;
             }
-
-            // Use Engine embedding lookup operation
             flatOutput = Engine.TensorEmbeddingLookup<T, int>(_embeddingTensor, flatIndices);
         }
 

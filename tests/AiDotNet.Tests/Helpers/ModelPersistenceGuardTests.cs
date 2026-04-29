@@ -131,213 +131,275 @@ public class ModelPersistenceGuardTests : IDisposable
     public async Task EnforceBeforeSave_WithoutLicense_CountsTrialOperation()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        // First call should succeed (trial is fresh)
-        ModelPersistenceGuard.EnforceBeforeSave();
+        // Issue: this test (and the cluster below) used to call
+        // ResetDefaultTrial() on _trialFilePath but then EnforceBefore*
+        // through the guard, which uses the REAL ~/.aidotnet/trial.json.
+        // On a developer machine with an exhausted real trial the test
+        // failed even though the logic under test was fine. Fix: wrap
+        // in WithIsolatedTrial so the guard's EnforceCore path also
+        // points at _trialFilePath.
+        WithIsolatedTrial(() =>
+        {
+            // First call should succeed (trial is fresh)
+            ModelPersistenceGuard.EnforceBeforeSave();
 
-        // Verify trial counter was incremented to exactly 1
-        var manager = new TrialStateManager(_trialFilePath);
-        var status = manager.GetStatus();
-        Assert.Equal(1, status.OperationsUsed);
+            // Verify trial counter was incremented to exactly 1
+            var manager = new TrialStateManager(_trialFilePath);
+            var status = manager.GetStatus();
+            Assert.Equal(1, status.OperationsUsed);
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task EnforceBeforeLoad_WithoutLicense_CountsTrialOperation()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        ModelPersistenceGuard.EnforceBeforeLoad();
+        WithIsolatedTrial(() =>
+        {
+            ModelPersistenceGuard.EnforceBeforeLoad();
 
-        var manager = new TrialStateManager(_trialFilePath);
-        var status = manager.GetStatus();
-        Assert.Equal(1, status.OperationsUsed);
+            var manager = new TrialStateManager(_trialFilePath);
+            var status = manager.GetStatus();
+            Assert.Equal(1, status.OperationsUsed);
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task EnforceBeforeSave_ExhaustedTrial_ThrowsLicenseRequiredException()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        // Exhaust the trial
-        var manager = new TrialStateManager();
-        for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+        WithIsolatedTrial(() =>
         {
-            manager.RecordOperationOrThrow();
-        }
+            // Exhaust the trial through the same isolated file the guard reads.
+            var manager = new TrialStateManager(_trialFilePath);
+            for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+            {
+                manager.RecordOperationOrThrow();
+            }
 
-        // Next enforcement should throw
-        Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSave());
+            // Next enforcement should throw
+            Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSave());
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task EnforceBeforeLoad_ExhaustedTrial_ThrowsLicenseRequiredException()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        var manager = new TrialStateManager();
-        for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+        WithIsolatedTrial(() =>
         {
-            manager.RecordOperationOrThrow();
-        }
+            var manager = new TrialStateManager(_trialFilePath);
+            for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+            {
+                manager.RecordOperationOrThrow();
+            }
 
-        Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeLoad());
+            Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeLoad());
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task EnforceBeforeSerialize_ExhaustedTrial_ThrowsLicenseRequiredException()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        var manager = new TrialStateManager();
-        for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+        WithIsolatedTrial(() =>
         {
-            manager.RecordOperationOrThrow();
-        }
+            var manager = new TrialStateManager(_trialFilePath);
+            for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+            {
+                manager.RecordOperationOrThrow();
+            }
 
-        Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSerialize());
+            Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSerialize());
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task EnforceBeforeDeserialize_ExhaustedTrial_ThrowsLicenseRequiredException()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        var manager = new TrialStateManager();
-        for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+        WithIsolatedTrial(() =>
         {
-            manager.RecordOperationOrThrow();
-        }
+            var manager = new TrialStateManager(_trialFilePath);
+            for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+            {
+                manager.RecordOperationOrThrow();
+            }
 
-        Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeDeserialize());
+            Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeDeserialize());
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task InternalOperation_SuppressesSerializeEnforcement()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        // Exhaust the trial
-        var manager = new TrialStateManager();
-        for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+        WithIsolatedTrial(() =>
         {
-            manager.RecordOperationOrThrow();
-        }
+            // Exhaust the trial
+            var manager = new TrialStateManager(_trialFilePath);
+            for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+            {
+                manager.RecordOperationOrThrow();
+            }
 
-        // Within InternalOperation scope, Serialize enforcement is suppressed
-        using (ModelPersistenceGuard.InternalOperation())
-        {
-            // Should NOT throw even though trial is exhausted
-            ModelPersistenceGuard.EnforceBeforeSerialize();
-        }
+            // Within InternalOperation scope, Serialize enforcement is suppressed
+            using (ModelPersistenceGuard.InternalOperation())
+            {
+                // Should NOT throw even though trial is exhausted
+                ModelPersistenceGuard.EnforceBeforeSerialize();
+            }
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task InternalOperation_SuppressesDeserializeEnforcement()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        var manager = new TrialStateManager();
-        for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+        WithIsolatedTrial(() =>
         {
-            manager.RecordOperationOrThrow();
-        }
+            var manager = new TrialStateManager(_trialFilePath);
+            for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+            {
+                manager.RecordOperationOrThrow();
+            }
 
-        using (ModelPersistenceGuard.InternalOperation())
-        {
-            ModelPersistenceGuard.EnforceBeforeDeserialize();
-        }
+            using (ModelPersistenceGuard.InternalOperation())
+            {
+                ModelPersistenceGuard.EnforceBeforeDeserialize();
+            }
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task InternalOperation_DoesNotSuppressSaveEnforcement()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        var manager = new TrialStateManager();
-        for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+        WithIsolatedTrial(() =>
         {
-            manager.RecordOperationOrThrow();
-        }
+            var manager = new TrialStateManager(_trialFilePath);
+            for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+            {
+                manager.RecordOperationOrThrow();
+            }
 
-        // InternalOperation does NOT suppress Save/Load — only Serialize/Deserialize
-        using (ModelPersistenceGuard.InternalOperation())
-        {
-            Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSave());
-        }
+            // InternalOperation does NOT suppress Save/Load — only Serialize/Deserialize
+            using (ModelPersistenceGuard.InternalOperation())
+            {
+                Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSave());
+            }
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task InternalOperation_DoesNotSuppressLoadEnforcement()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        var manager = new TrialStateManager();
-        for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+        WithIsolatedTrial(() =>
         {
-            manager.RecordOperationOrThrow();
-        }
+            var manager = new TrialStateManager(_trialFilePath);
+            for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+            {
+                manager.RecordOperationOrThrow();
+            }
 
-        using (ModelPersistenceGuard.InternalOperation())
-        {
-            Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeLoad());
-        }
+            using (ModelPersistenceGuard.InternalOperation())
+            {
+                Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeLoad());
+            }
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task InternalOperation_ScopeResetsOnDispose()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        var manager = new TrialStateManager();
-        for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+        WithIsolatedTrial(() =>
         {
-            manager.RecordOperationOrThrow();
-        }
+            var manager = new TrialStateManager(_trialFilePath);
+            for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+            {
+                manager.RecordOperationOrThrow();
+            }
 
-        // Enter and leave scope
-        using (ModelPersistenceGuard.InternalOperation())
-        {
-            // Suppressed — OK
-            ModelPersistenceGuard.EnforceBeforeSerialize();
-        }
+            // Enter and leave scope
+            using (ModelPersistenceGuard.InternalOperation())
+            {
+                // Suppressed — OK
+                ModelPersistenceGuard.EnforceBeforeSerialize();
+            }
 
-        // After scope, enforcement should be active again
-        Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSerialize());
+            // After scope, enforcement should be active again
+            Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSerialize());
+        });
     }
 
     [Fact(Timeout = 60000)]
-    public async Task InternalOperation_ThreadIsolation()
+    public async Task InternalOperation_AsyncLocalFlowsToInnerTasks_NotToOuterTasks()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        var manager = new TrialStateManager();
-        for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+        // The InternalOperation depth counter is backed by AsyncLocal<int>
+        // (NOT [ThreadStatic]). The production rationale is documented in
+        // ModelPersistenceGuard: an `await` inside the scope can resume on
+        // a different thread-pool thread, and a thread-static counter
+        // would read 0 on the new thread, causing the guard to fire on a
+        // suppressed operation.
+        //
+        // The contract is therefore:
+        //  * A Task scheduled WITHIN the scope inherits the scope (AsyncLocal flow).
+        //  * A Task scheduled BEFORE entering the scope (or after leaving)
+        //    does NOT see the scope.
+        // This test pins both halves.
+
+        WithIsolatedTrial(() =>
         {
-            manager.RecordOperationOrThrow();
-        }
+            var manager = new TrialStateManager(_trialFilePath);
+            for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+            {
+                manager.RecordOperationOrThrow();
+            }
 
-        // The [ThreadStatic] flag should NOT leak to other threads
-        bool otherThreadThrew = false;
+            // Half 1: Task scheduled INSIDE the scope inherits the
+            // suppression — should NOT throw.
+            bool innerTaskThrew = false;
+            using (ModelPersistenceGuard.InternalOperation())
+            {
+                ModelPersistenceGuard.EnforceBeforeSerialize();   // suppressed on this thread
 
-        using (ModelPersistenceGuard.InternalOperation())
-        {
-            // This thread is suppressed
-            ModelPersistenceGuard.EnforceBeforeSerialize();
+                var inner = Task.Run(() =>
+                {
+                    try
+                    {
+                        ModelPersistenceGuard.EnforceBeforeSerialize();
+                    }
+                    catch (LicenseRequiredException)
+                    {
+                        innerTaskThrew = true;
+                    }
+                });
+                inner.Wait();
+            }
 
-            // Other thread should NOT be suppressed
-            var task = Task.Run(() =>
+            Assert.False(innerTaskThrew,
+                "InternalOperation must flow into Task.Run continuations scheduled within the scope (AsyncLocal contract).");
+
+            // Half 2: A Task scheduled AFTER the scope ended must NOT see
+            // the suppression — the trial counter is exhausted, so it
+            // should throw. This is the "no leak after dispose" half.
+            bool outerTaskThrew = false;
+            var outer = Task.Run(() =>
             {
                 try
                 {
@@ -345,152 +407,164 @@ public class ModelPersistenceGuardTests : IDisposable
                 }
                 catch (LicenseRequiredException)
                 {
-                    otherThreadThrew = true;
+                    outerTaskThrew = true;
                 }
             });
+            outer.Wait();
 
-            task.Wait();
-        }
-
-        Assert.True(otherThreadThrew, "InternalOperation flag leaked to another thread");
+            Assert.True(outerTaskThrew,
+                "InternalOperation scope must release on dispose so subsequent Tasks see the depth counter back at 0.");
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task LicenseKey_BypassesTrial_NoOperationCounted()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        // Set license key
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.validlicens.abcdefghijklmnop");
-
-        // Call enforce many times — should never count operations
-        for (int i = 0; i < 50; i++)
+        WithIsolatedTrial(() =>
         {
-            ModelPersistenceGuard.EnforceBeforeSave();
-            ModelPersistenceGuard.EnforceBeforeLoad();
-            ModelPersistenceGuard.EnforceBeforeSerialize();
-            ModelPersistenceGuard.EnforceBeforeDeserialize();
-        }
+            // Set license key
+            Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.validlicens.abcdefghijklmnop");
 
-        // Clear license key and check trial is still fresh
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", null);
-        var manager = new TrialStateManager();
-        var status = manager.GetStatus();
-        Assert.Equal(0, status.OperationsUsed);
-        Assert.False(status.IsExpired);
+            // Call enforce many times — should never count operations
+            for (int i = 0; i < 50; i++)
+            {
+                ModelPersistenceGuard.EnforceBeforeSave();
+                ModelPersistenceGuard.EnforceBeforeLoad();
+                ModelPersistenceGuard.EnforceBeforeSerialize();
+                ModelPersistenceGuard.EnforceBeforeDeserialize();
+            }
+
+            // Clear license key and check trial is still fresh
+            Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", null);
+            var manager = new TrialStateManager(_trialFilePath);
+            var status = manager.GetStatus();
+            Assert.Equal(0, status.OperationsUsed);
+            Assert.False(status.IsExpired);
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task EnforceBeforeSave_AlwaysEnforces_EvenInInternalScope()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        // Save/Load always enforce, even within InternalOperation scope
-        // (only Serialize/Deserialize are suppressed)
-        int operationsBefore;
+        WithIsolatedTrial(() =>
         {
-            var manager = new TrialStateManager();
-            operationsBefore = manager.GetStatus().OperationsUsed;
-        }
+            // Save/Load always enforce, even within InternalOperation scope
+            // (only Serialize/Deserialize are suppressed)
+            int operationsBefore;
+            {
+                var manager = new TrialStateManager(_trialFilePath);
+                operationsBefore = manager.GetStatus().OperationsUsed;
+            }
 
-        using (ModelPersistenceGuard.InternalOperation())
-        {
-            ModelPersistenceGuard.EnforceBeforeSave();
-        }
+            using (ModelPersistenceGuard.InternalOperation())
+            {
+                ModelPersistenceGuard.EnforceBeforeSave();
+            }
 
-        {
-            var manager = new TrialStateManager();
-            int operationsAfter = manager.GetStatus().OperationsUsed;
-            Assert.True(operationsAfter > operationsBefore, "EnforceBeforeSave should count even inside InternalOperation scope");
-        }
+            {
+                var manager = new TrialStateManager(_trialFilePath);
+                int operationsAfter = manager.GetStatus().OperationsUsed;
+                Assert.True(operationsAfter > operationsBefore, "EnforceBeforeSave should count even inside InternalOperation scope");
+            }
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task EnforceBeforeSerialize_OutsideScope_CountsOperation()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        int operationsBefore;
+        WithIsolatedTrial(() =>
         {
-            var manager = new TrialStateManager(_trialFilePath);
-            operationsBefore = manager.GetStatus().OperationsUsed;
-        }
+            int operationsBefore;
+            {
+                var manager = new TrialStateManager(_trialFilePath);
+                operationsBefore = manager.GetStatus().OperationsUsed;
+            }
 
-        // Outside InternalOperation scope — should count
-        ModelPersistenceGuard.EnforceBeforeSerialize();
+            // Outside InternalOperation scope — should count
+            ModelPersistenceGuard.EnforceBeforeSerialize();
 
-        {
-            var manager = new TrialStateManager(_trialFilePath);
-            int operationsAfter = manager.GetStatus().OperationsUsed;
-            Assert.Equal(operationsBefore + 1, operationsAfter);
-        }
+            {
+                var manager = new TrialStateManager(_trialFilePath);
+                int operationsAfter = manager.GetStatus().OperationsUsed;
+                Assert.Equal(operationsBefore + 1, operationsAfter);
+            }
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task EnforceBeforeSerialize_InsideScope_DoesNotCountOperation()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        // Record one operation to establish the trial file
-        ModelPersistenceGuard.EnforceBeforeSave();
-
-        int operationsBefore;
+        WithIsolatedTrial(() =>
         {
-            var manager = new TrialStateManager();
-            operationsBefore = manager.GetStatus().OperationsUsed;
-        }
+            // Record one operation to establish the trial file
+            ModelPersistenceGuard.EnforceBeforeSave();
 
-        // Inside InternalOperation scope — should NOT count
-        using (ModelPersistenceGuard.InternalOperation())
-        {
-            ModelPersistenceGuard.EnforceBeforeSerialize();
-        }
+            int operationsBefore;
+            {
+                var manager = new TrialStateManager(_trialFilePath);
+                operationsBefore = manager.GetStatus().OperationsUsed;
+            }
 
-        {
-            var manager = new TrialStateManager();
-            int operationsAfter = manager.GetStatus().OperationsUsed;
-            Assert.Equal(operationsBefore, operationsAfter);
-        }
+            // Inside InternalOperation scope — should NOT count
+            using (ModelPersistenceGuard.InternalOperation())
+            {
+                ModelPersistenceGuard.EnforceBeforeSerialize();
+            }
+
+            {
+                var manager = new TrialStateManager(_trialFilePath);
+                int operationsAfter = manager.GetStatus().OperationsUsed;
+                Assert.Equal(operationsBefore, operationsAfter);
+            }
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task WhitespaceOnlyLicenseKey_TreatedAsNoKey()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        // Exhaust the trial
-        var manager = new TrialStateManager();
-        for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+        WithIsolatedTrial(() =>
         {
-            manager.RecordOperationOrThrow();
-        }
+            // Exhaust the trial
+            var manager = new TrialStateManager(_trialFilePath);
+            for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+            {
+                manager.RecordOperationOrThrow();
+            }
 
-        // Set whitespace-only license key — should NOT bypass
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "   ");
+            // Set whitespace-only license key — should NOT bypass
+            Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "   ");
 
-        Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSave());
+            Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSave());
+        });
     }
 
     [Fact(Timeout = 60000)]
     public async Task EmptyLicenseKey_TreatedAsNoKey()
     {
         ClearAllLicenseSources();
-        ResetDefaultTrial();
 
-        var manager = new TrialStateManager();
-        for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+        WithIsolatedTrial(() =>
         {
-            manager.RecordOperationOrThrow();
-        }
+            var manager = new TrialStateManager(_trialFilePath);
+            for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+            {
+                manager.RecordOperationOrThrow();
+            }
 
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "");
+            Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "");
 
-        Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSave());
+            Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeSave());
+        });
     }
 
     // ---------------------------------------------------------------------
