@@ -337,6 +337,31 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         => new DenseLayer<T>(outputSize, vectorActivation, InitializationStrategies<T>.Lazy);
 
     /// <summary>
+    /// Creates a <see cref="LayerNormalizationLayer{T}"/> pre-resolved against
+    /// <paramref name="featureSize"/> so its gamma/beta tensors are fully allocated
+    /// at construction time. Use when callers iterate <c>ParameterCount</c>,
+    /// <c>GetParameters</c>, <c>SetParameters</c>, or <c>Clone</c> before the first
+    /// forward — a stock lazy LayerNorm would report zero parameters until forward,
+    /// leading to wrong parameter vectors during initialization, serialization,
+    /// or cloning.
+    /// </summary>
+    protected static LayerNormalizationLayer<T> EagerLayerNorm(int featureSize)
+    {
+        if (featureSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(featureSize),
+                $"EagerLayerNorm requires a positive feature size; got {featureSize}.");
+        }
+        var ln = new LayerNormalizationLayer<T>();
+        // Resolve from a [1, featureSize] shape — LayerNorm reads input.Shape[^1]
+        // as featureSize, allocates gamma + beta, and registers them. The dummy
+        // tensor allocated by ResolveFromShape is discarded; only the shape is used.
+        ln.ResolveFromShape(new[] { 1, featureSize });
+        return ln;
+    }
+
+    /// <summary>
     /// Creates a <see cref="ConvolutionalLayer{T}"/> with lazy weight allocation.
     /// </summary>
     protected static ConvolutionalLayer<T> LazyConv2D(

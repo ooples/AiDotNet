@@ -190,6 +190,19 @@ public class DiffusionResBlock<T> : LayerBase<T>
         // return all-zero gradients on the UNet backbone.
         if (_timeEmbedDim > 0 && timeEmbed.Length > 0)
         {
+            // Validate the timeEmbed contract before letting the lazy MLP resolve its
+            // input feature dim from whatever shape happens to come in. _timeMlp is
+            // a lazy DenseLayer constructed without an input-feature size, so the
+            // FIRST call to its Forward() bakes the input dim from timeEmbed's last
+            // axis. If that's wrong we'd silently mis-shape the entire block.
+            if (timeEmbed.Shape.Length < 2 ||
+                timeEmbed.Shape[timeEmbed.Shape.Length - 1] != _timeEmbedDim)
+            {
+                throw new ArgumentException(
+                    $"timeEmbed must have rank >= 2 and last dim == _timeEmbedDim ({_timeEmbedDim}). " +
+                    $"Got rank {timeEmbed.Shape.Length}, last dim {timeEmbed.Shape[timeEmbed.Shape.Length - 1]}.",
+                    nameof(timeEmbed));
+            }
             var timeProj = _timeMlp.Forward(timeEmbed);
             // Reshape from [B, outChannels] to [B, outChannels, 1, 1] for broadcasting
             if (timeProj.Shape.Length == 1)

@@ -266,8 +266,9 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         // Context projection: project text embeddings to hidden dim
         _contextProj = LazyDense(_contextDim, _hiddenSize);
 
-        // Final layers
-        _finalNorm = new LayerNormalizationLayer<T>();
+        // Final layers — eagerly sized so ParameterCount/GetParameters/SetParameters/Clone
+        // see the correct gamma/beta vectors before the first forward.
+        _finalNorm = EagerLayerNorm(_hiddenSize);
         _adalnModulation = LazyDense(timeEmbedDim, _hiddenSize * 2);
         _outputProj = LazyDense(_hiddenSize, patchDim);
 
@@ -312,15 +313,15 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         return new MMDiTBlock
         {
             // Image stream
-            ImageNorm1 = new LayerNormalizationLayer<T>(),
-            ImageNorm2 = new LayerNormalizationLayer<T>(),
+            ImageNorm1 = EagerLayerNorm(_hiddenSize),
+            ImageNorm2 = EagerLayerNorm(_hiddenSize),
             ImageMLP1 = LazyDense(_hiddenSize, mlpHidden, new GELUActivation<T>()),
             ImageMLP2 = LazyDense(mlpHidden, _hiddenSize),
             ImageAdaLN = LazyDense(timeEmbedDim, _hiddenSize * 6),
 
             // Text stream
-            TextNorm1 = new LayerNormalizationLayer<T>(),
-            TextNorm2 = new LayerNormalizationLayer<T>(),
+            TextNorm1 = EagerLayerNorm(_hiddenSize),
+            TextNorm2 = EagerLayerNorm(_hiddenSize),
             TextMLP1 = LazyDense(_hiddenSize, mlpHidden, new GELUActivation<T>()),
             TextMLP2 = LazyDense(mlpHidden, _hiddenSize),
             TextAdaLN = LazyDense(timeEmbedDim, _hiddenSize * 6),
@@ -346,7 +347,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         {
             _singleBlocks.Add(new MMDiTSingleBlock
             {
-                Norm = new LayerNormalizationLayer<T>(),
+                Norm = EagerLayerNorm(_hiddenSize),
                 QProj = LazyDense(_hiddenSize, _hiddenSize),
                 KProj = LazyDense(_hiddenSize, _hiddenSize),
                 VProj = LazyDense(_hiddenSize, _hiddenSize),
