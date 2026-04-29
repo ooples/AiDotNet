@@ -485,6 +485,11 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        // Lazy ctor path: resolve _inputSize and allocate weights before any GPU code
+        // reads them.
+        EnsureInitializedFromInput(inputs[0]);
+
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
@@ -855,8 +860,14 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     internal override Dictionary<string, string> GetMetadata()
     {
         var metadata = base.GetMetadata();
-        metadata["InputSize"] = _inputWeights.Shape[1].ToString();
-        metadata["HiddenSize"] = _inputWeights.Shape[0].ToString();
+        // Read from configured fields, NOT from _inputWeights.Shape — the lazy
+        // ctor seeds _inputWeights with [0, 0] until first forward, so reading
+        // the tensor shape would emit "InputSize=0, HiddenSize=0" for any
+        // unresolved layer. _hiddenSize is fixed at construction; _inputSize
+        // is -1 until resolved (we emit -1 to signal "not yet resolved" rather
+        // than 0, which would falsely look like a configured input size).
+        metadata["InputSize"] = _inputSize.ToString();
+        metadata["HiddenSize"] = _hiddenSize.ToString();
         return metadata;
     }
 

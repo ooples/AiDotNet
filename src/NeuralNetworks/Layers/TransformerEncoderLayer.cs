@@ -291,6 +291,12 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        if (!_isInitialized)
+        {
+            throw new InvalidOperationException(
+                "TransformerEncoderLayer.SetParameters cannot run before sublayers are " +
+                "constructed. Run a Forward pass first so _embeddingSize is resolved.");
+        }
         int idx = 0;
         void Set(ILayer<T> layer)
         {
@@ -303,6 +309,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     public override Vector<T> GetParameterGradients()
     {
+        if (!_isInitialized) return new Vector<T>(0);
         return Vector<T>.Concatenate(
             _selfAttention.GetParameterGradients(),
             _norm1.GetParameterGradients(),
@@ -314,6 +321,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
+        if (!_isInitialized) return;
         _selfAttention.ClearGradients(); _norm1.ClearGradients();
         _feedForward1.ClearGradients(); _feedForward2.ClearGradients(); _norm2.ClearGradients();
     }
@@ -330,11 +338,13 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This returns the sum of all parameters from sublayers: self-attention, layer norms, and feed-forward layers.
     /// </remarks>
     public override int ParameterCount =>
-        _selfAttention.ParameterCount +
-        _norm1.ParameterCount +
-        _feedForward1.ParameterCount +
-        _feedForward2.ParameterCount +
-        _norm2.ParameterCount;
+        _isInitialized
+            ? _selfAttention.ParameterCount +
+              _norm1.ParameterCount +
+              _feedForward1.ParameterCount +
+              _feedForward2.ParameterCount +
+              _norm2.ParameterCount
+            : 0;
 
     /// <summary>
     /// Returns layer-specific metadata for serialization.
@@ -579,6 +589,10 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
+        // Lazy ctor path: resolve _embeddingSize from inputs[0].Shape[^1] and construct
+        // sublayers before any GPU code dereferences them.
+        EnsureInitializedFromInput(inputs[0]);
+
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
@@ -692,6 +706,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
+        if (!_isInitialized) return;
         // Update parameters for each sub-layer
         _selfAttention.UpdateParameters(learningRate);
         _norm1.UpdateParameters(learningRate);
@@ -712,6 +727,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void UpdateParametersGpu(IGpuOptimizerConfig config)
     {
+        if (!_isInitialized) return;
         // Update parameters for each sub-layer using GPU optimizer
         _selfAttention.UpdateParametersGpu(config);
         _norm1.UpdateParametersGpu(config);
@@ -748,6 +764,9 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        // Sublayers do not exist on a lazy encoder until first Forward.
+        if (!_isInitialized) return new Vector<T>(0);
+
         // === Vectorized Parameter Concatenation (Phase B: US-GPU-015) ===
         // Collect parameters from all sublayers and concatenate them
         var selfAttentionParams = _selfAttention.GetParameters();
@@ -792,9 +811,12 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void ResetState()
     {
-        // Clear GPU cached tensors
+        // Clear GPU cached tensors (always safe — these are local fields).
         _gpuInput3D = null;
         _gpuNormalized1 = null;
+
+        // Sublayers do not exist on a lazy encoder until first Forward.
+        if (!_isInitialized) return;
 
         // Reset all sublayers
         _selfAttention.ResetState();
@@ -837,6 +859,13 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public T ComputeAuxiliaryLoss()
     {
         if (!UseAuxiliaryLoss)
+        {
+            _lastAuxiliaryLoss = NumOps.Zero;
+            return _lastAuxiliaryLoss;
+        }
+
+        // Sublayers do not exist on a lazy encoder until first Forward.
+        if (!_isInitialized)
         {
             _lastAuxiliaryLoss = NumOps.Zero;
             return _lastAuxiliaryLoss;

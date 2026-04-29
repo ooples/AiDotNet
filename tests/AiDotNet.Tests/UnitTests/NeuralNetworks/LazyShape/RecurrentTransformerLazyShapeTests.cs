@@ -104,4 +104,68 @@ public class RecurrentTransformerLazyShapeTests
         Assert.True(dec.IsShapeResolved);
         Assert.Equal(input.Shape[^1], output.Shape[^1]);
     }
+
+    [Fact]
+    public void LazyTransformerDecoder_RejectsMismatchedEncoderOutput()
+    {
+        var dec = new TransformerDecoderLayer<double>(numHeads: 4, feedForwardDim: 64);
+        var decoderInput = new Tensor<double>(new[] { 1, 8, 32 });
+        // encoderOutput has 16 features, decoder has 32 — mismatched.
+        var encoderOutput = new Tensor<double>(new[] { 1, 8, 16 });
+
+        Assert.Throws<ArgumentException>(() => dec.Forward(decoderInput, encoderOutput));
+    }
+
+    // ---- Pre-resolution access regressions (the lazy ctor must not break public
+    // contract surface for callers that touch parameter / state APIs before any
+    // Forward has run). ----
+
+    [Fact]
+    public void LazyLSTM_BeforeForward_GetParameters_DoesNotThrow()
+    {
+        var lstm = new LSTMLayer<double>(hiddenSize: 16);
+        // Layer has no real weights yet, but parameter collection should still
+        // return *something* (typically empty or zero-length) instead of NRE.
+        var p = lstm.GetParameters();
+        Assert.NotNull(p);
+    }
+
+    [Fact]
+    public void LazyTransformerEncoder_BeforeForward_ParameterCount_IsZero()
+    {
+        var enc = new TransformerEncoderLayer<double>(numHeads: 4, feedForwardDim: 64);
+        // Sublayers don't exist yet — ParameterCount must be a safe 0, not NRE
+        // dereferencing the null sublayer fields.
+        Assert.Equal(0, enc.ParameterCount);
+    }
+
+    [Fact]
+    public void LazyTransformerEncoder_BeforeForward_GetParameters_ReturnsEmpty()
+    {
+        var enc = new TransformerEncoderLayer<double>(numHeads: 4, feedForwardDim: 64);
+        var p = enc.GetParameters();
+        Assert.NotNull(p);
+        Assert.Equal(0, p.Length);
+    }
+
+    [Fact]
+    public void LazyTransformerEncoder_BeforeForward_ResetState_DoesNotThrow()
+    {
+        var enc = new TransformerEncoderLayer<double>(numHeads: 4, feedForwardDim: 64);
+        enc.ResetState(); // should be a safe no-op, not an NRE.
+    }
+
+    [Fact]
+    public void LazyTransformerDecoder_BeforeForward_ParameterCount_IsZero()
+    {
+        var dec = new TransformerDecoderLayer<double>(numHeads: 4, feedForwardDim: 64);
+        Assert.Equal(0, dec.ParameterCount);
+    }
+
+    [Fact]
+    public void LazyTransformerDecoder_BeforeForward_ClearGradients_DoesNotThrow()
+    {
+        var dec = new TransformerDecoderLayer<double>(numHeads: 4, feedForwardDim: 64);
+        dec.ClearGradients();
+    }
 }

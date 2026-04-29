@@ -1201,6 +1201,10 @@ public partial class LSTMLayer<T> : LayerBase<T>
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
+        // Lazy ctor path: resolve _inputSize from inputs[0].Shape[^1] and allocate
+        // the 8 weight tensors + 4 biases before any GPU code reads them.
+        EnsureInitializedFromInput(inputs[0]);
+
         if (Engine is not DirectGpuTensorEngine gpuEngine)
         {
             throw new InvalidOperationException(
@@ -2025,6 +2029,16 @@ public partial class LSTMLayer<T> : LayerBase<T>
         _biasI = SerializationHelper<T>.DeserializeTensor(reader);
         _biasC = SerializationHelper<T>.DeserializeTensor(reader);
         _biasO = SerializationHelper<T>.DeserializeTensor(reader);
+
+        // Recover the lazy-init state from the loaded tensor shapes. Without this,
+        // a lazy-constructed layer that just deserialized real weights would have
+        // its weights overwritten on the first Forward by EnsureInitialized's
+        // re-allocation path.
+        if (_weightsFi.Shape.Length >= 2 && _weightsFi.Shape[1] > 0)
+        {
+            _inputSize = _weightsFi.Shape[1];
+            _isInitialized = true;
+        }
 
         // Invalidate stacked weight buffers since weights have been replaced from deserialization
         InvalidateGpuStackedWeights();

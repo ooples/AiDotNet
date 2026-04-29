@@ -499,6 +499,13 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        if (!_isInitialized)
+        {
+            throw new InvalidOperationException(
+                "TransformerDecoderLayer.SetParameters cannot run before sublayers are " +
+                "constructed. Run a Forward pass (or call EnsureInitialized via reflection) " +
+                "first so _embeddingSize is resolved and the sublayers exist.");
+        }
         int idx = 0;
         void Set(ILayer<T> layer) { int c = layer.ParameterCount; layer.SetParameters(parameters.Slice(idx, c)); idx += c; }
         Set(_selfAttention); Set(_norm1); Set(_crossAttention); Set(_norm2);
@@ -507,6 +514,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     public override Vector<T> GetParameterGradients()
     {
+        if (!_isInitialized) return new Vector<T>(0);
         return Vector<T>.Concatenate(
             _selfAttention.GetParameterGradients(), _norm1.GetParameterGradients(),
             _crossAttention.GetParameterGradients(), _norm2.GetParameterGradients(),
@@ -517,6 +525,8 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
+        // Sublayers do not exist on a lazy decoder until first Forward; nothing to clear.
+        if (!_isInitialized) return;
         _selfAttention.ClearGradients(); _norm1.ClearGradients();
         _crossAttention.ClearGradients(); _norm2.ClearGradients();
         _feedForward.ClearGradients(); _feedForwardProjection.ClearGradients(); _norm3.ClearGradients();
@@ -535,13 +545,15 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// layer norms, feed-forward layer, and feed-forward projection layer.
     /// </remarks>
     public override int ParameterCount =>
-        _selfAttention.ParameterCount +
-        _norm1.ParameterCount +
-        _crossAttention.ParameterCount +
-        _norm2.ParameterCount +
-        _feedForward.ParameterCount +
-        _feedForwardProjection.ParameterCount +
-        _norm3.ParameterCount;
+        _isInitialized
+            ? _selfAttention.ParameterCount +
+              _norm1.ParameterCount +
+              _crossAttention.ParameterCount +
+              _norm2.ParameterCount +
+              _feedForward.ParameterCount +
+              _feedForwardProjection.ParameterCount +
+              _norm3.ParameterCount
+            : 0;
 
 
     /// <summary>
@@ -746,6 +758,23 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // sublayers on first call.
         EnsureInitializedFromInput(input);
 
+        // Cross-attention requires encoderOutput's last dim to match the resolved
+        // embedding dim; otherwise the attention math fails deep inside MHA with
+        // a less-helpful error. Surface the mismatch at the layer boundary.
+        if (encoderOutput is null)
+        {
+            throw new ArgumentNullException(nameof(encoderOutput));
+        }
+        if (encoderOutput.Shape.Length >= 1
+            && encoderOutput.Shape[encoderOutput.Shape.Length - 1] != _embeddingSize)
+        {
+            throw new ArgumentException(
+                $"encoderOutput last dim ({encoderOutput.Shape[encoderOutput.Shape.Length - 1]}) " +
+                $"must match the decoder's resolved embedding size ({_embeddingSize}). " +
+                "Cross-attention requires the encoder and decoder to share their feature dim.",
+                nameof(encoderOutput));
+        }
+
         _lastInput = input;
         _lastEncoderOutput = encoderOutput;
 
@@ -789,6 +818,10 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         if (inputs.Length < 2)
             throw new ArgumentException("TransformerDecoderLayer requires two inputs: [decoderInput, encoderOutput]");
+
+        // Lazy ctor path: resolve _embeddingSize from decoder input.Shape[^1] and
+        // construct sublayers before any GPU code dereferences them.
+        EnsureInitializedFromInput(inputs[0]);
 
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
@@ -866,6 +899,8 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
+        // Sublayers do not exist on a lazy decoder until first Forward.
+        if (!_isInitialized) return;
         _selfAttention.UpdateParameters(learningRate);
         _norm1.UpdateParameters(learningRate);
         _crossAttention.UpdateParameters(learningRate);
@@ -887,6 +922,9 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void UpdateParametersGpu(IGpuOptimizerConfig config)
     {
+        // Sublayers do not exist on a lazy decoder until first Forward.
+        if (!_isInitialized) return;
+
         // Update parameters for each sub-layer using GPU optimizer
         _selfAttention.UpdateParametersGpu(config);
         _norm1.UpdateParametersGpu(config);
@@ -925,6 +963,9 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        // Sublayers do not exist on a lazy decoder until first Forward.
+        if (!_isInitialized) return new Vector<T>(0);
+
         // === Vectorized Parameter Concatenation (Phase B: US-GPU-015) ===
         // Collect parameters from all sublayers
         var selfAttentionParams = _selfAttention.GetParameters();
@@ -975,6 +1016,10 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void ResetState()
     {
+        // Sublayers do not exist on a lazy decoder until first Forward — nothing
+        // to reset on a never-used instance.
+        if (!_isInitialized) return;
+
         // Reset all sublayers
         _selfAttention.ResetState();
         _norm1.ResetState();
@@ -1034,6 +1079,14 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public T ComputeAuxiliaryLoss()
     {
         if (!UseAuxiliaryLoss)
+        {
+            _lastAuxiliaryLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        // Sublayers do not exist on a lazy decoder until first Forward — there is no
+        // auxiliary loss to aggregate from a never-trained instance.
+        if (!_isInitialized)
         {
             _lastAuxiliaryLoss = NumOps.Zero;
             return NumOps.Zero;

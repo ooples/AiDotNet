@@ -980,6 +980,12 @@ public partial class GRULayer<T> : LayerBase<T>
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        // Lazy ctor path: resolve _inputSize from inputs[0].Shape[^1] and allocate weights
+        // before any GPU code reads stacked weight tensors. Without this, a first GPU call
+        // on a freshly-constructed lazy GRULayer would dereference zero-sized tensors.
+        EnsureInitializedFromInput(inputs[0]);
+
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
