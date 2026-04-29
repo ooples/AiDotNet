@@ -1293,6 +1293,16 @@ namespace AiDotNet.AutoML
         protected virtual void Dispose(bool disposing)
         {
             if (_disposed) return;
+            if (disposing)
+            {
+                // BestModel is owned by this AutoML instance — search produces it, callers
+                // do not pass it in. If it's IDisposable, release its tensors/allocators.
+                if (BestModel is System.IDisposable disposableBest)
+                {
+                    disposableBest.Dispose();
+                }
+                BestModel = null;
+            }
             _disposed = true;
         }
     }
