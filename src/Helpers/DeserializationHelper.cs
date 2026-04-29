@@ -994,9 +994,18 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))
         {
-            // MeanLayer/LogVarianceLayer(int[] inputShape, int axis)
+            // MeanLayer/LogVarianceLayer are now lazy: ctor signature is (int axis).
+            // Resolve from input shape after construction so the deserialized layer
+            // has concrete shapes for any subsequent SetParameters call.
             int axis = TryGetInt(additionalParams, "Axis") ?? 0;
-            instance = Activator.CreateInstance(type, inputShape, axis);
+            instance = Activator.CreateInstance(type, axis);
+            if (instance is NeuralNetworks.Layers.LayerBase<T> meanOrVarLayer
+                && !meanOrVarLayer.IsShapeResolved
+                && inputShape.Length > 0
+                && Array.TrueForAll(inputShape, d => d > 0))
+            {
+                meanOrVarLayer.ResolveFromShape(inputShape);
+            }
         }
         else if (genericDef == typeof(ResidualLayer<>))
         {
@@ -1161,18 +1170,28 @@ public static class DeserializationHelper
 
     private static object CreateDenseLayer<T>(Type type, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams)
     {
-        // DenseLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null, IInitializationStrategy<T>? initializationStrategy = null)
-        // Use specific constructor to avoid ambiguity with vector activation constructor.
+        // DenseLayer is now lazy-only:
+        //   DenseLayer(int outputSize, IActivationFunction<T>? activationFunction = null,
+        //              IInitializationStrategy<T>? initializationStrategy = null)
+        // After construction we MUST call ResolveFromShape so SetParameters can load
+        // saved weights without hitting the -1 sentinel guard.
         var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
         var initStrategyType = typeof(AiDotNet.Initialization.IInitializationStrategy<>).MakeGenericType(typeof(T));
-        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType, initStrategyType });
+        var ctor = type.GetConstructor(new Type[] { typeof(int), activationFuncType, initStrategyType });
         if (ctor is null)
         {
-            throw new InvalidOperationException("Cannot find DenseLayer constructor with (int, int, IActivationFunction<T>, IInitializationStrategy<T>).");
+            throw new InvalidOperationException("Cannot find DenseLayer constructor with (int, IActivationFunction<T>, IInitializationStrategy<T>).");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke(new object?[] { inputShape[0], outputShape[0], activation, null });
+        object instance = ctor.Invoke(new object?[] { outputShape[0], activation, null });
+
+        // Resolve lazy shape so SetParameters can populate weights/biases on the deserialized layer.
+        if (instance is NeuralNetworks.Layers.LayerBase<T> layerBase && !layerBase.IsShapeResolved && inputShape.Length > 0 && inputShape[0] > 0)
+        {
+            layerBase.ResolveFromShape(new[] { inputShape[0] });
+        }
+        return instance;
     }
 
     private static object CreateMultiHeadAttentionLayer<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)

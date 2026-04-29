@@ -532,6 +532,33 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     }
 
     /// <summary>
+    /// Resolves a lazy layer's <see cref="InputShape"/> and <see cref="OutputShape"/> from a
+    /// concrete input shape WITHOUT allocating or initializing weights. Use this when a caller
+    /// (e.g. a chain-walker reading <see cref="ParameterCount"/> or <see cref="GetOutputShape"/>)
+    /// needs to know the resolved dimensions but must not consume RNG state — eager weight
+    /// initialization here would shift the random stream and perturb subsequent training.
+    /// </summary>
+    /// <param name="inputShape">Fully-resolved input shape (no <c>-1</c> entries; all dims &gt; 0).</param>
+    public void ResolveShapesOnly(int[] inputShape)
+    {
+        if (IsShapeResolved) return;
+        if (inputShape == null) throw new ArgumentNullException(nameof(inputShape));
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            if (inputShape[i] <= 0)
+            {
+                throw new ArgumentException(
+                    $"ResolveShapesOnly requires concrete positive dims; got {inputShape[i]} at axis {i}.",
+                    nameof(inputShape));
+            }
+        }
+        var dummy = new Tensor<T>(inputShape);
+        OnFirstForward(dummy);
+        // Intentionally NOT calling EnsureInitialized — weights stay deferred until
+        // the first real forward pass so RNG state is preserved.
+    }
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>

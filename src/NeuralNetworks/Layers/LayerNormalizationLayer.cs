@@ -316,6 +316,14 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
         var input = inputs[0];
+
+        // Lazy-shape resolution must run before any read of _gamma/_beta:
+        // a lazily-constructed LayerNormalizationLayer holds zero-length
+        // placeholder gamma/beta until its first Forward — matches the
+        // CPU Forward contract above (which calls EnsureInitializedFromInput
+        // before doing anything with _gamma/_beta).
+        EnsureInitializedFromInput(input);
+
         double epsilonDouble = NumOps.ToDouble(_epsilon);
 
         var (output, saveMean, saveInvVar) = gpuEngine.LayerNormGpu(

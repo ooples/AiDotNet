@@ -517,6 +517,12 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        // Deferred-shape layers cloned/walked before first Forward have
+        // zero-length placeholder weights/biases — return empty so Clone
+        // / SetParameters / ParameterCount roundtrip. Real parameters
+        // are picked up on the next Collect after the first Forward.
+        if (!IsShapeResolved) return new Vector<T>(0);
+
         // Flatten weight tensor and concatenate with biases
         int weightCount = _weights.Shape[0] * _weights.Shape[1];
         int biasCount = _biases.Shape[0];
@@ -596,6 +602,18 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Mirror GetParameters: deferred-shape layer cloned before its
+        // first Forward accepts an empty vector as a no-op so Clone
+        // roundtrip works on uninitialised layers; non-empty input on
+        // unresolved shapes is a real misuse.
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            throw new InvalidOperationException(
+                "Cannot SetParameters with non-empty data on a deferred-shape FullyConnectedLayer " +
+                "before its first Forward — the input feature size has not been resolved yet.");
+        }
+
         int weightCount = _weights.Shape[0] * _weights.Shape[1];
         int biasCount = _biases.Shape[0];
 
@@ -714,6 +732,14 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
 
         var input = inputs[0];
         int[] inputShape = input._shape;
+
+        // Lazy-shape resolution must run before any read of _weights.Shape:
+        // a lazily-constructed FullyConnectedLayer holds zero-length
+        // placeholder weights with no resolved input feature size.
+        // EnsureInitializedFromInput resolves shapes from input.Shape[^1]
+        // via OnFirstForward (no-op once resolved) and then allocates the
+        // real weights — same contract as the CPU Forward path above.
+        EnsureInitializedFromInput(input);
 
         // FullyConnectedLayer stores weights as [outputSize, inputSize]
         // We need to transpose for FusedLinearGpu which expects [inputSize, outputSize]
