@@ -44,7 +44,7 @@ public abstract class ClassificationModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, _) = GenerateData(TestSamples, Features, NumClasses, rng);
 
@@ -76,7 +76,7 @@ public abstract class ClassificationModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, testY) = GenerateData(TestSamples, Features, NumClasses, rng);
 
@@ -101,7 +101,7 @@ public abstract class ClassificationModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, testY) = GenerateData(TestSamples, Features, NumClasses, rng);
 
@@ -125,7 +125,7 @@ public abstract class ClassificationModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, testY) = GenerateData(TestSamples, Features, NumClasses, rng);
 
@@ -227,7 +227,7 @@ public abstract class ClassificationModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, _) = GenerateData(60, Features, NumClasses, rng);
 
@@ -255,7 +255,7 @@ public abstract class ClassificationModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, testY) = GenerateData(60, Features, NumClasses, rng);
 
@@ -299,7 +299,7 @@ public abstract class ClassificationModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, _) = GenerateData(TestSamples, Features, NumClasses, rng);
 
@@ -317,7 +317,7 @@ public abstract class ClassificationModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, _) = GenerateData(TestSamples, Features, NumClasses, rng);
 
@@ -331,7 +331,7 @@ public abstract class ClassificationModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, _) = GenerateData(TestSamples, Features, NumClasses, rng);
 
@@ -350,7 +350,7 @@ public abstract class ClassificationModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
 
         model.Train(trainX, trainY);
@@ -365,7 +365,7 @@ public abstract class ClassificationModelTestBase
         if (!HasFlatParameters) return; // Meta/ensemble/tree models delegate to sub-models
 
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
 
         model.Train(trainX, trainY);
@@ -392,7 +392,7 @@ public abstract class ClassificationModelTestBase
         if (NumClasses != 2) return;
 
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, 2, rng);
 
         model.Train(trainX, trainY);

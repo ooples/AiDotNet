@@ -522,6 +522,24 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     }
 
     #endregion
+
+    // --- IDisposable (issue #1136 plan part 3) ---
+
+    private bool _disposed;
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Releases resources held by this online-learning model. Override + call base for layer/tensor cleanup.</summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+    }
 }
 
 /// <summary>

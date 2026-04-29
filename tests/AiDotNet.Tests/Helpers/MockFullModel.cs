@@ -128,4 +128,6 @@ public class MockFullModel : IFullModel<double, Matrix<double>, Vector<double>>
     }
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+    public void Dispose() { /* test mock holds no resources */ }
 }

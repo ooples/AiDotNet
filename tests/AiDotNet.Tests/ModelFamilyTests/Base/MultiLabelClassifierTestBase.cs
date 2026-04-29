@@ -29,7 +29,7 @@ public abstract class MultiLabelClassifierTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
 
         var x = new Matrix<double>(TrainSamples, Features);
         var y = new Matrix<double>(TrainSamples, NumLabels);
@@ -58,7 +58,7 @@ public abstract class MultiLabelClassifierTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
 
         var x = new Matrix<double>(TrainSamples, Features);
         var y = new Matrix<double>(TrainSamples, NumLabels);
@@ -87,7 +87,7 @@ public abstract class MultiLabelClassifierTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
 
         var x = new Matrix<double>(TrainSamples, Features);
         var y = new Matrix<double>(TrainSamples, NumLabels);

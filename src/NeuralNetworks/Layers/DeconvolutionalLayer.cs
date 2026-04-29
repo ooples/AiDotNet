@@ -739,6 +739,11 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        // Deferred-shape layer cloned before its first Forward has empty
+        // _kernels/_biases placeholders. Return an empty vector so Clone
+        // can roundtrip via SetParameters; the cloned layer materialises
+        // its real weights when its first Forward fires.
+        if (!IsShapeResolved) return new Vector<T>(0);
         return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
     }
 
@@ -781,6 +786,19 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        // Deferred-shape layers cloned before their first Forward have no
+        // resolved InputDepth — passing -1 into the Tensor ctor would
+        // throw on shape validation. Accept an empty vector as a no-op so
+        // Clone roundtrip works on uninitialised conditioning branches;
+        // reject non-empty input that wouldn't fit any meaningful shape.
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            throw new InvalidOperationException(
+                "Cannot SetParameters with non-empty data on a deferred-shape DeconvolutionalLayer " +
+                "before its first Forward — the input depth has not been resolved yet.");
+        }
+
         int expectedLength = _kernels.Length + _biases.Length;
         if (parameters.Length != expectedLength)
         {

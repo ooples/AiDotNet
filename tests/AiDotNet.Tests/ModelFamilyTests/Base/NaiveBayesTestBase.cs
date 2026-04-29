@@ -18,7 +18,7 @@ public abstract class NaiveBayesTestBase : ProbabilisticClassifierTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
 
         // Generate data where one feature is constant (zero variance)
         var x = new Matrix<double>(TrainSamples, Features);
@@ -56,7 +56,7 @@ public abstract class NaiveBayesTestBase : ProbabilisticClassifierTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
 
         model.Train(trainX, trainY);

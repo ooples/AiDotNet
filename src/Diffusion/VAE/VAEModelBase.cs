@@ -698,4 +698,22 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     }
 
     #endregion
+
+    // --- IDisposable (issue #1136 plan part 3) ---
+
+    private bool _vaeDisposed;
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Releases resources held by this VAE. Override + call base for layer/tensor cleanup.</summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_vaeDisposed) return;
+        _vaeDisposed = true;
+    }
 }

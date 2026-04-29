@@ -19,7 +19,7 @@ public abstract class EnsembleClassifierTestBase : ClassificationModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
 
         model.Train(trainX, trainY);
@@ -41,7 +41,7 @@ public abstract class EnsembleClassifierTestBase : ClassificationModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
 
         model.Train(trainX, trainY);

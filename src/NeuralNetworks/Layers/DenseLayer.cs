@@ -731,8 +731,14 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Ensure weights are initialized (for lazy initialization)
-        EnsureInitialized();
+        // Lazy layers must run shape resolution (OnFirstForward) BEFORE
+        // EnsureInitialized — calling EnsureInitialized() directly on a
+        // lazily-constructed DenseLayer reads InputShape[0]/OutputShape[0]
+        // while they still hold the -1 sentinel and TensorAllocator.Rent
+        // overflows int on the resulting negative dimension product.
+        // EnsureInitializedFromInput is the correct lazy entry per
+        // LayerBase docs.
+        EnsureInitializedFromInput(input);
 
         _lastInput = input;
         _originalInputShape = input._shape;
@@ -1139,7 +1145,15 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Ensure weights and biases are initialized (supports lazy initialization)
+        // Deferred-shape layers that haven't seen their first Forward
+        // (e.g., a conditioning branch only activated by text embeddings)
+        // have InputShape[0] == -1 and EnsureInitialized would overflow on
+        // TensorAllocator.Rent. Return an empty vector — Clone /
+        // SetParameters / ParameterCount semantically have nothing to copy
+        // and pick up the real values once the first Forward materialises
+        // them.
+        if (!IsShapeResolved) return new Vector<T>(0);
+
         EnsureInitialized();
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
@@ -1189,7 +1203,20 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        // Ensure weights and biases are initialized (supports lazy initialization)
+        // Mirror GetParameters: a deferred-shape layer that was Cloned
+        // before its first Forward has no concrete weight/bias storage to
+        // copy into, and the source-side GetParameters returned an empty
+        // vector. Accept the empty vector as a no-op so Clone roundtrip
+        // works on uninitialised conditioning branches; reject non-empty
+        // input that wouldn't fit any meaningful shape.
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            throw new InvalidOperationException(
+                "Cannot SetParameters with non-empty data on a deferred-shape DenseLayer " +
+                "before its first Forward — the input feature size has not been resolved yet.");
+        }
+
         EnsureInitialized();
 
         int expected = _weights.Length + _biases.Length;

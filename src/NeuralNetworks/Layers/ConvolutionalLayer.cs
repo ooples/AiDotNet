@@ -1366,6 +1366,16 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
+        // For deferred-shape layers that haven't seen their first Forward
+        // yet (e.g., conditioning branch in UNetNoisePredictor that's only
+        // activated when text embeddings are present), EnsureInitialized
+        // would throw because InputDepth is still the -1 sentinel. Return
+        // an empty parameter vector — Clone/SetParameters/ParameterCount
+        // semantically have nothing to copy/set/count for an uninitialised
+        // layer and will pick up the real parameters on a subsequent pass
+        // after the first Forward materialises them.
+        if (!IsShapeResolved) return new Vector<T>(0);
+
         EnsureInitialized();
         // Bulk copy from contiguous tensor storage — replaces 4-nested scalar loops
         return Vector<T>.Concatenate(
@@ -1429,6 +1439,20 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Mirror GetParameters: a deferred-shape layer that was Cloned
+        // before its first Forward has no concrete kernel/bias storage to
+        // copy into, and the source-side GetParameters returned an empty
+        // vector. Accept the empty vector as a no-op so Clone roundtrip
+        // works on uninitialised conditioning branches; reject non-empty
+        // input that wouldn't fit any meaningful shape.
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            throw new InvalidOperationException(
+                "Cannot SetParameters with non-empty data on a deferred-shape ConvolutionalLayer " +
+                "before its first Forward — the input depth has not been resolved yet.");
+        }
+
         EnsureInitialized();
         int kernelLen = _kernels.Length;
         int biasLen = _biases.Shape[0];

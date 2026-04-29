@@ -2266,6 +2266,8 @@ public class DistributedTrainingIntegrationTests
         }
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+        public void Dispose() { /* test mock holds no resources */ }
     }
 
     #endregion

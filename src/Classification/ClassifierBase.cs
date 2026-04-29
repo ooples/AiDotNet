@@ -720,4 +720,26 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
         Deserialize(serializedData);
     }
 
+    // --- IDisposable (issue #1136 plan part 3) ---
+
+    private bool _disposed;
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases resources held by this classifier. Override and call
+    /// base.Dispose(disposing) at the end if the derived class owns
+    /// disposable state (layers, GPU handles, rented tensors).
+    /// </summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+    }
+
 }

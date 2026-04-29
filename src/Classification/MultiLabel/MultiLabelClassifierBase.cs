@@ -483,6 +483,24 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
         return gradients;
     }
 
+    // --- IDisposable (issue #1136 plan part 3) ---
+
+    private bool _disposed;
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Releases resources held by this multi-label classifier. Override + call base for layer/tensor cleanup.</summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+    }
+
     /// <summary>
     /// Binary cross-entropy loss for multi-label classification.
     /// </summary>

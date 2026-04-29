@@ -155,4 +155,31 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
     /// <inheritdoc/>
     public virtual Dictionary<string, T> GetFeatureImportance() => BaseModel.GetFeatureImportance();
 
+    // --- IDisposable (issue #1136 plan part 3) ---
+
+    private bool _disposed;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Forwards Dispose to the wrapped <see cref="BaseModel"/> when
+    /// it implements IDisposable. The wrapper itself owns no
+    /// additional disposable state beyond the base model reference.
+    /// </remarks>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Disposes the wrapped base model if it is disposable. Override + call base for additional cleanup.</summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        if (disposing)
+        {
+            (BaseModel as System.IDisposable)?.Dispose();
+        }
+        _disposed = true;
+    }
+
 }

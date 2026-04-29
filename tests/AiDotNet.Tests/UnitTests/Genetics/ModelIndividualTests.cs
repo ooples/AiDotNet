@@ -184,6 +184,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             }
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+            public void Dispose() { /* test mock holds no resources */ }
         }
 
         private class ModelParameterGene : ICloneable

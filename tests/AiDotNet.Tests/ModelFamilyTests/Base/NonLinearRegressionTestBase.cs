@@ -36,7 +36,7 @@ public abstract class NonLinearRegressionTestBase : RegressionModelTestBase
             y[i] = xi * xi + ModelTestHelpers.NextGaussian(rng) * 0.1;
         }
 
-        var model = CreateModel();
+        using var model = CreateModel();
         model.Train(x, y);
         var predictions = model.Predict(x);
 
@@ -71,7 +71,7 @@ public abstract class NonLinearRegressionTestBase : RegressionModelTestBase
             y[i] = Math.Sin(xi) + ModelTestHelpers.NextGaussian(rng) * 0.1;
         }
 
-        var model = CreateModel();
+        using var model = CreateModel();
         model.Train(x, y);
         var predictions = model.Predict(x);
 
@@ -108,7 +108,7 @@ public abstract class NonLinearRegressionTestBase : RegressionModelTestBase
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, 1, rng);
 
-        var model = CreateModel();
+        using var model = CreateModel();
         model.Train(trainX, trainY);
 
         // Extrapolate far outside training range

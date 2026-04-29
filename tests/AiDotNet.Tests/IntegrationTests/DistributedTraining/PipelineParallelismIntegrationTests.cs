@@ -1401,6 +1401,8 @@ public class PipelineParallelismIntegrationTests
             Enumerable.Range(0, _parameterCount).ToDictionary(i => $"f_{i}", i => 1.0 / _parameterCount);
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+        public void Dispose() { /* test mock holds no resources */ }
     }
 
     /// <summary>
@@ -1563,6 +1565,8 @@ public class PipelineParallelismIntegrationTests
             Enumerable.Range(0, _parameterCount).ToDictionary(i => $"f_{i}", i => 1.0 / _parameterCount);
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+        public void Dispose() { /* test mock holds no resources */ }
     }
 
     #endregion

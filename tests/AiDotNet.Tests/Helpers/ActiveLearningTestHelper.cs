@@ -244,4 +244,6 @@ public class MockFullModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     }
 
     public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
+    public void Dispose() { /* test mock holds no resources */ }
 }

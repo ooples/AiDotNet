@@ -4192,6 +4192,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("        public void SetActiveFeatureIndices(System.Collections.Generic.IEnumerable<int> f) { }");
         sb.AppendLine("        public bool IsFeatureUsed(int i) => false;");
         sb.AppendLine("        public System.Collections.Generic.Dictionary<string, double> GetFeatureImportance() => new();");
+        // IFullModel now requires IDisposable (issue #1136 plan part 3 — every model
+        // implementer must declare its disposal contract). PassThroughModel holds
+        // no disposable state, so the implementation is a no-op.
+        sb.AppendLine("        public void Dispose() { }");
         sb.AppendLine("    }");
     }
 

@@ -888,6 +888,8 @@ public class FederatedLearningDeepMathIntegrationTests
         public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+        public void Dispose() { /* test mock holds no resources */ }
     }
 
     #endregion

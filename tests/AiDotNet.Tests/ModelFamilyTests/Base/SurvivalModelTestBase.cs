@@ -38,7 +38,7 @@ public abstract class SurvivalModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateSurvivalData(rng);
         model.Train(trainX, trainY);
         var predictions = model.Predict(trainX);
@@ -56,7 +56,7 @@ public abstract class SurvivalModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateSurvivalData(rng);
         model.Train(trainX, trainY);
         var pred1 = model.Predict(trainX);
@@ -71,7 +71,7 @@ public abstract class SurvivalModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateSurvivalData(rng);
         model.Train(trainX, trainY);
         var cloned = model.Clone();
@@ -87,7 +87,7 @@ public abstract class SurvivalModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateSurvivalData(rng);
         model.Train(trainX, trainY);
         Assert.Equal(TrainSamples, model.Predict(trainX).Length);
@@ -99,7 +99,7 @@ public abstract class SurvivalModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateSurvivalData(rng);
         model.Train(trainX, trainY);
         Assert.NotNull(model.GetModelMetadata());
@@ -111,7 +111,7 @@ public abstract class SurvivalModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateSurvivalData(rng);
         model.Train(trainX, trainY);
         Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)model).GetParameters().Length > 0, "Trained survival model should have parameters.");
