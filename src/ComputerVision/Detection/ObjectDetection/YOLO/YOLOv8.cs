@@ -60,13 +60,13 @@ public class YOLOv8<T> : ObjectDetectorBase<T>
         Backbone = new CSPDarknet<T>(depth: depth, widthMultiplier: width);
 
         // Initialize neck
-        Neck = new PANet<T>(Backbone.OutputChannels, outputChannels: (int)(256 * width));
+        Neck = new PANet<T>(Backbone.OutputChannels.ToArray(), outputChannels: (int)(256 * width));
 
         // Initialize detection head
         var neckChannels = Enumerable.Repeat(Neck.OutputChannels, Neck.NumLevels).ToArray();
         _head = new YOLOv8Head<T>(neckChannels, options.NumClasses);
 
-        _strides = Backbone.Strides;
+        _strides = Backbone.Strides.ToArray();
         _nms = new NMS<T>();
     }
 

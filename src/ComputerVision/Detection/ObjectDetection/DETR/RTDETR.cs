@@ -65,7 +65,7 @@ public class RTDETR<T> : ObjectDetectorBase<T>
         Backbone = new ResNet<T>(ResNetVariant.ResNet50);
 
         // Hybrid encoder neck
-        Neck = new PANet<T>(Backbone.OutputChannels, outputChannels: hiddenDim);
+        Neck = new PANet<T>(Backbone.OutputChannels.ToArray(), outputChannels: hiddenDim);
 
         // Hybrid encoder with efficient attention
         _encoder = new RTDETREncoder<T>(hiddenDim, numHeads, numEncoderLayers, Neck.NumLevels);

@@ -62,7 +62,7 @@ public class YOLOv11<T> : ObjectDetectorBase<T>
         Backbone = new CSPDarknet<T>(depth: depth * 1.1, widthMultiplier: width);
 
         // Initialize neck
-        Neck = new PANet<T>(Backbone.OutputChannels, outputChannels: (int)(256 * width));
+        Neck = new PANet<T>(Backbone.OutputChannels.ToArray(), outputChannels: (int)(256 * width));
 
         // Add attention blocks to neck features
         _attentionBlocks = new List<AttentionBlock<T>>();
@@ -78,7 +78,7 @@ public class YOLOv11<T> : ObjectDetectorBase<T>
         var neckChannels = Enumerable.Repeat(Neck.OutputChannels, Neck.NumLevels).ToArray();
         _head = new YOLOv8Head<T>(neckChannels, options.NumClasses);
 
-        _strides = Backbone.Strides;
+        _strides = Backbone.Strides.ToArray();
         _nms = new NMS<T>();
     }
 
