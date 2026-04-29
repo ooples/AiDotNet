@@ -105,7 +105,11 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// aspects of each word like its meaning, grammatical role, and context.
     /// </para>
     /// </remarks>
-    private readonly int _embeddingSize;
+    /// <remarks>
+    /// Initialized to <c>-1</c> when the lazy ctor is used; resolved from
+    /// <c>input.Shape[^1]</c> on first <see cref="Forward(Tensor{T})"/>.
+    /// </remarks>
+    private int _embeddingSize;
 
     /// <summary>
     /// The number of attention heads for the self-attention and cross-attention mechanisms.
@@ -295,7 +299,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This is the standard FFN architecture in transformers: expand → activate → project back.
     /// </para>
     /// </remarks>
-    private readonly FeedForwardLayer<T> _feedForwardProjection;
+    private FeedForwardLayer<T> _feedForwardProjection;
 
     /// <summary>
     /// The layer normalization applied after the feed-forward network.
@@ -606,6 +610,114 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         RegisterSubLayer(_feedForward);
         RegisterSubLayer(_feedForwardProjection);
         RegisterSubLayer(_norm3);
+
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Lazy ctor: <see cref="_embeddingSize"/> is resolved from <c>input.Shape[^1]</c>
+    /// on first <see cref="Forward(Tensor{T})"/>; the inner attention/cross-attention/
+    /// FFN/norm sublayers are constructed then.
+    /// </summary>
+    /// <param name="numHeads">Number of attention heads (default 8).</param>
+    /// <param name="feedForwardDim">Hidden dimension of the FFN (default 2048).</param>
+    /// <param name="sequenceLength">Maximum sequence length (default 512).</param>
+    /// <param name="ffnActivation">FFN activation (default GELU).</param>
+    public TransformerDecoderLayer(int numHeads, int feedForwardDim,
+        int sequenceLength = 512,
+        IActivationFunction<T>? ffnActivation = null)
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
+    {
+        if (numHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numHeads), "numHeads must be positive.");
+        if (feedForwardDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(feedForwardDim), "feedForwardDim must be positive.");
+
+        _embeddingSize = -1;
+        _numHeads = numHeads;
+        _feedForwardDim = feedForwardDim;
+        _sequenceLength = sequenceLength;
+        _lazyFfnActivation = ffnActivation;
+
+        _selfAttention = null!;
+        _norm1 = null!;
+        _crossAttention = null!;
+        _norm2 = null!;
+        _feedForward = null!;
+        _feedForwardProjection = null!;
+        _norm3 = null!;
+
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastAuxiliaryLoss = NumOps.Zero;
+
+        _isInitialized = false;
+    }
+
+    /// <summary>True once the lazy sublayers have been constructed.</summary>
+    private bool _isInitialized;
+
+    /// <summary>FFN activation captured by the lazy ctor for later sublayer construction.</summary>
+    private IActivationFunction<T>? _lazyFfnActivation;
+
+    /// <summary>
+    /// Resolves <see cref="_embeddingSize"/> from <c>input.Shape[^1]</c>.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        if (IsShapeResolved) return;
+        if (input.Shape.Length < 1)
+            throw new ArgumentException(
+                $"TransformerDecoderLayer requires rank>=1 input; got rank {input.Shape.Length}.",
+                nameof(input));
+
+        if (_embeddingSize < 0)
+        {
+            _embeddingSize = input.Shape[input.Shape.Length - 1];
+            if (_embeddingSize % _numHeads != 0)
+                throw new ArgumentException(
+                    $"Resolved embeddingSize ({_embeddingSize}) must be evenly divisible by " +
+                    $"numHeads ({_numHeads}); got remainder {_embeddingSize % _numHeads}.");
+        }
+
+        var resolved = new int[input.Shape.Length];
+        for (int i = 0; i < input.Shape.Length; i++) resolved[i] = input.Shape[i];
+        ResolveShapes(resolved, resolved);
+    }
+
+    /// <summary>
+    /// Constructs the sublayers using the resolved <see cref="_embeddingSize"/>.
+    /// </summary>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+
+        lock (InitializationLock)
+        {
+            if (_isInitialized) return;
+            if (_embeddingSize <= 0)
+                throw new InvalidOperationException(
+                    "TransformerDecoderLayer.EnsureInitialized called before _embeddingSize was resolved.");
+
+            var activation = _lazyFfnActivation ?? new GELUActivation<T>();
+
+            _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads, activation);
+            _norm1 = new LayerNormalizationLayer<T>();
+            _crossAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads, activation);
+            _norm2 = new LayerNormalizationLayer<T>();
+            _feedForward = new FeedForwardLayer<T>(_feedForwardDim, activation);
+            _feedForwardProjection = new FeedForwardLayer<T>(_embeddingSize, (IActivationFunction<T>?)null);
+            _norm3 = new LayerNormalizationLayer<T>();
+
+            RegisterSubLayer(_selfAttention);
+            RegisterSubLayer(_norm1);
+            RegisterSubLayer(_crossAttention);
+            RegisterSubLayer(_norm2);
+            RegisterSubLayer(_feedForward);
+            RegisterSubLayer(_feedForwardProjection);
+            RegisterSubLayer(_norm3);
+
+            _isInitialized = true;
+        }
     }
 
     /// <summary>
@@ -672,6 +784,8 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         RegisterSubLayer(_feedForward);
         RegisterSubLayer(_feedForwardProjection);
         RegisterSubLayer(_norm3);
+
+        _isInitialized = true;
     }
 
     /// <summary>
@@ -765,6 +879,10 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input, Tensor<T> encoderOutput)
     {
+        // Lazy ctor path: resolve _embeddingSize from input.Shape[^1] and construct
+        // sublayers on first call.
+        EnsureInitializedFromInput(input);
+
         _lastInput = input;
         _lastEncoderOutput = encoderOutput;
 

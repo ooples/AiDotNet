@@ -118,7 +118,11 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// aspects of each word like its meaning, grammatical role, and context.
     /// </para>
     /// </remarks>
-    private readonly int _embeddingSize;
+    /// <remarks>
+    /// Initialized to <c>-1</c> when the lazy ctor is used; resolved from
+    /// <c>input.Shape[^1]</c> on first <see cref="Forward(Tensor{T})"/>.
+    /// </remarks>
+    private int _embeddingSize;
 
     /// <summary>
     /// The number of attention heads for the self-attention mechanism.
@@ -225,7 +229,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// making final decisions about what features to extract from each position.
     /// </para>
     /// </remarks>
-    private readonly FeedForwardLayer<T> _feedForward1;
+    private FeedForwardLayer<T> _feedForward1;
 
     /// <summary>
     /// The second (projection) layer of the feed-forward network.
@@ -234,7 +238,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Projects the expanded representation back to the original embedding size.
     /// A proper transformer FFN has two layers: expansion and projection.
     /// </remarks>
-    private readonly FeedForwardLayer<T> _feedForward2;
+    private FeedForwardLayer<T> _feedForward2;
 
     /// <summary>
     /// The layer normalization applied after the feed-forward network.
@@ -405,6 +409,107 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         RegisterSubLayer(_feedForward1);
         RegisterSubLayer(_feedForward2);
         RegisterSubLayer(_norm2);
+
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Lazy ctor: <see cref="_embeddingSize"/> is resolved from <c>input.Shape[^1]</c>
+    /// on first <see cref="Forward(Tensor{T})"/>; the inner attention/FFN/norm sublayers
+    /// are constructed then.
+    /// </summary>
+    /// <param name="numHeads">Number of attention heads.</param>
+    /// <param name="feedForwardDim">Hidden dimension of the FFN.</param>
+    public TransformerEncoderLayer(int numHeads, int feedForwardDim)
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
+    {
+        if (numHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numHeads), "numHeads must be positive.");
+        if (feedForwardDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(feedForwardDim), "feedForwardDim must be positive.");
+
+        _embeddingSize = -1;
+        _numHeads = numHeads;
+        _feedForwardDim = feedForwardDim;
+
+        // Sublayers constructed lazily inside EnsureInitialized once _embeddingSize is known.
+        _selfAttention = null!;
+        _norm1 = null!;
+        _feedForward1 = null!;
+        _feedForward2 = null!;
+        _norm2 = null!;
+
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastAuxiliaryLoss = NumOps.Zero;
+
+        _isInitialized = false;
+    }
+
+    /// <summary>
+    /// True once sublayers (attention, norm1, ffn1, ffn2, norm2) have been constructed.
+    /// Eager ctor sets this <c>true</c> at construction.
+    /// </summary>
+    private bool _isInitialized;
+
+    /// <summary>
+    /// Resolves <see cref="_embeddingSize"/> from <c>input.Shape[^1]</c> and propagates
+    /// the full input shape into the layer's resolved shapes (input == output for an
+    /// encoder block).
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        if (IsShapeResolved) return;
+        if (input.Shape.Length < 1)
+            throw new ArgumentException(
+                $"TransformerEncoderLayer requires rank>=1 input; got rank {input.Shape.Length}.",
+                nameof(input));
+
+        if (_embeddingSize < 0)
+        {
+            _embeddingSize = input.Shape[input.Shape.Length - 1];
+            if (_embeddingSize % _numHeads != 0)
+                throw new ArgumentException(
+                    $"Resolved embeddingSize ({_embeddingSize}) must be evenly divisible by " +
+                    $"numHeads ({_numHeads}); got remainder {_embeddingSize % _numHeads}.");
+        }
+
+        var resolved = new int[input.Shape.Length];
+        for (int i = 0; i < input.Shape.Length; i++) resolved[i] = input.Shape[i];
+        ResolveShapes(resolved, resolved);
+    }
+
+    /// <summary>
+    /// Constructs the sublayers (attention, norms, FFN) using the resolved
+    /// <see cref="_embeddingSize"/>.
+    /// </summary>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+
+        lock (InitializationLock)
+        {
+            if (_isInitialized) return;
+            if (_embeddingSize <= 0)
+                throw new InvalidOperationException(
+                    "TransformerEncoderLayer.EnsureInitialized called before _embeddingSize was resolved.");
+
+            _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads,
+                new GELUActivation<T>() as IActivationFunction<T>);
+            _norm1 = new LayerNormalizationLayer<T>();
+            _feedForward1 = new FeedForwardLayer<T>(_feedForwardDim,
+                new GELUActivation<T>() as IActivationFunction<T>);
+            _feedForward2 = new FeedForwardLayer<T>(_embeddingSize,
+                (IActivationFunction<T>?)null);
+            _norm2 = new LayerNormalizationLayer<T>();
+
+            RegisterSubLayer(_selfAttention);
+            RegisterSubLayer(_norm1);
+            RegisterSubLayer(_feedForward1);
+            RegisterSubLayer(_feedForward2);
+            RegisterSubLayer(_norm2);
+
+            _isInitialized = true;
+        }
     }
 
     /// <summary>
@@ -444,6 +549,10 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy ctor path: resolve _embeddingSize from input.Shape[^1] and construct
+        // the inner attention / FFN / norm sublayers on first call.
+        EnsureInitializedFromInput(input);
+
         // Handle any rank >= 2: last 2 dims are [seq, embed], earlier dims are batch-like
         int rank = input.Shape.Length;
         _inputWas2D = rank == 2;
