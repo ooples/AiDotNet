@@ -27,7 +27,7 @@ namespace AiDotNet.Interfaces;
 /// The "Process" part means it works with functions rather than simple values.
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("GaussianProcess")]
-public interface IGaussianProcess<T> : System.IDisposable
+public interface IGaussianProcess<T>
 {
     /// <summary>
     /// Trains the Gaussian Process model on the provided data.
@@ -107,4 +107,18 @@ public interface IGaussianProcess<T> : System.IDisposable
     /// This method allows you to update the kernel without retraining the entire model from scratch.
     /// </remarks>
     void UpdateKernel(IKernelFunction<T> kernel);
+}
+
+/// <summary>
+/// A Gaussian Process whose implementation owns native or unmanaged resources
+/// (e.g., cached Cholesky factors, GPU memory) and must be released deterministically.
+/// </summary>
+/// <remarks>
+/// Implemented separately from <see cref="IGaussianProcess{T}"/> so the base contract
+/// stays a pure-data interface. External implementers of <see cref="IGaussianProcess{T}"/>
+/// are not forced to add a Dispose method just because the framework's own
+/// implementations need one.
+/// </remarks>
+public interface IDisposableGaussianProcess<T> : IGaussianProcess<T>, System.IDisposable
+{
 }
