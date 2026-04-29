@@ -2159,10 +2159,14 @@ public partial class LSTMLayer<T> : LayerBase<T>
                 if (inferredInput > 0)
                 {
                     _inputSize = inferredInput;
-                    // Resolve shapes + allocate weights via OnFirstForward path.
-                    // Synthetic [1, inferredInput] shape: rank-2 satisfies the rank>=1
-                    // contract and the last axis carries the resolved input width.
-                    ResolveFromShape(new[] { 1, inferredInput });
+                    // Allocate weight tensors now (we know hiddenSize and inferredInput),
+                    // but DO NOT call ResolveFromShape with a synthetic shape — that would
+                    // bake a fake rank-2 [1, inferredInput] into InputShape/OutputShape and
+                    // override the real rank-3 [B, T, F] sequence shape on the first
+                    // actual Forward(...). Leaving _isInitialized true (set inside
+                    // EnsureInitialized) but IsShapeResolved false defers shape resolution
+                    // to OnFirstForward, which receives the real input tensor.
+                    EnsureInitialized();
                 }
                 else
                 {
