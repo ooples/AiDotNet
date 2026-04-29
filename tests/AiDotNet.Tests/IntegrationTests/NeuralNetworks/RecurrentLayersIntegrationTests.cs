@@ -23,7 +23,7 @@ public class RecurrentLayersIntegrationTests
         // Arrange
         int batchSize = 2, timeSteps = 5, inputSize = 10, hiddenSize = 8;
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new GRULayer<double>(inputSize, hiddenSize, returnSequences: false, activation: tanh);
+        var layer = new GRULayer<double>( hiddenSize, returnSequences: false, activation: tanh);
         var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
 
         // Act
@@ -42,7 +42,7 @@ public class RecurrentLayersIntegrationTests
         // Arrange
         int batchSize = 2, timeSteps = 5, inputSize = 10, hiddenSize = 8;
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new GRULayer<double>(inputSize, hiddenSize, returnSequences: true, activation: tanh);
+        var layer = new GRULayer<double>( hiddenSize, returnSequences: true, activation: tanh);
         var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
 
         // Act
@@ -62,7 +62,7 @@ public class RecurrentLayersIntegrationTests
     public async Task GRULayer_SupportsTraining_ReturnsTrue()
     {
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new GRULayer<double>(10, 8, false, tanh);
+        var layer = new GRULayer<double>( 8, false, tanh);
         Assert.True(layer.SupportsTraining);
     }
 
@@ -70,7 +70,7 @@ public class RecurrentLayersIntegrationTests
     public async Task GRULayer_GetParameters_ReturnsParameters()
     {
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new GRULayer<double>(10, 8, false, tanh);
+        var layer = new GRULayer<double>( 8, false, tanh);
         var parameters = layer.GetParameters();
         Assert.NotNull(parameters);
         Assert.True(parameters.Length > 0, "Parameters should not be empty");
@@ -82,7 +82,7 @@ public class RecurrentLayersIntegrationTests
         // Arrange
         int batchSize = 2, timeSteps = 50, inputSize = 10, hiddenSize = 8;
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new GRULayer<double>(inputSize, hiddenSize, returnSequences: true, activation: tanh);
+        var layer = new GRULayer<double>( hiddenSize, returnSequences: true, activation: tanh);
         var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
 
         // Act
@@ -105,7 +105,7 @@ public class RecurrentLayersIntegrationTests
         int batchSize = 2, timeSteps = 5, inputSize = 10, hiddenSize = 8;
         int[] inputShape = [batchSize, timeSteps, inputSize];
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new LSTMLayer<double>(inputSize, hiddenSize, inputShape, tanh);
+        var layer = new LSTMLayer<double>( hiddenSize, tanh);
         var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
 
         // Act
@@ -122,7 +122,7 @@ public class RecurrentLayersIntegrationTests
     {
         int[] inputShape = [1, 5, 10];
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new LSTMLayer<double>(10, 8, inputShape, tanh);
+        var layer = new LSTMLayer<double>( 8, tanh);
         var parameters = layer.GetParameters();
         Assert.NotNull(parameters);
         Assert.True(parameters.Length > 0, "Parameters should not be empty");
@@ -135,7 +135,7 @@ public class RecurrentLayersIntegrationTests
         int batchSize = 2, timeSteps = 50, inputSize = 10, hiddenSize = 8;
         int[] inputShape = [batchSize, timeSteps, inputSize];
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new LSTMLayer<double>(inputSize, hiddenSize, inputShape, tanh);
+        var layer = new LSTMLayer<double>( hiddenSize, tanh);
         var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
 
         // Act
@@ -152,7 +152,7 @@ public class RecurrentLayersIntegrationTests
     {
         int[] inputShape = [1, 5, 10];
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new LSTMLayer<double>(10, 8, inputShape, tanh);
+        var layer = new LSTMLayer<double>( 8, tanh);
         Assert.True(layer.SupportsTraining);
     }
 
@@ -166,7 +166,7 @@ public class RecurrentLayersIntegrationTests
         // Arrange
         int batchSize = 2, timeSteps = 5, inputSize = 10, hiddenSize = 8;
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var innerLayer = new GRULayer<double>(inputSize, hiddenSize, returnSequences: true, activation: tanh);
+        var innerLayer = new GRULayer<double>( hiddenSize, returnSequences: true, activation: tanh);
         var layer = new BidirectionalLayer<double>(innerLayer, mergeMode: true, activationFunction: tanh);
         var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
 
@@ -186,7 +186,7 @@ public class RecurrentLayersIntegrationTests
         int batchSize = 2, timeSteps = 5, inputSize = 10, hiddenSize = 8;
         int[] inputShape = [batchSize, timeSteps, inputSize];
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var innerLayer = new LSTMLayer<double>(inputSize, hiddenSize, inputShape, tanh);
+        var innerLayer = new LSTMLayer<double>( hiddenSize, tanh);
         var layer = new BidirectionalLayer<double>(innerLayer, mergeMode: true, activationFunction: tanh);
         var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
 
@@ -210,7 +210,7 @@ public class RecurrentLayersIntegrationTests
         // Arrange
         int batchSize = 2, timeSteps = 5, inputSize = 10, hiddenSize = 8;
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new RecurrentLayer<double>(inputSize, hiddenSize, tanh);
+        var layer = new RecurrentLayer<double>( hiddenSize, tanh);
         var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
 
         // Act
@@ -232,7 +232,7 @@ public class RecurrentLayersIntegrationTests
         int batchSize = 2, timeSteps = 3, inputSize = 5, hiddenSize = 4;
         int[] inputShape = [batchSize, timeSteps, inputSize];
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new GRULayer<double>(inputSize, hiddenSize, false, tanh);
+        var layer = new GRULayer<double>( hiddenSize, false, tanh);
         var input = new Tensor<double>(inputShape);
         input.Fill(0.0);
 
@@ -248,7 +248,7 @@ public class RecurrentLayersIntegrationTests
         int batchSize = 2, timeSteps = 3, inputSize = 5, hiddenSize = 4;
         int[] inputShape = [batchSize, timeSteps, inputSize];
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new LSTMLayer<double>(inputSize, hiddenSize, inputShape, tanh);
+        var layer = new LSTMLayer<double>( hiddenSize, tanh);
         var input = new Tensor<double>(inputShape);
         input.Fill(0.0);
 
@@ -264,7 +264,7 @@ public class RecurrentLayersIntegrationTests
         int batchSize = 2, timeSteps = 3, inputSize = 5, hiddenSize = 4;
         int[] inputShape = [batchSize, timeSteps, inputSize];
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new GRULayer<double>(inputSize, hiddenSize, false, tanh);
+        var layer = new GRULayer<double>( hiddenSize, false, tanh);
         var input = new Tensor<double>(inputShape);
         input.Fill(10.0);
 
@@ -280,7 +280,7 @@ public class RecurrentLayersIntegrationTests
         int batchSize = 2, timeSteps = 3, inputSize = 5, hiddenSize = 4;
         int[] inputShape = [batchSize, timeSteps, inputSize];
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new LSTMLayer<double>(inputSize, hiddenSize, inputShape, tanh);
+        var layer = new LSTMLayer<double>( hiddenSize, tanh);
         var input = new Tensor<double>(inputShape);
         input.Fill(10.0);
 
@@ -295,7 +295,7 @@ public class RecurrentLayersIntegrationTests
     {
         int batchSize = 1, timeSteps = 5, inputSize = 10, hiddenSize = 8;
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new GRULayer<double>(inputSize, hiddenSize, returnSequences: true, activation: tanh);
+        var layer = new GRULayer<double>( hiddenSize, returnSequences: true, activation: tanh);
         var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
 
         var output = layer.Forward(input);
@@ -310,7 +310,7 @@ public class RecurrentLayersIntegrationTests
         int batchSize = 1, timeSteps = 5, inputSize = 10, hiddenSize = 8;
         int[] inputShape = [batchSize, timeSteps, inputSize];
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new LSTMLayer<double>(inputSize, hiddenSize, inputShape, tanh);
+        var layer = new LSTMLayer<double>( hiddenSize, tanh);
         var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
 
         var output = layer.Forward(input);
@@ -327,7 +327,7 @@ public class RecurrentLayersIntegrationTests
     public async Task GRULayer_Clone_CreatesIndependentCopy()
     {
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var original = new GRULayer<double>(10, 8, false, tanh);
+        var original = new GRULayer<double>( 8, false, tanh);
         var input = Tensor<double>.CreateRandom(2, 5, 10);
 
         var originalOutput = original.Forward(input);
@@ -347,7 +347,7 @@ public class RecurrentLayersIntegrationTests
     {
         int[] inputShape = [2, 5, 10];
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var original = new LSTMLayer<double>(10, 8, inputShape, tanh);
+        var original = new LSTMLayer<double>( 8, tanh);
         var input = Tensor<double>.CreateRandom(2, 5, 10);
 
         var originalOutput = original.Forward(input);

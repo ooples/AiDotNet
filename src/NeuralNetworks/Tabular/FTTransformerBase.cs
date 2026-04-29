@@ -165,7 +165,6 @@ public abstract class FTTransformerBase<T>
         for (int i = 0; i < Options.NumLayers; i++)
         {
             var encoderLayer = new TransformerEncoderLayer<T>(
-                Options.EmbeddingDimension,
                 Options.NumHeads,
                 Options.FeedForwardDimension);
 

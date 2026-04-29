@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
-[LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public partial class RecurrentLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -211,103 +211,6 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="RecurrentLayer{T}"/> class with a scalar activation function.
-    /// </summary>
-    /// <param name="inputSize">The size of the input to the layer at each time step.</param>
-    /// <param name="hiddenSize">The size of the hidden state and output at each time step.</param>
-    /// <param name="activationFunction">The activation function to apply to the hidden state. Defaults to Tanh if not specified.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates a new RecurrentLayer with the specified dimensions and a scalar activation function.
-    /// The weights are initialized using Xavier/Glorot initialization to improve training dynamics, and the biases
-    /// are initialized to zero. A scalar activation function is applied element-wise to each hidden neuron independently.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a new recurrent layer for your neural network using a simple activation function.
-    /// 
-    /// When you create this layer, you specify:
-    /// - inputSize: How many features come into the layer at each time step
-    /// - hiddenSize: How many memory units (neurons) the layer has
-    /// - activationFunction: How to transform the hidden state (defaults to tanh)
-    /// 
-    /// The hiddenSize determines the "memory capacity" of the layer:
-    /// - Larger values can remember more information about the sequence
-    /// - But also require more computation and might be harder to train
-    /// 
-    /// Tanh is commonly used as the activation function because:
-    /// - It outputs values between -1 and 1
-    /// - It has a nice gradient for training
-    /// - It works well for capturing both positive and negative patterns
-    /// 
-    /// The layer starts with carefully initialized weights to help training proceed smoothly.
-    /// </para>
-    /// </remarks>
-    public RecurrentLayer(int inputSize, int hiddenSize, IActivationFunction<T>? activationFunction = null)
-        : base([inputSize], [hiddenSize], activationFunction ?? new TanhActivation<T>())
-    {
-        _inputSize = inputSize;
-        _hiddenSize = hiddenSize;
-
-        _inputWeights = new Tensor<T>([hiddenSize, inputSize]);
-        _hiddenWeights = new Tensor<T>([hiddenSize, hiddenSize]);
-        _biases = new Tensor<T>([hiddenSize]);
-
-        InitializeParameters();
-
-        // Register trainable parameters for GPU memory optimization
-        RegisterTrainableParameter(_inputWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_hiddenWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
-
-        _isInitialized = true;
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="RecurrentLayer{T}"/> class with a vector activation function.
-    /// </summary>
-    /// <param name="inputSize">The size of the input to the layer at each time step.</param>
-    /// <param name="hiddenSize">The size of the hidden state and output at each time step.</param>
-    /// <param name="vectorActivationFunction">The vector activation function to apply to the hidden state. Defaults to Tanh if not specified.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates a new RecurrentLayer with the specified dimensions and a vector activation function.
-    /// The weights are initialized using Xavier/Glorot initialization to improve training dynamics, and the biases
-    /// are initialized to zero. A vector activation function is applied to the entire hidden state vector at once,
-    /// which allows for interactions between different hidden neurons.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a new recurrent layer for your neural network using an advanced activation function.
-    /// 
-    /// When you create this layer, you specify:
-    /// - inputSize: How many features come into the layer at each time step
-    /// - hiddenSize: How many memory units (neurons) the layer has
-    /// - vectorActivationFunction: How to transform the entire hidden state as a group
-    /// 
-    /// A vector activation means all hidden neurons are calculated together, which can capture relationships between them.
-    /// This is an advanced option that might be useful for specific types of sequence problems.
-    /// 
-    /// This constructor works the same as the scalar version, but allows for more sophisticated activation patterns
-    /// across the hidden state. Most RNN implementations use the scalar version with tanh activation.
-    /// </para>
-    /// </remarks>
-    public RecurrentLayer(int inputSize, int hiddenSize, IVectorActivationFunction<T>? vectorActivationFunction = null)
-        : base([inputSize], [hiddenSize], vectorActivationFunction ?? new TanhActivation<T>())
-    {
-        _inputSize = inputSize;
-        _hiddenSize = hiddenSize;
-
-        _inputWeights = new Tensor<T>([hiddenSize, inputSize]);
-        _hiddenWeights = new Tensor<T>([hiddenSize, hiddenSize]);
-        _biases = new Tensor<T>([hiddenSize]);
-
-        InitializeParameters();
-
-        // Register trainable parameters for GPU memory optimization
-        RegisterTrainableParameter(_inputWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_hiddenWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
-
-        _isInitialized = true;
-    }
 
     /// <summary>
     /// Lazy ctor: input feature size resolved from <c>input.Shape[^1]</c> on first

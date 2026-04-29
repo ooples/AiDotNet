@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 2, 16")]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "2, 16")]
 public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -354,64 +354,6 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return metadata;
     }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="TransformerEncoderLayer{T}"/> class.
-    /// </summary>
-    /// <param name="embeddingSize">The size of the embeddings.</param>
-    /// <param name="numHeads">The number of attention heads.</param>
-    /// <param name="feedForwardDim">The dimension of the feed-forward network.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates a transformer encoder layer with the specified dimensions. It initializes the
-    /// self-attention, layer normalization, and feed-forward sublayers with appropriate dimensions and activation functions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This constructor creates a new transformer encoder layer with the specified settings.
-    /// 
-    /// The parameters you provide determine:
-    /// - embeddingSize: How rich the representation of each token is (more = more expressive)
-    /// - numHeads: How many different "perspectives" the attention mechanism can have
-    /// - feedForwardDim: How much processing capacity the feed-forward network has
-    /// 
-    /// These settings control the capacity, expressiveness, and computational requirements of the encoder.
-    /// Typical values might be 512 for embedding size, 8 attention heads, and 2048 for the feed-forward dimension,
-    /// similar to those used in the original transformer paper.
-    /// </para>
-    /// </remarks>
-    public TransformerEncoderLayer(int embeddingSize, int numHeads, int feedForwardDim)
-        : base([embeddingSize], [embeddingSize])
-    {
-        _embeddingSize = embeddingSize;
-        _numHeads = numHeads;
-        _feedForwardDim = feedForwardDim;
-
-        _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, (_embeddingSize) / (_numHeads),
-            new GELUActivation<T>() as IActivationFunction<T>);
-
-        _norm1 = new LayerNormalizationLayer<T>();
-
-        // Standard transformer FFN: Linear(embed -> ff) + GELU + Linear(ff -> embed)
-        _feedForward1 = new FeedForwardLayer<T>(
-            _feedForwardDim,
-            new GELUActivation<T>() as IActivationFunction<T>);
-
-        _feedForward2 = new FeedForwardLayer<T>(
-            _embeddingSize,
-            (IActivationFunction<T>?)null); // No activation on projection layer
-
-        _norm2 = new LayerNormalizationLayer<T>();
-
-        // Initialize NumOps-based fields
-        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
-        _lastAuxiliaryLoss = NumOps.Zero;
-
-        RegisterSubLayer(_selfAttention);
-        RegisterSubLayer(_norm1);
-        RegisterSubLayer(_feedForward1);
-        RegisterSubLayer(_feedForward2);
-        RegisterSubLayer(_norm2);
-
-        _isInitialized = true;
-    }
 
     /// <summary>
     /// Lazy ctor: <see cref="_embeddingSize"/> is resolved from <c>input.Shape[^1]</c>

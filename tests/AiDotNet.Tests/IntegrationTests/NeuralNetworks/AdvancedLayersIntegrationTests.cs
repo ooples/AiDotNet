@@ -25,7 +25,7 @@ public class AdvancedLayersIntegrationTests
         int embeddingSize = 64;
         int numHeads = 4;
         int feedForwardDim = 256;
-        var layer = new TransformerEncoderLayer<float>(embeddingSize, numHeads, feedForwardDim);
+        var layer = new TransformerEncoderLayer<float>( numHeads, feedForwardDim);
 
         int batchSize = 2;
         var input = Tensor<float>.CreateRandom([batchSize, embeddingSize]);
@@ -47,7 +47,7 @@ public class AdvancedLayersIntegrationTests
         int embeddingSize = 64;
         int numHeads = 8;
         int feedForwardDim = 256;
-        var layer = new TransformerEncoderLayer<float>(embeddingSize, numHeads, feedForwardDim);
+        var layer = new TransformerEncoderLayer<float>( numHeads, feedForwardDim);
 
         int batchSize = 2;
         int seqLen = 10;
@@ -72,7 +72,7 @@ public class AdvancedLayersIntegrationTests
         int embeddingSize = 64;
         int numHeads = 4;
         int feedForwardDim = 256;
-        var original = new TransformerEncoderLayer<float>(embeddingSize, numHeads, feedForwardDim);
+        var original = new TransformerEncoderLayer<float>( numHeads, feedForwardDim);
 
         // Act
         var clone = original.Clone();
@@ -90,7 +90,7 @@ public class AdvancedLayersIntegrationTests
         int embeddingSize = 64;
         int numHeads = 4;
         int feedForwardDim = 256;
-        var layer = new TransformerEncoderLayer<float>(embeddingSize, numHeads, feedForwardDim);
+        var layer = new TransformerEncoderLayer<float>( numHeads, feedForwardDim);
 
         // Act
         int paramCount = layer.ParameterCount;
@@ -111,7 +111,7 @@ public class AdvancedLayersIntegrationTests
         int numHeads = 4;
         int feedForwardDim = 256;
         int sequenceLength = 10;
-        var layer = new TransformerDecoderLayer<float>(embeddingSize, numHeads, feedForwardDim, sequenceLength, (IActivationFunction<float>?)null);
+        var layer = new TransformerDecoderLayer<float>( numHeads, feedForwardDim, sequenceLength, (IActivationFunction<float>?)null);
 
         // Decoder input and encoder output (both needed for cross-attention)
         var input = Tensor<float>.CreateRandom([2, embeddingSize]);
@@ -133,7 +133,7 @@ public class AdvancedLayersIntegrationTests
         int numHeads = 8;
         int feedForwardDim = 256;
         int sequenceLength = 10;
-        var layer = new TransformerDecoderLayer<float>(embeddingSize, numHeads, feedForwardDim, sequenceLength, (IActivationFunction<float>?)null);
+        var layer = new TransformerDecoderLayer<float>( numHeads, feedForwardDim, sequenceLength, (IActivationFunction<float>?)null);
 
         int batchSize = 2;
         var input = Tensor<float>.CreateRandom([batchSize, sequenceLength, embeddingSize]);
@@ -157,7 +157,7 @@ public class AdvancedLayersIntegrationTests
         int numHeads = 4;
         int feedForwardDim = 256;
         int sequenceLength = 10;
-        var original = new TransformerDecoderLayer<float>(embeddingSize, numHeads, feedForwardDim, sequenceLength, (IActivationFunction<float>?)null);
+        var original = new TransformerDecoderLayer<float>( numHeads, feedForwardDim, sequenceLength, (IActivationFunction<float>?)null);
 
         // Act
         var clone = original.Clone();
@@ -576,8 +576,8 @@ public class AdvancedLayersIntegrationTests
         int feedForwardDim = 256;
         int seqLen = 10;
 
-        var encoder = new TransformerEncoderLayer<float>(embeddingSize, numHeads, feedForwardDim);
-        var decoder = new TransformerDecoderLayer<float>(embeddingSize, numHeads, feedForwardDim, seqLen, (IActivationFunction<float>?)null);
+        var encoder = new TransformerEncoderLayer<float>( numHeads, feedForwardDim);
+        var decoder = new TransformerDecoderLayer<float>( numHeads, feedForwardDim, seqLen, (IActivationFunction<float>?)null);
 
         var sourceInput = Tensor<float>.CreateRandom([2, seqLen, embeddingSize]);
         var targetInput = Tensor<float>.CreateRandom([2, seqLen, embeddingSize]);
@@ -667,7 +667,7 @@ public class AdvancedLayersIntegrationTests
         int embeddingSize = 8;
         int numHeads = 2;
         int feedForwardDim = 16;
-        var layer = new TransformerEncoderLayer<float>(embeddingSize, numHeads, feedForwardDim);
+        var layer = new TransformerEncoderLayer<float>( numHeads, feedForwardDim);
 
         var input = Tensor<float>.CreateRandom([1, embeddingSize]);
 
@@ -1191,7 +1191,7 @@ public class AdvancedLayersIntegrationTests
         int inputSize = 16;
         int hiddenSize = 32;
         bool returnSequences = false;
-        var layer = new GRULayer<float>(inputSize, hiddenSize, returnSequences, (IActivationFunction<float>?)null);
+        var layer = new GRULayer<float>( hiddenSize, returnSequences, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, 5, inputSize]); // [batch, sequence, features]
 
@@ -1211,7 +1211,7 @@ public class AdvancedLayersIntegrationTests
         int inputSize = 16;
         int hiddenSize = 32;
         bool returnSequences = true;
-        var layer = new GRULayer<float>(inputSize, hiddenSize, returnSequences, (IActivationFunction<float>?)null);
+        var layer = new GRULayer<float>( hiddenSize, returnSequences, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, 5, inputSize]); // [batch, sequence, features]
 
@@ -1230,7 +1230,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 8;
         int hiddenSize = 16;
-        var original = new GRULayer<float>(inputSize, hiddenSize, false, (IActivationFunction<float>?)null);
+        var original = new GRULayer<float>( hiddenSize, false, (IActivationFunction<float>?)null);
         var input = Tensor<float>.CreateRandom([1, 3, inputSize]);
 
         // Act
@@ -1496,7 +1496,7 @@ public class AdvancedLayersIntegrationTests
         int hiddenSize = 32;
         int sequenceLength = 5;
         int[] inputShape = [sequenceLength, inputSize];
-        var layer = new LSTMLayer<float>(inputSize, hiddenSize, inputShape, (IActivationFunction<float>?)null);
+        var layer = new LSTMLayer<float>( hiddenSize, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, sequenceLength, inputSize]); // [batch, sequence, features]
 
@@ -1516,7 +1516,7 @@ public class AdvancedLayersIntegrationTests
         int hiddenSize = 32;
         int sequenceLength = 10;
         int[] inputShape = [sequenceLength, inputSize];
-        var layer = new LSTMLayer<float>(inputSize, hiddenSize, inputShape, (IActivationFunction<float>?)null);
+        var layer = new LSTMLayer<float>( hiddenSize, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, sequenceLength, inputSize]); // [batch, sequence, features]
 
@@ -1537,7 +1537,7 @@ public class AdvancedLayersIntegrationTests
         int hiddenSize = 16;
         int sequenceLength = 3;
         int[] inputShape = [sequenceLength, inputSize];
-        var original = new LSTMLayer<float>(inputSize, hiddenSize, inputShape, (IActivationFunction<float>?)null);
+        var original = new LSTMLayer<float>( hiddenSize, (IActivationFunction<float>?)null);
         var input = Tensor<float>.CreateRandom([1, sequenceLength, inputSize]);
 
         // Act
@@ -1559,7 +1559,7 @@ public class AdvancedLayersIntegrationTests
         int hiddenSize = 32;
         int sequenceLength = 5;
         int[] inputShape = [sequenceLength, inputSize];
-        var layer = new LSTMLayer<float>(inputSize, hiddenSize, inputShape, (IActivationFunction<float>?)null);
+        var layer = new LSTMLayer<float>( hiddenSize, (IActivationFunction<float>?)null);
 
         // Act
         int paramCount = layer.ParameterCount;
@@ -3181,7 +3181,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 10;
         int hiddenSize = 20;
-        var layer = new RecurrentLayer<float>(inputSize, hiddenSize,
+        var layer = new RecurrentLayer<float>( hiddenSize,
             (IActivationFunction<float>)new TanhActivation<float>());
 
         // Input: [batch, sequenceLength, inputSize]
@@ -3201,7 +3201,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 8;
         int hiddenSize = 16;
-        var original = new RecurrentLayer<float>(inputSize, hiddenSize,
+        var original = new RecurrentLayer<float>( hiddenSize,
             (IActivationFunction<float>)new TanhActivation<float>());
         var input = Tensor<float>.CreateRandom([1, 4, inputSize]);
 
@@ -3273,7 +3273,7 @@ public class AdvancedLayersIntegrationTests
         int hiddenSize = 20;
         int sequenceLength = 5;
         int[] inputShape = [sequenceLength, inputSize];
-        var innerLayer = new LSTMLayer<float>(inputSize, hiddenSize, inputShape,
+        var innerLayer = new LSTMLayer<float>( hiddenSize,
             (IActivationFunction<float>)new TanhActivation<float>());
         var layer = new BidirectionalLayer<float>(innerLayer, mergeMode: true,
             activationFunction: (IActivationFunction<float>)new IdentityActivation<float>());
@@ -3296,7 +3296,7 @@ public class AdvancedLayersIntegrationTests
         int inputSize = 8;
         int hiddenSize = 16;
         int sequenceLength = 4;
-        var innerLayer = new GRULayer<float>(inputSize, hiddenSize, returnSequences: false,
+        var innerLayer = new GRULayer<float>( hiddenSize, returnSequences: false,
             activation: (IActivationFunction<float>)new TanhActivation<float>());
         var original = new BidirectionalLayer<float>(innerLayer, mergeMode: false,
             activationFunction: (IActivationFunction<float>)new IdentityActivation<float>());

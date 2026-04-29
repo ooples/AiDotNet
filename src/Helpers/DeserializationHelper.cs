@@ -930,7 +930,7 @@ public static class DeserializationHelper
         {
             int inputSize = inputShape.Length > 0 ? inputShape[^1] : 128;
             int hiddenSize = outputShape.Length > 0 ? outputShape[^1] : 64;
-            instance = new RecurrentLayer<T>(inputSize, hiddenSize, (IActivationFunction<T>?)null);
+            instance = new RecurrentLayer<T>( hiddenSize, (IActivationFunction<T>?)null);
         }
         else if (genericDef == typeof(SparseLinearLayer<>))
         {

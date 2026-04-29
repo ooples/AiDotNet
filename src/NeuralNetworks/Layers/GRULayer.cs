@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
-[LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, false, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "8, false, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public partial class GRULayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -578,136 +578,6 @@ public partial class GRULayer<T> : LayerBase<T>
         }
     }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="GRULayer{T}"/> class with the specified dimensions, return behavior, and element-wise activation functions.
-    /// </summary>
-    /// <param name="inputSize">The size of the input feature vector at each time step.</param>
-    /// <param name="hiddenSize">The size of the hidden state vector.</param>
-    /// <param name="returnSequences">If <c>true</c>, returns all hidden states; if <c>false</c>, returns only the final hidden state.</param>
-    /// <param name="activation">The activation function for the candidate hidden state. Defaults to tanh if not specified.</param>
-    /// <param name="recurrentActivation">The activation function for the gates. Defaults to sigmoid if not specified.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates a new GRU layer with the specified dimensions and element-wise activation functions.
-    /// The weights are initialized randomly with a scale factor based on the hidden size, and the biases are initialized to zero.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a new GRU layer with standard activation functions.
-    /// 
-    /// When creating a GRU layer, you specify:
-    /// - inputSize: How many features each element in your sequence has
-    /// - hiddenSize: How large the GRU's "memory" should be
-    /// - returnSequences: Whether you want information about every element or just a final summary
-    /// - activation: How to shape new information (default is tanh, outputting values between -1 and 1)
-    /// - recurrentActivation: How the gates should work (default is sigmoid, outputting values between 0 and 1)
-    /// 
-    /// For example, if processing sentences where each word is represented by a 100-dimensional vector,
-    /// and you want a 200-dimensional memory, you would use inputSize=100 and hiddenSize=200.
-    /// </para>
-    /// </remarks>
-    public GRULayer(int inputSize, int hiddenSize,
-                    bool returnSequences = false,
-                    IActivationFunction<T>? activation = null,
-                    IActivationFunction<T>? recurrentActivation = null)
-        : base([inputSize], [hiddenSize], activation ?? new TanhActivation<T>())
-    {
-        _inputSize = inputSize;
-        _hiddenSize = hiddenSize;
-        _returnSequences = returnSequences;
-        _activation = activation ?? new TanhActivation<T>();
-        _recurrentActivation = recurrentActivation ?? new SigmoidActivation<T>();
-
-        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _hiddenSize)));
-
-        _Wz = InitializeTensor(_hiddenSize, _inputSize, scale);
-        _Wr = InitializeTensor(_hiddenSize, _inputSize, scale);
-        _Wh = InitializeTensor(_hiddenSize, _inputSize, scale);
-
-        _Uz = InitializeTensor(_hiddenSize, _hiddenSize, scale);
-        _Ur = InitializeTensor(_hiddenSize, _hiddenSize, scale);
-        _Uh = InitializeTensor(_hiddenSize, _hiddenSize, scale);
-
-        _bz = new Tensor<T>([_hiddenSize]);
-        _br = new Tensor<T>([_hiddenSize]);
-        _bh = new Tensor<T>([_hiddenSize]);
-
-        // Register trainable parameters for GPU memory optimization
-        RegisterTrainableParameter(_Wz, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Wr, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Wh, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Uz, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Ur, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Uh, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_bz, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_br, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_bh, PersistentTensorRole.Biases);
-
-        _isInitialized = true;
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="GRULayer{T}"/> class with the specified dimensions, return behavior, and vector activation functions.
-    /// </summary>
-    /// <param name="inputSize">The size of the input feature vector at each time step.</param>
-    /// <param name="hiddenSize">The size of the hidden state vector.</param>
-    /// <param name="returnSequences">If <c>true</c>, returns all hidden states; if <c>false</c>, returns only the final hidden state.</param>
-    /// <param name="vectorActivation">The vector activation function for the candidate hidden state. Defaults to tanh if not specified.</param>
-    /// <param name="vectorRecurrentActivation">The vector activation function for the gates. Defaults to sigmoid if not specified.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates a new GRU layer with the specified dimensions and vector activation functions.
-    /// Vector activation functions operate on entire vectors rather than individual elements, which can capture
-    /// dependencies between different elements of the vectors.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a new GRU layer with more advanced vector-based activation functions.
-    /// 
-    /// Vector activation functions:
-    /// - Process entire groups of numbers together, not just one at a time
-    /// - Can capture relationships between different features
-    /// - May be more powerful for complex patterns
-    /// 
-    /// This constructor is useful when you need the layer to understand how different
-    /// features interact with each other, rather than treating each feature independently.
-    /// </para>
-    /// </remarks>
-    public GRULayer(int inputSize, int hiddenSize,
-                    bool returnSequences = false,
-                    IVectorActivationFunction<T>? vectorActivation = null,
-                    IVectorActivationFunction<T>? vectorRecurrentActivation = null)
-        : base([inputSize], [hiddenSize], vectorActivation ?? new TanhActivation<T>())
-    {
-        _inputSize = inputSize;
-        _hiddenSize = hiddenSize;
-        _returnSequences = returnSequences;
-        _vectorActivation = vectorActivation ?? new TanhActivation<T>();
-        _vectorRecurrentActivation = vectorRecurrentActivation ?? new SigmoidActivation<T>();
-
-        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _hiddenSize)));
-
-        _Wz = InitializeTensor(_hiddenSize, _inputSize, scale);
-        _Wr = InitializeTensor(_hiddenSize, _inputSize, scale);
-        _Wh = InitializeTensor(_hiddenSize, _inputSize, scale);
-
-        _Uz = InitializeTensor(_hiddenSize, _hiddenSize, scale);
-        _Ur = InitializeTensor(_hiddenSize, _hiddenSize, scale);
-        _Uh = InitializeTensor(_hiddenSize, _hiddenSize, scale);
-
-        _bz = new Tensor<T>([_hiddenSize]);
-        _br = new Tensor<T>([_hiddenSize]);
-        _bh = new Tensor<T>([_hiddenSize]);
-
-        // Register trainable parameters for GPU memory optimization
-        RegisterTrainableParameter(_Wz, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Wr, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Wh, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Uz, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Ur, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Uh, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_bz, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_br, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_bh, PersistentTensorRole.Biases);
-
-        _isInitialized = true;
-    }
 
     /// <summary>
     /// Initializes a tensor with scaled random values.

@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, ApiShape = LayerApiShape.DualTensor, TestInputShape = "4, 8", TestConstructorArgs = "8, 2, 16, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, ApiShape = LayerApiShape.DualTensor, TestInputShape = "4, 8", TestConstructorArgs = "2, 16, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -543,76 +543,6 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _feedForwardProjection.ParameterCount +
         _norm3.ParameterCount;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="TransformerDecoderLayer{T}"/> class with scalar activation function.
-    /// </summary>
-    /// <param name="embeddingSize">The size of the embeddings. Default is 512.</param>
-    /// <param name="numHeads">The number of attention heads. Default is 8.</param>
-    /// <param name="feedForwardDim">The dimension of the feed-forward network. Default is 2048.</param>
-    /// <param name="sequenceLength">The maximum sequence length. Default is 512.</param>
-    /// <param name="ffnActivation">The activation function for the feed-forward network. Default is GELU.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates a transformer decoder layer with the specified dimensions and a scalar activation function
-    /// for the feed-forward network. It initializes all the sublayers needed for the transformer decoder architecture.
-    /// </para>
-    /// <para><b>For Beginners:</b> This constructor creates a new transformer decoder layer with standard settings.
-    /// 
-    /// The parameters you provide determine:
-    /// - embeddingSize: How rich the representation of each token is (more = more expressive)
-    /// - numHeads: How many different "perspectives" the attention mechanism can have
-    /// - feedForwardDim: How much processing capacity the feed-forward network has
-    /// - sequenceLength: The maximum number of tokens the model can process
-    /// - ffnActivation: The mathematical function used in the feed-forward network
-    /// 
-    /// These settings control the capacity, expressiveness, and computational requirements of the decoder.
-    /// The default values (512 embedding size, 8 heads, etc.) are similar to those used in the original
-    /// transformer paper and work well for many language tasks.
-    /// </para>
-    /// </remarks>
-    public TransformerDecoderLayer(int embeddingSize,
-        int numHeads = 8,
-        int feedForwardDim = 2048,
-        int sequenceLength = 512,
-        IActivationFunction<T>? ffnActivation = null,
-        IEngine? engine = null)
-        : base([embeddingSize], [embeddingSize])
-    {
-        _embeddingSize = embeddingSize;
-        _numHeads = numHeads;
-        _feedForwardDim = feedForwardDim;
-        _sequenceLength = sequenceLength;
-
-        var activation = ffnActivation ?? new GELUActivation<T>();
-
-        // Self-attention layer (no activation)
-        _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, (_embeddingSize) / (_numHeads), activation);
-        _norm1 = new LayerNormalizationLayer<T>();
-
-        // Cross-attention layer (no activation)
-        _crossAttention = new MultiHeadAttentionLayer<T>(_numHeads, (_embeddingSize) / (_numHeads), activation);
-        _norm2 = new LayerNormalizationLayer<T>();
-
-        // Feed-forward layer (with activation) - expands to hidden dimension
-        _feedForward = new FeedForwardLayer<T>(_feedForwardDim, activation);
-        // Projection layer (no activation) - projects back to embedding size
-        _feedForwardProjection = new FeedForwardLayer<T>(_embeddingSize, (IActivationFunction<T>?)null);
-        _norm3 = new LayerNormalizationLayer<T>();
-
-        // Initialize NumOps-based fields
-        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
-        _lastAuxiliaryLoss = NumOps.Zero;
-
-        RegisterSubLayer(_selfAttention);
-        RegisterSubLayer(_norm1);
-        RegisterSubLayer(_crossAttention);
-        RegisterSubLayer(_norm2);
-        RegisterSubLayer(_feedForward);
-        RegisterSubLayer(_feedForwardProjection);
-        RegisterSubLayer(_norm3);
-
-        _isInitialized = true;
-    }
 
     /// <summary>
     /// Lazy ctor: <see cref="_embeddingSize"/> is resolved from <c>input.Shape[^1]</c>
@@ -720,73 +650,6 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
     }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="TransformerDecoderLayer{T}"/> class with vector activation function.
-    /// </summary>
-    /// <param name="embeddingSize">The size of the embeddings. Default is 512.</param>
-    /// <param name="numHeads">The number of attention heads. Default is 8.</param>
-    /// <param name="feedForwardDim">The dimension of the feed-forward network. Default is 2048.</param>
-    /// <param name="sequenceLength">The maximum sequence length. Default is 512.</param>
-    /// <param name="ffnVectorActivation">The vector activation function for the feed-forward network. Default is GELU.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates a transformer decoder layer with the specified dimensions and a vector activation function
-    /// for the feed-forward network. It initializes all the sublayers needed for the transformer decoder architecture.
-    /// </para>
-    /// <para><b>For Beginners:</b> This constructor is similar to the previous one, but uses vector activations.
-    /// 
-    /// Vector activations:
-    /// - Process entire groups of numbers at once, rather than one at a time
-    /// - Can capture relationships between different elements
-    /// - Allow for more complex transformations
-    /// 
-    /// This version is useful when you need more sophisticated processing that considers
-    /// how different features relate to each other, rather than treating each feature independently.
-    /// </para>
-    /// </remarks>
-    public TransformerDecoderLayer(int embeddingSize,
-        int numHeads = 8,
-        int feedForwardDim = 2048,
-        int sequenceLength = 512,
-        IVectorActivationFunction<T>? ffnVectorActivation = null,
-        IEngine? engine = null)
-        : base([embeddingSize], [embeddingSize])
-    {
-        _embeddingSize = embeddingSize;
-        _numHeads = numHeads;
-        _feedForwardDim = feedForwardDim;
-        _sequenceLength = sequenceLength;
-
-        var activation = ffnVectorActivation ?? new GELUActivation<T>();
-
-        // Self-attention layer (no activation)
-        _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, (_embeddingSize) / (_numHeads), activation);
-        _norm1 = new LayerNormalizationLayer<T>();
-
-        // Cross-attention layer (no activation)
-        _crossAttention = new MultiHeadAttentionLayer<T>(_numHeads, (_embeddingSize) / (_numHeads), activation);
-        _norm2 = new LayerNormalizationLayer<T>();
-
-        // Feed-forward layer (with vector activation) - expands to hidden dimension
-        _feedForward = new FeedForwardLayer<T>(_feedForwardDim, activation);
-        // Projection layer (no activation) - projects back to embedding size
-        _feedForwardProjection = new FeedForwardLayer<T>(_embeddingSize, (IActivationFunction<T>?)null);
-        _norm3 = new LayerNormalizationLayer<T>();
-
-        // Initialize NumOps-based fields
-        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
-        _lastAuxiliaryLoss = NumOps.Zero;
-
-        RegisterSubLayer(_selfAttention);
-        RegisterSubLayer(_norm1);
-        RegisterSubLayer(_crossAttention);
-        RegisterSubLayer(_norm2);
-        RegisterSubLayer(_feedForward);
-        RegisterSubLayer(_feedForwardProjection);
-        RegisterSubLayer(_norm3);
-
-        _isInitialized = true;
-    }
 
     /// <summary>
     /// Declares named input ports for this multi-input layer.
