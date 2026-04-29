@@ -570,7 +570,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// transformer paper and work well for many language tasks.
     /// </para>
     /// </remarks>
-    public TransformerDecoderLayer(int embeddingSize = 512,
+    public TransformerDecoderLayer(int embeddingSize,
         int numHeads = 8,
         int feedForwardDim = 2048,
         int sequenceLength = 512,
@@ -744,7 +744,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// how different features relate to each other, rather than treating each feature independently.
     /// </para>
     /// </remarks>
-    public TransformerDecoderLayer(int embeddingSize = 512,
+    public TransformerDecoderLayer(int embeddingSize,
         int numHeads = 8,
         int feedForwardDim = 2048,
         int sequenceLength = 512,
