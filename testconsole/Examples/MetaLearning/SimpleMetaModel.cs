@@ -162,4 +162,6 @@ internal class SimpleMetaModel : IFullModel<double, Matrix<double>, Vector<doubl
     }
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+    public void Dispose() { /* mock holds no resources */ }
 }

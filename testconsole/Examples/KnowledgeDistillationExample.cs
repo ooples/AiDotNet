@@ -372,7 +372,9 @@ public static class KnowledgeDistillationExample
         public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null) => new Vector<double>(0);
         public void ApplyGradients(Vector<double> gradients, double learningRate) { }
 
-    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+        public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+        public void Dispose() { /* mock holds no resources */ }
     }
 }
 
