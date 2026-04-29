@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+﻿using System.Linq;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -177,7 +178,10 @@ public class VAEDecoder<T> : LayerBase<T>
         if (baseChannels <= 0)
             throw new ArgumentOutOfRangeException(nameof(baseChannels));
 
-        var resolvedChannelMults = channelMults ?? new[] { 1, 2, 4, 4 };
+        // Defensive copy — _channelMults must not alias the caller-provided array
+        // (later mutation would silently desync runtime properties from the layers
+        // already built and from checkpoint metadata).
+        var resolvedChannelMults = (channelMults ?? new[] { 1, 2, 4, 4 }).ToArray();
         if (resolvedChannelMults.Length == 0)
             throw new ArgumentException("At least one channel multiplier is required.", nameof(channelMults));
         for (int i = 0; i < resolvedChannelMults.Length; i++)
@@ -196,6 +200,20 @@ public class VAEDecoder<T> : LayerBase<T>
         if (numGroups <= 0)
             throw new ArgumentOutOfRangeException(nameof(numGroups), "Number of groups must be positive.");
 
+        // outputSpatialSize must be evenly divisible by 2^(levels-1) so the
+        // bottleneck → output upsample chain returns exactly to outputSpatialSize.
+        // Without this, integer division silently truncates and the actual decoded
+        // shape diverges from the declared output shape.
+        int upsampleFactor = 1 << (resolvedChannelMults.Length - 1);
+        if (outputSpatialSize % upsampleFactor != 0)
+        {
+            throw new ArgumentException(
+                $"outputSpatialSize ({outputSpatialSize}) must be divisible by " +
+                $"{upsampleFactor} = 2^{resolvedChannelMults.Length - 1} for " +
+                $"{resolvedChannelMults.Length}-level upsampling without shape drift.",
+                nameof(outputSpatialSize));
+        }
+
         _outputChannels = outputChannels;
         _latentChannels = latentChannels;
         _baseChannels = baseChannels;
@@ -206,12 +224,8 @@ public class VAEDecoder<T> : LayerBase<T>
         _silu = new SiLUActivation<T>();
         _tanh = new TanhActivation<T>();
 
-        // Calculate bottleneck spatial size
-        _bottleneckSize = outputSpatialSize;
-        for (int i = 0; i < _channelMults.Length - 1; i++)
-        {
-            _bottleneckSize /= 2;
-        }
+        // Bottleneck spatial size: divide by the validated upsample factor.
+        _bottleneckSize = outputSpatialSize / upsampleFactor;
 
         _upBlockOutputs = new Tensor<T>?[_channelMults.Length];
 
@@ -442,10 +456,21 @@ public class VAEDecoder<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Sets all trainable parameters from a single vector.
+    /// Sets all trainable parameters from a single vector. Throws
+    /// <see cref="ArgumentException"/> if <paramref name="parameters"/> does not
+    /// match the total parameter length — silently truncating or padding would
+    /// zero-fill some layer params or ignore tail values.
     /// </summary>
     public override void SetParameters(Vector<T> parameters)
     {
+        int expectedLength = GetParameters().Length;
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException(
+                $"VAEDecoder parameter length mismatch: expected {expectedLength}, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         int index = 0;
 
         SetLayerParams(_postQuantConv, parameters, ref index);
@@ -470,7 +495,9 @@ public class VAEDecoder<T> : LayerBase<T>
         var layerParams = layer.GetParameters();
         var newParams = new Vector<T>(layerParams.Length);
 
-        for (int i = 0; i < layerParams.Length && index < parameters.Length; i++)
+        // Caller (SetParameters above) has already validated the total length, so
+        // each layer's slice is guaranteed to fit.
+        for (int i = 0; i < layerParams.Length; i++)
         {
             newParams[i] = parameters[index++];
         }
