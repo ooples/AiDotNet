@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
-[LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public partial class RecurrentLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -84,6 +84,24 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     private Tensor<T> _biases;
 
     /// <summary>
+    /// Resolved input feature size. <c>-1</c> until the lazy ctor's first forward
+    /// reads it from <c>input.Shape[^1]</c>.
+    /// </summary>
+    private int _inputSize;
+
+    /// <summary>
+    /// Hidden state size — fixed at construction.
+    /// </summary>
+    private readonly int _hiddenSize;
+
+    /// <summary>
+    /// True once weight tensors are allocated. (As of #1212 the eager constructors
+    /// are removed — every <see cref="RecurrentLayer{T}"/> goes through
+    /// <see cref="EnsureInitialized"/> on first forward to flip this true.)
+    /// </summary>
+    private bool _isInitialized;
+
+    /// <summary>
     /// Gets the total number of trainable parameters in this recurrent layer.
     /// </summary>
     /// <remarks>
@@ -93,6 +111,8 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     /// - Biases: hiddenSize
     /// </remarks>
     public override int ParameterCount =>
+        // Weight/bias tensors are zero-sized placeholders before first forward, so
+        // .Length already returns 0. Result matches GetParameters().Length.
         _inputWeights.Length + _hiddenWeights.Length + _biases.Length;
 
     /// <summary>
@@ -194,92 +214,103 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
+
     /// <summary>
-    /// Initializes a new instance of the <see cref="RecurrentLayer{T}"/> class with a scalar activation function.
+    /// Lazy ctor: input feature size resolved from <c>input.Shape[^1]</c> on first
+    /// <see cref="Forward(Tensor{T})"/>; weights allocated then.
     /// </summary>
-    /// <param name="inputSize">The size of the input to the layer at each time step.</param>
-    /// <param name="hiddenSize">The size of the hidden state and output at each time step.</param>
-    /// <param name="activationFunction">The activation function to apply to the hidden state. Defaults to Tanh if not specified.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates a new RecurrentLayer with the specified dimensions and a scalar activation function.
-    /// The weights are initialized using Xavier/Glorot initialization to improve training dynamics, and the biases
-    /// are initialized to zero. A scalar activation function is applied element-wise to each hidden neuron independently.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a new recurrent layer for your neural network using a simple activation function.
-    /// 
-    /// When you create this layer, you specify:
-    /// - inputSize: How many features come into the layer at each time step
-    /// - hiddenSize: How many memory units (neurons) the layer has
-    /// - activationFunction: How to transform the hidden state (defaults to tanh)
-    /// 
-    /// The hiddenSize determines the "memory capacity" of the layer:
-    /// - Larger values can remember more information about the sequence
-    /// - But also require more computation and might be harder to train
-    /// 
-    /// Tanh is commonly used as the activation function because:
-    /// - It outputs values between -1 and 1
-    /// - It has a nice gradient for training
-    /// - It works well for capturing both positive and negative patterns
-    /// 
-    /// The layer starts with carefully initialized weights to help training proceed smoothly.
-    /// </para>
-    /// </remarks>
-    public RecurrentLayer(int inputSize, int hiddenSize, IActivationFunction<T>? activationFunction = null)
-        : base([inputSize], [hiddenSize], activationFunction ?? new TanhActivation<T>())
+    /// <param name="hiddenSize">Hidden state size (number of recurrent units).</param>
+    /// <param name="activationFunction">Hidden-state activation (default tanh).</param>
+    public RecurrentLayer(int hiddenSize, IActivationFunction<T>? activationFunction = null)
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, activationFunction ?? new TanhActivation<T>())
     {
-        _inputWeights = new Tensor<T>([hiddenSize, inputSize]);
-        _hiddenWeights = new Tensor<T>([hiddenSize, hiddenSize]);
-        _biases = new Tensor<T>([hiddenSize]);
+        if (hiddenSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenSize), "hiddenSize must be positive.");
 
-        InitializeParameters();
+        _inputSize = -1;
+        _hiddenSize = hiddenSize;
 
-        // Register trainable parameters for GPU memory optimization
-        RegisterTrainableParameter(_inputWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_hiddenWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        _inputWeights = new Tensor<T>(new[] { 0, 0 });
+        _hiddenWeights = new Tensor<T>(new[] { 0, 0 });
+        _biases = new Tensor<T>(new[] { 0 });
+
+        _isInitialized = false;
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="RecurrentLayer{T}"/> class with a vector activation function.
+    /// Lazy ctor with vector activation.
     /// </summary>
-    /// <param name="inputSize">The size of the input to the layer at each time step.</param>
-    /// <param name="hiddenSize">The size of the hidden state and output at each time step.</param>
-    /// <param name="vectorActivationFunction">The vector activation function to apply to the hidden state. Defaults to Tanh if not specified.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates a new RecurrentLayer with the specified dimensions and a vector activation function.
-    /// The weights are initialized using Xavier/Glorot initialization to improve training dynamics, and the biases
-    /// are initialized to zero. A vector activation function is applied to the entire hidden state vector at once,
-    /// which allows for interactions between different hidden neurons.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a new recurrent layer for your neural network using an advanced activation function.
-    /// 
-    /// When you create this layer, you specify:
-    /// - inputSize: How many features come into the layer at each time step
-    /// - hiddenSize: How many memory units (neurons) the layer has
-    /// - vectorActivationFunction: How to transform the entire hidden state as a group
-    /// 
-    /// A vector activation means all hidden neurons are calculated together, which can capture relationships between them.
-    /// This is an advanced option that might be useful for specific types of sequence problems.
-    /// 
-    /// This constructor works the same as the scalar version, but allows for more sophisticated activation patterns
-    /// across the hidden state. Most RNN implementations use the scalar version with tanh activation.
-    /// </para>
-    /// </remarks>
-    public RecurrentLayer(int inputSize, int hiddenSize, IVectorActivationFunction<T>? vectorActivationFunction = null)
-        : base([inputSize], [hiddenSize], vectorActivationFunction ?? new TanhActivation<T>())
+    public RecurrentLayer(int hiddenSize, IVectorActivationFunction<T> vectorActivationFunction)
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, vectorActivationFunction)
     {
-        _inputWeights = new Tensor<T>([hiddenSize, inputSize]);
-        _hiddenWeights = new Tensor<T>([hiddenSize, hiddenSize]);
-        _biases = new Tensor<T>([hiddenSize]);
+        if (hiddenSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenSize), "hiddenSize must be positive.");
 
-        InitializeParameters();
+        _inputSize = -1;
+        _hiddenSize = hiddenSize;
 
-        // Register trainable parameters for GPU memory optimization
-        RegisterTrainableParameter(_inputWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_hiddenWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        _inputWeights = new Tensor<T>(new[] { 0, 0 });
+        _hiddenWeights = new Tensor<T>(new[] { 0, 0 });
+        _biases = new Tensor<T>(new[] { 0 });
+
+        _isInitialized = false;
+    }
+
+    /// <summary>
+    /// Resolves <see cref="_inputSize"/> from <c>input.Shape[^1]</c> and propagates the
+    /// full shape into the layer's resolved input/output shapes.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        if (IsShapeResolved) return;
+        if (input.Shape.Length < 1)
+            throw new ArgumentException(
+                $"RecurrentLayer requires rank>=1 input; got rank {input.Shape.Length}.", nameof(input));
+
+        if (_inputSize < 0)
+        {
+            _inputSize = input.Shape[input.Shape.Length - 1];
+        }
+
+        var resolvedInput = new int[input.Shape.Length];
+        var resolvedOutput = new int[input.Shape.Length];
+        for (int i = 0; i < input.Shape.Length; i++)
+        {
+            resolvedInput[i] = input.Shape[i];
+            resolvedOutput[i] = input.Shape[i];
+        }
+        resolvedOutput[resolvedOutput.Length - 1] = _hiddenSize;
+
+        ResolveShapes(resolvedInput, resolvedOutput);
+    }
+
+    /// <summary>
+    /// Allocates input/hidden weight tensors and biases using the resolved
+    /// <see cref="_inputSize"/> and <see cref="_hiddenSize"/>.
+    /// </summary>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+
+        lock (InitializationLock)
+        {
+            if (_isInitialized) return;
+            if (_inputSize <= 0)
+                throw new InvalidOperationException(
+                    "RecurrentLayer.EnsureInitialized called before _inputSize was resolved.");
+
+            _inputWeights = new Tensor<T>(new[] { _hiddenSize, _inputSize });
+            _hiddenWeights = new Tensor<T>(new[] { _hiddenSize, _hiddenSize });
+            _biases = new Tensor<T>(new[] { _hiddenSize });
+
+            InitializeParameters();
+
+            RegisterTrainableParameter(_inputWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_hiddenWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+            _isInitialized = true;
+        }
     }
 
     /// <summary>
@@ -313,6 +344,9 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy ctor path: resolve _inputSize and allocate weights on first call.
+        EnsureInitializedFromInput(input);
+
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
@@ -454,6 +488,11 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        // Lazy ctor path: resolve _inputSize and allocate weights before any GPU code
+        // reads them.
+        EnsureInitializedFromInput(inputs[0]);
+
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
@@ -792,6 +831,14 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        if (!_isInitialized && parameters.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"RecurrentLayer.SetParameters({parameters.Length}) called before the lazy " +
+                $"input width was resolved. Call ResolveFromShape(...) or run a Forward(input) " +
+                $"pass first so the layer can allocate weight tensors of the correct shape.");
+        }
+
         int inputWeightsSize = _inputWeights.Length;
         int hiddenWeightsSize = _hiddenWeights.Length;
         int totalParams = inputWeightsSize + hiddenWeightsSize + _biases.Length;
@@ -824,8 +871,14 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     internal override Dictionary<string, string> GetMetadata()
     {
         var metadata = base.GetMetadata();
-        metadata["InputSize"] = _inputWeights.Shape[1].ToString();
-        metadata["HiddenSize"] = _inputWeights.Shape[0].ToString();
+        // Read from configured fields, NOT from _inputWeights.Shape — the lazy
+        // ctor seeds _inputWeights with [0, 0] until first forward, so reading
+        // the tensor shape would emit "InputSize=0, HiddenSize=0" for any
+        // unresolved layer. _hiddenSize is fixed at construction; _inputSize
+        // is -1 until resolved (we emit -1 to signal "not yet resolved" rather
+        // than 0, which would falsely look like a configured input size).
+        metadata["InputSize"] = _inputSize.ToString();
+        metadata["HiddenSize"] = _hiddenSize.ToString();
         return metadata;
     }
 

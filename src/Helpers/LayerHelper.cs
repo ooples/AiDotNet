@@ -683,16 +683,12 @@ public static class LayerHelper<T>
 
         // LSTM layers to process temporal data
         yield return new LSTMLayer<T>(
-            inputSize: inputFeatures,
             hiddenSize: 64,
-            inputShape: [historyWindowSize, inputFeatures],
             activation: new TanhActivation<T>() as IActivationFunction<T>,
             recurrentActivation: new SigmoidActivation<T>()
         );
         yield return new LSTMLayer<T>(
-            inputSize: 64,
             hiddenSize: 32,
-            inputShape: [historyWindowSize, 64],
             activation: new TanhActivation<T>() as IActivationFunction<T>,
             recurrentActivation: new SigmoidActivation<T>()
         );
@@ -2221,7 +2217,6 @@ public static class LayerHelper<T>
             // Bidirectional GRU for better sequence understanding
             yield return new BidirectionalLayer<T>(
                 new GRULayer<T>(
-                    inputSize,
                     hiddenSize / 2, // Half size for each direction
                     returnSequences: returnSequences,
                     new TanhActivation<T>() as IActivationFunction<T>,  // Scalar activation for candidate hidden state
@@ -2233,7 +2228,6 @@ public static class LayerHelper<T>
         {
             // Standard GRU
             yield return new GRULayer<T>(
-                inputSize,
                 hiddenSize,
                 returnSequences: returnSequences,
                 new TanhActivation<T>() as IActivationFunction<T>,  // Scalar activation for candidate hidden state
@@ -2251,7 +2245,6 @@ public static class LayerHelper<T>
             bool finalReturnSequences = architecture.TaskType == NeuralNetworkTaskType.SequenceToSequence;
 
             yield return new GRULayer<T>(
-                hiddenSize,
                 secondHiddenSize,
                 returnSequences: finalReturnSequences,
                 new TanhActivation<T>(),
@@ -2510,7 +2503,6 @@ public static class LayerHelper<T>
         // Standard Elman RNN layers with tanh activation (Elman 1990, PyTorch nn.RNN default).
         // Each layer gets a unique deterministic seed for reproducible initialization.
         yield return new RecurrentLayer<T>(
-            inputSize: inputSize,
             hiddenSize: hiddenSize,
             activationFunction: new TanhActivation<T>()
         );
@@ -2518,7 +2510,6 @@ public static class LayerHelper<T>
         for (int i = 1; i < recurrentLayerCount; i++)
         {
             yield return new RecurrentLayer<T>(
-                inputSize: hiddenSize,
                 hiddenSize: hiddenSize,
                 activationFunction: new TanhActivation<T>()
             );
@@ -3170,9 +3161,7 @@ public static class LayerHelper<T>
 
             // Add LSTM Layer
             yield return new LSTMLayer<T>(
-                inputSize: _currentInputSize,
                 hiddenSize: _layerHiddenSize,
-                inputShape: [_currentInputSize],
                 activation: new TanhActivation<T>(),
                 recurrentActivation: new SigmoidActivation<T>() as IActivationFunction<T>
             );
@@ -5366,7 +5355,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLmLayers; i++)
         {
             yield return new TransformerDecoderLayer<T>(
-                embeddingSize: lmHiddenDim,
                 numHeads: numHeads,
                 feedForwardDim: lmHiddenDim * 4,
                 sequenceLength: maxAudioTokens,
@@ -5980,7 +5968,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new TransformerDecoderLayer<T>(
-                embeddingSize: modelDim,
                 numHeads: numHeads,
                 feedForwardDim: ffDim,
                 sequenceLength: maxTokens,
@@ -6092,7 +6079,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new TransformerDecoderLayer<T>(
-                embeddingSize: audioHiddenDim,
                 numHeads: numHeads,
                 feedForwardDim: audioHiddenDim * 4,
                 sequenceLength: maxMelFrames,
@@ -9099,7 +9085,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             yield return new TransformerEncoderLayer<T>(
-                hiddenDim,
                 numHeads,
                 hiddenDim * 4); // FFN intermediate size = 4x hidden dim (standard)
         }
@@ -9257,7 +9242,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new TransformerDecoderLayer<T>(
-                decoderHiddenDim,
                 decoderHeads,
                 decoderHiddenDim * 4,
                 maxGenerationLength,
@@ -9380,7 +9364,7 @@ public static class LayerHelper<T>
         // ViT encoder blocks
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, hiddenDim * 4);
+            yield return new TransformerEncoderLayer<T>( numHeads, hiddenDim * 4);
         }
 
         // Final layer norm
@@ -9402,7 +9386,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             yield return new TransformerDecoderLayer<T>(
-                hiddenDim,
                 numHeads,
                 hiddenDim * 4,
                 maxSequenceLength,
@@ -9468,7 +9451,7 @@ public static class LayerHelper<T>
         // Transformer encoder
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, hiddenDim * 4);
+            yield return new TransformerEncoderLayer<T>( numHeads, hiddenDim * 4);
         }
 
         // Transformer decoder with object queries
@@ -9476,7 +9459,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new TransformerDecoderLayer<T>(
-                hiddenDim,
                 numHeads,
                 hiddenDim * 4,
                 numQueries,
@@ -9862,7 +9844,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             yield return new TransformerDecoderLayer<T>(
-                embeddingSize: hiddenDim,
                 numHeads: numHeads,
                 feedForwardDim: hiddenDim * 4,
                 sequenceLength: maxSequenceLength,
@@ -9941,7 +9922,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             yield return new TransformerDecoderLayer<T>(
-                embeddingSize: hiddenDim,
                 numHeads: numHeads,
                 feedForwardDim: hiddenDim * 4,
                 sequenceLength: maxSequenceLength,
@@ -10025,7 +10005,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             yield return new TransformerDecoderLayer<T>(
-                embeddingSize: hiddenDim,
                 numHeads: numHeads,
                 feedForwardDim: hiddenDim * 4,
                 sequenceLength: maxSequenceLength,
@@ -10937,7 +10916,7 @@ public static class LayerHelper<T>
 
         yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
-        yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, 3072);
+        yield return new TransformerEncoderLayer<T>( numHeads, 3072);
     }
 
     /// <summary>
@@ -11080,10 +11059,12 @@ public static class LayerHelper<T>
         for (int i = 0; i < numQformerLayers; i++)
         {
             // Self-attention for queries
-            yield return new TransformerEncoderLayer<T>(qformerHiddenDim, numHeads, feedForwardDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
 
-            // Cross-attention from queries to vision features
-            yield return new TransformerEncoderLayer<T>(qformerHiddenDim, numHeads, feedForwardDim);
+            // Cross-attention from queries to vision features (decoder layer with
+            // self+cross attention).
+            yield return new TransformerDecoderLayer<T>(
+                numHeads, feedForwardDim, ffnActivation: null);
 
             // Feed-forward
             yield return new DenseLayer<T>(qformerHiddenDim, (IActivationFunction<T>?)null);
@@ -11104,7 +11085,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLmDecoderLayers; i++)
         {
             yield return new TransformerDecoderLayer<T>(
-                embeddingSize: lmHiddenDim,
                 numHeads: lmNumHeads,
                 feedForwardDim: lmFeedForwardDim,
                 sequenceLength: maxSequenceLength,
@@ -11136,7 +11116,7 @@ public static class LayerHelper<T>
         // 3. Transformer Encoder Layers (SimCSE uses standard BERT/RoBERTa stacks)
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
         }
 
         // Per Gao et al. (2021), SimCSE outputs [CLS] token embeddings (768-dim),
@@ -11161,7 +11141,7 @@ public static class LayerHelper<T>
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, 768);
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(768, numHeads, feedForwardDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
         }
 
         // 2. Projection Layer (maps to token-level late interaction embeddings)
@@ -11185,7 +11165,7 @@ public static class LayerHelper<T>
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
         }
 
         // 2. SPLADE Head (maps token representations back to vocabulary log-space)
@@ -11209,7 +11189,7 @@ public static class LayerHelper<T>
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, 768);
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(768, numHeads, feedForwardDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
         }
 
         // 2. Final projection to max Matryoshka dimension
@@ -11233,7 +11213,7 @@ public static class LayerHelper<T>
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
         }
 
         // 2. Instruction Pooling/Projection
@@ -11257,7 +11237,7 @@ public static class LayerHelper<T>
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
         }
 
         // BGE often uses an additional normalization/projection head for retrieval
@@ -11282,10 +11262,11 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numLayers; i++)
         {
-            // Note: In a real decoder, we would use TransformerDecoderLayer with causal masking
-            // For embedding extraction, a simple TransformerEncoderLayer is often used as a proxy
-            // if we aren't doing autoregressive generation.
-            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
+            // SGPT/embedding extraction is autoregressive — emit a real decoder
+            // (with causal self-attention) rather than an encoder placeholder.
+            yield return new TransformerDecoderLayer<T>(
+                numHeads, feedForwardDim,
+                ffnActivation: null);
         }
 
         // SGPT uses the last token's representation
@@ -11364,7 +11345,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             yield return new TransformerEncoderLayer<T>(
-                embeddingSize: modelDimension,
                 numHeads: numHeads,
                 feedForwardDim: feedForwardDimension);
         }
@@ -11442,7 +11422,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             yield return new TransformerEncoderLayer<T>(
-                embeddingSize: modelDimension,
                 numHeads: numHeads,
                 feedForwardDim: feedForwardDimension);
         }
@@ -11520,7 +11499,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new TransformerEncoderLayer<T>(
-                embeddingSize: modelDimension,
                 numHeads: numHeads,
                 feedForwardDim: feedForwardDimension);
         }
@@ -11529,7 +11507,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new TransformerEncoderLayer<T>(
-                embeddingSize: modelDimension,
                 numHeads: numHeads,
                 feedForwardDim: feedForwardDimension);
         }
@@ -11603,7 +11580,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new TransformerEncoderLayer<T>(
-                embeddingSize: modelDimension,
                 numHeads: numHeads,
                 feedForwardDim: feedForwardDimension);
         }
@@ -11612,7 +11588,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new TransformerEncoderLayer<T>(
-                embeddingSize: modelDimension,
                 numHeads: numHeads,
                 feedForwardDim: feedForwardDimension);
         }
@@ -11686,7 +11661,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new TransformerEncoderLayer<T>(
-                embeddingSize: modelDimension,
                 numHeads: numHeads,
                 feedForwardDim: feedForwardDimension);
         }
@@ -11695,7 +11669,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new TransformerEncoderLayer<T>(
-                embeddingSize: modelDimension,
                 numHeads: numHeads,
                 feedForwardDim: feedForwardDimension);
         }
@@ -11771,22 +11744,16 @@ public static class LayerHelper<T>
         // LSTM Encoder
         // Input shape: [batch, sequence, features] where features = hiddenSize after variable selection
         yield return new LSTMLayer<T>(
-            inputSize: hiddenSize,
             hiddenSize: hiddenSize,
-            inputShape: new[] { 1, sequenceLength, hiddenSize },
             activation: (IActivationFunction<T>?)null,
-            recurrentActivation: null,
-            engine: null);
+            recurrentActivation: null);
 
         // LSTM Decoder
         // Input shape: [batch, sequence, features] where features = hiddenSize from encoder
         yield return new LSTMLayer<T>(
-            inputSize: hiddenSize,
             hiddenSize: hiddenSize,
-            inputShape: new[] { 1, predictionHorizon, hiddenSize },
             activation: (IActivationFunction<T>?)null,
-            recurrentActivation: null,
-            engine: null);
+            recurrentActivation: null);
 
         // Gated Residual Network layers
         for (int i = 0; i < numLayers; i++)
@@ -11798,7 +11765,6 @@ public static class LayerHelper<T>
 
         // Interpretable multi-head attention
         yield return new TransformerEncoderLayer<T>(
-            embeddingSize: hiddenSize,
             numHeads: numHeads,
             feedForwardDim: hiddenSize * 4);
 
@@ -11873,13 +11839,11 @@ public static class LayerHelper<T>
         {
             // Cross-Time Attention
             yield return new TransformerEncoderLayer<T>(
-                embeddingSize: modelDimension,
                 numHeads: numHeads,
                 feedForwardDim: modelDimension * 4);
 
             // Cross-Dimension Attention
             yield return new TransformerEncoderLayer<T>(
-                embeddingSize: modelDimension,
                 numHeads: numHeads,
                 feedForwardDim: modelDimension * 4);
 
@@ -12386,12 +12350,9 @@ public static class LayerHelper<T>
 
             // LSTM layer with explicit type disambiguation
             yield return new LSTMLayer<T>(
-                inputSize: lstmInputSize,
                 hiddenSize: hiddenSize,
-                inputShape: new[] { 1, contextLength, lstmInputSize },
                 activation: (IActivationFunction<T>?)null,
-                recurrentActivation: null,
-                engine: null);
+                recurrentActivation: null);
 
             // Dropout between LSTM layers (except after last layer)
             if (i < numLstmLayers - 1 && dropout > 0)
@@ -12715,7 +12676,6 @@ public static class LayerHelper<T>
         // Output: [batch, hiddenRecurrentSize]
 
         yield return new GRULayer<T>(
-            inputSize: convolutionFilters,
             hiddenSize: hiddenRecurrentSize,
             returnSequences: false,
             activation: (IActivationFunction<T>?)null,
@@ -12735,7 +12695,6 @@ public static class LayerHelper<T>
         int numSkipConnections = Math.Max(1, convOutputLength / skipPeriod);
 
         yield return new GRULayer<T>(
-            inputSize: convolutionFilters,
             hiddenSize: hiddenSkipSize,
             returnSequences: false,
             activation: (IActivationFunction<T>?)null,
@@ -13199,7 +13158,6 @@ public static class LayerHelper<T>
             // GRU layer (returnSequences=false for last layer)
             bool returnSeqs = layer < numRnnLayers - 1;
             yield return new GRULayer<T>(
-                inputSize: hiddenDimension,
                 hiddenSize: hiddenDimension,
                 returnSequences: returnSeqs,
                 activation: (IActivationFunction<T>?)null,
@@ -13313,7 +13271,6 @@ public static class LayerHelper<T>
         {
             bool returnSeqs = layer < numFactorLayers - 1;
             yield return new GRULayer<T>(
-                inputSize: factorHiddenDim,
                 hiddenSize: factorHiddenDim,
                 returnSequences: returnSeqs,
                 activation: (IActivationFunction<T>?)null,
@@ -13452,7 +13409,7 @@ public static class LayerHelper<T>
         // === Decoder-only transformer stack ===
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, hiddenDim * 4);
+            yield return new TransformerEncoderLayer<T>( numHeads, hiddenDim * 4);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
@@ -13549,7 +13506,7 @@ public static class LayerHelper<T>
         // === Llama-style Transformer Layers ===
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, intermediateSize);
+            yield return new TransformerEncoderLayer<T>( numHeads, intermediateSize);
             if (dropout > 0)
                 yield return new DropoutLayer<T>(dropout);
         }
@@ -13637,7 +13594,7 @@ public static class LayerHelper<T>
         // === Transformer Encoder Stack (T5-style pre-norm) ===
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, intermediateSize);
+            yield return new TransformerEncoderLayer<T>( numHeads, intermediateSize);
             if (dropout > 0)
                 yield return new DropoutLayer<T>(dropout);
         }
@@ -13697,7 +13654,7 @@ public static class LayerHelper<T>
         // === Masked Encoder Transformer ===
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, intermediateSize);
+            yield return new TransformerEncoderLayer<T>( numHeads, intermediateSize);
             if (dropout > 0)
                 yield return new DropoutLayer<T>(dropout);
         }
@@ -13765,7 +13722,7 @@ public static class LayerHelper<T>
         // === Reprogramming Transformer ===
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(llmDim, numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
             if (dropout > 0)
                 yield return new DropoutLayer<T>(dropout);
         }
@@ -13773,7 +13730,7 @@ public static class LayerHelper<T>
         // === Simulated Frozen LLM (additional transformer layers) ===
         for (int i = 0; i < 2; i++)
         {
-            yield return new TransformerEncoderLayer<T>(llmDim, numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
         }
 
         // === Final Layer Norm + Output Projection ===
@@ -13856,7 +13813,7 @@ public static class LayerHelper<T>
         // Per paper: standard pre-norm transformer layers for global temporal dependencies.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
             if (dropout > 0)
                 yield return new DropoutLayer<T>(dropout);
         }
@@ -13956,7 +13913,7 @@ public static class LayerHelper<T>
         // === GPT-Style Transformer Stack ===
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
             if (dropout > 0)
                 yield return new DropoutLayer<T>(dropout);
         }
@@ -14016,7 +13973,7 @@ public static class LayerHelper<T>
         // === Large Transformer Backbone ===
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
             if (dropout > 0)
                 yield return new DropoutLayer<T>(dropout);
         }
@@ -15612,7 +15569,6 @@ public static class LayerHelper<T>
         {
             // GRU layer for temporal processing
             yield return new GRULayer<T>(
-                inputSize: hiddenDimension,
                 hiddenSize: hiddenDimension,
                 returnSequences: true,
                 activation: (IActivationFunction<T>?)null,
@@ -15630,7 +15586,6 @@ public static class LayerHelper<T>
         {
             // GRU layer for temporal processing
             yield return new GRULayer<T>(
-                inputSize: hiddenDimension,
                 hiddenSize: hiddenDimension,
                 returnSequences: true,
                 activation: (IActivationFunction<T>?)null,
@@ -15737,7 +15692,6 @@ public static class LayerHelper<T>
         // === Temporal Processing ===
         // For time series forecasting, add temporal layers
         yield return new GRULayer<T>(
-            inputSize: hiddenDimension,
             hiddenSize: hiddenDimension,
             returnSequences: true,
             activation: (IActivationFunction<T>?)null,
@@ -16536,12 +16490,9 @@ public static class LayerHelper<T>
     {
         // LSTM for temporal patterns
         yield return new LSTMLayer<T>(
-            inputSize: numFeatures,
             hiddenSize: hiddenDimension,
-            inputShape: new[] { 1, sequenceLength, numFeatures },
             activation: (IActivationFunction<T>?)null,
-            recurrentActivation: null,
-            engine: null);
+            recurrentActivation: null);
 
         // Dense layers for risk estimation
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
@@ -16567,12 +16518,9 @@ public static class LayerHelper<T>
     {
         // LSTM for temporal patterns
         yield return new LSTMLayer<T>(
-            inputSize: numFeatures,
             hiddenSize: hiddenDimension,
-            inputShape: new[] { 1, sequenceLength, numFeatures },
             activation: (IActivationFunction<T>?)null,
-            recurrentActivation: null,
-            engine: null);
+            recurrentActivation: null);
 
         // Dense layers
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
@@ -29303,10 +29251,12 @@ public static class LayerHelper<T>
         yield return new BatchNormalizationLayer<T>();
         yield return new ActivationLayer<T>(elu);
 
-        // GRU layers
+        // GRU layers — only the last layer in the stack collapses the time axis;
+        // intermediate layers must return sequences so the next GRU sees [B, T, F].
         for (int i = 0; i < numGruLayers; i++)
         {
-            yield return new GRULayer<T>(hiddenDim, hiddenDim, returnSequences: false,
+            bool isLast = i == numGruLayers - 1;
+            yield return new GRULayer<T>( hiddenDim, returnSequences: !isLast,
                 (IActivationFunction<T>?)null, (IActivationFunction<T>?)null);
         }
 
@@ -29366,7 +29316,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLstmLayers; i++)
         {
             int inputDim = i == 0 ? lstmInputDim : lstmHiddenDim;
-            yield return new LSTMLayer<T>(inputDim, lstmHiddenDim, lstmInputShape,
+            yield return new LSTMLayer<T>( lstmHiddenDim,
                 (IActivationFunction<T>)new TanhActivation<T>(), (IActivationFunction<T>)new SigmoidActivation<T>());
             lstmInputShape = [1, lstmHiddenDim];
         }
@@ -29443,9 +29393,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLstmLayers; i++)
         {
             int inputSize = i == 0 ? convFilters : lstmHiddenDim;
-            yield return new LSTMLayer<T>(
-                inputSize: inputSize, hiddenSize: lstmHiddenDim,
-                inputShape: [1, seqLen3, inputSize],
+            yield return new LSTMLayer<T>( hiddenSize: lstmHiddenDim,
                 activation: (IActivationFunction<T>?)null,
                 recurrentActivation: (IActivationFunction<T>?)null);
         }
@@ -29974,7 +29922,6 @@ public static class LayerHelper<T>
         {
             yield return new RecurrentLayer<T>(
                 hiddenDim,
-                hiddenDim,
                 (IActivationFunction<T>)new TanhActivation<T>());
         }
     }
@@ -30000,7 +29947,7 @@ public static class LayerHelper<T>
         // Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, mlpDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, mlpDim);
         }
 
         // Classification head
@@ -30025,7 +29972,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
         }
     }
 
@@ -30054,7 +30001,7 @@ public static class LayerHelper<T>
         // Vision encoder transformer layers
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(visionHiddenDim, numHeads, visionFfnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, visionFfnDim);
         }
 
         // Projection layers (2-layer MLP)
@@ -30068,7 +30015,7 @@ public static class LayerHelper<T>
         // Language model transformer layers
         for (int i = 0; i < numLmLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(lmHiddenDim, numHeads, lmFfnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, lmFfnDim);
         }
 
         // Output projection
@@ -30105,13 +30052,13 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numFrameEncoderLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(visionHiddenDim, numHeads, visionFfnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, visionFfnDim);
         }
 
         // Temporal encoder layers
         for (int i = 0; i < numTemporalLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(visionHiddenDim, numHeads, temporalFfnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, temporalFfnDim);
         }
 
         // Video projection
@@ -30123,7 +30070,7 @@ public static class LayerHelper<T>
         // Text encoder layers
         for (int i = 0; i < numTextLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(textHiddenDim, numHeads, textFfnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, textFfnDim);
         }
 
         // Text projection
@@ -30157,13 +30104,13 @@ public static class LayerHelper<T>
         // Image encoder
         yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
         for (int i = 0; i < numEncoderLayers; i++)
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
         // Text encoder
         yield return new EmbeddingLayer<T>(vocabularySize, hiddenDim);
         for (int i = 0; i < numEncoderLayers; i++)
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
         // Audio encoder
@@ -30173,30 +30120,30 @@ public static class LayerHelper<T>
         if (audioSeqLen < audioPatchSize) audioSeqLen = audioPatchSize;
         yield return new PatchEmbeddingLayer<T>(audioPatchSize, hiddenDim);
         for (int i = 0; i < numEncoderLayers; i++)
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
         // Thermal encoder
         yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
         for (int i = 0; i < numEncoderLayers; i++)
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
         // Depth encoder
         yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
         for (int i = 0; i < numEncoderLayers; i++)
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
         // IMU encoder
         yield return new DenseLayer<T>(hiddenDim, (IActivationFunction<T>)new GELUActivation<T>());
         for (int i = 0; i < Math.Min(6, numEncoderLayers); i++)
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
         // Video temporal aggregation
         for (int i = 0; i < 4; i++)
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
     }
 
@@ -30371,22 +30318,22 @@ public static class LayerHelper<T>
         // Vision encoder: PatchEmbed + numLayers × TransformerEncoder + projection
         yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
         for (int i = 0; i < numLayers; i++)
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, mlpDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, mlpDim);
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
         // Text encoder: EmbeddingLayer + numLayers × TransformerEncoder + projection
         yield return new EmbeddingLayer<T>(vocabularySize, hiddenDim);
         for (int i = 0; i < numLayers; i++)
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, mlpDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, mlpDim);
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
-        // Text decoder layers
+        // Text decoder layers (causal self-attention, autoregressive generation)
         for (int i = 0; i < numDecoderLayers; i++)
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, mlpDim);
+            yield return new TransformerDecoderLayer<T>(numHeads, mlpDim, ffnActivation: null);
 
-        // Cross-attention layers (6)
+        // Cross-attention layers (6) — decoder layer surfaces self + cross attention.
         for (int i = 0; i < 6; i++)
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, mlpDim);
+            yield return new TransformerDecoderLayer<T>(numHeads, mlpDim, ffnActivation: null);
 
         // ITM head + LM head
         yield return new DenseLayer<T>(2, (IActivationFunction<T>?)null);
@@ -30419,8 +30366,11 @@ public static class LayerHelper<T>
         // Q-Former layers: (self-attn + cross-attn + FFN) × numQformerLayers
         for (int i = 0; i < numQformerLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(qformerHiddenDim, numHeads, feedForwardDim);
-            yield return new TransformerEncoderLayer<T>(qformerHiddenDim, numHeads, feedForwardDim);
+            // Self-attention for queries
+            yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
+            // Cross-attention from queries to vision features (decoder block).
+            yield return new TransformerDecoderLayer<T>(
+                numHeads, feedForwardDim, ffnActivation: null);
             yield return new DenseLayer<T>(qformerHiddenDim, (IActivationFunction<T>?)null);
         }
 
@@ -30438,7 +30388,6 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLmDecoderLayers; i++)
         {
             yield return new TransformerDecoderLayer<T>(
-                embeddingSize: lmHiddenDim,
                 numHeads: lmNumHeads,
                 feedForwardDim: lmFeedForwardDim,
                 sequenceLength: maxSequenceLength,
@@ -30835,7 +30784,7 @@ public static class LayerHelper<T>
 
         // Vision encoder transformer layers
         for (int i = 0; i < numVisionLayers; i++)
-            yield return new TransformerEncoderLayer<T>(visionHiddenDim, numHeads, visionFfnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, visionFfnDim);
 
         // Perceiver Resampler layers: (CrossAttn + FFN_expand + FFN_contract) × numPerceiverLayers
         for (int i = 0; i < numPerceiverLayers; i++)
@@ -30856,7 +30805,7 @@ public static class LayerHelper<T>
 
         // Language model transformer layers
         for (int i = 0; i < numLmLayers; i++)
-            yield return new TransformerEncoderLayer<T>(lmHiddenDim, numHeads, lmFfnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, lmFfnDim);
 
         // Output projection
         yield return new DenseLayer<T>(vocabularySize, (IActivationFunction<T>?)null);
@@ -30882,7 +30831,7 @@ public static class LayerHelper<T>
         // Vision encoder: PatchEmbed + TransformerEncoder × numVisionLayers + LayerNorm
         yield return new PatchEmbeddingLayer<T>(patchSize, visionEmbeddingDim);
         for (int i = 0; i < numVisionLayers; i++)
-            yield return new TransformerEncoderLayer<T>(visionEmbeddingDim, numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
         yield return new LayerNormalizationLayer<T>();
 
         // Vision projectors (2-layer MLP)
@@ -30896,10 +30845,12 @@ public static class LayerHelper<T>
         int crossAttnCount = 0;
         for (int i = 0; i < numLanguageLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, ffnDim);
+            // Causal self-attention LM block.
+            yield return new TransformerDecoderLayer<T>(numHeads, ffnDim, ffnActivation: null);
             if (i % 4 == 0)
             {
-                yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, ffnDim);
+                // Cross-attention block at every 4th layer (decoder for self+cross).
+                yield return new TransformerDecoderLayer<T>(numHeads, ffnDim, ffnActivation: null);
                 crossAttnCount++;
             }
         }
@@ -31785,7 +31736,12 @@ public static class LayerHelper<T>
         // === GRU layers (paper: single large GRU; we stack multiple per numResidualLayers) ===
         int gruCount = Math.Max(1, Math.Min(numResidualLayers, 4));
         for (int i = 0; i < gruCount; i++)
-            yield return new GRULayer<T>(hiddenDim, hiddenDim, false, (IActivationFunction<T>?)null);
+        {
+            // Only the final stacked GRU collapses the time axis. Intermediate
+            // GRUs must return sequences so the next layer sees [B, T, F].
+            bool isLast = i == gruCount - 1;
+            yield return new GRULayer<T>( hiddenDim, !isLast, (IActivationFunction<T>?)null);
+        }
 
         // === Output FC chain (paper: fc1 → fc2 → fc3) ===
         // fc1: hiddenDim → hiddenDim with ReLU
@@ -31910,9 +31866,7 @@ public static class LayerHelper<T>
             // Forward reads left-to-right, backward reads right-to-left
             // Outputs are merged (element-wise add) to produce charHiddenDimension features
             var charLSTM = new LSTMLayer<T>(
-                inputSize: charEmbeddingDimension,
                 hiddenSize: charHiddenDimension,
-                inputShape: [charEmbeddingDimension],
                 activation: tanhActivation,
                 recurrentActivation: sigmoidActivation);
             yield return new BidirectionalLayer<T>(charLSTM, mergeMode: true,
@@ -31940,9 +31894,7 @@ public static class LayerHelper<T>
             // Create LSTM for the forward direction; BidirectionalLayer automatically
             // clones it for the backward direction
             var lstm = new LSTMLayer<T>(
-                inputSize: currentInputSize,
                 hiddenSize: hiddenDimension,
-                inputShape: [currentInputSize],
                 activation: tanhActivation,
                 recurrentActivation: sigmoidActivation);
 
@@ -32077,9 +32029,7 @@ public static class LayerHelper<T>
         for (int layer = 0; layer < numLSTMLayers; layer++)
         {
             var lstm = new LSTMLayer<T>(
-                inputSize: currentInputSize,
                 hiddenSize: hiddenDimension,
-                inputShape: [currentInputSize],
                 activation: tanhActivation,
                 recurrentActivation: sigmoidActivation);
 
@@ -32168,9 +32118,7 @@ public static class LayerHelper<T>
         for (int layer = 0; layer < numLSTMLayers; layer++)
         {
             yield return new LSTMLayer<T>(
-                inputSize: currentInputSize,
                 hiddenSize: hiddenDimension,
-                inputShape: [currentInputSize],
                 activation: tanhActivation,
                 recurrentActivation: sigmoidActivation);
 
@@ -32250,7 +32198,6 @@ public static class LayerHelper<T>
         for (int layer = 0; layer < numTransformerLayers; layer++)
         {
             yield return new TransformerEncoderLayer<T>(
-                embeddingSize: hiddenDimension,
                 numHeads: numAttentionHeads,
                 feedForwardDim: intermediateDimension);
 
@@ -32321,7 +32268,6 @@ public static class LayerHelper<T>
         for (int layer = 0; layer < numTransformerLayers; layer++)
         {
             yield return new TransformerEncoderLayer<T>(
-                embeddingSize: hiddenDimension,
                 numHeads: numAttentionHeads,
                 feedForwardDim: intermediateDimension);
 
@@ -32427,7 +32373,7 @@ public static class LayerHelper<T>
         // === T5-style encoder stack ===
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, intermediateSize);
+            yield return new TransformerEncoderLayer<T>( numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
@@ -32599,7 +32545,7 @@ public static class LayerHelper<T>
 
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, intermediateSize);
+            yield return new TransformerEncoderLayer<T>( numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
@@ -32708,7 +32654,7 @@ public static class LayerHelper<T>
 
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, intermediateSize);
+            yield return new TransformerEncoderLayer<T>( numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
@@ -32787,7 +32733,7 @@ public static class LayerHelper<T>
 
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, intermediateSize);
+            yield return new TransformerEncoderLayer<T>( numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
@@ -32834,7 +32780,7 @@ public static class LayerHelper<T>
         int encIntermediateSize = encoderHiddenDim * 4;
         for (int layer = 0; layer < numEncoderLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(encoderHiddenDim, numHeads, encIntermediateSize);
+            yield return new TransformerEncoderLayer<T>( numHeads, encIntermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
@@ -32860,7 +32806,6 @@ public static class LayerHelper<T>
         for (int layer = 0; layer < numDecoderLayers; layer++)
         {
             yield return new TransformerDecoderLayer<T>(
-                embeddingSize: decoderHiddenDim,
                 numHeads: numHeads,
                 feedForwardDim: decIntermediateSize,
                 sequenceLength: forecastHorizon,
@@ -32908,7 +32853,7 @@ public static class LayerHelper<T>
 
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateSize);
+            yield return new TransformerEncoderLayer<T>( numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
@@ -32938,7 +32883,7 @@ public static class LayerHelper<T>
 
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateSize);
+            yield return new TransformerEncoderLayer<T>( numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
@@ -32968,7 +32913,7 @@ public static class LayerHelper<T>
 
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateSize);
+            yield return new TransformerEncoderLayer<T>( numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
@@ -33002,7 +32947,7 @@ public static class LayerHelper<T>
 
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateSize);
+            yield return new TransformerEncoderLayer<T>( numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
@@ -33038,7 +32983,7 @@ public static class LayerHelper<T>
 
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateSize);
+            yield return new TransformerEncoderLayer<T>( numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
@@ -33072,7 +33017,7 @@ public static class LayerHelper<T>
 
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateSize);
+            yield return new TransformerEncoderLayer<T>( numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
@@ -33120,7 +33065,7 @@ public static class LayerHelper<T>
 
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateSize);
+            yield return new TransformerEncoderLayer<T>( numHeads, intermediateSize);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
@@ -33425,13 +33370,13 @@ public static class LayerHelper<T>
 
         for (int layer = 0; layer < numEncoderLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, intermediateDim);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
         for (int layer = 0; layer < numDecoderLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, intermediateDim);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
@@ -33468,7 +33413,7 @@ public static class LayerHelper<T>
 
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>(hiddenDimension, numHeads, intermediateDim);
+            yield return new TransformerEncoderLayer<T>( numHeads, intermediateDim);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 

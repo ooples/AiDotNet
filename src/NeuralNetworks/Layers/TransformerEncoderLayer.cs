@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 2, 16")]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "2, 16")]
 public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -118,7 +118,11 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// aspects of each word like its meaning, grammatical role, and context.
     /// </para>
     /// </remarks>
-    private readonly int _embeddingSize;
+    /// <remarks>
+    /// Initialized to <c>-1</c> when the lazy ctor is used; resolved from
+    /// <c>input.Shape[^1]</c> on first <see cref="Forward(Tensor{T})"/>.
+    /// </remarks>
+    private int _embeddingSize;
 
     /// <summary>
     /// The number of attention heads for the self-attention mechanism.
@@ -225,7 +229,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// making final decisions about what features to extract from each position.
     /// </para>
     /// </remarks>
-    private readonly FeedForwardLayer<T> _feedForward1;
+    private FeedForwardLayer<T> _feedForward1;
 
     /// <summary>
     /// The second (projection) layer of the feed-forward network.
@@ -234,7 +238,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Projects the expanded representation back to the original embedding size.
     /// A proper transformer FFN has two layers: expansion and projection.
     /// </remarks>
-    private readonly FeedForwardLayer<T> _feedForward2;
+    private FeedForwardLayer<T> _feedForward2;
 
     /// <summary>
     /// The layer normalization applied after the feed-forward network.
@@ -287,6 +291,12 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        if (!_isInitialized)
+        {
+            throw new InvalidOperationException(
+                "TransformerEncoderLayer.SetParameters cannot run before sublayers are " +
+                "constructed. Run a Forward pass first so _embeddingSize is resolved.");
+        }
         int idx = 0;
         void Set(ILayer<T> layer)
         {
@@ -299,6 +309,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     public override Vector<T> GetParameterGradients()
     {
+        if (!_isInitialized) return new Vector<T>(0);
         return Vector<T>.Concatenate(
             _selfAttention.GetParameterGradients(),
             _norm1.GetParameterGradients(),
@@ -310,6 +321,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
+        if (!_isInitialized) return;
         _selfAttention.ClearGradients(); _norm1.ClearGradients();
         _feedForward1.ClearGradients(); _feedForward2.ClearGradients(); _norm2.ClearGradients();
     }
@@ -326,11 +338,13 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This returns the sum of all parameters from sublayers: self-attention, layer norms, and feed-forward layers.
     /// </remarks>
     public override int ParameterCount =>
-        _selfAttention.ParameterCount +
-        _norm1.ParameterCount +
-        _feedForward1.ParameterCount +
-        _feedForward2.ParameterCount +
-        _norm2.ParameterCount;
+        _isInitialized
+            ? _selfAttention.ParameterCount +
+              _norm1.ParameterCount +
+              _feedForward1.ParameterCount +
+              _feedForward2.ParameterCount +
+              _norm2.ParameterCount
+            : 0;
 
     /// <summary>
     /// Returns layer-specific metadata for serialization.
@@ -350,61 +364,104 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return metadata;
     }
 
+
     /// <summary>
-    /// Initializes a new instance of the <see cref="TransformerEncoderLayer{T}"/> class.
+    /// Lazy ctor: <see cref="_embeddingSize"/> is resolved from <c>input.Shape[^1]</c>
+    /// on first <see cref="Forward(Tensor{T})"/>; the inner attention/FFN/norm sublayers
+    /// are constructed then.
     /// </summary>
-    /// <param name="embeddingSize">The size of the embeddings.</param>
-    /// <param name="numHeads">The number of attention heads.</param>
-    /// <param name="feedForwardDim">The dimension of the feed-forward network.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates a transformer encoder layer with the specified dimensions. It initializes the
-    /// self-attention, layer normalization, and feed-forward sublayers with appropriate dimensions and activation functions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This constructor creates a new transformer encoder layer with the specified settings.
-    /// 
-    /// The parameters you provide determine:
-    /// - embeddingSize: How rich the representation of each token is (more = more expressive)
-    /// - numHeads: How many different "perspectives" the attention mechanism can have
-    /// - feedForwardDim: How much processing capacity the feed-forward network has
-    /// 
-    /// These settings control the capacity, expressiveness, and computational requirements of the encoder.
-    /// Typical values might be 512 for embedding size, 8 attention heads, and 2048 for the feed-forward dimension,
-    /// similar to those used in the original transformer paper.
-    /// </para>
-    /// </remarks>
-    public TransformerEncoderLayer(int embeddingSize, int numHeads, int feedForwardDim)
-        : base([embeddingSize], [embeddingSize])
+    /// <param name="numHeads">Number of attention heads.</param>
+    /// <param name="feedForwardDim">Hidden dimension of the FFN.</param>
+    public TransformerEncoderLayer(int numHeads, int feedForwardDim)
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
     {
-        _embeddingSize = embeddingSize;
+        if (numHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numHeads), "numHeads must be positive.");
+        if (feedForwardDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(feedForwardDim), "feedForwardDim must be positive.");
+
+        _embeddingSize = -1;
         _numHeads = numHeads;
         _feedForwardDim = feedForwardDim;
 
-        _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, (_embeddingSize) / (_numHeads),
-            new GELUActivation<T>() as IActivationFunction<T>);
+        // Sublayers constructed lazily inside EnsureInitialized once _embeddingSize is known.
+        _selfAttention = null!;
+        _norm1 = null!;
+        _feedForward1 = null!;
+        _feedForward2 = null!;
+        _norm2 = null!;
 
-        _norm1 = new LayerNormalizationLayer<T>();
-
-        // Standard transformer FFN: Linear(embed -> ff) + GELU + Linear(ff -> embed)
-        _feedForward1 = new FeedForwardLayer<T>(
-            _feedForwardDim,
-            new GELUActivation<T>() as IActivationFunction<T>);
-
-        _feedForward2 = new FeedForwardLayer<T>(
-            _embeddingSize,
-            (IActivationFunction<T>?)null); // No activation on projection layer
-
-        _norm2 = new LayerNormalizationLayer<T>();
-
-        // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastAuxiliaryLoss = NumOps.Zero;
 
-        RegisterSubLayer(_selfAttention);
-        RegisterSubLayer(_norm1);
-        RegisterSubLayer(_feedForward1);
-        RegisterSubLayer(_feedForward2);
-        RegisterSubLayer(_norm2);
+        _isInitialized = false;
+    }
+
+    /// <summary>
+    /// True once sublayers (attention, norm1, ffn1, ffn2, norm2) have been constructed.
+    /// Eager ctor sets this <c>true</c> at construction.
+    /// </summary>
+    private bool _isInitialized;
+
+    /// <summary>
+    /// Resolves <see cref="_embeddingSize"/> from <c>input.Shape[^1]</c> and propagates
+    /// the full input shape into the layer's resolved shapes (input == output for an
+    /// encoder block).
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        if (IsShapeResolved) return;
+        if (input.Shape.Length < 1)
+            throw new ArgumentException(
+                $"TransformerEncoderLayer requires rank>=1 input; got rank {input.Shape.Length}.",
+                nameof(input));
+
+        if (_embeddingSize < 0)
+        {
+            _embeddingSize = input.Shape[input.Shape.Length - 1];
+            if (_embeddingSize % _numHeads != 0)
+                throw new ArgumentException(
+                    $"Resolved embeddingSize ({_embeddingSize}) must be evenly divisible by " +
+                    $"numHeads ({_numHeads}); got remainder {_embeddingSize % _numHeads}.");
+        }
+
+        var resolved = new int[input.Shape.Length];
+        for (int i = 0; i < input.Shape.Length; i++) resolved[i] = input.Shape[i];
+        ResolveShapes(resolved, resolved);
+    }
+
+    /// <summary>
+    /// Constructs the sublayers (attention, norms, FFN) using the resolved
+    /// <see cref="_embeddingSize"/>.
+    /// </summary>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+
+        lock (InitializationLock)
+        {
+            if (_isInitialized) return;
+            if (_embeddingSize <= 0)
+                throw new InvalidOperationException(
+                    "TransformerEncoderLayer.EnsureInitialized called before _embeddingSize was resolved.");
+
+            _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads,
+                new GELUActivation<T>() as IActivationFunction<T>);
+            _norm1 = new LayerNormalizationLayer<T>();
+            _feedForward1 = new FeedForwardLayer<T>(_feedForwardDim,
+                new GELUActivation<T>() as IActivationFunction<T>);
+            _feedForward2 = new FeedForwardLayer<T>(_embeddingSize,
+                (IActivationFunction<T>?)null);
+            _norm2 = new LayerNormalizationLayer<T>();
+
+            RegisterSubLayer(_selfAttention);
+            RegisterSubLayer(_norm1);
+            RegisterSubLayer(_feedForward1);
+            RegisterSubLayer(_feedForward2);
+            RegisterSubLayer(_norm2);
+
+            _isInitialized = true;
+        }
     }
 
     /// <summary>
@@ -444,6 +501,10 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy ctor path: resolve _embeddingSize from input.Shape[^1] and construct
+        // the inner attention / FFN / norm sublayers on first call.
+        EnsureInitializedFromInput(input);
+
         // Handle any rank >= 2: last 2 dims are [seq, embed], earlier dims are batch-like
         int rank = input.Shape.Length;
         _inputWas2D = rank == 2;
@@ -527,6 +588,10 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        // Lazy ctor path: resolve _embeddingSize from inputs[0].Shape[^1] and construct
+        // sublayers before any GPU code dereferences them.
+        EnsureInitializedFromInput(inputs[0]);
 
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
@@ -641,6 +706,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
+        if (!_isInitialized) return;
         // Update parameters for each sub-layer
         _selfAttention.UpdateParameters(learningRate);
         _norm1.UpdateParameters(learningRate);
@@ -661,6 +727,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void UpdateParametersGpu(IGpuOptimizerConfig config)
     {
+        if (!_isInitialized) return;
         // Update parameters for each sub-layer using GPU optimizer
         _selfAttention.UpdateParametersGpu(config);
         _norm1.UpdateParametersGpu(config);
@@ -697,6 +764,9 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        // Sublayers do not exist on a lazy encoder until first Forward.
+        if (!_isInitialized) return new Vector<T>(0);
+
         // === Vectorized Parameter Concatenation (Phase B: US-GPU-015) ===
         // Collect parameters from all sublayers and concatenate them
         var selfAttentionParams = _selfAttention.GetParameters();
@@ -741,9 +811,12 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void ResetState()
     {
-        // Clear GPU cached tensors
+        // Clear GPU cached tensors (always safe — these are local fields).
         _gpuInput3D = null;
         _gpuNormalized1 = null;
+
+        // Sublayers do not exist on a lazy encoder until first Forward.
+        if (!_isInitialized) return;
 
         // Reset all sublayers
         _selfAttention.ResetState();
@@ -786,6 +859,13 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public T ComputeAuxiliaryLoss()
     {
         if (!UseAuxiliaryLoss)
+        {
+            _lastAuxiliaryLoss = NumOps.Zero;
+            return _lastAuxiliaryLoss;
+        }
+
+        // Sublayers do not exist on a lazy encoder until first Forward.
+        if (!_isInitialized)
         {
             _lastAuxiliaryLoss = NumOps.Zero;
             return _lastAuxiliaryLoss;

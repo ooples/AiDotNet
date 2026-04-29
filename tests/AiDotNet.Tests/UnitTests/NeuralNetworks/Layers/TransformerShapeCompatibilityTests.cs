@@ -150,7 +150,7 @@ public class TransformerShapeCompatibilityTests
         int embeddingSize = 64;
         int numHeads = 4;
         int feedForwardDim = 128;
-        var layer = new TransformerEncoderLayer<double>(embeddingSize, numHeads, feedForwardDim);
+        var layer = new TransformerEncoderLayer<double>( numHeads, feedForwardDim);
 
         // 2D input: [seq_length, embedding_size]
         int seqLength = 10;
@@ -173,7 +173,7 @@ public class TransformerShapeCompatibilityTests
         int embeddingSize = 64;
         int numHeads = 4;
         int feedForwardDim = 128;
-        var layer = new TransformerEncoderLayer<double>(embeddingSize, numHeads, feedForwardDim);
+        var layer = new TransformerEncoderLayer<double>( numHeads, feedForwardDim);
 
         // 3D input: [batch_size, seq_length, embedding_size]
         int batchSize = 2;
@@ -206,7 +206,7 @@ public class TransformerShapeCompatibilityTests
         int feedForwardDim = 128;
 
         var positionalEncoding = new PositionalEncodingLayer<double>(maxSequenceLength: 100, embeddingSize);
-        var encoderLayer = new TransformerEncoderLayer<double>(embeddingSize, numHeads, feedForwardDim);
+        var encoderLayer = new TransformerEncoderLayer<double>( numHeads, feedForwardDim);
 
         // Create input: [batch_size, seq_length, embedding_size]
         var input = new Tensor<double>([batchSize, seqLength, embeddingSize]);

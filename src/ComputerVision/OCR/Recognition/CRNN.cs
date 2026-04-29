@@ -103,14 +103,14 @@ public class CRNN<T> : OCRBase<T>
         // Input: [batch, seqLen, 512], Output: [batch, seqLen, 256]
         int[] inputShape1 = new[] { 1, _sequenceFeatureDim }; // [batch, features] for single timestep
         IActivationFunction<T> tanhActivation = new TanhActivation<T>();
-        _lstm1Forward = new LSTMLayer<T>(_sequenceFeatureDim, _hiddenDim, inputShape1, tanhActivation);
-        _lstm1Backward = new LSTMLayer<T>(_sequenceFeatureDim, _hiddenDim, inputShape1, tanhActivation);
+        _lstm1Forward = new LSTMLayer<T>( _hiddenDim, tanhActivation);
+        _lstm1Backward = new LSTMLayer<T>( _hiddenDim, tanhActivation);
 
         // Bidirectional LSTM Layer 2
         // Input: [batch, seqLen, 512 (256*2)], Output: [batch, seqLen, 256]
         int[] inputShape2 = new[] { 1, _hiddenDim * 2 };
-        _lstm2Forward = new LSTMLayer<T>(_hiddenDim * 2, _hiddenDim, inputShape2, tanhActivation);
-        _lstm2Backward = new LSTMLayer<T>(_hiddenDim * 2, _hiddenDim, inputShape2, tanhActivation);
+        _lstm2Forward = new LSTMLayer<T>( _hiddenDim, tanhActivation);
+        _lstm2Backward = new LSTMLayer<T>( _hiddenDim, tanhActivation);
 
         // Output layer to vocabulary (512 = 256*2 from bidirectional)
         _outputLayer = new Dense<T>(_hiddenDim * 2, VocabularySize);

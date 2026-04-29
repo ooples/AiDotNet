@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
-[LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, false, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "8, false, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public partial class GRULayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -164,7 +164,11 @@ public partial class GRULayer<T> : LayerBase<T>
     /// - In audio processing, this could be the number of frequency bands
     /// </para>
     /// </remarks>
-    private readonly int _inputSize;
+    /// <remarks>
+    /// Initialized to <c>-1</c> when the lazy ctor is used; resolved from
+    /// <c>input.Shape[^1]</c> on first <see cref="Forward(Tensor{T})"/>.
+    /// </remarks>
+    private int _inputSize;
 
     /// <summary>
     /// The size of the hidden state vector.
@@ -397,9 +401,17 @@ public partial class GRULayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override int ParameterCount =>
-        _hiddenSize * _inputSize * 3 +  // Wz, Wr, Wh
-        _hiddenSize * _hiddenSize * 3 + // Uz, Ur, Uh
-        _hiddenSize * 3;                // bz, br, bh
+        // Before first forward, _inputSize is -1 (lazy sentinel) and the weight/bias
+        // tensors are zero-sized placeholders. Match what GetParameters() returns:
+        // an empty vector. Reporting a real parameter count from an unresolved input
+        // width would yield a negative number and disagree with the actual GetParameters()
+        // length. Subclasses that need to inspect the parameter layout pre-forward must
+        // call ResolveFromShape first.
+        _inputSize <= 0
+            ? 0
+            : _hiddenSize * _inputSize * 3 +  // Wz, Wr, Wh
+              _hiddenSize * _hiddenSize * 3 + // Uz, Ur, Uh
+              _hiddenSize * 3;                // bz, br, bh
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -430,131 +442,150 @@ public partial class GRULayer<T> : LayerBase<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="GRULayer{T}"/> class with the specified dimensions, return behavior, and element-wise activation functions.
+    /// True once the first forward has resolved <see cref="_inputSize"/> and allocated
+    /// the 6 weight tensors + 3 biases. (As of #1212 the eager constructors are removed —
+    /// every <see cref="GRULayer{T}"/> goes through this lazy initialization path.)
     /// </summary>
-    /// <param name="inputSize">The size of the input feature vector at each time step.</param>
+    private bool _isInitialized;
+
+    /// <summary>
+    /// Initializes a lazy <see cref="GRULayer{T}"/>: input feature size is resolved from
+    /// <c>input.Shape[^1]</c> on first <see cref="Forward(Tensor{T})"/>; weight tensors
+    /// and biases are allocated then.
+    /// </summary>
     /// <param name="hiddenSize">The size of the hidden state vector.</param>
-    /// <param name="returnSequences">If <c>true</c>, returns all hidden states; if <c>false</c>, returns only the final hidden state.</param>
-    /// <param name="activation">The activation function for the candidate hidden state. Defaults to tanh if not specified.</param>
-    /// <param name="recurrentActivation">The activation function for the gates. Defaults to sigmoid if not specified.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates a new GRU layer with the specified dimensions and element-wise activation functions.
-    /// The weights are initialized randomly with a scale factor based on the hidden size, and the biases are initialized to zero.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a new GRU layer with standard activation functions.
-    /// 
-    /// When creating a GRU layer, you specify:
-    /// - inputSize: How many features each element in your sequence has
-    /// - hiddenSize: How large the GRU's "memory" should be
-    /// - returnSequences: Whether you want information about every element or just a final summary
-    /// - activation: How to shape new information (default is tanh, outputting values between -1 and 1)
-    /// - recurrentActivation: How the gates should work (default is sigmoid, outputting values between 0 and 1)
-    /// 
-    /// For example, if processing sentences where each word is represented by a 100-dimensional vector,
-    /// and you want a 200-dimensional memory, you would use inputSize=100 and hiddenSize=200.
-    /// </para>
-    /// </remarks>
-    public GRULayer(int inputSize, int hiddenSize,
+    /// <param name="returnSequences">If <c>true</c>, returns all hidden states.</param>
+    /// <param name="activation">Candidate-hidden-state activation (default tanh).</param>
+    /// <param name="recurrentActivation">Gate activation (default sigmoid).</param>
+    public GRULayer(int hiddenSize,
                     bool returnSequences = false,
                     IActivationFunction<T>? activation = null,
                     IActivationFunction<T>? recurrentActivation = null)
-        : base([inputSize], [hiddenSize], activation ?? new TanhActivation<T>())
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, activation ?? new TanhActivation<T>())
     {
-        _inputSize = inputSize;
+        if (hiddenSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenSize), "hiddenSize must be positive.");
+
         _hiddenSize = hiddenSize;
+        _inputSize = -1;
         _returnSequences = returnSequences;
         _activation = activation ?? new TanhActivation<T>();
         _recurrentActivation = recurrentActivation ?? new SigmoidActivation<T>();
 
-        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _hiddenSize)));
+        _Wz = new Tensor<T>(new[] { 0, 0 });
+        _Wr = new Tensor<T>(new[] { 0, 0 });
+        _Wh = new Tensor<T>(new[] { 0, 0 });
+        _Uz = new Tensor<T>(new[] { 0, 0 });
+        _Ur = new Tensor<T>(new[] { 0, 0 });
+        _Uh = new Tensor<T>(new[] { 0, 0 });
+        _bz = new Tensor<T>(new[] { 0 });
+        _br = new Tensor<T>(new[] { 0 });
+        _bh = new Tensor<T>(new[] { 0 });
 
-        _Wz = InitializeTensor(_hiddenSize, _inputSize, scale);
-        _Wr = InitializeTensor(_hiddenSize, _inputSize, scale);
-        _Wh = InitializeTensor(_hiddenSize, _inputSize, scale);
-
-        _Uz = InitializeTensor(_hiddenSize, _hiddenSize, scale);
-        _Ur = InitializeTensor(_hiddenSize, _hiddenSize, scale);
-        _Uh = InitializeTensor(_hiddenSize, _hiddenSize, scale);
-
-        _bz = new Tensor<T>([_hiddenSize]);
-        _br = new Tensor<T>([_hiddenSize]);
-        _bh = new Tensor<T>([_hiddenSize]);
-
-        // Register trainable parameters for GPU memory optimization
-        RegisterTrainableParameter(_Wz, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Wr, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Wh, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Uz, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Ur, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Uh, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_bz, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_br, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_bh, PersistentTensorRole.Biases);
+        _isInitialized = false;
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="GRULayer{T}"/> class with the specified dimensions, return behavior, and vector activation functions.
+    /// Lazy ctor with vector activation functions.
     /// </summary>
-    /// <param name="inputSize">The size of the input feature vector at each time step.</param>
-    /// <param name="hiddenSize">The size of the hidden state vector.</param>
-    /// <param name="returnSequences">If <c>true</c>, returns all hidden states; if <c>false</c>, returns only the final hidden state.</param>
-    /// <param name="vectorActivation">The vector activation function for the candidate hidden state. Defaults to tanh if not specified.</param>
-    /// <param name="vectorRecurrentActivation">The vector activation function for the gates. Defaults to sigmoid if not specified.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates a new GRU layer with the specified dimensions and vector activation functions.
-    /// Vector activation functions operate on entire vectors rather than individual elements, which can capture
-    /// dependencies between different elements of the vectors.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a new GRU layer with more advanced vector-based activation functions.
-    /// 
-    /// Vector activation functions:
-    /// - Process entire groups of numbers together, not just one at a time
-    /// - Can capture relationships between different features
-    /// - May be more powerful for complex patterns
-    /// 
-    /// This constructor is useful when you need the layer to understand how different
-    /// features interact with each other, rather than treating each feature independently.
-    /// </para>
-    /// </remarks>
-    public GRULayer(int inputSize, int hiddenSize,
+    public GRULayer(int hiddenSize,
+                    IVectorActivationFunction<T> vectorActivation,
                     bool returnSequences = false,
-                    IVectorActivationFunction<T>? vectorActivation = null,
                     IVectorActivationFunction<T>? vectorRecurrentActivation = null)
-        : base([inputSize], [hiddenSize], vectorActivation ?? new TanhActivation<T>())
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, vectorActivation)
     {
-        _inputSize = inputSize;
+        if (hiddenSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenSize), "hiddenSize must be positive.");
+
         _hiddenSize = hiddenSize;
+        _inputSize = -1;
         _returnSequences = returnSequences;
-        _vectorActivation = vectorActivation ?? new TanhActivation<T>();
+        _vectorActivation = vectorActivation;
         _vectorRecurrentActivation = vectorRecurrentActivation ?? new SigmoidActivation<T>();
 
-        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _hiddenSize)));
+        _Wz = new Tensor<T>(new[] { 0, 0 });
+        _Wr = new Tensor<T>(new[] { 0, 0 });
+        _Wh = new Tensor<T>(new[] { 0, 0 });
+        _Uz = new Tensor<T>(new[] { 0, 0 });
+        _Ur = new Tensor<T>(new[] { 0, 0 });
+        _Uh = new Tensor<T>(new[] { 0, 0 });
+        _bz = new Tensor<T>(new[] { 0 });
+        _br = new Tensor<T>(new[] { 0 });
+        _bh = new Tensor<T>(new[] { 0 });
 
-        _Wz = InitializeTensor(_hiddenSize, _inputSize, scale);
-        _Wr = InitializeTensor(_hiddenSize, _inputSize, scale);
-        _Wh = InitializeTensor(_hiddenSize, _inputSize, scale);
-
-        _Uz = InitializeTensor(_hiddenSize, _hiddenSize, scale);
-        _Ur = InitializeTensor(_hiddenSize, _hiddenSize, scale);
-        _Uh = InitializeTensor(_hiddenSize, _hiddenSize, scale);
-
-        _bz = new Tensor<T>([_hiddenSize]);
-        _br = new Tensor<T>([_hiddenSize]);
-        _bh = new Tensor<T>([_hiddenSize]);
-
-        // Register trainable parameters for GPU memory optimization
-        RegisterTrainableParameter(_Wz, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Wr, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Wh, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Uz, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Ur, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Uh, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_bz, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_br, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_bh, PersistentTensorRole.Biases);
+        _isInitialized = false;
     }
+
+    /// <summary>
+    /// Resolves <see cref="_inputSize"/> from <c>input.Shape[^1]</c> on first forward.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        if (IsShapeResolved) return;
+        if (input.Shape.Length < 1)
+            throw new ArgumentException(
+                $"GRULayer requires rank>=1 input; got rank {input.Shape.Length}.", nameof(input));
+
+        if (_inputSize < 0)
+        {
+            _inputSize = input.Shape[input.Shape.Length - 1];
+        }
+
+        var resolvedInput = new int[input.Shape.Length];
+        var resolvedOutput = new int[input.Shape.Length];
+        for (int i = 0; i < input.Shape.Length; i++)
+        {
+            resolvedInput[i] = input.Shape[i];
+            resolvedOutput[i] = input.Shape[i];
+        }
+        resolvedOutput[resolvedOutput.Length - 1] = _hiddenSize;
+
+        ResolveShapes(resolvedInput, resolvedOutput);
+    }
+
+    /// <summary>
+    /// Allocates the 6 GRU weight tensors and 3 gate biases using resolved
+    /// <see cref="_inputSize"/> and <see cref="_hiddenSize"/>.
+    /// </summary>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+
+        lock (InitializationLock)
+        {
+            if (_isInitialized) return;
+            if (_inputSize <= 0)
+                throw new InvalidOperationException(
+                    "GRULayer.EnsureInitialized called before _inputSize was resolved. " +
+                    "OnFirstForward must run first.");
+
+            T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _hiddenSize)));
+
+            _Wz = InitializeTensor(_hiddenSize, _inputSize, scale);
+            _Wr = InitializeTensor(_hiddenSize, _inputSize, scale);
+            _Wh = InitializeTensor(_hiddenSize, _inputSize, scale);
+            _Uz = InitializeTensor(_hiddenSize, _hiddenSize, scale);
+            _Ur = InitializeTensor(_hiddenSize, _hiddenSize, scale);
+            _Uh = InitializeTensor(_hiddenSize, _hiddenSize, scale);
+
+            _bz = new Tensor<T>(new[] { _hiddenSize });
+            _br = new Tensor<T>(new[] { _hiddenSize });
+            _bh = new Tensor<T>(new[] { _hiddenSize });
+
+            RegisterTrainableParameter(_Wz, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_Wr, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_Wh, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_Uz, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_Ur, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_Uh, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_bz, PersistentTensorRole.Biases);
+            RegisterTrainableParameter(_br, PersistentTensorRole.Biases);
+            RegisterTrainableParameter(_bh, PersistentTensorRole.Biases);
+
+            _isInitialized = true;
+        }
+    }
+
 
     /// <summary>
     /// Initializes a tensor with scaled random values.
@@ -624,6 +655,10 @@ public partial class GRULayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Resolve _inputSize from input.Shape[^1] and allocate weights on first call.
+        // Idempotent — gated by _isInitialized.
+        EnsureInitializedFromInput(input);
+
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
@@ -953,6 +988,12 @@ public partial class GRULayer<T> : LayerBase<T>
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        // Lazy ctor path: resolve _inputSize from inputs[0].Shape[^1] and allocate weights
+        // before any GPU code reads stacked weight tensors. Without this, a first GPU call
+        // on a freshly-constructed lazy GRULayer would dereference zero-sized tensors.
+        EnsureInitializedFromInput(inputs[0]);
+
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 

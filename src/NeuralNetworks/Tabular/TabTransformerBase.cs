@@ -184,7 +184,6 @@ public abstract class TabTransformerBase<T>
         for (int i = 0; i < Options.NumLayers; i++)
         {
             var encoderLayer = new TransformerEncoderLayer<T>(
-                Options.EmbeddingDimension,
                 Options.NumHeads,
                 Options.FeedForwardDimension);
             _encoderLayers.Add(encoderLayer);

@@ -230,7 +230,7 @@ public class NeuralNetworkLayersIntegrationTests
         int[] inputShape = [batchSize, sequenceLength, inputSize];
 
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new LSTMLayer<double>(inputSize, hiddenSize, inputShape, tanh);
+        var layer = new LSTMLayer<double>( hiddenSize, tanh);
         var input = new Tensor<double>(inputShape);
         InitializeRandomTensor(input);
 
@@ -249,7 +249,7 @@ public class NeuralNetworkLayersIntegrationTests
         // Arrange
         int[] inputShape = [1, 5, 10];
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new LSTMLayer<double>(10, 20, inputShape, tanh);
+        var layer = new LSTMLayer<double>( 20, tanh);
 
         // Assert
         Assert.True(layer.SupportsTraining);
@@ -261,7 +261,7 @@ public class NeuralNetworkLayersIntegrationTests
         // Arrange
         int[] inputShape = [1, 5, 10];
         IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new LSTMLayer<double>(10, 20, inputShape, tanh);
+        var layer = new LSTMLayer<double>( 20, tanh);
 
         // Act
         var parameters = layer.GetParameters();

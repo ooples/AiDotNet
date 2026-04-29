@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
-[LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, new[] { 1, 4 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public partial class LSTMLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -63,7 +63,13 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// If you're processing words represented as 100-dimensional vectors, this value would be 100.
     /// </para>
     /// </remarks>
-    private readonly int _inputSize;
+    /// <remarks>
+    /// Initialized to <c>-1</c> at construction and resolved from <c>input.Shape[^1]</c>
+    /// on the first <see cref="Forward(Tensor{T})"/> call. (As of #1212 the eager
+    /// constructors are removed — every <see cref="LSTMLayer{T}"/> goes through this
+    /// lazy resolution path.)
+    /// </remarks>
+    private int _inputSize;
 
     /// <summary>
     /// The size of the hidden state and cell state (number of LSTM units).
@@ -673,9 +679,16 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override int ParameterCount =>
-        4 * (_hiddenSize * _inputSize) +  // 4 input weight matrices
-        4 * (_hiddenSize * _hiddenSize) + // 4 hidden weight matrices
-        4 * _hiddenSize;                  // 4 bias vectors
+        // Before first forward, _inputSize is -1 (lazy sentinel) and the weight/bias
+        // tensors are zero-sized placeholders. Reporting a real parameter count from
+        // an unresolved input width would (a) yield a negative number from
+        // 4*hidden*(-1) and (b) disagree with the actual length of GetParameters().
+        // Match what the placeholder tensors expose: zero parameters.
+        _inputSize <= 0
+            ? 0
+            : 4 * (_hiddenSize * _inputSize) +  // 4 input weight matrices
+              4 * (_hiddenSize * _hiddenSize) + // 4 hidden weight matrices
+              4 * _hiddenSize;                  // 4 bias vectors
 
     /// <summary>
     /// Gets the forget gate input weights for weight loading.
@@ -738,40 +751,31 @@ public partial class LSTMLayer<T> : LayerBase<T>
     public Tensor<T> BiasO => _biasO;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="LSTMLayer{T}"/> class with scalar activation functions.
+    /// True once the first forward has resolved <see cref="_inputSize"/> and allocated
+    /// the 8 weight tensors + 4 biases. (As of #1212 the eager constructors are removed —
+    /// every <see cref="LSTMLayer{T}"/> goes through this lazy initialization path.)
     /// </summary>
-    /// <param name="inputSize">The size of each input vector (number of features).</param>
+    private bool _isInitialized;
+
+    /// <summary>
+    /// Initializes a new lazy <see cref="LSTMLayer{T}"/>: input feature size is resolved
+    /// from <c>input.Shape[^1]</c> on first <see cref="Forward(Tensor{T})"/>; weight
+    /// tensors and biases are allocated then. The full-rank input shape is also
+    /// resolved at first forward.
+    /// </summary>
     /// <param name="hiddenSize">The size of the hidden state (number of LSTM units).</param>
-    /// <param name="inputShape">The shape of the input tensor.</param>
-    /// <param name="activation">The activation function to use for the cell state, defaults to tanh if not specified.</param>
-    /// <param name="recurrentActivation">The activation function to use for the gates, defaults to sigmoid if not specified.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates an LSTM layer with the specified dimensions and activation functions. It initializes
-    /// all the weights and biases needed for the LSTM gates (forget, input, cell state, and output). The weights
-    /// are initialized using the Xavier/Glorot initialization technique, which helps with training stability.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a new LSTM layer with your desired settings using standard activation functions.
-    /// 
-    /// When setting up this layer:
-    /// - inputSize is how many features each data point has
-    /// - hiddenSize is how much "memory" each LSTM unit will have
-    /// - inputShape defines the expected dimensions of your data
-    /// - activation controls how the cell state is processed (usually tanh)
-    /// - recurrentActivation controls how the gates operate (usually sigmoid)
-    /// 
-    /// For example, if you're processing words represented as 100-dimensional vectors,
-    /// inputSize would be 100. If you want 200 LSTM units, hiddenSize would be 200.
-    /// </para>
-    /// </remarks>
-    public LSTMLayer(int inputSize, int hiddenSize, int[] inputShape,
+    /// <param name="activation">Cell-state activation (default tanh).</param>
+    /// <param name="recurrentActivation">Gate activation (default sigmoid).</param>
+    public LSTMLayer(int hiddenSize,
         IActivationFunction<T>? activation = null,
-        IActivationFunction<T>? recurrentActivation = null,
-        IEngine? engine = null)
-        : base(inputShape, CalculateOutputShape(inputShape, hiddenSize), activation ?? new TanhActivation<T>())
+        IActivationFunction<T>? recurrentActivation = null)
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, activation ?? new TanhActivation<T>())
     {
-        _inputSize = inputSize;
+        if (hiddenSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenSize), "hiddenSize must be positive.");
+
         _hiddenSize = hiddenSize;
+        _inputSize = -1;
         _useVectorActivation = false;
 
         _sigmoidActivation = recurrentActivation ?? new SigmoidActivation<T>();
@@ -779,151 +783,141 @@ public partial class LSTMLayer<T> : LayerBase<T>
 
         Gradients = new Dictionary<string, Tensor<T>>();
 
-        // Initialize weights
-        _weightsFi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
-        _weightsIi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
-        _weightsCi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
-        _weightsOi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
+        // Lazy: keep weight/bias tensors at zero size until first forward resolves _inputSize.
+        _weightsFi = new Tensor<T>(new int[] { 0, 0 });
+        _weightsIi = new Tensor<T>(new int[] { 0, 0 });
+        _weightsCi = new Tensor<T>(new int[] { 0, 0 });
+        _weightsOi = new Tensor<T>(new int[] { 0, 0 });
+        _weightsFh = new Tensor<T>(new int[] { 0, 0 });
+        _weightsIh = new Tensor<T>(new int[] { 0, 0 });
+        _weightsCh = new Tensor<T>(new int[] { 0, 0 });
+        _weightsOh = new Tensor<T>(new int[] { 0, 0 });
+        _biasF = new Tensor<T>(new int[] { 0 });
+        _biasI = new Tensor<T>(new int[] { 0 });
+        _biasC = new Tensor<T>(new int[] { 0 });
+        _biasO = new Tensor<T>(new int[] { 0 });
 
-        _weightsFh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
-        _weightsIh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
-        _weightsCh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
-        _weightsOh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
-
-        // Initialize biases
-        _biasF = new Tensor<T>(new int[] { _hiddenSize });
-        _biasI = new Tensor<T>(new int[] { _hiddenSize });
-        _biasC = new Tensor<T>(new int[] { _hiddenSize });
-        _biasO = new Tensor<T>(new int[] { _hiddenSize });
-
-        InitializeWeights();
-
-        // Register trainable parameters for GPU memory optimization
-        RegisterTrainableParameter(_weightsFi, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_weightsIi, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_weightsCi, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_weightsOi, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_weightsFh, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_weightsIh, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_weightsCh, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_weightsOh, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biasF, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_biasI, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_biasC, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_biasO, PersistentTensorRole.Biases);
+        _isInitialized = false;
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="LSTMLayer{T}"/> class with vector activation functions.
+    /// Lazy ctor with vector activation functions. See the
+    /// <see cref="LSTMLayer{T}(int, IActivationFunction{T}?, IActivationFunction{T}?)"/>
+    /// overload for the rest of the contract.
     /// </summary>
-    /// <param name="inputSize">The size of each input vector (number of features).</param>
-    /// <param name="hiddenSize">The size of the hidden state (number of LSTM units).</param>
-    /// <param name="inputShape">The shape of the input tensor.</param>
-    /// <param name="activation">The vector activation function to use for the cell state, defaults to tanh if not specified.</param>
-    /// <param name="recurrentActivation">The vector activation function to use for the gates, defaults to sigmoid if not specified.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor creates an LSTM layer that uses vector activation functions, which operate on entire tensors
-    /// at once rather than element by element. This can be more efficient for certain operations and allows for more
-    /// complex activation patterns that consider relationships between different elements.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a new LSTM layer using advanced vector-based activation functions.
-    /// 
-    /// Vector activation functions:
-    /// - Process entire groups of numbers at once, rather than one at a time
-    /// - Can be more efficient on certain hardware
-    /// - May capture more complex relationships between different values
-    /// 
-    /// When you might use this constructor instead of the standard one:
-    /// - When working with very large models
-    /// - When you need maximum performance
-    /// - When using specialized activation functions that work on vectors
-    /// 
-    /// The basic functionality is the same as the standard constructor, but with
-    /// potentially better performance for large-scale applications.
-    /// </para>
-    /// </remarks>
-    public LSTMLayer(int inputSize, int hiddenSize, int[] inputShape,
-        IVectorActivationFunction<T>? activation = null,
-        IVectorActivationFunction<T>? recurrentActivation = null,
-        IEngine? engine = null)
-        : base(inputShape, CalculateOutputShape(inputShape, hiddenSize), activation ?? new TanhActivation<T>())
+    public LSTMLayer(int hiddenSize,
+        IVectorActivationFunction<T> vectorActivation,
+        IVectorActivationFunction<T>? recurrentActivation = null)
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, vectorActivation)
     {
-        _inputSize = inputSize;
+        if (hiddenSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenSize), "hiddenSize must be positive.");
+
         _hiddenSize = hiddenSize;
+        _inputSize = -1;
         _useVectorActivation = true;
 
         _sigmoidVectorActivation = recurrentActivation ?? new SigmoidActivation<T>();
-        _tanhVectorActivation = activation ?? new TanhActivation<T>();
+        _tanhVectorActivation = vectorActivation;
 
         Gradients = new Dictionary<string, Tensor<T>>();
 
-        // Initialize weights
-        _weightsFi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
-        _weightsIi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
-        _weightsCi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
-        _weightsOi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
+        _weightsFi = new Tensor<T>(new int[] { 0, 0 });
+        _weightsIi = new Tensor<T>(new int[] { 0, 0 });
+        _weightsCi = new Tensor<T>(new int[] { 0, 0 });
+        _weightsOi = new Tensor<T>(new int[] { 0, 0 });
+        _weightsFh = new Tensor<T>(new int[] { 0, 0 });
+        _weightsIh = new Tensor<T>(new int[] { 0, 0 });
+        _weightsCh = new Tensor<T>(new int[] { 0, 0 });
+        _weightsOh = new Tensor<T>(new int[] { 0, 0 });
+        _biasF = new Tensor<T>(new int[] { 0 });
+        _biasI = new Tensor<T>(new int[] { 0 });
+        _biasC = new Tensor<T>(new int[] { 0 });
+        _biasO = new Tensor<T>(new int[] { 0 });
 
-        _weightsFh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
-        _weightsIh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
-        _weightsCh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
-        _weightsOh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
-
-        // Initialize biases
-        _biasF = new Tensor<T>(new int[] { _hiddenSize });
-        _biasI = new Tensor<T>(new int[] { _hiddenSize });
-        _biasC = new Tensor<T>(new int[] { _hiddenSize });
-        _biasO = new Tensor<T>(new int[] { _hiddenSize });
-
-        InitializeWeights();
-
-        // Register trainable parameters for GPU memory optimization
-        RegisterTrainableParameter(_weightsFi, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_weightsIi, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_weightsCi, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_weightsOi, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_weightsFh, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_weightsIh, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_weightsCh, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_weightsOh, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biasF, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_biasI, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_biasC, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_biasO, PersistentTensorRole.Biases);
+        _isInitialized = false;
     }
 
     /// <summary>
-    /// Calculates the output shape of the LSTM layer based on the input shape and hidden size.
+    /// Resolves <see cref="_inputSize"/> from <c>input.Shape[^1]</c> and propagates the
+    /// full input shape into the layer's resolved input/output shapes (output preserves
+    /// batch / time dims, last axis becomes <see cref="_hiddenSize"/>).
     /// </summary>
-    /// <param name="inputShape">The shape of the input tensor.</param>
-    /// <param name="hiddenSize">The size of the hidden state (number of LSTM units).</param>
-    /// <returns>The calculated output shape for the LSTM layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the output shape by preserving the batch size and time steps dimensions of the input,
-    /// but changes the feature dimension to match the hidden size. This reflects that the LSTM processes each time step
-    /// and outputs a vector of size hiddenSize for each one.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method figures out the shape of the data that will come out of this layer.
-    /// 
-    /// When an LSTM processes data:
-    /// - It keeps the same number of samples (batch size)
-    /// - It keeps the same number of time steps
-    /// - It changes the number of features to match the hidden size
-    /// 
-    /// For example, if your input has shape [32, 10, 100] (32 samples, 10 time steps, 100 features),
-    /// and your hiddenSize is 200, the output shape would be [32, 10, 200].
-    /// </para>
-    /// </remarks>
-    private static int[] CalculateOutputShape(int[] inputShape, int hiddenSize)
+    protected override void OnFirstForward(Tensor<T> input)
     {
-        // Preserve batch size and time steps, change last dimension to hiddenSize
-        var outputShape = new int[inputShape.Length];
-        Array.Copy(inputShape, outputShape, inputShape.Length);
-        outputShape[outputShape.Length - 1] = hiddenSize;
+        if (IsShapeResolved) return;
+        if (input.Shape.Length < 1)
+            throw new ArgumentException(
+                $"LSTMLayer requires rank>=1 input; got rank {input.Shape.Length}.", nameof(input));
 
-        return outputShape;
+        if (_inputSize < 0)
+        {
+            _inputSize = input.Shape[input.Shape.Length - 1];
+        }
+
+        var resolvedInput = new int[input.Shape.Length];
+        var resolvedOutput = new int[input.Shape.Length];
+        for (int i = 0; i < input.Shape.Length; i++)
+        {
+            resolvedInput[i] = input.Shape[i];
+            resolvedOutput[i] = input.Shape[i];
+        }
+        resolvedOutput[resolvedOutput.Length - 1] = _hiddenSize;
+
+        ResolveShapes(resolvedInput, resolvedOutput);
     }
+
+    /// <summary>
+    /// Allocates the 8 input/recurrent weight tensors and 4 gate biases using the
+    /// resolved <see cref="_inputSize"/> and <see cref="_hiddenSize"/>. Idempotent —
+    /// gated by <see cref="_isInitialized"/> so a second forward is a no-op.
+    /// </summary>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+
+        lock (InitializationLock)
+        {
+            if (_isInitialized) return;
+            if (_inputSize <= 0)
+                throw new InvalidOperationException(
+                    "LSTMLayer.EnsureInitialized called before _inputSize was resolved. " +
+                    "OnFirstForward must run first.");
+
+            _weightsFi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
+            _weightsIi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
+            _weightsCi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
+            _weightsOi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
+
+            _weightsFh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
+            _weightsIh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
+            _weightsCh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
+            _weightsOh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
+
+            _biasF = new Tensor<T>(new int[] { _hiddenSize });
+            _biasI = new Tensor<T>(new int[] { _hiddenSize });
+            _biasC = new Tensor<T>(new int[] { _hiddenSize });
+            _biasO = new Tensor<T>(new int[] { _hiddenSize });
+
+            InitializeWeights();
+
+            RegisterTrainableParameter(_weightsFi, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_weightsIi, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_weightsCi, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_weightsOi, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_weightsFh, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_weightsIh, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_weightsCh, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_weightsOh, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biasF, PersistentTensorRole.Biases);
+            RegisterTrainableParameter(_biasI, PersistentTensorRole.Biases);
+            RegisterTrainableParameter(_biasC, PersistentTensorRole.Biases);
+            RegisterTrainableParameter(_biasO, PersistentTensorRole.Biases);
+
+            _isInitialized = true;
+        }
+    }
+
 
     /// <summary>
     /// Initializes the weights of the LSTM layer.
@@ -1057,6 +1051,10 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Resolve _inputSize from input.Shape[^1] and allocate weights on first call.
+        // Idempotent — gated by _isInitialized.
+        EnsureInitializedFromInput(input);
+
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
@@ -1206,6 +1204,10 @@ public partial class LSTMLayer<T> : LayerBase<T>
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+
+        // Lazy ctor path: resolve _inputSize from inputs[0].Shape[^1] and allocate
+        // the 8 weight tensors + 4 biases before any GPU code reads them.
+        EnsureInitializedFromInput(inputs[0]);
 
         if (Engine is not DirectGpuTensorEngine gpuEngine)
         {
@@ -2032,6 +2034,16 @@ public partial class LSTMLayer<T> : LayerBase<T>
         _biasC = SerializationHelper<T>.DeserializeTensor(reader);
         _biasO = SerializationHelper<T>.DeserializeTensor(reader);
 
+        // Recover the lazy-init state from the loaded tensor shapes. Without this,
+        // a lazy-constructed layer that just deserialized real weights would have
+        // its weights overwritten on the first Forward by EnsureInitialized's
+        // re-allocation path.
+        if (_weightsFi.Shape.Length >= 2 && _weightsFi.Shape[1] > 0)
+        {
+            _inputSize = _weightsFi.Shape[1];
+            _isInitialized = true;
+        }
+
         // Invalidate stacked weight buffers since weights have been replaced from deserialization
         InvalidateGpuStackedWeights();
     }
@@ -2133,6 +2145,47 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        if (!_isInitialized || _inputSize <= 0)
+        {
+            // Lazy LSTM with no resolved input width — try to recover by inferring
+            // _inputSize from parameters.Length. The flat layout is:
+            //   4 * (hidden*input) + 4 * (hidden*hidden) + 4 * hidden
+            // → input = (params - 4*hidden*hidden - 4*hidden) / (4*hidden)
+            int hidden4 = 4 * _hiddenSize;
+            int residual = parameters.Length - 4 * _hiddenSize * _hiddenSize - hidden4;
+            if (residual >= 0 && hidden4 > 0 && residual % hidden4 == 0)
+            {
+                int inferredInput = residual / hidden4;
+                if (inferredInput > 0)
+                {
+                    _inputSize = inferredInput;
+                    // Allocate weight tensors now (we know hiddenSize and inferredInput),
+                    // but DO NOT call ResolveFromShape with a synthetic shape — that would
+                    // bake a fake rank-2 [1, inferredInput] into InputShape/OutputShape and
+                    // override the real rank-3 [B, T, F] sequence shape on the first
+                    // actual Forward(...). Leaving _isInitialized true (set inside
+                    // EnsureInitialized) but IsShapeResolved false defers shape resolution
+                    // to OnFirstForward, which receives the real input tensor.
+                    EnsureInitialized();
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"LSTMLayer.SetParameters({parameters.Length}) cannot infer a positive " +
+                        $"input width from this parameter vector. Run a Forward(input) pass first " +
+                        $"so the layer can resolve _inputSize, or pass a resolved layer.");
+                }
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"LSTMLayer.SetParameters({parameters.Length}) called before the lazy input " +
+                    $"width was resolved, and the parameter count does not match a valid layout " +
+                    $"for hiddenSize={_hiddenSize}. Run a Forward(input) pass first or supply " +
+                    $"a vector matching 4*hidden*input + 4*hidden*hidden + 4*hidden.");
+            }
+        }
+
         int inputWeightSize = _hiddenSize * _inputSize;
         int hiddenWeightSize = _hiddenSize * _hiddenSize;
         int biasSize = _hiddenSize;
