@@ -48,7 +48,7 @@ public class CSPDarknet<T> : BackboneBase<T>
     /// Returns channel counts for P3, P4, P5 feature levels (stages 1, 2, 3).
     /// Stage 0 (P2) is not extracted as it's typically not used in detection heads.
     /// </remarks>
-    public override int[] OutputChannels { get; }
+    public override IReadOnlyList<int> OutputChannels { get; }
 
     /// <summary>
     /// Internal channel configuration for all 4 stages (used during construction).
@@ -59,7 +59,7 @@ public class CSPDarknet<T> : BackboneBase<T>
     /// <remarks>
     /// Returns strides for P3, P4, P5 feature levels: 8, 16, 32.
     /// </remarks>
-    public override int[] Strides => new[] { 8, 16, 32 };
+    public override IReadOnlyList<int> Strides => new[] { 8, 16, 32 };
 
     /// <summary>
     /// Creates a new CSP-Darknet backbone.

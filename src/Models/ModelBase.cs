@@ -201,5 +201,4 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
         if (_disposed) return;
         _disposed = true;
     }
-
 }

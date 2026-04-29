@@ -181,5 +181,4 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
         }
         _disposed = true;
     }
-
 }

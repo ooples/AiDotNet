@@ -1971,5 +1971,4 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         if (_disposed) return;
         _disposed = true;
     }
-
 }

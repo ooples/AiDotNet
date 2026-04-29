@@ -45,10 +45,10 @@ public class EfficientNet<T> : BackboneBase<T>
     public override string Name => $"EfficientNet-{_variant}";
 
     /// <inheritdoc/>
-    public override int[] OutputChannels { get; }
+    public override IReadOnlyList<int> OutputChannels { get; }
 
     /// <inheritdoc/>
-    public override int[] Strides => new[] { 4, 8, 16, 32 };
+    public override IReadOnlyList<int> Strides => new[] { 4, 8, 16, 32 };
 
     /// <summary>
     /// Indices of blocks that produce output features (P2, P3, P4, P5).

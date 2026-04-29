@@ -477,11 +477,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         if (_timestepEmbeddingCache.TryGetValue(timestep, out var cached))
             return cached;
 
-        // Sinusoidal timestep embedding emitted as rank-2 [1, TimeEmbeddingDim].
-        // DiffusionResBlock requires rank >= 2 to validate the timeEmbed contract
-        // before its lazy time-MLP bakes the input feature dim from the last axis.
+        // Sinusoidal timestep embedding (like in Transformers)
         var halfDim = TimeEmbeddingDim / 2;
-        var embedding = new Tensor<T>(new[] { 1, TimeEmbeddingDim });
+        var embedding = new Tensor<T>(new[] { TimeEmbeddingDim });
         var embSpan = embedding.AsWritableSpan();
 
         var logScale = Math.Log(10000.0) / (halfDim - 1);

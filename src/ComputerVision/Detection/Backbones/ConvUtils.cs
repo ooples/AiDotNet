@@ -173,8 +173,6 @@ internal class Dense<T>
                     "input dim is still the lazy sentinel. Call Forward(input) once before reading Bias.");
             var p = _layer.GetParameters();
             int wlen = _inDim * _outDim;
-            if (p.Length < wlen + _outDim)
-                return new Tensor<T>(new[] { _outDim });
             var arr = new T[_outDim];
             for (int i = 0; i < _outDim; i++) arr[i] = p[wlen + i];
             return new Tensor<T>(new[] { _outDim }, new Vector<T>(arr));

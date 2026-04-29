@@ -795,7 +795,10 @@ public static class DeserializationHelper
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.UpsamplingLayer<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.UpsamplingLayer`1")))
         {
-            // UpsamplingLayer(int scaleFactor) — lazy: input shape resolved on first forward
+            // UpsamplingLayer(int scaleFactor) — lazy: input shape resolved on first forward.
+            // Keep the ScaleFactor > 0 validation guard; route through the new 1-arg
+            // lazy ctor (the legacy 2-arg eager ctor was removed in the lazy-shape-
+            // inference migration).
             int scaleFactor = TryGetInt(additionalParams, "ScaleFactor") ?? 2;
             if (scaleFactor <= 0)
             {
