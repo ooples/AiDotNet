@@ -1159,6 +1159,28 @@ public static class DeserializationHelper
             throw new InvalidOperationException($"Failed to create instance of layer type {layerType}.");
         }
 
+        // Resolve lazy layers from the serialized inputShape so SetParameters
+        // can land trained weights. Layers whose lazy SetParameters can self-
+        // resolve from the parameter vector tolerate ResolveFromShape failures
+        // here since SetParameters will recover; others resolve via first Forward.
+        if (instance is NeuralNetworks.Layers.LayerBase<T> lb
+            && !lb.IsShapeResolved
+            && inputShape != null
+            && inputShape.Length > 0
+            && System.Array.TrueForAll(inputShape, d => d > 0))
+        {
+            try
+            {
+                lb.ResolveFromShape(inputShape);
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"DeserializationHelper: ResolveFromShape failed for {lb.GetType().Name} " +
+                    $"with inputShape [{string.Join(", ", inputShape)}]: {ex.GetType().Name}: {ex.Message}.");
+            }
+        }
+
         return (ILayer<T>)instance;
     }
 

@@ -1189,7 +1189,25 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        // Ensure weights and biases are initialized (supports lazy initialization)
+        // Round-trip from saved parameters when the layer is still in lazy
+        // placeholder state. Parameter vector length + outputSize uniquely
+        // determines inputSize for the (inputSize × outputSize + outputSize)
+        // layout — fixes #1221 serialize/deserialize drop.
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            int outputSize = OutputShape[0];
+            if (outputSize <= 0)
+                throw new InvalidOperationException(
+                    "Cannot SetParameters on deferred-shape DenseLayer before outputSize is known.");
+            int candidateInput = (parameters.Length - outputSize) / outputSize;
+            if (candidateInput <= 0 || candidateInput * outputSize + outputSize != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer inputSize for DenseLayer from {parameters.Length} parameters " +
+                    $"and outputSize={outputSize}.");
+            ResolveFromShape(new[] { candidateInput });
+        }
+
         EnsureInitialized();
 
         int expected = _weights.Length + _biases.Length;

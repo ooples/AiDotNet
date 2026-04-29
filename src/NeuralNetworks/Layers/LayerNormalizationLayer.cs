@@ -431,6 +431,20 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        // Round-trip from saved parameters when the layer is still in lazy
+        // placeholder state. Vector layout is [gamma, beta] both of length
+        // featureSize, so featureSize = parameters.Length / 2.
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            if (parameters.Length % 2 != 0 || parameters.Length == 0)
+                throw new ArgumentException(
+                    $"Cannot infer featureSize for LayerNormalizationLayer from {parameters.Length} parameters " +
+                    "(expected even length for [gamma, beta]).");
+            int featureSize = parameters.Length / 2;
+            ResolveFromShape(new[] { featureSize });
+        }
+
         int totalParams = _gamma.Length + _beta.Length;
 
         if (parameters.Length != totalParams)

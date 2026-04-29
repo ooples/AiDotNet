@@ -342,6 +342,73 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
                 $"Clone output[{i}] differs: original={original[i]}, cloned={clonedOutput[i]}");
     }
 
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Clone Preserves TRAINED Weights
+    //
+    // Stronger version of Clone_ShouldProduceIdenticalOutput that exercises
+    // the serialize/deserialize round-trip on a TRAINED model. Bug class
+    // this catches: lazy-shape layer SetParameters silently dropping
+    // trained weights when called on an unresolved layer post-deserialize
+    // (issue #1221). The pre-training Clone test passes because random-
+    // init weights are by definition disposable, so even when serialization
+    // drops them the cloned model produces "different but plausible"
+    // output — only post-training does the dropped-weights signal stand
+    // out as orders-of-magnitude divergent.
+    // =====================================================
+
+    [Fact(Timeout = 120000)]
+    public async Task Clone_AfterTraining_ShouldPreserveLearnedWeights()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var network = CreateNetwork();
+
+        // Train so weights have non-default values.
+        var trainInput = CreateRandomTensor(InputShape, rng);
+        var trainTarget = CreateRandomTensor(OutputShape, rng);
+        for (int i = 0; i < TrainingIterations; i++)
+            network.Train(trainInput, trainTarget);
+
+        // Capture predictions on diverse inputs.
+        var probeInputs = new Tensor<double>[3];
+        var trainedOutputs = new Tensor<double>[3];
+        for (int k = 0; k < 3; k++)
+        {
+            probeInputs[k] = CreateRandomTensor(InputShape, rng);
+            trainedOutputs[k] = network.Predict(probeInputs[k]);
+        }
+
+        // Serialize/deserialize via Clone.
+        var cloned = network.Clone();
+
+        // Cloned model MUST produce IDENTICAL predictions on every input.
+        for (int k = 0; k < 3; k++)
+        {
+            var clonedOutput = cloned.Predict(probeInputs[k]);
+            Assert.Equal(trainedOutputs[k].Length, clonedOutput.Length);
+            double sumSq = 0, magSq = 0;
+            for (int i = 0; i < trainedOutputs[k].Length; i++)
+            {
+                double d = trainedOutputs[k][i] - clonedOutput[i];
+                sumSq += d * d;
+                magSq += trainedOutputs[k][i] * trainedOutputs[k][i];
+            }
+            double diffL2 = Math.Sqrt(sumSq);
+            double mag = Math.Sqrt(magSq);
+            // Allow 1e-5 relative drift to absorb float quantization noise.
+            // Bug-class this catches has diffL2 ~ mag (not ~ 1e-10).
+            double tolerance = Math.Max(1e-5, mag * 1e-5);
+            Assert.True(diffL2 <= tolerance,
+                $"Cloned model predicts differently from trained model after " +
+                $"serialize/deserialize round-trip (issue #1221 class): " +
+                $"||Δ|| = {diffL2:E3}, tolerance = {tolerance:E3}, ||trained|| = {mag:E3} " +
+                $"on probe input {k}. The serialization layer dropped trained weights " +
+                $"for some lazy-state layer — likely SetParameters skipped silently when " +
+                $"called on an unresolved layer post-deserialize.");
+        }
+    }
+
     [Fact(Timeout = 120000)]
     public async Task Metadata_ShouldExist()
     {

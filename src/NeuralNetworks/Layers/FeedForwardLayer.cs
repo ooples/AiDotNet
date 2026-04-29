@@ -762,6 +762,23 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Round-trip from saved parameters: derive inputSize from vector
+        // length + known outputSize. Fixes #1221 serialize/deserialize drop.
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            int outputSize = OutputShape[0];
+            if (outputSize <= 0)
+                throw new InvalidOperationException(
+                    "Cannot SetParameters on deferred-shape FeedForwardLayer before outputSize is known.");
+            int candidateInput = (parameters.Length - outputSize) / outputSize;
+            if (candidateInput <= 0 || candidateInput * outputSize + outputSize != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer inputSize for FeedForwardLayer from {parameters.Length} parameters " +
+                    $"and outputSize={outputSize}.");
+            ResolveFromShape(new[] { candidateInput });
+        }
+
         EnsureInitialized();
         int weightLen = _weights.Length;
         int biasLen = _biases.Length;
