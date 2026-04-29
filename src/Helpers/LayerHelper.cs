@@ -11061,8 +11061,10 @@ public static class LayerHelper<T>
             // Self-attention for queries
             yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
 
-            // Cross-attention from queries to vision features
-            yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
+            // Cross-attention from queries to vision features (decoder layer with
+            // self+cross attention).
+            yield return new TransformerDecoderLayer<T>(
+                numHeads, feedForwardDim, ffnActivation: null);
 
             // Feed-forward
             yield return new DenseLayer<T>(qformerHiddenDim, (IActivationFunction<T>?)null);
@@ -11260,10 +11262,11 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numLayers; i++)
         {
-            // Note: In a real decoder, we would use TransformerDecoderLayer with causal masking
-            // For embedding extraction, a simple TransformerEncoderLayer is often used as a proxy
-            // if we aren't doing autoregressive generation.
-            yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
+            // SGPT/embedding extraction is autoregressive — emit a real decoder
+            // (with causal self-attention) rather than an encoder placeholder.
+            yield return new TransformerDecoderLayer<T>(
+                numHeads, feedForwardDim,
+                ffnActivation: null);
         }
 
         // SGPT uses the last token's representation
@@ -11743,16 +11746,14 @@ public static class LayerHelper<T>
         yield return new LSTMLayer<T>(
             hiddenSize: hiddenSize,
             activation: (IActivationFunction<T>?)null,
-            recurrentActivation: null,
-            engine: null);
+            recurrentActivation: null);
 
         // LSTM Decoder
         // Input shape: [batch, sequence, features] where features = hiddenSize from encoder
         yield return new LSTMLayer<T>(
             hiddenSize: hiddenSize,
             activation: (IActivationFunction<T>?)null,
-            recurrentActivation: null,
-            engine: null);
+            recurrentActivation: null);
 
         // Gated Residual Network layers
         for (int i = 0; i < numLayers; i++)
@@ -12351,8 +12352,7 @@ public static class LayerHelper<T>
             yield return new LSTMLayer<T>(
                 hiddenSize: hiddenSize,
                 activation: (IActivationFunction<T>?)null,
-                recurrentActivation: null,
-                engine: null);
+                recurrentActivation: null);
 
             // Dropout between LSTM layers (except after last layer)
             if (i < numLstmLayers - 1 && dropout > 0)
@@ -16492,8 +16492,7 @@ public static class LayerHelper<T>
         yield return new LSTMLayer<T>(
             hiddenSize: hiddenDimension,
             activation: (IActivationFunction<T>?)null,
-            recurrentActivation: null,
-            engine: null);
+            recurrentActivation: null);
 
         // Dense layers for risk estimation
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
@@ -16521,8 +16520,7 @@ public static class LayerHelper<T>
         yield return new LSTMLayer<T>(
             hiddenSize: hiddenDimension,
             activation: (IActivationFunction<T>?)null,
-            recurrentActivation: null,
-            engine: null);
+            recurrentActivation: null);
 
         // Dense layers
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
@@ -30327,13 +30325,13 @@ public static class LayerHelper<T>
             yield return new TransformerEncoderLayer<T>( numHeads, mlpDim);
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
-        // Text decoder layers
+        // Text decoder layers (causal self-attention, autoregressive generation)
         for (int i = 0; i < numDecoderLayers; i++)
-            yield return new TransformerEncoderLayer<T>( numHeads, mlpDim);
+            yield return new TransformerDecoderLayer<T>(numHeads, mlpDim, ffnActivation: null);
 
-        // Cross-attention layers (6)
+        // Cross-attention layers (6) — decoder layer surfaces self + cross attention.
         for (int i = 0; i < 6; i++)
-            yield return new TransformerEncoderLayer<T>( numHeads, mlpDim);
+            yield return new TransformerDecoderLayer<T>(numHeads, mlpDim, ffnActivation: null);
 
         // ITM head + LM head
         yield return new DenseLayer<T>(2, (IActivationFunction<T>?)null);
@@ -30366,8 +30364,11 @@ public static class LayerHelper<T>
         // Q-Former layers: (self-attn + cross-attn + FFN) × numQformerLayers
         for (int i = 0; i < numQformerLayers; i++)
         {
+            // Self-attention for queries
             yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
-            yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
+            // Cross-attention from queries to vision features (decoder block).
+            yield return new TransformerDecoderLayer<T>(
+                numHeads, feedForwardDim, ffnActivation: null);
             yield return new DenseLayer<T>(qformerHiddenDim, (IActivationFunction<T>?)null);
         }
 
@@ -30842,10 +30843,12 @@ public static class LayerHelper<T>
         int crossAttnCount = 0;
         for (int i = 0; i < numLanguageLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
+            // Causal self-attention LM block.
+            yield return new TransformerDecoderLayer<T>(numHeads, ffnDim, ffnActivation: null);
             if (i % 4 == 0)
             {
-                yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
+                // Cross-attention block at every 4th layer (decoder for self+cross).
+                yield return new TransformerDecoderLayer<T>(numHeads, ffnDim, ffnActivation: null);
                 crossAttnCount++;
             }
         }

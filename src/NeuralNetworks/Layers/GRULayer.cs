@@ -401,9 +401,17 @@ public partial class GRULayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override int ParameterCount =>
-        _hiddenSize * _inputSize * 3 +  // Wz, Wr, Wh
-        _hiddenSize * _hiddenSize * 3 + // Uz, Ur, Uh
-        _hiddenSize * 3;                // bz, br, bh
+        // Before first forward, _inputSize is -1 (lazy sentinel) and the weight/bias
+        // tensors are zero-sized placeholders. Match what GetParameters() returns:
+        // an empty vector. Reporting a real parameter count from an unresolved input
+        // width would yield a negative number and disagree with the actual GetParameters()
+        // length. Subclasses that need to inspect the parameter layout pre-forward must
+        // call ResolveFromShape first.
+        _inputSize <= 0
+            ? 0
+            : _hiddenSize * _inputSize * 3 +  // Wz, Wr, Wh
+              _hiddenSize * _hiddenSize * 3 + // Uz, Ur, Uh
+              _hiddenSize * 3;                // bz, br, bh
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.

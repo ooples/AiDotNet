@@ -110,6 +110,8 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     /// - Biases: hiddenSize
     /// </remarks>
     public override int ParameterCount =>
+        // Weight/bias tensors are zero-sized placeholders before first forward, so
+        // .Length already returns 0. Result matches GetParameters().Length.
         _inputWeights.Length + _hiddenWeights.Length + _biases.Length;
 
     /// <summary>
@@ -828,6 +830,14 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        if (!_isInitialized && parameters.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"RecurrentLayer.SetParameters({parameters.Length}) called before the lazy " +
+                $"input width was resolved. Call ResolveFromShape(...) or run a Forward(input) " +
+                $"pass first so the layer can allocate weight tensors of the correct shape.");
+        }
+
         int inputWeightsSize = _inputWeights.Length;
         int hiddenWeightsSize = _hiddenWeights.Length;
         int totalParams = inputWeightsSize + hiddenWeightsSize + _biases.Length;

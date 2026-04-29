@@ -678,9 +678,16 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override int ParameterCount =>
-        4 * (_hiddenSize * _inputSize) +  // 4 input weight matrices
-        4 * (_hiddenSize * _hiddenSize) + // 4 hidden weight matrices
-        4 * _hiddenSize;                  // 4 bias vectors
+        // Before first forward, _inputSize is -1 (lazy sentinel) and the weight/bias
+        // tensors are zero-sized placeholders. Reporting a real parameter count from
+        // an unresolved input width would (a) yield a negative number from
+        // 4*hidden*(-1) and (b) disagree with the actual length of GetParameters().
+        // Match what the placeholder tensors expose: zero parameters.
+        _inputSize <= 0
+            ? 0
+            : 4 * (_hiddenSize * _inputSize) +  // 4 input weight matrices
+              4 * (_hiddenSize * _hiddenSize) + // 4 hidden weight matrices
+              4 * _hiddenSize;                  // 4 bias vectors
 
     /// <summary>
     /// Gets the forget gate input weights for weight loading.
@@ -758,11 +765,9 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// <param name="hiddenSize">The size of the hidden state (number of LSTM units).</param>
     /// <param name="activation">Cell-state activation (default tanh).</param>
     /// <param name="recurrentActivation">Gate activation (default sigmoid).</param>
-    /// <param name="engine">Optional engine override.</param>
     public LSTMLayer(int hiddenSize,
         IActivationFunction<T>? activation = null,
-        IActivationFunction<T>? recurrentActivation = null,
-        IEngine? engine = null)
+        IActivationFunction<T>? recurrentActivation = null)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, activation ?? new TanhActivation<T>())
     {
         if (hiddenSize <= 0)
@@ -796,13 +801,12 @@ public partial class LSTMLayer<T> : LayerBase<T>
 
     /// <summary>
     /// Lazy ctor with vector activation functions. See the
-    /// <see cref="LSTMLayer{T}(int, IActivationFunction{T}?, IActivationFunction{T}?, IEngine?)"/>
+    /// <see cref="LSTMLayer{T}(int, IActivationFunction{T}?, IActivationFunction{T}?)"/>
     /// overload for the rest of the contract.
     /// </summary>
     public LSTMLayer(int hiddenSize,
         IVectorActivationFunction<T> vectorActivation,
-        IVectorActivationFunction<T>? recurrentActivation = null,
-        IEngine? engine = null)
+        IVectorActivationFunction<T>? recurrentActivation = null)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, vectorActivation)
     {
         if (hiddenSize <= 0)
