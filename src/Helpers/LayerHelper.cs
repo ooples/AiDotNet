@@ -29251,10 +29251,12 @@ public static class LayerHelper<T>
         yield return new BatchNormalizationLayer<T>();
         yield return new ActivationLayer<T>(elu);
 
-        // GRU layers
+        // GRU layers — only the last layer in the stack collapses the time axis;
+        // intermediate layers must return sequences so the next GRU sees [B, T, F].
         for (int i = 0; i < numGruLayers; i++)
         {
-            yield return new GRULayer<T>( hiddenDim, returnSequences: false,
+            bool isLast = i == numGruLayers - 1;
+            yield return new GRULayer<T>( hiddenDim, returnSequences: !isLast,
                 (IActivationFunction<T>?)null, (IActivationFunction<T>?)null);
         }
 
@@ -31734,7 +31736,12 @@ public static class LayerHelper<T>
         // === GRU layers (paper: single large GRU; we stack multiple per numResidualLayers) ===
         int gruCount = Math.Max(1, Math.Min(numResidualLayers, 4));
         for (int i = 0; i < gruCount; i++)
-            yield return new GRULayer<T>( hiddenDim, false, (IActivationFunction<T>?)null);
+        {
+            // Only the final stacked GRU collapses the time axis. Intermediate
+            // GRUs must return sequences so the next layer sees [B, T, F].
+            bool isLast = i == gruCount - 1;
+            yield return new GRULayer<T>( hiddenDim, !isLast, (IActivationFunction<T>?)null);
+        }
 
         // === Output FC chain (paper: fc1 → fc2 → fc3) ===
         // fc1: hiddenDim → hiddenDim with ReLU

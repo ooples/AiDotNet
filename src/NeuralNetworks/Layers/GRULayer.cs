@@ -442,9 +442,9 @@ public partial class GRULayer<T> : LayerBase<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <summary>
-    /// True once the lazy ctor's first forward has resolved <see cref="_inputSize"/>
-    /// and allocated the 6 weight tensors + 3 biases. Eager ctors mark this <c>true</c>
-    /// from construction.
+    /// True once the first forward has resolved <see cref="_inputSize"/> and allocated
+    /// the 6 weight tensors + 3 biases. (As of #1212 the eager constructors are removed —
+    /// every <see cref="GRULayer{T}"/> goes through this lazy initialization path.)
     /// </summary>
     private bool _isInitialized;
 
@@ -655,8 +655,8 @@ public partial class GRULayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Lazy ctor path: resolve _inputSize from input.Shape[^1] and allocate weights
-        // on first call. No-op for layers built via the eager ctors.
+        // Resolve _inputSize from input.Shape[^1] and allocate weights on first call.
+        // Idempotent — gated by _isInitialized.
         EnsureInitializedFromInput(input);
 
         // Store original shape for any-rank tensor support

@@ -95,8 +95,9 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     private readonly int _hiddenSize;
 
     /// <summary>
-    /// True once weight tensors are allocated. Eager ctors set this <c>true</c> at
-    /// construction; lazy ctors flip it inside <see cref="EnsureInitialized"/>.
+    /// True once weight tensors are allocated. (As of #1212 the eager constructors
+    /// are removed — every <see cref="RecurrentLayer{T}"/> goes through
+    /// <see cref="EnsureInitialized"/> on first forward to flip this true.)
     /// </summary>
     private bool _isInitialized;
 

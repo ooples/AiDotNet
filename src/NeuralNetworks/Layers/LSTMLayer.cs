@@ -64,9 +64,10 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     /// <remarks>
-    /// Initialized to <c>-1</c> when the lazy ctor is used; resolved from
-    /// <c>input.Shape[^1]</c> on first <see cref="Forward(Tensor{T})"/>. The eager ctors
-    /// (kept for backwards compat) still bind it at construction.
+    /// Initialized to <c>-1</c> at construction and resolved from <c>input.Shape[^1]</c>
+    /// on the first <see cref="Forward(Tensor{T})"/> call. (As of #1212 the eager
+    /// constructors are removed — every <see cref="LSTMLayer{T}"/> goes through this
+    /// lazy resolution path.)
     /// </remarks>
     private int _inputSize;
 
@@ -750,9 +751,9 @@ public partial class LSTMLayer<T> : LayerBase<T>
     public Tensor<T> BiasO => _biasO;
 
     /// <summary>
-    /// True once the lazy ctor's first forward has resolved <see cref="_inputSize"/>
-    /// and allocated the 8 weight tensors + 4 biases. Eager ctors mark this
-    /// <c>true</c> from construction.
+    /// True once the first forward has resolved <see cref="_inputSize"/> and allocated
+    /// the 8 weight tensors + 4 biases. (As of #1212 the eager constructors are removed —
+    /// every <see cref="LSTMLayer{T}"/> goes through this lazy initialization path.)
     /// </summary>
     private bool _isInitialized;
 
@@ -869,7 +870,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// <summary>
     /// Allocates the 8 input/recurrent weight tensors and 4 gate biases using the
     /// resolved <see cref="_inputSize"/> and <see cref="_hiddenSize"/>. Idempotent —
-    /// no-op for layers built via the eager ctors that allocated up-front.
+    /// gated by <see cref="_isInitialized"/> so a second forward is a no-op.
     /// </summary>
     protected override void EnsureInitialized()
     {
@@ -1050,9 +1051,8 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Lazy ctor path: resolve _inputSize from input.Shape[^1] and allocate weights
-        // on first call. No-op for layers built via the eager ctors (which set
-        // _isInitialized = true at construction).
+        // Resolve _inputSize from input.Shape[^1] and allocate weights on first call.
+        // Idempotent — gated by _isInitialized.
         EnsureInitializedFromInput(input);
 
         // Store original shape for any-rank tensor support
@@ -2145,6 +2145,43 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        if (!_isInitialized || _inputSize <= 0)
+        {
+            // Lazy LSTM with no resolved input width — try to recover by inferring
+            // _inputSize from parameters.Length. The flat layout is:
+            //   4 * (hidden*input) + 4 * (hidden*hidden) + 4 * hidden
+            // → input = (params - 4*hidden*hidden - 4*hidden) / (4*hidden)
+            int hidden4 = 4 * _hiddenSize;
+            int residual = parameters.Length - 4 * _hiddenSize * _hiddenSize - hidden4;
+            if (residual >= 0 && hidden4 > 0 && residual % hidden4 == 0)
+            {
+                int inferredInput = residual / hidden4;
+                if (inferredInput > 0)
+                {
+                    _inputSize = inferredInput;
+                    // Resolve shapes + allocate weights via OnFirstForward path.
+                    // Synthetic [1, inferredInput] shape: rank-2 satisfies the rank>=1
+                    // contract and the last axis carries the resolved input width.
+                    ResolveFromShape(new[] { 1, inferredInput });
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"LSTMLayer.SetParameters({parameters.Length}) cannot infer a positive " +
+                        $"input width from this parameter vector. Run a Forward(input) pass first " +
+                        $"so the layer can resolve _inputSize, or pass a resolved layer.");
+                }
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"LSTMLayer.SetParameters({parameters.Length}) called before the lazy input " +
+                    $"width was resolved, and the parameter count does not match a valid layout " +
+                    $"for hiddenSize={_hiddenSize}. Run a Forward(input) pass first or supply " +
+                    $"a vector matching 4*hidden*input + 4*hidden*hidden + 4*hidden.");
+            }
+        }
+
         int inputWeightSize = _hiddenSize * _inputSize;
         int hiddenWeightSize = _hiddenSize * _hiddenSize;
         int biasSize = _hiddenSize;
