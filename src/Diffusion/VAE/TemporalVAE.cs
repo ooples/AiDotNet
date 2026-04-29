@@ -718,12 +718,8 @@ public class TemporalVAE<T> : VAEModelBase<T>
         int downsampleFactor = (int)Math.Pow(2, _channelMultipliers.Length - 1);
         int spatialSize = 64 / downsampleFactor; // Compute from input size
         return new Conv3DLayer<T>(
-            inputChannels: channels,
             outputChannels: channels,
             kernelSize: _temporalKernelSize,
-            inputDepth: 8,
-            inputHeight: spatialSize,
-            inputWidth: spatialSize,
             stride: 1,
             padding: 1,
             activationFunction: new SiLUActivation<T>());
@@ -918,4 +914,17 @@ public class TemporalVAE<T> : VAEModelBase<T>
         var g = layer.GetParameterGradients();
         for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
     }
+    /// <inheritdoc />
+    /// <remarks>
+    /// This concrete VAE does not implement layer-level backprop yet, so the
+    /// exact-gradient path is unsupported. The base class catches this and falls
+    /// through to SPSA in ComputeGradients.
+    /// </remarks>
+    protected override void BackpropagateLossGradient(Tensor<T> lossGradient)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: layer-level BackpropagateLossGradient is not " +
+            "implemented. ComputeGradients will fall through to SPSA.");
+    }
+
 }

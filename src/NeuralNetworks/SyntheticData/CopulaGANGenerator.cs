@@ -234,7 +234,7 @@ public class CopulaGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
             _genBNLayers.Clear();
             foreach (int dim in _options.GeneratorDimensions)
             {
-                _genBNLayers.Add(new BatchNormalizationLayer<T>(dim));
+                _genBNLayers.Add(new BatchNormalizationLayer<T>());
             }
             _usingCustomLayers = false;
         }
@@ -258,7 +258,7 @@ public class CopulaGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
             _genBNLayers.Clear();
             foreach (int dim in _options.GeneratorDimensions)
             {
-                _genBNLayers.Add(new BatchNormalizationLayer<T>(dim));
+                _genBNLayers.Add(new BatchNormalizationLayer<T>());
             }
         }
 

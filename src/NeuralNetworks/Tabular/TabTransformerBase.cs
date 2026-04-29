@@ -193,7 +193,7 @@ public abstract class TabTransformerBase<T>
         // Final layer normalization
         if (Options.UseLayerNorm)
         {
-            _finalLayerNorm = new LayerNormalizationLayer<T>(Options.EmbeddingDimension);
+            _finalLayerNorm = new LayerNormalizationLayer<T>();
         }
 
         // Initialize MLP layers
@@ -203,7 +203,6 @@ public abstract class TabTransformerBase<T>
         foreach (int hiddenDim in Options.MLPHiddenDimensions)
         {
             var layer = new FullyConnectedLayer<T>(
-                prevDim,
                 hiddenDim,
                 new ReLUActivation<T>() as IActivationFunction<T>);
             _mlpLayers.Add(layer);

@@ -22,7 +22,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     public async Task BatchNorm_Init_GammaIsOnes()
     {
         // gamma initialized to 1.0 for each feature
-        var bn = new BatchNormalizationLayer<double>(3);
+        var bn = new BatchNormalizationLayer<double>();
         var gamma = bn.GetGamma();
         Assert.Equal(3, gamma.Length);
         for (int i = 0; i < 3; i++)
@@ -33,7 +33,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     public async Task BatchNorm_Init_BetaIsZeros()
     {
         // beta initialized to 0.0 for each feature
-        var bn = new BatchNormalizationLayer<double>(3);
+        var bn = new BatchNormalizationLayer<double>();
         var beta = bn.GetBeta();
         Assert.Equal(3, beta.Length);
         for (int i = 0; i < 3; i++)
@@ -43,7 +43,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_Init_RunningMeanIsZeros()
     {
-        var bn = new BatchNormalizationLayer<double>(3);
+        var bn = new BatchNormalizationLayer<double>();
         var runningMean = bn.GetRunningMean();
         Assert.Equal(3, runningMean.Length);
         for (int i = 0; i < 3; i++)
@@ -53,7 +53,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_Init_RunningVarianceIsOnes()
     {
-        var bn = new BatchNormalizationLayer<double>(3);
+        var bn = new BatchNormalizationLayer<double>();
         var runningVar = bn.GetRunningVariance();
         Assert.Equal(3, runningVar.Length);
         for (int i = 0; i < 3; i++)
@@ -63,7 +63,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_Init_Epsilon_DefaultIsLargeEpsilon()
     {
-        var bn = new BatchNormalizationLayer<double>(2);
+        var bn = new BatchNormalizationLayer<double>();
         double epsilon = bn.GetEpsilon();
         Assert.Equal(1e-5, epsilon, 1e-10);
     }
@@ -71,7 +71,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_Init_Momentum_DefaultIs09()
     {
-        var bn = new BatchNormalizationLayer<double>(2);
+        var bn = new BatchNormalizationLayer<double>();
         double momentum = bn.GetMomentum();
         Assert.Equal(0.9, momentum, Tol);
     }
@@ -84,7 +84,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     public async Task BatchNorm_ParameterCount_IsTwiceFeatureSize()
     {
         // ParameterCount = gamma.Length + beta.Length = 2 * numFeatures
-        var bn = new BatchNormalizationLayer<double>(5);
+        var bn = new BatchNormalizationLayer<double>();
         Assert.Equal(10, bn.ParameterCount);
     }
 
@@ -92,7 +92,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     public async Task BatchNorm_GetParameters_GammaThenBeta()
     {
         // Parameters vector: [gamma_0, ..., gamma_n, beta_0, ..., beta_n]
-        var bn = new BatchNormalizationLayer<double>(3);
+        var bn = new BatchNormalizationLayer<double>();
 
         // Set custom gamma=[2,3,4], beta=[5,6,7]
         var paramVec = new Vector<double>(new double[] { 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 });
@@ -113,7 +113,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_SetParameters_UpdatesGammaAndBeta()
     {
-        var bn = new BatchNormalizationLayer<double>(2);
+        var bn = new BatchNormalizationLayer<double>();
 
         // Set gamma=[10, 20], beta=[-1, -2]
         var paramVec = new Vector<double>(new double[] { 10.0, 20.0, -1.0, -2.0 });
@@ -130,7 +130,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_SetParameters_WrongLength_Throws()
     {
-        var bn = new BatchNormalizationLayer<double>(3);
+        var bn = new BatchNormalizationLayer<double>();
         var badParams = new Vector<double>(new double[] { 1.0, 2.0, 3.0 }); // should be 6
         Assert.Throws<ArgumentException>(() => bn.SetParameters(badParams));
     }
@@ -146,7 +146,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         // scale = 1 / sqrt(1 + 1e-5) ≈ 0.999995
         // shift = 0 - 1 * 0 / sqrt(1 + 1e-5) = 0
         // output ≈ input * 0.999995
-        var bn = new BatchNormalizationLayer<double>(2);
+        var bn = new BatchNormalizationLayer<double>();
         bn.SetTrainingMode(false);
 
         var input = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new double[] { 3.0, 5.0, 7.0, -2.0 }));
@@ -168,7 +168,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         // shift[0] = 5 - 2*0/sqrt(1+1e-5) = 5.0
         // scale[1] = 3 / sqrt(1 + 1e-5) ≈ 2.99999
         // shift[1] = -1 - 3*0/sqrt(1+1e-5) = -1.0
-        var bn = new BatchNormalizationLayer<double>(2);
+        var bn = new BatchNormalizationLayer<double>();
         bn.SetParameters(new Vector<double>(new double[] { 2.0, 3.0, 5.0, -1.0 }));
         bn.SetTrainingMode(false);
 
@@ -197,7 +197,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         // With gamma=1 beta=0 runningMean=0 runningVar=1:
         // output ≈ input / sqrt(1 + eps) ≈ input
         // If we set gamma=0.5, output ≈ 0.5 * input / sqrt(1+eps)
-        var bn = new BatchNormalizationLayer<double>(2);
+        var bn = new BatchNormalizationLayer<double>();
         bn.SetParameters(new Vector<double>(new double[] { 0.5, 0.5, 0.0, 0.0 }));
         bn.SetTrainingMode(false);
 
@@ -213,7 +213,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     public async Task BatchNorm_Inference_PreservesOutputShape()
     {
         // Input [3, 4] should produce output [3, 4]
-        var bn = new BatchNormalizationLayer<double>(4);
+        var bn = new BatchNormalizationLayer<double>();
         bn.SetTrainingMode(false);
 
         var input = new Tensor<double>(new[] { 3, 4 });
@@ -228,7 +228,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     public async Task BatchNorm_Inference_1DInput_PreservesRank()
     {
         // 1D input should be auto-reshaped to [1, N] and output reshaped back to [N]
-        var bn = new BatchNormalizationLayer<double>(3);
+        var bn = new BatchNormalizationLayer<double>();
         bn.SetTrainingMode(false);
 
         var input = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0 }));
@@ -245,7 +245,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_ZeroInitGamma_SetsGammaToZero()
     {
-        var bn = new BatchNormalizationLayer<double>(3);
+        var bn = new BatchNormalizationLayer<double>();
         bn.ZeroInitGamma();
 
         var gamma = bn.GetGamma();
@@ -258,7 +258,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     {
         // With gamma=0, scale=0, shift = beta - 0 = beta
         // output = input * 0 + beta = beta for all inputs
-        var bn = new BatchNormalizationLayer<double>(2);
+        var bn = new BatchNormalizationLayer<double>();
         bn.SetParameters(new Vector<double>(new double[] { 1.0, 1.0, 3.0, -2.0 })); // gamma=1,1 beta=3,-2
         bn.ZeroInitGamma(); // Now gamma=0,0
         bn.SetTrainingMode(false);
@@ -285,7 +285,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         // runningMean_new = momentum * runningMean_old + (1 - momentum) * batchMean
         // With defaults: momentum=0.9, runningMean_old=0
         // runningMean_new = 0.9 * 0 + 0.1 * batchMean = 0.1 * batchMean
-        var bn = new BatchNormalizationLayer<double>(2, momentum: 0.9);
+        var bn = new BatchNormalizationLayer<double>();
         bn.SetTrainingMode(true);
 
         // Batch: [[2, 4], [6, 8]]
@@ -306,7 +306,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         // runningVar_new = momentum * runningVar_old + (1 - momentum) * batchVar
         // With defaults: momentum=0.9, runningVar_old=1
         // runningVar_new = 0.9 * 1 + 0.1 * batchVar
-        var bn = new BatchNormalizationLayer<double>(2, momentum: 0.9);
+        var bn = new BatchNormalizationLayer<double>();
         bn.SetTrainingMode(true);
 
         // Batch: [[2, 4], [6, 8]]
@@ -326,7 +326,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     {
         // First pass: runningMean = 0.9*0 + 0.1*batchMean1
         // Second pass: runningMean = 0.9*prev + 0.1*batchMean2
-        var bn = new BatchNormalizationLayer<double>(1, momentum: 0.9);
+        var bn = new BatchNormalizationLayer<double>();
         bn.SetTrainingMode(true);
 
         // First batch mean = (10 + 20) / 2 = 15
@@ -355,7 +355,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     {
         // With large epsilon, scale = gamma / sqrt(runningVar + eps)
         // eps=1.0: scale = 1 / sqrt(1 + 1) = 1/sqrt(2)
-        var bn = new BatchNormalizationLayer<double>(1, epsilon: 1.0);
+        var bn = new BatchNormalizationLayer<double>();
         bn.SetTrainingMode(false);
 
         var input = new Tensor<double>(new[] { 1, 1 }, new Vector<double>(new double[] { 4.0 }));
@@ -379,7 +379,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         // std = sqrt(8/3 + eps)
         // normalized = [(1-3)/std, (3-3)/std, (5-3)/std] = [-2/std, 0, 2/std]
         // With gamma=1, beta=0: output = normalized
-        var ln = new LayerNormalizationLayer<double>(3);
+        var ln = new LayerNormalizationLayer<double>();
 
         var input = new Tensor<double>(new[] { 1, 3 }, new Vector<double>(new double[] { 1.0, 3.0, 5.0 }));
         var output = ln.Forward(input);
@@ -399,7 +399,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         // Each sample normalized independently
         // Sample 0: [2, 6] -> mean=4, var=((2-4)^2+(6-4)^2)/2 = (4+4)/2 = 4, std=sqrt(4+eps)
         // Sample 1: [10, 20] -> mean=15, var=((10-15)^2+(20-15)^2)/2 = (25+25)/2 = 25, std=sqrt(25+eps)
-        var ln = new LayerNormalizationLayer<double>(2);
+        var ln = new LayerNormalizationLayer<double>();
 
         var input = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new double[] { 2.0, 6.0, 10.0, 20.0 }));
         var output = ln.Forward(input);
@@ -425,7 +425,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         // mean = 6, var = ((4-6)^2+(8-6)^2)/2 = 4, std=sqrt(4+eps)
         // normalized = [(4-6)/std, (8-6)/std] = [-2/std, 2/std]
         // output = gamma * normalized + beta = [2*(-2/std)+1, 3*(2/std)+(-1)]
-        var ln = new LayerNormalizationLayer<double>(2);
+        var ln = new LayerNormalizationLayer<double>();
         ln.SetParameters(new Vector<double>(new double[] { 2.0, 3.0, 1.0, -1.0 }));
 
         var input = new Tensor<double>(new[] { 1, 2 }, new Vector<double>(new double[] { 4.0, 8.0 }));
@@ -442,14 +442,14 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LayerNorm_ParameterCount_IsTwiceFeatureSize()
     {
-        var ln = new LayerNormalizationLayer<double>(7);
+        var ln = new LayerNormalizationLayer<double>();
         Assert.Equal(14, ln.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
     public async Task LayerNorm_GetSetParameters_RoundTrips()
     {
-        var ln = new LayerNormalizationLayer<double>(3);
+        var ln = new LayerNormalizationLayer<double>();
         var paramVec = new Vector<double>(new double[] { 0.5, 1.5, 2.5, -0.5, -1.5, -2.5 });
         ln.SetParameters(paramVec);
 
@@ -465,7 +465,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         // All features identical => mean = value, var = 0
         // normalized = (x - mean) / sqrt(0 + eps) = 0 / sqrt(eps) = 0
         // With gamma=1, beta=0: output = 0
-        var ln = new LayerNormalizationLayer<double>(4);
+        var ln = new LayerNormalizationLayer<double>();
 
         var input = new Tensor<double>(new[] { 1, 4 }, new Vector<double>(new double[] { 5.0, 5.0, 5.0, 5.0 }));
         var output = ln.Forward(input);
@@ -478,7 +478,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     public async Task LayerNorm_OutputMean_ApproximatelyZero()
     {
         // After LN with gamma=1, beta=0, the output mean should be ~0
-        var ln = new LayerNormalizationLayer<double>(5);
+        var ln = new LayerNormalizationLayer<double>();
 
         var input = new Tensor<double>(new[] { 1, 5 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 }));
         var output = ln.Forward(input);
@@ -494,7 +494,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     public async Task LayerNorm_OutputVariance_ApproximatelyOne()
     {
         // After LN with gamma=1, beta=0, the output variance should be ~1
-        var ln = new LayerNormalizationLayer<double>(5);
+        var ln = new LayerNormalizationLayer<double>();
 
         var input = new Tensor<double>(new[] { 1, 5 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 }));
         var output = ln.Forward(input);
@@ -720,7 +720,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     {
         // All-zero input with default params
         // output = 0 * scale + 0 = 0
-        var bn = new BatchNormalizationLayer<double>(2);
+        var bn = new BatchNormalizationLayer<double>();
         bn.SetTrainingMode(false);
 
         var input = new Tensor<double>(new[] { 1, 2 });
@@ -735,7 +735,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     {
         // Negative input with gamma=1, beta=0
         // output = input * scale ≈ input
-        var bn = new BatchNormalizationLayer<double>(2);
+        var bn = new BatchNormalizationLayer<double>();
         bn.SetTrainingMode(false);
 
         var input = new Tensor<double>(new[] { 1, 2 }, new Vector<double>(new double[] { -3.0, -7.0 }));
@@ -750,7 +750,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     public async Task BatchNorm_Inference_LargeBatch_PerFeatureConsistency()
     {
         // All samples in a batch with same feature value should get same output
-        var bn = new BatchNormalizationLayer<double>(2);
+        var bn = new BatchNormalizationLayer<double>();
         bn.SetParameters(new Vector<double>(new double[] { 2.0, 3.0, 1.0, -1.0 }));
         bn.SetTrainingMode(false);
 
@@ -779,7 +779,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     public async Task BatchNorm_CustomMomentum_RunningStats()
     {
         // momentum=0.5: runningMean = 0.5*old + 0.5*batch
-        var bn = new BatchNormalizationLayer<double>(1, momentum: 0.5);
+        var bn = new BatchNormalizationLayer<double>();
         bn.SetTrainingMode(true);
 
         // batchMean = (4 + 8) / 2 = 6
@@ -807,7 +807,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         var dropout = new DropoutLayer<double>(0.5);
         dropout.SetTrainingMode(false);
 
-        var bn = new BatchNormalizationLayer<double>(2);
+        var bn = new BatchNormalizationLayer<double>();
         bn.SetTrainingMode(false);
 
         var input = new Tensor<double>(new[] { 1, 2 }, new Vector<double>(new double[] { 3.0, 7.0 }));

@@ -121,41 +121,36 @@ public class ImprovedVideoVAE<T> : VAEModelBase<T>
 
         // Spatial encoder with temporal-aware blocks
         _encoderLayers.Add(new ConvolutionalLayer<T>(
-            inputDepth: _inputChannels, outputDepth: channels,
-            kernelSize: 3, inputHeight: 64, inputWidth: 64,
-            stride: 1, padding: 1,
+            outputDepth: channels,
+            kernelSize: 3, stride: 1, padding: 1,
             activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
 
         foreach (int mult in multipliers)
         {
             int outChannels = _baseChannels * mult;
             _encoderLayers.Add(new ConvolutionalLayer<T>(
-                inputDepth: channels, outputDepth: outChannels,
-                kernelSize: 3, inputHeight: 32, inputWidth: 32,
-                stride: 2, padding: 1,
+                outputDepth: outChannels,
+                kernelSize: 3, stride: 2, padding: 1,
                 activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
             channels = outChannels;
         }
 
         // Latent projection
         _encoderLayers.Add(new ConvolutionalLayer<T>(
-            inputDepth: channels, outputDepth: _latentChannels * 2,
-            kernelSize: 1, inputHeight: 8, inputWidth: 8,
-            stride: 1, padding: 0,
+            outputDepth: _latentChannels * 2,
+            kernelSize: 1, stride: 1, padding: 0,
             activationFunction: new IdentityActivation<T>()));
 
         // Decoder
         _decoderLayers.Add(new ConvolutionalLayer<T>(
-            inputDepth: _latentChannels, outputDepth: channels,
-            kernelSize: 1, inputHeight: 8, inputWidth: 8,
-            stride: 1, padding: 0,
+            outputDepth: channels,
+            kernelSize: 1, stride: 1, padding: 0,
             activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
 
         for (int i = multipliers.Length - 1; i >= 0; i--)
         {
             int outChannels = i == 0 ? _baseChannels : _baseChannels * multipliers[i - 1];
             _decoderLayers.Add(new DeconvolutionalLayer<T>(
-                inputShape: [1, channels, 8, 8],
                 outputDepth: outChannels,
                 kernelSize: 4, stride: 2, padding: 1,
                 activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
@@ -163,9 +158,8 @@ public class ImprovedVideoVAE<T> : VAEModelBase<T>
         }
 
         _decoderLayers.Add(new ConvolutionalLayer<T>(
-            inputDepth: channels, outputDepth: _inputChannels,
-            kernelSize: 3, inputHeight: 64, inputWidth: 64,
-            stride: 1, padding: 1,
+            outputDepth: _inputChannels,
+            kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new TanhActivation<T>()));
     }
 
@@ -328,4 +322,17 @@ public class ImprovedVideoVAE<T> : VAEModelBase<T>
         }
         return new Vector<T>(gradients.ToArray());
     }
+    /// <inheritdoc />
+    /// <remarks>
+    /// This concrete VAE does not implement layer-level backprop yet, so the
+    /// exact-gradient path is unsupported. The base class catches this and falls
+    /// through to SPSA in ComputeGradients.
+    /// </remarks>
+    protected override void BackpropagateLossGradient(Tensor<T> lossGradient)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: layer-level BackpropagateLossGradient is not " +
+            "implemented. ComputeGradients will fall through to SPSA.");
+    }
+
 }

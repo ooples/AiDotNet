@@ -168,7 +168,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             ? (NeuralNetworkBase<T>)new FeedForwardNeuralNetwork<T>(architecture)
             : new ConvolutionalNeuralNetwork<T>(architecture);
         int embeddingSize = architecture.GetOutputShape()[0];
-        _outputLayer = new DenseLayer<T>(embeddingSize * 2, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
+        _outputLayer = new DenseLayer<T>(1, new SigmoidActivation<T>() as IActivationFunction<T>);
 
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.5);
@@ -583,7 +583,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 
         // Initialize the output layer with the correct dimensions
         int embeddingSize = Architecture.GetOutputShape()[0];
-        _outputLayer = new DenseLayer<T>(embeddingSize * 2, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
+        _outputLayer = new DenseLayer<T>(1, new SigmoidActivation<T>() as IActivationFunction<T>);
         _outputLayer.SetParameters(outputLayerParams);
     }
 

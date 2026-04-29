@@ -195,7 +195,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         }
 
         // Final norm and output
-        _finalNorm = new LayerNormalizationLayer<T>(_hiddenSize);
+        _finalNorm = new LayerNormalizationLayer<T>();
         int outPatchDim = _inputChannels * _patchSize * _patchSize;
         _outputProj = LazyDense(_hiddenSize, outPatchDim);
 
@@ -215,9 +215,9 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
     {
         return new UViTBlock
         {
-            Norm1 = new LayerNormalizationLayer<T>(_hiddenSize),
+            Norm1 = new LayerNormalizationLayer<T>(),
             Attention = LazySelfAttention(_maxPatches, _hiddenSize, _numHeads),
-            Norm2 = new LayerNormalizationLayer<T>(_hiddenSize),
+            Norm2 = new LayerNormalizationLayer<T>(),
             MLP1 = LazyDense(_hiddenSize, _hiddenSize * 4, new GELUActivation<T>()),
             MLP2 = LazyDense(_hiddenSize * 4, _hiddenSize)
         };

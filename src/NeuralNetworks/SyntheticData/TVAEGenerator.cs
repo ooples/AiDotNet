@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -210,8 +210,8 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
             // Create separate mean and logvar projection heads for custom layers
             int lastLayerOutput = Architecture.OutputSize;
             var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-            _meanLayer = new FullyConnectedLayer<T>(lastLayerOutput, _options.LatentDimension, identity);
-            _logVarLayer = new FullyConnectedLayer<T>(lastLayerOutput, _options.LatentDimension, identity);
+            _meanLayer = new FullyConnectedLayer<T>(_options.LatentDimension, identity);
+            _logVarLayer = new FullyConnectedLayer<T>(_options.LatentDimension, identity);
         }
         else
         {
@@ -245,8 +245,8 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
             // For custom layers, rebuild the projection heads with actual latent dimension
             int lastLayerOutput = Layers.Count > 0 ? GetLayerOutputSize(Layers[^1]) : dataWidth;
             var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-            _meanLayer = new FullyConnectedLayer<T>(lastLayerOutput, _options.LatentDimension, identity);
-            _logVarLayer = new FullyConnectedLayer<T>(lastLayerOutput, _options.LatentDimension, identity);
+            _meanLayer = new FullyConnectedLayer<T>(_options.LatentDimension, identity);
+            _logVarLayer = new FullyConnectedLayer<T>(_options.LatentDimension, identity);
         }
 
         // Always rebuild decoder with actual dimensions

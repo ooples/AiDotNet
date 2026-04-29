@@ -231,7 +231,7 @@ public class GroupedQueryAttentionLayerTests
         int numHeads = 4;
 
         var gqa = new GroupedQueryAttentionLayer<float>(seqLen, embDim, numHeads, numHeads);
-        var mha = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
+        var mha = new MultiHeadAttentionLayer<float>(numHeads, (embDim) / (numHeads));
 
         // Copy GQA parameters to MHA (both have identical layout: Q, K, V, O weights, O bias)
         var gqaParams = gqa.GetParameters();
@@ -265,7 +265,7 @@ public class GroupedQueryAttentionLayerTests
         int numHeads = 4;
 
         var gqa = new GroupedQueryAttentionLayer<float>(seqLen, embDim, numHeads, numHeads);
-        var mha = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
+        var mha = new MultiHeadAttentionLayer<float>(numHeads, (embDim) / (numHeads));
 
         mha.SetParameters(gqa.GetParameters());
 

@@ -95,14 +95,12 @@ public class KairosMultiSizePatchLayer<T> : LayerBase<T>
                     nameof(patchSizes));
 
             _patchEmbeddings.Add(new DenseLayer<T>(
-                inputSize: ps,
                 outputSize: hiddenDim,
                 activationFunction: null));
         }
 
         // Router: [B, contextLength] -> [B, numPatchSizes] softmax weights.
         _router = new DenseLayer<T>(
-            inputSize: contextLength,
             outputSize: _patchSizes.Length,
             activationFunction: new SoftmaxActivation<T>());
 

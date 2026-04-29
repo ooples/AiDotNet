@@ -35,12 +35,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "1, 4, 4, 2, 2")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "2, 2")]
 public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
 {
     private readonly int _outputHeight;
     private readonly int _outputWidth;
-    private readonly int _channels;
+    private int _channels;
 
     private Tensor<T>? _lastInput;
     private int[]? _lastInputShape;
@@ -81,14 +81,11 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public AdaptiveAveragePoolingLayer(
-        int inputChannels,
-        int inputHeight,
-        int inputWidth,
         int outputHeight = 1,
         int outputWidth = 1)
         : base(
-            inputShape: [inputChannels, inputHeight, inputWidth],
-            outputShape: [inputChannels, outputHeight, outputWidth])
+            inputShape: [-1, -1, -1],
+            outputShape: [-1, outputHeight, outputWidth])
     {
         if (outputHeight <= 0)
         {
@@ -99,7 +96,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
             throw new ArgumentOutOfRangeException(nameof(outputWidth), "Output width must be greater than 0.");
         }
 
-        _channels = inputChannels;
+        _channels = -1;
         _outputHeight = outputHeight;
         _outputWidth = outputWidth;
     }
@@ -107,13 +104,29 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
     /// <summary>
     /// Creates a global average pooling layer that pools to 1x1.
     /// </summary>
-    /// <param name="inputChannels">The number of input channels.</param>
-    /// <param name="inputHeight">The expected input height.</param>
-    /// <param name="inputWidth">The expected input width.</param>
     /// <returns>An adaptive pooling layer that performs global average pooling.</returns>
-    public static AdaptiveAveragePoolingLayer<T> GlobalPool(int inputChannels, int inputHeight, int inputWidth)
+    public static AdaptiveAveragePoolingLayer<T> GlobalPool()
     {
-        return new AdaptiveAveragePoolingLayer<T>(inputChannels, inputHeight, inputWidth, 1, 1);
+        return new AdaptiveAveragePoolingLayer<T>(1, 1);
+    }
+
+    /// <summary>
+    /// Resolves channels and input spatial dims on first forward.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 3)
+            throw new ArgumentException(
+                $"AdaptiveAveragePoolingLayer requires rank>=3 [...,C,H,W] input; got rank {rank}.",
+                nameof(input));
+
+        int c = input.Shape[rank - 3];
+        int h = input.Shape[rank - 2];
+        int w = input.Shape[rank - 1];
+
+        _channels = c;
+        ResolveShapes(new[] { c, h, w }, new[] { c, _outputHeight, _outputWidth });
     }
 
     /// <summary>
@@ -126,6 +139,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
         if (input.Shape.Length < 3)
             throw new ArgumentException("Input must have at least 3 dimensions (channels, height, width).");
 
+        EnsureInitializedFromInput(input);
         _lastInput = input;
         _lastInputShape = input._shape;
 

@@ -137,7 +137,6 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Note: Just rebuild the last layer with correct activation
             int lastInputSize = _options.PolicyHiddenLayers.LastOrDefault() > 0 ? _options.PolicyHiddenLayers.Last() : 128;
             layers[layers.Count - 1] = new DenseLayer<T>(
-                lastInputSize,
                 outputSize,
                 (IActivationFunction<T>)new SoftmaxActivation<T>()
             );

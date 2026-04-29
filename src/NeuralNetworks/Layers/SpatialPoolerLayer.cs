@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, TestInputShape = "1, 8", TestConstructorArgs = "8, 4, 0.02")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, TestInputShape = "1, 8", TestConstructorArgs = "4, 0.02")]
 public class SpatialPoolerLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -54,7 +54,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// Larger input sizes can capture more detailed information but require more memory and processing power.
     /// </para>
     /// </remarks>
-    private readonly int InputSize;
+    private int InputSize;
 
     /// <summary>
     /// The number of columns in the spatial pooler.
@@ -236,24 +236,45 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// with random values that will be adjusted during learning.
     /// </para>
     /// </remarks>
-    public SpatialPoolerLayer(int inputSize, int columnCount, double sparsityThreshold)
-        : base(
-            [inputSize > 0 ? inputSize : throw new ArgumentOutOfRangeException(nameof(inputSize), "Must be positive.")],
-            [columnCount > 0 ? columnCount : throw new ArgumentOutOfRangeException(nameof(columnCount), "Must be positive.")])
+    public SpatialPoolerLayer(int columnCount, double sparsityThreshold)
+        : base(new[] { -1 }, new[] { columnCount > 0 ? columnCount : throw new ArgumentOutOfRangeException(nameof(columnCount), "Must be positive.") })
     {
         if (sparsityThreshold < 0 || sparsityThreshold > 1)
             throw new ArgumentOutOfRangeException(nameof(sparsityThreshold), "Must be between 0 and 1.");
 
-        InputSize = inputSize;
+        InputSize = -1;
         ColumnCount = columnCount;
         SparsityThreshold = sparsityThreshold;
-        Connections = new Tensor<T>([inputSize, columnCount]);
+        Connections = new Tensor<T>([0, 0]);
+    }
 
+    /// <summary>
+    /// Resolves input size from input.Shape (last axis or product of trailing axes) on first forward
+    /// and allocates the connection matrix [inputSize, columnCount].
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"SpatialPoolerLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+
+        // Per-sample input size: product of all dims except a leading batch dim if present.
+        // For a 1-D input we treat the only axis as the input size; otherwise we treat the
+        // first axis as batch and flatten the rest.
+        int inputSize;
+        if (rank == 1) inputSize = input.Shape[0];
+        else
+        {
+            inputSize = 1;
+            for (int i = 1; i < rank; i++) inputSize *= input.Shape[i];
+        }
+
+        InputSize = inputSize;
         InitializeConnections();
-
-        // Connections are modified by Hebbian learning rules, not gradient descent.
-        // Register as buffer (serialized + GPU-persistent, NOT in GetTrainableParameters).
         RegisterBuffer(Connections, nameof(Connections), PersistentTensorRole.Weights);
+
+        ResolveShapes(new[] { inputSize }, new[] { ColumnCount });
     }
 
     /// <summary>
@@ -307,6 +328,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         // Flatten to 1D tensor if needed
         LastInput = input.Shape.Length == 1
             ? input

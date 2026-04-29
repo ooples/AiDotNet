@@ -83,7 +83,6 @@ public class NeuralOperatorTrainingTests
         var layers = new List<ILayer<double>>
         {
             new DenseLayer<double>(
-                inputSize,
                 outputSize,
                 (IActivationFunction<double>)new IdentityActivation<double>())
         };

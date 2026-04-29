@@ -118,14 +118,11 @@ public class TransitionLayer<T> : LayerBase<T>
         OutputChannels = (int)(inputChannels * compressionFactor);
         _relu = new ReLUActivation<T>();
 
-        _bn = new BatchNormalizationLayer<T>(inputChannels);
+        _bn = new BatchNormalizationLayer<T>();
 
         _conv = new ConvolutionalLayer<T>(
-            inputDepth: inputChannels,
             outputDepth: OutputChannels,
             kernelSize: 1,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             stride: 1,
             padding: 0,
             activationFunction: new IdentityActivation<T>());
@@ -133,7 +130,6 @@ public class TransitionLayer<T> : LayerBase<T>
         // After 1x1 conv, dimensions are same
         // Then 2x2 avg pool with stride 2 halves dimensions
         _pool = new AveragePoolingLayer<T>(
-            inputShape: [OutputChannels, inputHeight, inputWidth],
             poolSize: 2,
             strides: 2);
 

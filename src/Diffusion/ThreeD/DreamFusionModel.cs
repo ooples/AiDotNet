@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
@@ -939,16 +939,27 @@ public class NeRFNetwork<T>
         for (int i = 0; i < numLayers; i++)
         {
             int inDim = i == 0 ? inputDim : hiddenDim;
-            _densityLayers.Add(new DenseLayer<T>(inDim, hiddenDim, (IActivationFunction<T>)new ReLUActivation<T>()));
+            var layer = new DenseLayer<T>(hiddenDim, (IActivationFunction<T>)new ReLUActivation<T>());
+            // Pre-resolve from the ctor-known input dim so ParameterCount, GetParameters,
+            // SetParameters, and Clone reflect the correct layout before any render.
+            layer.ResolveFromShape(new[] { 1, inDim });
+            _densityLayers.Add(layer);
         }
-        _densityLayers.Add(new DenseLayer<T>(hiddenDim, 1, (IActivationFunction<T>?)null)); // Output density
+        var densityOut = new DenseLayer<T>(1, (IActivationFunction<T>?)null); // Output density
+        densityOut.ResolveFromShape(new[] { 1, hiddenDim });
+        _densityLayers.Add(densityOut);
 
         // Color network: features + direction -> RGB
         _colorLayers = new List<DenseLayer<T>>();
         int colorInputDim = hiddenDim + 3 + 6 * 4; // Features + direction + positional encoding
 
-        _colorLayers.Add(new DenseLayer<T>(colorInputDim, hiddenDim / 2, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _colorLayers.Add(new DenseLayer<T>(hiddenDim / 2, 3, (IActivationFunction<T>)new SigmoidActivation<T>())); // RGB output
+        var colorMid = new DenseLayer<T>(hiddenDim / 2, (IActivationFunction<T>)new ReLUActivation<T>());
+        colorMid.ResolveFromShape(new[] { 1, colorInputDim });
+        _colorLayers.Add(colorMid);
+
+        var colorOut = new DenseLayer<T>(3, (IActivationFunction<T>)new SigmoidActivation<T>()); // RGB output
+        colorOut.ResolveFromShape(new[] { 1, hiddenDim / 2 });
+        _colorLayers.Add(colorOut);
     }
 
     /// <summary>

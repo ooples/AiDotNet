@@ -21,7 +21,7 @@ public class PoolingLayersIntegrationTests
         int[] inputShape = [3, 8, 8];
         int poolSize = 2;
         int stride = 2;
-        var layer = new MaxPoolingLayer<float>(inputShape, poolSize, stride);
+        var layer = new MaxPoolingLayer<float>(poolSize, stride);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act
@@ -42,7 +42,7 @@ public class PoolingLayersIntegrationTests
         int[] inputShape = [3, 8, 8]; // layer expects CHW
         int poolSize = 2;
         int stride = 2;
-        var layer = new MaxPoolingLayer<float>(inputShape, poolSize, stride);
+        var layer = new MaxPoolingLayer<float>(poolSize, stride);
         var input = CreateRandomTensor<float>([2, 3, 8, 8]); // NCHW input
 
         // Act
@@ -63,7 +63,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [3, 8, 8];
-        var original = new MaxPoolingLayer<float>(inputShape, 2, 2);
+        var original = new MaxPoolingLayer<float>(2, 2);
         var input = CreateRandomTensor<float>(inputShape);
         var originalOutput = original.Forward(input);
 
@@ -89,7 +89,7 @@ public class PoolingLayersIntegrationTests
         int[] inputShape = [4, 10, 10];
         int poolSize = 2;
         int stride = 2;
-        var layer = new AveragePoolingLayer<float>(inputShape, poolSize, stride);
+        var layer = new AveragePoolingLayer<float>(poolSize, stride);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act
@@ -110,7 +110,7 @@ public class PoolingLayersIntegrationTests
         int[] inputShape = [4, 8, 8];
         int poolSize = 2;
         int stride = 2;
-        var layer = new AveragePoolingLayer<float>(inputShape, poolSize, stride);
+        var layer = new AveragePoolingLayer<float>(poolSize, stride);
         var input = CreateRandomTensor<float>([3, 4, 8, 8]);
 
         // Act
@@ -131,7 +131,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [4, 8, 8];
-        var original = new AveragePoolingLayer<float>(inputShape, 2, 2);
+        var original = new AveragePoolingLayer<float>(2, 2);
         var input = CreateRandomTensor<float>(inputShape);
         var originalOutput = original.Forward(input);
 
@@ -153,7 +153,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange - 3D input [channels, height, width]
         int[] inputShape = [8, 7, 7];
-        var layer = new GlobalPoolingLayer<float>(inputShape, PoolingType.Max);
+        var layer = new GlobalPoolingLayer<float>(PoolingType.Max);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act
@@ -170,7 +170,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [8, 7, 7];
-        var layer = new GlobalPoolingLayer<float>(inputShape, PoolingType.Average);
+        var layer = new GlobalPoolingLayer<float>(PoolingType.Average);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act
@@ -187,7 +187,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [8, 7, 7];
-        var original = new GlobalPoolingLayer<float>(inputShape, PoolingType.Max);
+        var original = new GlobalPoolingLayer<float>(PoolingType.Max);
         var input = CreateRandomTensor<float>(inputShape);
         var originalOutput = original.Forward(input);
 
@@ -213,7 +213,7 @@ public class PoolingLayersIntegrationTests
         int inputWidth = 16;
         int outputHeight = 4;
         int outputWidth = 4;
-        var layer = new AdaptiveAveragePoolingLayer<float>(inputChannels, inputHeight, inputWidth, outputHeight, outputWidth);
+        var layer = new AdaptiveAveragePoolingLayer<float>(outputHeight, outputWidth);
         var input = CreateRandomTensor<float>([inputChannels, inputHeight, inputWidth]);
 
         // Act
@@ -228,7 +228,7 @@ public class PoolingLayersIntegrationTests
     public async Task AdaptiveAveragePoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
-        var original = new AdaptiveAveragePoolingLayer<float>(4, 16, 16, 4, 4);
+        var original = new AdaptiveAveragePoolingLayer<float>(4, 4);
         var input = CreateRandomTensor<float>([4, 16, 16]);
         var originalOutput = original.Forward(input);
 
@@ -312,7 +312,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [3, 8, 8];
-        var layer = new MaxPoolingLayer<float>(inputShape, 2, 2);
+        var layer = new MaxPoolingLayer<float>(2, 2);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act - Training mode
@@ -332,7 +332,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [4, 8, 8];
-        var layer = new AveragePoolingLayer<float>(inputShape, 2, 2);
+        var layer = new AveragePoolingLayer<float>(2, 2);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act - Training mode
@@ -356,7 +356,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange - single channel input
         int[] inputShape = [1, 8, 8];
-        var layer = new MaxPoolingLayer<float>(inputShape, 2, 2);
+        var layer = new MaxPoolingLayer<float>(2, 2);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act
@@ -372,7 +372,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange - 3x3 pooling
         int[] inputShape = [2, 9, 9];
-        var layer = new AveragePoolingLayer<float>(inputShape, 3, 3);
+        var layer = new AveragePoolingLayer<float>(3, 3);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act
@@ -390,7 +390,7 @@ public class PoolingLayersIntegrationTests
     {
         // Arrange - non-square input
         int[] inputShape = [3, 8, 12];
-        var layer = new MaxPoolingLayer<float>(inputShape, 2, 2);
+        var layer = new MaxPoolingLayer<float>(2, 2);
         var input = CreateRandomTensor<float>(inputShape);
 
         // Act

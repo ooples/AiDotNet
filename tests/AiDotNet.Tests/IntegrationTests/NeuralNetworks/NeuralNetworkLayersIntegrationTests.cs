@@ -25,7 +25,7 @@ public class NeuralNetworkLayersIntegrationTests
         // Arrange
         int inputSize = 10;
         int outputSize = 5;
-        var layer = new DenseLayer<double>(inputSize, outputSize);
+        var layer = new DenseLayer<double>(outputSize);
         var input = new Tensor<double>([1, inputSize]);
 
         // Initialize with random values
@@ -51,7 +51,7 @@ public class NeuralNetworkLayersIntegrationTests
         int batchSize = 8;
         int inputSize = 10;
         int outputSize = 5;
-        var layer = new DenseLayer<double>(inputSize, outputSize);
+        var layer = new DenseLayer<double>(outputSize);
         var input = new Tensor<double>([batchSize, inputSize]);
 
         // Initialize with random values
@@ -81,7 +81,7 @@ public class NeuralNetworkLayersIntegrationTests
         int inputSize = 5;
         int outputSize = 3;
         IActivationFunction<double> relu = new ReLUActivation<double>();
-        var layer = new DenseLayer<double>(inputSize, outputSize, relu);
+        var layer = new DenseLayer<double>(outputSize, relu);
 
         var input = new Tensor<double>([1, inputSize]);
         for (int i = 0; i < inputSize; i++)
@@ -104,7 +104,7 @@ public class NeuralNetworkLayersIntegrationTests
     public async Task DenseLayer_SupportsTraining_ReturnsTrue()
     {
         // Arrange
-        var layer = new DenseLayer<double>(10, 5);
+        var layer = new DenseLayer<double>(5);
 
         // Assert
         Assert.True(layer.SupportsTraining);
@@ -116,7 +116,7 @@ public class NeuralNetworkLayersIntegrationTests
         // Arrange
         int inputSize = 4;
         int outputSize = 3;
-        var layer = new DenseLayer<double>(inputSize, outputSize);
+        var layer = new DenseLayer<double>(outputSize);
 
         // Act
         var parameters = layer.GetParameters();
@@ -143,7 +143,7 @@ public class NeuralNetworkLayersIntegrationTests
         int padding = 1;
 
         var layer = new ConvolutionalLayer<double>(
-            inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding);
+            outputDepth, kernelSize, stride, padding);
 
         // Create input tensor [batch, depth, height, width]
         var input = new Tensor<double>([1, inputDepth, inputHeight, inputWidth]);
@@ -173,7 +173,7 @@ public class NeuralNetworkLayersIntegrationTests
         int padding = 1;
 
         var layer = new ConvolutionalLayer<double>(
-            inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding);
+            outputDepth, kernelSize, stride, padding);
 
         var input = new Tensor<double>([1, inputDepth, inputHeight, inputWidth]);
         InitializeRandomTensor(input);
@@ -202,7 +202,7 @@ public class NeuralNetworkLayersIntegrationTests
         int padding = 1;
 
         var layer = new ConvolutionalLayer<double>(
-            inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding);
+            outputDepth, kernelSize, stride, padding);
 
         var input = new Tensor<double>([batchSize, inputDepth, inputHeight, inputWidth]);
         InitializeRandomTensor(input);
@@ -280,7 +280,7 @@ public class NeuralNetworkLayersIntegrationTests
     {
         // Arrange
         int numFeatures = 10;
-        var layer = new BatchNormalizationLayer<double>(numFeatures);
+        var layer = new BatchNormalizationLayer<double>();
         layer.SetTrainingMode(true);
 
         var input = new Tensor<double>([32, numFeatures]); // Large batch for stable statistics
@@ -300,7 +300,7 @@ public class NeuralNetworkLayersIntegrationTests
     {
         // Arrange
         int numFeatures = 5;
-        var layer = new BatchNormalizationLayer<double>(numFeatures);
+        var layer = new BatchNormalizationLayer<double>();
 
         var input = new Tensor<double>([8, numFeatures]);
         InitializeRandomTensor(input, scale: 5.0);
@@ -346,7 +346,7 @@ public class NeuralNetworkLayersIntegrationTests
     public async Task BatchNormalizationLayer_SupportsTraining_ReturnsTrue()
     {
         // Arrange
-        var layer = new BatchNormalizationLayer<double>(10);
+        var layer = new BatchNormalizationLayer<double>();
 
         // Assert
         Assert.True(layer.SupportsTraining);
@@ -444,7 +444,7 @@ public class NeuralNetworkLayersIntegrationTests
         int embeddingDimension = 64;
         int headCount = 8;
 
-        var layer = new MultiHeadAttentionLayer<double>(sequenceLength, embeddingDimension, headCount);
+        var layer = new MultiHeadAttentionLayer<double>(headCount, (embeddingDimension) / (headCount));
         var input = new Tensor<double>([1, sequenceLength, embeddingDimension]);
         InitializeRandomTensor(input);
 
@@ -467,7 +467,7 @@ public class NeuralNetworkLayersIntegrationTests
         int headCount = 8;
 
         // Act
-        var layer = new MultiHeadAttentionLayer<double>(sequenceLength, embeddingDimension, headCount);
+        var layer = new MultiHeadAttentionLayer<double>(headCount, (embeddingDimension) / (headCount));
 
         // Assert
         Assert.NotNull(layer);
@@ -488,7 +488,7 @@ public class NeuralNetworkLayersIntegrationTests
         int embeddingDimension = 32;
         int headCount = 4;
 
-        var layer = new MultiHeadAttentionLayer<double>(sequenceLength, embeddingDimension, headCount);
+        var layer = new MultiHeadAttentionLayer<double>(headCount, (embeddingDimension) / (headCount));
         var input = new Tensor<double>([batchSize, sequenceLength, embeddingDimension]);
         InitializeRandomTensor(input);
 
@@ -504,7 +504,7 @@ public class NeuralNetworkLayersIntegrationTests
     public async Task MultiHeadAttentionLayer_SupportsTraining_ReturnsTrue()
     {
         // Arrange
-        var layer = new MultiHeadAttentionLayer<double>(10, 64, 8);
+        var layer = new MultiHeadAttentionLayer<double>(8, (64) / (8));
 
         // Assert
         Assert.True(layer.SupportsTraining);
@@ -518,7 +518,7 @@ public class NeuralNetworkLayersIntegrationTests
     public async Task DenseLayer_ZeroOutput_ThrowsArgumentOutOfRange()
     {
         // Arrange, Act & Assert - zero output size is invalid
-        Assert.Throws<ArgumentOutOfRangeException>(() => new DenseLayer<double>(5, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DenseLayer<double>(0));
     }
 
     [Fact(Timeout = 120000)]
@@ -533,7 +533,7 @@ public class NeuralNetworkLayersIntegrationTests
 
         // Act & Assert - input too small for kernel should throw
         Assert.Throws<ArgumentException>(() =>
-            new ConvolutionalLayer<double>(inputDepth, inputHeight, inputWidth, outputDepth, kernelSize));
+            new ConvolutionalLayer<double>(outputDepth, kernelSize));
     }
 
     #endregion
@@ -544,7 +544,7 @@ public class NeuralNetworkLayersIntegrationTests
     public async Task DenseLayer_LargeValues_RemainsNumericallyStable()
     {
         // Arrange
-        var layer = new DenseLayer<double>(10, 5);
+        var layer = new DenseLayer<double>(5);
         var input = new Tensor<double>([1, 10]);
         InitializeTensorWithValue(input, 1000.0); // Large values
 
@@ -563,7 +563,7 @@ public class NeuralNetworkLayersIntegrationTests
     public async Task DenseLayer_SmallValues_RemainsNumericallyStable()
     {
         // Arrange
-        var layer = new DenseLayer<double>(10, 5);
+        var layer = new DenseLayer<double>(5);
         var input = new Tensor<double>([1, 10]);
         InitializeTensorWithValue(input, 1e-10); // Very small values
 
@@ -582,7 +582,7 @@ public class NeuralNetworkLayersIntegrationTests
     {
         // Arrange
         int numFeatures = 5;
-        var layer = new BatchNormalizationLayer<double>(numFeatures);
+        var layer = new BatchNormalizationLayer<double>();
         layer.SetTrainingMode(true);
 
         // All same values - zero variance
@@ -612,7 +612,7 @@ public class NeuralNetworkLayersIntegrationTests
     public async Task DenseLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
-        var original = new DenseLayer<double>(10, 5);
+        var original = new DenseLayer<double>(5);
         var input = new Tensor<double>([1, 10]);
         InitializeRandomTensor(input);
 

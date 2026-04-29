@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 
@@ -25,7 +25,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
 {
-    private readonly int _inputDim;
+    private int _inputDim;
     private readonly int _outputDim;
 
     // Feature transformation
@@ -50,19 +50,25 @@ public class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputDim">Input dimension.</param>
     /// <param name="outputDim">Output dimension.</param>
-    public GatedFeatureLearningUnitLayer(int inputDim, int outputDim)
-        : base([inputDim], [outputDim])
+    public GatedFeatureLearningUnitLayer(int outputDim)
+        : base(new[] { -1 }, new[] { outputDim })
     {
-        _inputDim = inputDim;
+        _inputDim = -1;
         _outputDim = outputDim;
 
-        // Feature transformation with ReLU
-        _featureTransform = new FullyConnectedLayer<T>(
-            inputDim, outputDim, new ReLUActivation<T>() as IActivationFunction<T>);
+        _featureTransform = new FullyConnectedLayer<T>(outputDim, new ReLUActivation<T>() as IActivationFunction<T>);
+        _gateTransform = new FullyConnectedLayer<T>(outputDim, (IActivationFunction<T>?)null);
+    }
 
-        // Gate transformation (no activation, sigmoid applied manually)
-        _gateTransform = new FullyConnectedLayer<T>(
-            inputDim, outputDim, (IActivationFunction<T>?)null);
+    /// <inheritdoc/>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"GatedFeatureLearningUnitLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+        _inputDim = input.Shape[rank - 1];
+        ResolveShapes(new[] { _inputDim }, new[] { _outputDim });
     }
 
     /// <summary>
@@ -72,6 +78,7 @@ public class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
     /// <returns>Gated output [batchSize, outputDim].</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _inputCache = input;
 
         // Transform features

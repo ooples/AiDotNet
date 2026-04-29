@@ -70,8 +70,8 @@ public class MotionModule<T> : LayerBase<T>
         int spatialSize = 64,
         int ffnMultiplier = 4)
         : base(
-            new[] { 1, numFrames * spatialSize * spatialSize, channels },
-            new[] { 1, numFrames * spatialSize * spatialSize, channels })
+            new[] { spatialSize * spatialSize, numFrames, channels },
+            new[] { spatialSize * spatialSize, numFrames, channels })
     {
         if (channels <= 0)
             throw new ArgumentOutOfRangeException(nameof(channels), "Channels must be positive.");
@@ -96,11 +96,26 @@ public class MotionModule<T> : LayerBase<T>
             spatialSize: spatialSize);
 
         int ffnHidden = channels * ffnMultiplier;
-        _ffnIn = new DenseLayer<T>(channels, ffnHidden, (IActivationFunction<T>)new GELUActivation<T>());
-        _ffnOut = new DenseLayer<T>(ffnHidden, channels, (IActivationFunction<T>)new IdentityActivation<T>());
+        // Cast disambiguates between DenseLayer's IActivationFunction<T> and
+        // IVectorActivationFunction<T> ctor overloads — ActivationFunctionBase<T>
+        // implements both interfaces, so omitting the cast is a CS0121 ambiguity.
+        _ffnIn = new DenseLayer<T>(ffnHidden, (IActivationFunction<T>)new GELUActivation<T>());
+        _ffnOut = new DenseLayer<T>(channels, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        _norm1 = new LayerNormalizationLayer<T>(channels);
-        _norm2 = new LayerNormalizationLayer<T>(channels);
+        _norm1 = new LayerNormalizationLayer<T>();
+        _norm2 = new LayerNormalizationLayer<T>();
+
+        // Pre-resolve the lazy sublayers from the ctor-known shape so GetParameters,
+        // SetParameters, ParameterCount, and ONNX export all work on a freshly
+        // constructed MotionModule — without waiting for the first Forward.
+        // Forward expects input of shape [H*W, numFrames, channels] (matches
+        // TemporalSelfAttention's input contract).
+        var inputShape = new[] { spatialSize * spatialSize, numFrames, channels };
+        var ffnHiddenShape = new[] { spatialSize * spatialSize, numFrames, ffnHidden };
+        _norm1.ResolveFromShape(inputShape);
+        _norm2.ResolveFromShape(inputShape);
+        _ffnIn.ResolveFromShape(inputShape);
+        _ffnOut.ResolveFromShape(ffnHiddenShape);
     }
 
     /// <summary>

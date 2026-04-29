@@ -346,7 +346,7 @@ public class Phase2GateTests
     [Fact(Timeout = 60000)]
     public async Task DenseLayer_LazyInit_IsNotInitializedAfterConstruction()
     {
-        var layer = new DenseLayer<float>(100, 50,
+        var layer = new DenseLayer<float>(50,
             initializationStrategy: InitializationStrategies<float>.Lazy);
 
         Assert.False(layer.IsInitialized);
@@ -355,7 +355,7 @@ public class Phase2GateTests
     [Fact(Timeout = 60000)]
     public async Task DenseLayer_LazyInit_IsInitializedAfterForward()
     {
-        var layer = new DenseLayer<float>(100, 50,
+        var layer = new DenseLayer<float>(50,
             initializationStrategy: InitializationStrategies<float>.Lazy);
 
         Assert.False(layer.IsInitialized);
@@ -370,7 +370,7 @@ public class Phase2GateTests
     [Fact(Timeout = 60000)]
     public async Task DenseLayer_EagerInit_IsInitializedImmediately()
     {
-        var layer = new DenseLayer<float>(100, 50,
+        var layer = new DenseLayer<float>(50,
             initializationStrategy: InitializationStrategies<float>.Eager);
 
         Assert.True(layer.IsInitialized);
@@ -379,7 +379,7 @@ public class Phase2GateTests
     [Fact(Timeout = 60000)]
     public async Task DenseLayer_DefaultInit_IsInitializedImmediately()
     {
-        var layer = new DenseLayer<float>(100, 50);
+        var layer = new DenseLayer<float>(50);
 
         Assert.True(layer.IsInitialized);
     }
@@ -395,7 +395,7 @@ public class Phase2GateTests
         var swEager = Stopwatch.StartNew();
         for (int i = 0; i < iterations; i++)
         {
-            var layer = new DenseLayer<float>(inputSize, outputSize,
+            var layer = new DenseLayer<float>(outputSize,
                 initializationStrategy: InitializationStrategies<float>.Eager);
         }
         swEager.Stop();
@@ -404,7 +404,7 @@ public class Phase2GateTests
         var swLazy = Stopwatch.StartNew();
         for (int i = 0; i < iterations; i++)
         {
-            var layer = new DenseLayer<float>(inputSize, outputSize,
+            var layer = new DenseLayer<float>(outputSize,
                 initializationStrategy: InitializationStrategies<float>.Lazy);
         }
         swLazy.Stop();
@@ -417,9 +417,9 @@ public class Phase2GateTests
     [Fact(Timeout = 60000)]
     public async Task DenseLayer_LazyInit_ProducesCorrectOutput()
     {
-        var eagerLayer = new DenseLayer<float>(10, 5,
+        var eagerLayer = new DenseLayer<float>(5,
             initializationStrategy: InitializationStrategies<float>.Zero);
-        var lazyLayer = new DenseLayer<float>(10, 5,
+        var lazyLayer = new DenseLayer<float>(5,
             initializationStrategy: InitializationStrategies<float>.Lazy);
 
         // Set the lazy layer's strategy to also use zero init after it's created
@@ -441,7 +441,7 @@ public class Phase2GateTests
     [Fact(Timeout = 60000)]
     public async Task DenseLayer_LazyInit_ThreadSafe()
     {
-        var layer = new DenseLayer<float>(100, 50,
+        var layer = new DenseLayer<float>(50,
             initializationStrategy: InitializationStrategies<float>.Lazy);
         var exceptions = new ConcurrentBag<Exception>();
 
@@ -468,7 +468,6 @@ public class Phase2GateTests
     public async Task ConvolutionalLayer_LazyInit_IsNotInitializedAfterConstruction()
     {
         var layer = new ConvolutionalLayer<float>(
-            inputDepth: 3, inputHeight: 32, inputWidth: 32,
             outputDepth: 16, kernelSize: 3,
             initializationStrategy: InitializationStrategies<float>.Lazy);
 
@@ -479,7 +478,6 @@ public class Phase2GateTests
     public async Task ConvolutionalLayer_LazyInit_IsInitializedAfterForward()
     {
         var layer = new ConvolutionalLayer<float>(
-            inputDepth: 3, inputHeight: 32, inputWidth: 32,
             outputDepth: 16, kernelSize: 3,
             initializationStrategy: InitializationStrategies<float>.Lazy);
 
@@ -496,7 +494,6 @@ public class Phase2GateTests
     public async Task ConvolutionalLayer_EagerInit_IsInitializedImmediately()
     {
         var layer = new ConvolutionalLayer<float>(
-            inputDepth: 3, inputHeight: 32, inputWidth: 32,
             outputDepth: 16, kernelSize: 3,
             initializationStrategy: InitializationStrategies<float>.Eager);
 
@@ -507,7 +504,6 @@ public class Phase2GateTests
     public async Task ConvolutionalLayer_DefaultInit_IsInitializedImmediately()
     {
         var layer = new ConvolutionalLayer<float>(
-            inputDepth: 3, inputHeight: 32, inputWidth: 32,
             outputDepth: 16, kernelSize: 3);
 
         Assert.True(layer.IsInitialized);
@@ -528,7 +524,7 @@ public class Phase2GateTests
         for (int i = 0; i < iterations; i++)
         {
             var layer = new ConvolutionalLayer<float>(
-                inputDepth, inputHeight, inputWidth, outputDepth, kernelSize,
+                outputDepth, kernelSize,
                 initializationStrategy: InitializationStrategies<float>.Eager);
         }
         swEager.Stop();
@@ -538,7 +534,7 @@ public class Phase2GateTests
         for (int i = 0; i < iterations; i++)
         {
             var layer = new ConvolutionalLayer<float>(
-                inputDepth, inputHeight, inputWidth, outputDepth, kernelSize,
+                outputDepth, kernelSize,
                 initializationStrategy: InitializationStrategies<float>.Lazy);
         }
         swLazy.Stop();
@@ -552,7 +548,6 @@ public class Phase2GateTests
     public async Task ConvolutionalLayer_LazyInit_ProducesValidOutput()
     {
         var layer = new ConvolutionalLayer<float>(
-            inputDepth: 3, inputHeight: 32, inputWidth: 32,
             outputDepth: 16, kernelSize: 3, stride: 1, padding: 1,
             initializationStrategy: InitializationStrategies<float>.Lazy);
 

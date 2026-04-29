@@ -105,7 +105,7 @@ public class LoRAValidationTests
     public async Task AdaLoRAAdapter_InvalidPruningInterval_Zero_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
-        var baseLayer = new DenseLayer<double>(10, 5);
+        var baseLayer = new DenseLayer<double>(5);
 
         // Act & Assert
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -119,7 +119,7 @@ public class LoRAValidationTests
     public async Task AdaLoRAAdapter_InvalidPruningInterval_Negative_ThrowsArgumentOutOfRangeException()
     {
         // Arrange
-        var baseLayer = new DenseLayer<double>(10, 5);
+        var baseLayer = new DenseLayer<double>(5);
 
         // Act & Assert
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -133,7 +133,7 @@ public class LoRAValidationTests
     public async Task AdaLoRAAdapter_ValidPruningInterval_CreatesSuccessfully()
     {
         // Arrange
-        var baseLayer = new DenseLayer<double>(10, 5);
+        var baseLayer = new DenseLayer<double>(5);
 
         // Act
         var adapter = new AdaLoRAAdapter<double>(baseLayer, maxRank: 4, alpha: 4, freezeBaseLayer: true,
@@ -152,7 +152,7 @@ public class LoRAValidationTests
     {
         // Arrange
         var config = new DefaultLoRAConfiguration<double>(rank: 4, alpha: 4, freezeBaseLayer: true);
-        var baseLayer = new DenseLayer<double>(10, 5);
+        var baseLayer = new DenseLayer<double>(5);
 
         // Act
         var adaptedLayer = config.ApplyLoRA(baseLayer);
@@ -165,9 +165,9 @@ public class LoRAValidationTests
     public async Task DefaultLoRAConfiguration_DoRAAdapter_CreatesSuccessfully()
     {
         // Arrange - DoRA has matching constructor signature (ILayer<T>, int, double, bool)
-        var doraAdapter = new DoRAAdapter<double>(new DenseLayer<double>(10, 5), rank: 4, alpha: 4, freezeBaseLayer: true);
+        var doraAdapter = new DoRAAdapter<double>(new DenseLayer<double>(5), rank: 4, alpha: 4, freezeBaseLayer: true);
         var config = new DefaultLoRAConfiguration<double>(rank: 4, alpha: 4, freezeBaseLayer: true, loraAdapter: doraAdapter);
-        var baseLayer = new DenseLayer<double>(10, 5);
+        var baseLayer = new DenseLayer<double>(5);
 
         // Act
         var adaptedLayer = config.ApplyLoRA(baseLayer);
@@ -180,9 +180,9 @@ public class LoRAValidationTests
     public async Task DefaultLoRAConfiguration_AdaLoRAAdapter_CreatesSuccessfully()
     {
         // Arrange - AdaLoRA has compatible constructor (4th param is bool, rest have defaults)
-        var adaloraAdapter = new AdaLoRAAdapter<double>(new DenseLayer<double>(10, 5), maxRank: 4);
+        var adaloraAdapter = new AdaLoRAAdapter<double>(new DenseLayer<double>(5), maxRank: 4);
         var config = new DefaultLoRAConfiguration<double>(rank: 4, alpha: 4, freezeBaseLayer: true, loraAdapter: adaloraAdapter);
-        var baseLayer = new DenseLayer<double>(10, 5);
+        var baseLayer = new DenseLayer<double>(5);
 
         // Act
         var adaptedLayer = config.ApplyLoRA(baseLayer);
@@ -197,9 +197,9 @@ public class LoRAValidationTests
         // QLoRA has incompatible constructor signature (4th param is QuantizationType, not bool)
         // This should throw a helpful error message
         // Arrange
-        var qloraAdapter = new QLoRAAdapter<double>(new DenseLayer<double>(10, 5), rank: 4);
+        var qloraAdapter = new QLoRAAdapter<double>(new DenseLayer<double>(5), rank: 4);
         var config = new DefaultLoRAConfiguration<double>(rank: 4, alpha: 4, freezeBaseLayer: true, loraAdapter: qloraAdapter);
-        var baseLayer = new DenseLayer<double>(10, 5);
+        var baseLayer = new DenseLayer<double>(5);
 
         // Act & Assert
         var ex = Assert.Throws<InvalidOperationException>(() => config.ApplyLoRA(baseLayer));
@@ -212,7 +212,7 @@ public class LoRAValidationTests
         // Layers without trainable weights should pass through unchanged
         // Arrange
         var config = new DefaultLoRAConfiguration<double>(rank: 4);
-        var poolingLayer = new MaxPoolingLayer<double>(inputShape: new[] { 28, 28, 1 }, poolSize: 2, stride: 2);
+        var poolingLayer = new MaxPoolingLayer<double>(poolSize: 2, stride: 2);
 
         // Act
         var result = config.ApplyLoRA(poolingLayer);
@@ -252,7 +252,7 @@ public class LoRAValidationTests
         int inputSize = 5; // Smaller than outputSize to catch the bug
         int outputSize = 10;
         int rank = 4;
-        var baseLayer = new DenseLayer<double>(inputSize, outputSize);
+        var baseLayer = new DenseLayer<double>(outputSize);
         var adapter = new StandardLoRAAdapter<double>(baseLayer, rank: rank, alpha: rank, freezeBaseLayer: true);
 
         // Act & Assert - should not throw
@@ -268,7 +268,7 @@ public class LoRAValidationTests
         int inputSize = 5;
         int outputSize = 10;
         int rank = 4;
-        var baseLayer = new DenseLayer<double>(inputSize, outputSize);
+        var baseLayer = new DenseLayer<double>(outputSize);
         var adapter = new DoRAAdapter<double>(baseLayer, rank: rank, alpha: rank, freezeBaseLayer: true);
 
         // Act & Assert - should not throw
@@ -284,7 +284,7 @@ public class LoRAValidationTests
         int inputSize = 5;
         int outputSize = 10;
         int rank = 4;
-        var baseLayer = new DenseLayer<double>(inputSize, outputSize);
+        var baseLayer = new DenseLayer<double>(outputSize);
         var adapter = new QLoRAAdapter<double>(baseLayer, rank: rank, alpha: rank, freezeBaseLayer: true);
 
         // Act & Assert - should not throw
@@ -306,7 +306,7 @@ public class LoRAValidationTests
 
         try
         {
-            var baseLayer = new DenseLayer<double>(inputSize, outputSize);
+            var baseLayer = new DenseLayer<double>(outputSize);
             var adapter = new VeRAAdapter<double>(baseLayer, rank: rank, alpha: rank, freezeBaseLayer: true);
 
             // Act & Assert - should not throw
@@ -334,7 +334,7 @@ public class LoRAValidationTests
         int outputSize = 10;
         int rank = 4;
         int batchSize = 2;
-        var baseLayer = new DenseLayer<double>(inputSize, outputSize);
+        var baseLayer = new DenseLayer<double>(outputSize);
         var adapter = new DoRAAdapter<double>(baseLayer, rank: rank, alpha: rank, freezeBaseLayer: true);
 
         // Create input tensor [batchSize, inputSize]

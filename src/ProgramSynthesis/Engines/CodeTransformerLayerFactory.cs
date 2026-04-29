@@ -37,25 +37,20 @@ internal static class CodeTransformerLayerFactory
     {
         for (int i = 0; i < architecture.NumEncoderLayers; i++)
         {
-            layers.Add(new MultiHeadAttentionLayer<T>(
-                sequenceLength: architecture.MaxSequenceLength,
-                embeddingDimension: architecture.ModelDimension,
-                headCount: architecture.NumHeads,
+            layers.Add(new MultiHeadAttentionLayer<T>(architecture.NumHeads, (architecture.ModelDimension) / (architecture.NumHeads), 
                 activationFunction: new IdentityActivation<T>()));
 
-            layers.Add(new LayerNormalizationLayer<T>(architecture.ModelDimension));
+            layers.Add(new LayerNormalizationLayer<T>());
 
             layers.Add(new DenseLayer<T>(
-                inputSize: architecture.ModelDimension,
                 outputSize: architecture.FeedForwardDimension,
                 activationFunction: new GELUActivation<T>()));
 
             layers.Add(new DenseLayer<T>(
-                inputSize: architecture.FeedForwardDimension,
                 outputSize: architecture.ModelDimension,
                 activationFunction: new IdentityActivation<T>()));
 
-            layers.Add(new LayerNormalizationLayer<T>(architecture.ModelDimension));
+            layers.Add(new LayerNormalizationLayer<T>());
             AddDropoutIfEnabled(layers, architecture);
         }
     }
@@ -64,33 +59,25 @@ internal static class CodeTransformerLayerFactory
     {
         for (int i = 0; i < architecture.NumDecoderLayers; i++)
         {
-            layers.Add(new MultiHeadAttentionLayer<T>(
-                sequenceLength: architecture.MaxSequenceLength,
-                embeddingDimension: architecture.ModelDimension,
-                headCount: architecture.NumHeads,
+            layers.Add(new MultiHeadAttentionLayer<T>(architecture.NumHeads, (architecture.ModelDimension) / (architecture.NumHeads), 
                 activationFunction: new IdentityActivation<T>()));
 
-            layers.Add(new LayerNormalizationLayer<T>(architecture.ModelDimension));
+            layers.Add(new LayerNormalizationLayer<T>());
 
-            layers.Add(new MultiHeadAttentionLayer<T>(
-                sequenceLength: architecture.MaxSequenceLength,
-                embeddingDimension: architecture.ModelDimension,
-                headCount: architecture.NumHeads,
+            layers.Add(new MultiHeadAttentionLayer<T>(architecture.NumHeads, (architecture.ModelDimension) / (architecture.NumHeads), 
                 activationFunction: new IdentityActivation<T>()));
 
-            layers.Add(new LayerNormalizationLayer<T>(architecture.ModelDimension));
+            layers.Add(new LayerNormalizationLayer<T>());
 
             layers.Add(new DenseLayer<T>(
-                inputSize: architecture.ModelDimension,
                 outputSize: architecture.FeedForwardDimension,
                 activationFunction: new GELUActivation<T>()));
 
             layers.Add(new DenseLayer<T>(
-                inputSize: architecture.FeedForwardDimension,
                 outputSize: architecture.ModelDimension,
                 activationFunction: new IdentityActivation<T>()));
 
-            layers.Add(new LayerNormalizationLayer<T>(architecture.ModelDimension));
+            layers.Add(new LayerNormalizationLayer<T>());
             AddDropoutIfEnabled(layers, architecture);
         }
     }
@@ -98,7 +85,6 @@ internal static class CodeTransformerLayerFactory
     internal static void AddOutputProjection<T>(IList<ILayer<T>> layers, CodeSynthesisArchitecture<T> architecture)
     {
         layers.Add(new DenseLayer<T>(
-            inputSize: architecture.ModelDimension,
             outputSize: architecture.VocabularySize,
             activationFunction: new IdentityActivation<T>()));
     }

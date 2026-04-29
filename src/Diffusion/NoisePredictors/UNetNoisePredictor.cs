@@ -867,7 +867,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     {
         // spatialSize here is the current (smaller) spatial size before upsampling
         return new DeconvolutionalLayer<T>(
-            inputShape: new[] { 1, channels, spatialSize, spatialSize },
             outputDepth: channels,
             kernelSize: 4,
             stride: 2,

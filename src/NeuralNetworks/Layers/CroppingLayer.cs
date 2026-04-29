@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 8, 8, 1", TestConstructorArgs = "new[] { 1, 8, 8, 1 }, new[] { 0, 1, 0, 0 }, new[] { 0, 1, 0, 0 }, new[] { 0, 0, 1, 0 }, new[] { 0, 0, 1, 0 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 8, 8, 1", TestConstructorArgs = "new[] { 0, 1, 0, 0 }, new[] { 0, 1, 0, 0 }, new[] { 0, 0, 1, 0 }, new[] { 0, 0, 1, 0 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class CroppingLayer<T> : LayerBase<T>
 {
 
@@ -248,14 +248,13 @@ public class CroppingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public CroppingLayer(
-        int[] inputShape,
         int[] cropTop,
         int[] cropBottom,
         int[] cropLeft,
         int[] cropRight,
         IActivationFunction<T>? scalarActivation = null,
         IEngine? engine = null)
-        : base(inputShape, CalculateOutputShape(inputShape, cropTop, cropBottom, cropLeft, cropRight), scalarActivation ?? new IdentityActivation<T>())
+        : base(MakeUnknownShape(cropTop), MakeUnknownShape(cropTop), scalarActivation ?? new IdentityActivation<T>())
     {
         _cropTop = cropTop;
         _cropBottom = cropBottom;
@@ -293,19 +292,56 @@ public class CroppingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public CroppingLayer(
-        int[] inputShape,
         int[] cropTop,
         int[] cropBottom,
         int[] cropLeft,
         int[] cropRight,
-        IVectorActivationFunction<T>? vectorActivation = null,
+        IVectorActivationFunction<T> vectorActivation,
         IEngine? engine = null)
-        : base(inputShape, CalculateOutputShape(inputShape, cropTop, cropBottom, cropLeft, cropRight), vectorActivation ?? new IdentityActivation<T>())
+        : base(MakeUnknownShape(cropTop), MakeUnknownShape(cropTop), vectorActivation ?? new IdentityActivation<T>())
     {
         _cropTop = cropTop;
         _cropBottom = cropBottom;
         _cropLeft = cropLeft;
         _cropRight = cropRight;
+    }
+
+    private static int[] MakeUnknownShape(int[] cropDims)
+    {
+        var s = new int[cropDims.Length];
+        for (int i = 0; i < s.Length; i++) s[i] = -1;
+        return s;
+    }
+
+    /// <summary>
+    /// Resolves the input/output shape on first forward by subtracting crops from input.Shape.
+    /// Crop arrays may have shorter length than input rank (e.g., HWC crops applied to BHWC input);
+    /// the rightmost dimensions of input are aligned with the crop arrays.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var inputShape = input.Shape.ToArray();
+        int rank = inputShape.Length;
+        int cropRank = _cropTop.Length;
+        if (cropRank > rank)
+            throw new ArgumentException(
+                $"CroppingLayer crop array length ({cropRank}) must be <= input rank ({rank}).",
+                nameof(input));
+
+        int[] outputShape = new int[rank];
+        // Leading dims (e.g., batch) are not cropped
+        for (int i = 0; i < rank - cropRank; i++) outputShape[i] = inputShape[i];
+        // Trailing dims aligned with crop arrays
+        for (int j = 0; j < cropRank; j++)
+        {
+            int axis = rank - cropRank + j;
+            outputShape[axis] = inputShape[axis] - _cropTop[j] - _cropBottom[j] - _cropLeft[j] - _cropRight[j];
+            if (outputShape[axis] <= 0)
+                throw new ArgumentException(
+                    $"Crop on axis {axis} produces non-positive output dim ({outputShape[axis]}) for input dim {inputShape[axis]}.");
+        }
+
+        ResolveShapes(inputShape, outputShape);
     }
 
     /// <summary>
@@ -371,6 +407,7 @@ public class CroppingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         // Support any rank >= 3: NHWC format where last 3 dims are [H, W, C]
         if (input.Rank < 3)
         {

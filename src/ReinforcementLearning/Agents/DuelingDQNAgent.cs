@@ -448,7 +448,7 @@ internal class DuelingNetwork<T>
         int prevSize = stateSize;
         foreach (var size in sharedLayerSizes)
         {
-            _sharedLayers.Add(new DenseLayer<T>(prevSize, size, (IActivationFunction<T>)new ReLUActivation<T>()));
+            _sharedLayers.Add(new DenseLayer<T>(size, (IActivationFunction<T>)new ReLUActivation<T>()));
             prevSize = size;
         }
 
@@ -458,19 +458,19 @@ internal class DuelingNetwork<T>
         prevSize = sharedOutputSize;
         foreach (var size in valueLayerSizes)
         {
-            _valueLayers.Add(new DenseLayer<T>(prevSize, size, (IActivationFunction<T>)new ReLUActivation<T>()));
+            _valueLayers.Add(new DenseLayer<T>(size, (IActivationFunction<T>)new ReLUActivation<T>()));
             prevSize = size;
         }
-        _valueLayers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new IdentityActivation<T>())); // Output single value
+        _valueLayers.Add(new DenseLayer<T>(1, (IActivationFunction<T>)new IdentityActivation<T>())); // Output single value
 
         // Build advantage stream
         prevSize = sharedOutputSize;
         foreach (var size in advantageLayerSizes)
         {
-            _advantageLayers.Add(new DenseLayer<T>(prevSize, size, (IActivationFunction<T>)new ReLUActivation<T>()));
+            _advantageLayers.Add(new DenseLayer<T>(size, (IActivationFunction<T>)new ReLUActivation<T>()));
             prevSize = size;
         }
-        _advantageLayers.Add(new DenseLayer<T>(prevSize, actionSize, (IActivationFunction<T>)new IdentityActivation<T>())); // Output per-action advantages
+        _advantageLayers.Add(new DenseLayer<T>(actionSize, (IActivationFunction<T>)new IdentityActivation<T>())); // Output per-action advantages
     }
 
     public Vector<T> Forward(Vector<T> state)

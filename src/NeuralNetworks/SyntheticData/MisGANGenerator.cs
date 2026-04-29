@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -230,13 +230,13 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             for (int i = 0; i < dims.Length; i++)
             {
                 int layerInput = i == 0 ? inputDim : dims[i - 1] + inputDim;
-                var fcLayer = new FullyConnectedLayer<T>(layerInput, dims[i], identity);
+                var fcLayer = new FullyConnectedLayer<T>(dims[i], identity);
                 Layers.Add(fcLayer);
-                _dataGenBNLayers.Add(new BatchNormalizationLayer<T>(dims[i]));
+                _dataGenBNLayers.Add(new BatchNormalizationLayer<T>());
             }
 
             int lastHidden = dims.Length > 0 ? dims[^1] + inputDim : inputDim;
-            Layers.Add(new FullyConnectedLayer<T>(lastHidden, Architecture.OutputSize, identity));
+            Layers.Add(new FullyConnectedLayer<T>(Architecture.OutputSize, identity));
             _usingCustomLayers = false;
         }
     }
@@ -255,12 +255,12 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         for (int i = 0; i < dims.Length; i++)
         {
             int layerInput = i == 0 ? _dataWidth : dims[i - 1];
-            _dataDiscLayers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
+            _dataDiscLayers.Add(new FullyConnectedLayer<T>(dims[i], identity));
             _dataDiscDropoutLayers.Add(new DropoutLayer<T>(_options.DiscriminatorDropout));
         }
 
         int lastHidden = dims.Length > 0 ? dims[^1] : _dataWidth;
-        _dataDiscLayers.Add(new FullyConnectedLayer<T>(lastHidden, 1, identity));
+        _dataDiscLayers.Add(new FullyConnectedLayer<T>(1, identity));
     }
 
     /// <summary>
@@ -278,12 +278,12 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         for (int i = 0; i < dims.Length; i++)
         {
             int layerInput = i == 0 ? inputDim : dims[i - 1] + inputDim;
-            _maskGenLayers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-            _maskGenBNLayers.Add(new BatchNormalizationLayer<T>(dims[i]));
+            _maskGenLayers.Add(new FullyConnectedLayer<T>(dims[i], identity));
+            _maskGenBNLayers.Add(new BatchNormalizationLayer<T>());
         }
 
         int lastHidden = dims.Length > 0 ? dims[^1] + inputDim : inputDim;
-        _maskGenLayers.Add(new FullyConnectedLayer<T>(lastHidden, _dataWidth, identity));
+        _maskGenLayers.Add(new FullyConnectedLayer<T>(_dataWidth, identity));
     }
 
     /// <summary>
@@ -300,12 +300,12 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         for (int i = 0; i < dims.Length; i++)
         {
             int layerInput = i == 0 ? _dataWidth : dims[i - 1];
-            _maskDiscLayers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
+            _maskDiscLayers.Add(new FullyConnectedLayer<T>(dims[i], identity));
             _maskDiscDropoutLayers.Add(new DropoutLayer<T>(_options.DiscriminatorDropout));
         }
 
         int lastHidden = dims.Length > 0 ? dims[^1] : _dataWidth;
-        _maskDiscLayers.Add(new FullyConnectedLayer<T>(lastHidden, 1, identity));
+        _maskDiscLayers.Add(new FullyConnectedLayer<T>(1, identity));
     }
 
     #endregion
@@ -334,12 +334,12 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             for (int i = 0; i < dims.Length; i++)
             {
                 int layerInput = i == 0 ? inputDim : dims[i - 1] + inputDim;
-                Layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-                _dataGenBNLayers.Add(new BatchNormalizationLayer<T>(dims[i]));
+                Layers.Add(new FullyConnectedLayer<T>(dims[i], identity));
+                _dataGenBNLayers.Add(new BatchNormalizationLayer<T>());
             }
 
             int lastHidden = dims.Length > 0 ? dims[^1] + inputDim : inputDim;
-            Layers.Add(new FullyConnectedLayer<T>(lastHidden, _dataWidth, identity));
+            Layers.Add(new FullyConnectedLayer<T>(_dataWidth, identity));
         }
 
         // Build auxiliary networks

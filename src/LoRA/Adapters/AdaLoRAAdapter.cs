@@ -1,4 +1,3 @@
-#pragma warning disable CS0649, CS0414, CS0169
 ﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -85,11 +84,14 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
     private Vector<T> _importanceScores;
 
     /// <summary>
-    /// Threshold for pruning singular values based on importance.
+    /// Pruning fraction (0.0–1.0): the bottom <c>_rankPruningThreshold</c> fraction of
+    /// active components, ranked by importance score, is dropped on each prune cycle.
     /// </summary>
     /// <remarks>
-    /// Components with importance scores below this threshold are candidates for pruning.
-    /// This value is typically set as a small fraction (e.g., 0.01 to 0.1).
+    /// Despite the historic "threshold" name, this is a count-based percentile, not a
+    /// score comparison: with <c>_rankPruningThreshold = 0.1</c>, the 10% lowest-scoring
+    /// components are pruned regardless of their absolute score values. Typical values
+    /// are 0.01–0.1. <see cref="_minRank"/> caps how aggressively this can shrink rank.
     /// </remarks>
     private readonly double _rankPruningThreshold;
 
@@ -116,6 +118,17 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// Current training step counter.
     /// </summary>
     private int _stepCount;
+
+    /// <summary>
+    /// Physical rank indices in <c>matrixA</c>/<c>matrixB</c> that remain active after
+    /// pruning. Length equals <see cref="CurrentRank"/>; values are a subset of
+    /// <c>[0, _maxRank)</c>. Importance scores at indices in <c>_activeIndices</c> are
+    /// the live ones; positions outside this set hold either pruned (zeroed) matrix
+    /// columns/rows or zero importance scores. Tracking active indices instead of
+    /// compacting <c>_importanceScores</c> keeps gradient lookup aligned with the
+    /// underlying physical matrix layout across multiple prune cycles.
+    /// </summary>
+    private List<int> _activeIndices;
 
     /// <summary>
     /// Gets the maximum rank this adapter can use.
@@ -206,6 +219,10 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
         _importanceScoreEMA = importanceScoreEMA;
         _stepCount = 0;
 
+        // Every physical rank index starts active before any prune cycle runs.
+        _activeIndices = new List<int>(maxRank);
+        for (int i = 0; i < maxRank; i++) _activeIndices.Add(i);
+
         // Initialize importance scores (start with uniform importance)
         _importanceScores = new Vector<T>(maxRank);
         T initialScore = NumOps.One;
@@ -236,13 +253,29 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
-        // Forward through LoRA layer with pruned components
-        // The LoRA layer matrices have been pruned by PruneRank() - zeroing out low-importance components
-        // So this Forward call only uses the top _currentRank components (others contribute zero)
+        // Forward through LoRA layer with pruned components.
+        // The LoRA layer matrices have been pruned by PruneRank() — zeroing out
+        // low-importance components — so this Forward call only uses the top
+        // _currentRank components (others contribute zero).
         Tensor<T> loraOutput = _loraLayer.Forward(input);
 
-        // Sum the outputs (pruning is already applied via zeroed matrix elements)
+        // Sum the outputs (pruning is already applied via zeroed matrix elements).
         Tensor<T> result = Engine.TensorAdd(baseOutput, loraOutput);
+
+        // Drive the automatic pruning schedule: every _pruningInterval forward
+        // passes (during training mode), refresh importance scores from the latest
+        // gradients and trim the rank. The base layer is frozen, so this is a
+        // training-time-only operation; we gate on IsTrainingMode so inference
+        // calls never trigger a rank change.
+        if (IsTrainingMode && _pruningInterval > 0)
+        {
+            _stepCount++;
+            if (_stepCount % _pruningInterval == 0)
+            {
+                UpdateImportanceScores();
+                PruneRank();
+            }
+        }
 
         return result;
     }
@@ -277,10 +310,27 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
         int inputSize = matrixA.Rows;
         int outputSize = matrixB.Columns;
 
-        // For each rank component, compute gradient magnitude
-        for (int r = 0; r < _currentRank; r++)
+        // Bail out before computing magnitudes if the gradient cache is empty —
+        // happens when UpdateImportanceScores fires before any backward pass has
+        // populated gradients (e.g., the very first PruningInterval-th forward in
+        // training mode). Indexing into a zero-length vector below would otherwise
+        // throw IndexOutOfRangeException.
+        int expectedGradLength = inputSize * _maxRank + _maxRank * outputSize;
+        if (loraGradients == null || loraGradients.Length < expectedGradLength)
         {
-            // Compute L2 norm of gradients for this rank component
+            return;
+        }
+
+        // For each ACTIVE rank component (physical index in _activeIndices), compute the
+        // gradient magnitude. We must use the physical index r, not the compacted slot,
+        // because matrices A and B retain original-rank layout — column r of A and row r
+        // of B hold the active component's parameters.
+        T emaFactor = NumOps.FromDouble(_importanceScoreEMA);
+        T oneMinusEma = NumOps.FromDouble(1.0 - _importanceScoreEMA);
+        int bOffset = inputSize * _maxRank;
+
+        foreach (int r in _activeIndices)
+        {
             T gradMagnitude = NumOps.Zero;
 
             // Gradients from matrix A for column r
@@ -291,7 +341,6 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
             }
 
             // Gradients from matrix B for row r
-            int bOffset = inputSize * _maxRank;
             for (int j = 0; j < outputSize; j++)
             {
                 T grad = loraGradients[bOffset + r * outputSize + j];
@@ -299,10 +348,6 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
             }
 
             gradMagnitude = NumOps.Sqrt(gradMagnitude);
-
-            // Update importance score with EMA
-            T emaFactor = NumOps.FromDouble(_importanceScoreEMA);
-            T oneMinusEma = NumOps.FromDouble(1.0 - _importanceScoreEMA);
 
             T oldScore = _importanceScores[r];
             T newScore = NumOps.Add(
@@ -341,98 +386,68 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     private void PruneRank()
     {
-        // Compute threshold value (percentile-based pruning)
-        // We keep the top (1 - threshold) components
+        // Sort active indices by their importance score (descending).
+        var sortedActive = _activeIndices
+            .Select(idx => (idx, score: Convert.ToDouble(_importanceScores[idx])))
+            .OrderByDescending(p => p.score)
+            .ToList();
 
-        // Create a list of (importance, index) pairs for sorting
-        var importanceList = new List<(T score, int index)>();
-        for (int i = 0; i < _currentRank; i++)
-        {
-            importanceList.Add((_importanceScores[i], i));
-        }
-
-        // Sort by importance (descending)
-        // Convert to double for comparison since INumericOperations<T> doesn't have Compare
-        importanceList.Sort((a, b) =>
-            Convert.ToDouble(b.score).CompareTo(Convert.ToDouble(a.score)));
-
-        // Determine new rank (prune bottom threshold fraction)
+        // Determine new rank (prune bottom threshold fraction). _minRank is a floor.
         int componentsToKeep = Math.Max(_minRank, (int)(_currentRank * (1.0 - _rankPruningThreshold)));
+        if (componentsToKeep >= _currentRank) return;
 
-        // Only prune if we would actually reduce rank
-        if (componentsToKeep < _currentRank)
+        // Build the next active set from the top-k by importance.
+        var newActive = new List<int>(componentsToKeep);
+        var newActiveSet = new HashSet<int>();
+        for (int i = 0; i < componentsToKeep; i++)
         {
-            // Determine which rank indices to keep (top components by importance)
-            var keepIndices = new HashSet<int>();
-            for (int i = 0; i < componentsToKeep; i++)
-            {
-                keepIndices.Add(importanceList[i].index);
-            }
-
-            // Zero out pruned components in LoRA matrices
-            // Get matrices A and B from LoRA layer
-            Matrix<T> matrixA = _loraLayer.GetMatrixA();
-            Matrix<T> matrixB = _loraLayer.GetMatrixB();
-
-            // Zero columns of A and rows of B for pruned rank components
-            for (int r = 0; r < _maxRank; r++)
-            {
-                if (!keepIndices.Contains(r))
-                {
-                    // Zero column r of matrix A [inputSize, rank]
-                    for (int i = 0; i < matrixA.Rows; i++)
-                    {
-                        matrixA[i, r] = NumOps.Zero;
-                    }
-
-                    // Zero row r of matrix B [rank, outputSize]
-                    for (int j = 0; j < matrixB.Columns; j++)
-                    {
-                        matrixB[r, j] = NumOps.Zero;
-                    }
-                }
-            }
-
-            // Update LoRA layer parameters with zeroed matrices
-            // Note: LoRALayer.SetParameters expects flattened A then B
-            Vector<T> loraParams = new Vector<T>(_loraLayer.ParameterCount);
-            int idx = 0;
-
-            // Pack matrix A
-            for (int i = 0; i < matrixA.Rows; i++)
-            {
-                for (int j = 0; j < matrixA.Columns; j++)
-                {
-                    loraParams[idx++] = matrixA[i, j];
-                }
-            }
-
-            // Pack matrix B
-            for (int i = 0; i < matrixB.Rows; i++)
-            {
-                for (int j = 0; j < matrixB.Columns; j++)
-                {
-                    loraParams[idx++] = matrixB[i, j];
-                }
-            }
-
-            _loraLayer.SetParameters(loraParams);
-
-            // Update current rank
-            _currentRank = componentsToKeep;
-
-            // Reorder importance scores to keep only the top components
-            Vector<T> newImportanceScores = new Vector<T>(_maxRank);
-            for (int i = 0; i < _currentRank; i++)
-            {
-                newImportanceScores[i] = importanceList[i].score;
-            }
-            for (int i = _currentRank; i < _maxRank; i++)
-            {
-                newImportanceScores[i] = NumOps.Zero;
-            }
-            _importanceScores = newImportanceScores;
+            newActive.Add(sortedActive[i].idx);
+            newActiveSet.Add(sortedActive[i].idx);
         }
+
+        // Zero out pruned components in LoRA matrices. Indices stay PHYSICAL — column r
+        // of A and row r of B continue to hold the same component's parameters across
+        // prune cycles, which is what UpdateImportanceScores's gradient lookup requires.
+        Matrix<T> matrixA = _loraLayer.GetMatrixA();
+        Matrix<T> matrixB = _loraLayer.GetMatrixB();
+
+        foreach (int r in _activeIndices)
+        {
+            if (newActiveSet.Contains(r)) continue;
+
+            for (int i = 0; i < matrixA.Rows; i++)
+                matrixA[i, r] = NumOps.Zero;
+            for (int j = 0; j < matrixB.Columns; j++)
+                matrixB[r, j] = NumOps.Zero;
+
+            // Also zero the importance score for pruned indices so a future expand
+            // that re-activates this slot starts from a clean baseline.
+            _importanceScores[r] = NumOps.Zero;
+        }
+
+        SyncMatricesToParameters(matrixA, matrixB);
+
+        _activeIndices = newActive;
+        _currentRank = componentsToKeep;
+    }
+
+    /// <summary>
+    /// Packs the current matrix A and matrix B values into the LoRA layer's flat
+    /// parameter vector while preserving any tail parameters (biases, scale factors)
+    /// that exist beyond the two matrices. Starting from a zero vector instead of
+    /// <see cref="ILayer{T}.GetParameters"/> would silently zero those tail params.
+    /// </summary>
+    private void SyncMatricesToParameters(Matrix<T> matrixA, Matrix<T> matrixB)
+    {
+        Vector<T> loraParams = _loraLayer.GetParameters();
+        int idx = 0;
+        for (int i = 0; i < matrixA.Rows; i++)
+            for (int j = 0; j < matrixA.Columns; j++)
+                loraParams[idx++] = matrixA[i, j];
+        for (int i = 0; i < matrixB.Rows; i++)
+            for (int j = 0; j < matrixB.Columns; j++)
+                loraParams[idx++] = matrixB[i, j];
+        _loraLayer.SetParameters(loraParams);
     }
 
     /// <summary>
@@ -460,66 +475,41 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         int newRank = Math.Min(_currentRank + additionalRank, _maxRank);
+        if (newRank <= _currentRank) return;
 
-        if (newRank > _currentRank)
+        int slotsToActivate = newRank - _currentRank;
+
+        // Find inactive physical indices to reactivate. After PruneRank, these are the
+        // slots whose matrix columns/rows have been zeroed and whose importance score
+        // is zero. Reactivating them gives the model fresh capacity without disturbing
+        // the still-active components' parameters.
+        var activeSet = new HashSet<int>(_activeIndices);
+        var inactiveIndices = new List<int>(slotsToActivate);
+        for (int r = 0; r < _maxRank && inactiveIndices.Count < slotsToActivate; r++)
         {
-            int oldRank = _currentRank;
-
-            // Initialize new components with low importance
-            T lowImportance = NumOps.FromDouble(0.01);
-            for (int i = oldRank; i < newRank; i++)
-            {
-                _importanceScores[i] = lowImportance;
-            }
-
-            // Reinitialize the expanded components in LoRA matrices
-            // Get matrices A and B from LoRA layer
-            Matrix<T> matrixA = _loraLayer.GetMatrixA();
-            Matrix<T> matrixB = _loraLayer.GetMatrixB();
-
-            // Reinitialize columns of A and rows of B for expanded rank components
-            // Use small random values like in original initialization
-            for (int r = oldRank; r < newRank; r++)
-            {
-                // Reinitialize column r of matrix A [inputSize, rank] with small random values
-                for (int i = 0; i < matrixA.Rows; i++)
-                {
-                    matrixA[i, r] = NumOps.FromDouble((_rng.NextDouble() - 0.5) * 0.02);
-                }
-
-                // Reinitialize row r of matrix B [rank, outputSize] with small random values
-                for (int j = 0; j < matrixB.Columns; j++)
-                {
-                    matrixB[r, j] = NumOps.FromDouble((_rng.NextDouble() - 0.5) * 0.02);
-                }
-            }
-
-            // Update LoRA layer parameters with reinitialized matrices
-            Vector<T> loraParams = new Vector<T>(_loraLayer.ParameterCount);
-            int idx = 0;
-
-            // Pack matrix A
-            for (int i = 0; i < matrixA.Rows; i++)
-            {
-                for (int j = 0; j < matrixA.Columns; j++)
-                {
-                    loraParams[idx++] = matrixA[i, j];
-                }
-            }
-
-            // Pack matrix B
-            for (int i = 0; i < matrixB.Rows; i++)
-            {
-                for (int j = 0; j < matrixB.Columns; j++)
-                {
-                    loraParams[idx++] = matrixB[i, j];
-                }
-            }
-
-            _loraLayer.SetParameters(loraParams);
-
-            _currentRank = newRank;
+            if (!activeSet.Contains(r)) inactiveIndices.Add(r);
         }
+
+        Matrix<T> matrixA = _loraLayer.GetMatrixA();
+        Matrix<T> matrixB = _loraLayer.GetMatrixB();
+        T lowImportance = NumOps.FromDouble(0.01);
+
+        foreach (int r in inactiveIndices)
+        {
+            // Reinitialize column r of matrix A [inputSize, rank] with small random values.
+            for (int i = 0; i < matrixA.Rows; i++)
+                matrixA[i, r] = NumOps.FromDouble((_rng.NextDouble() - 0.5) * 0.02);
+            // Reinitialize row r of matrix B [rank, outputSize] with small random values.
+            for (int j = 0; j < matrixB.Columns; j++)
+                matrixB[r, j] = NumOps.FromDouble((_rng.NextDouble() - 0.5) * 0.02);
+
+            _importanceScores[r] = lowImportance;
+            _activeIndices.Add(r);
+        }
+
+        SyncMatricesToParameters(matrixA, matrixB);
+
+        _currentRank = newRank;
     }
 
     /// <summary>
@@ -542,10 +532,6 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     public override ILayer<T> MergeToOriginalLayer()
     {
-        // For now, delegate to the base LoRA layer's merge logic
-        // The LoRA layer will merge all components; ideally we'd mask by importance
-        // but for simplicity, we use the current implementation
-
         // Support both DenseLayer and FullyConnected layers
         DenseLayer<T>? denseBase = _baseLayer as DenseLayer<T>;
         FullyConnectedLayer<T>? fcBase = _baseLayer as FullyConnectedLayer<T>;
@@ -555,7 +541,41 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
             throw new InvalidOperationException("AdaLoRAAdapter only supports DenseLayer or FullyConnectedLayer base layers");
         }
 
-        // Get the LoRA weight contribution
+        // Active-rank masking: PruneRank zeroes column r of matrix A and row r of
+        // matrix B for every pruned component, so A @ B contributes only the active
+        // rank components by construction. We additionally enforce the invariant
+        // here so a divergent prune/merge state surfaces immediately instead of
+        // silently merging stale weights from inactive slots.
+        Matrix<T> loraA = _loraLayer.GetMatrixA();
+        Matrix<T> loraB = _loraLayer.GetMatrixB();
+        var activeSet = new HashSet<int>(_activeIndices);
+        for (int r = 0; r < _maxRank; r++)
+        {
+            if (activeSet.Contains(r)) continue;
+            // Inactive rank slot: every cell of column-r-of-A and row-r-of-B must be zero.
+            for (int i = 0; i < loraA.Rows; i++)
+            {
+                if (!NumOps.Equals(loraA[i, r], NumOps.Zero))
+                {
+                    throw new InvalidOperationException(
+                        $"AdaLoRA merge invariant broken: pruned rank slot r={r} has " +
+                        $"non-zero value in matrix A at row {i}. PruneRank must zero " +
+                        $"matrix entries for inactive components before merge.");
+                }
+            }
+            for (int j = 0; j < loraB.Columns; j++)
+            {
+                if (!NumOps.Equals(loraB[r, j], NumOps.Zero))
+                {
+                    throw new InvalidOperationException(
+                        $"AdaLoRA merge invariant broken: pruned rank slot r={r} has " +
+                        $"non-zero value in matrix B at column {j}.");
+                }
+            }
+        }
+
+        // Compute the LoRA weight contribution. Because inactive slots are zeroed,
+        // _loraLayer.MergeWeights() = A @ B already excludes pruned components.
         Matrix<T> loraWeights = _loraLayer.MergeWeights();
 
         // Get base layer parameters

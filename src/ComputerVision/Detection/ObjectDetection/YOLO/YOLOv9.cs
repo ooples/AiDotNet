@@ -90,8 +90,7 @@ public class YOLOv9<T> : ObjectDetectorBase<T>
                 inChannels: Neck.OutputChannels,
                 outChannels: Neck.OutputChannels,
                 kernelSize: 3,
-                padding: 1,
-                useBias: false
+                padding: 1
             ));
         }
 

@@ -96,7 +96,6 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
 
         // Regression head: Linear layer from embedding dimension to output dimension
         _regressionHead = new FullyConnectedLayer<T>(
-            Options.EmbeddingDimension,
             outputDimension,
             (IActivationFunction<T>?)null);  // No activation for regression
     }

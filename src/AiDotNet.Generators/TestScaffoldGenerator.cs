@@ -1116,6 +1116,39 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     }
 
     /// <summary>
+    /// Patch-based ViT families that need a patch-divisible 112×112 (= lcm(14, 16))
+    /// input. Other vision models — CNN, FPN, U-Net, ResNet, EfficientNet style — get a
+    /// stride-2-pyramid-friendly 128×128 default instead, since 112 is not divisible
+    /// by 32. Allocated once at class load to avoid per-call array allocation in the
+    /// source generator's hot path.
+    /// </summary>
+    /// <remarks>
+    /// ViT-/14 family: DINOv2, DINOv3, SigLIP, InternViT, PerceptionEncoder, EVA, BEiT.
+    /// ViT-/16 family: ViT, SAM, RADIO, MobileSAM, Swin, MAE, MoCo.
+    /// </remarks>
+    private static readonly string[] s_patchVisionFamilies =
+    {
+        "ViT", "DINO", "SigLIP", "InternViT", "PerceptionEncoder",
+        "SAM", "MobileSAM", "RADIO", "Swin", "MAE", "MoCo",
+        "EVA", "BEiT", "DeiT", "PoolFormer", "PVT", "CrossViT", "PiT",
+    };
+
+    /// <summary>
+    /// Returns <c>true</c> for vision models in the patch-based ViT family. The check is
+    /// intentionally permissive (<c>StartsWith</c>) so derived/variant types
+    /// (e.g. <c>DINOv2Small</c>, <c>ViTHugePatch16</c>) inherit the right shape.
+    /// </summary>
+    private static bool IsPatchVisionModel(string className)
+    {
+        foreach (var prefix in s_patchVisionFamilies)
+        {
+            if (className.StartsWith(prefix, System.StringComparison.Ordinal))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Checks if a type IS exactly <c>NeuralNetworkArchitecture&lt;T&gt;</c> (not a derived type).
     /// Uses <see cref="SymbolEqualityComparer"/> for cross-assembly robustness, with a
     /// metadata-name fallback when the resolved compilation symbol is unavailable.
@@ -1569,14 +1602,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 }
                 else if (isVision)
                 {
-                    // Standard vision: [C, H, W] at 112x112. 112 = lcm(14, 16) so it
-                    // is divisible by both common ViT patch sizes — DINOv2/v3, SigLIP,
-                    // InternViT, PerceptionEncoder use ViT-/14 (112÷14=8 tokens), while
-                    // ViT-B, SAM, RADIO, MobileSAM use ViT-/16 (112÷16=7 tokens). This
-                    // keeps the smoke tests paper-faithful for both patch families
-                    // without forcing a 224×224 input that would inflate test memory.
                     inputTypeExpr = "AiDotNet.Enums.InputType.ThreeDimensional";
-                    sizeExpr = "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 4";
+                    if (IsPatchVisionModel(model.ClassName))
+                    {
+                        // Patch-based vision (ViT-/14 and ViT-/16 families): 112 = lcm(14, 16)
+                        // so both patch sizes divide evenly. DINOv2/v3, SigLIP, InternViT,
+                        // PerceptionEncoder use ViT-/14 (112÷14=8 tokens); ViT-B, SAM, RADIO,
+                        // MobileSAM use ViT-/16 (112÷16=7 tokens).
+                        sizeExpr = "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 4";
+                    }
+                    else
+                    {
+                        // CNN / FPN / U-Net / ResNet / EfficientNet style: 128 = 2^7 so it
+                        // survives every stride-2 downsample up to a 7-level pyramid without
+                        // producing odd-sized intermediate tensors. 112 is not divisible by
+                        // 32 so it broke 5-level pyramid models.
+                        sizeExpr = "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4";
+                    }
                 }
                 else if (isAudio)
                 {
@@ -1753,12 +1795,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (isVisionModel)
         {
-            // 112 = lcm(14, 16) so InputShape divides evenly for both the ViT-/14
-            // family (DINOv2/v3, SigLIP, InternViT, PerceptionEncoder) and the
-            // ViT-/16 family (ViT-B/16, SAM, RADIO, MobileSAM). Must match the
-            // architecture's inputHeight/inputWidth emitted above so the model's
-            // patch embedder receives a paper-divisible spatial size.
-            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 112, 112 };");
+            // Must match the architecture's inputHeight/inputWidth emitted above. ViT
+            // families use 112 (divisible by both 14 and 16); CNN/FPN/U-Net families use
+            // 128 (2^7-compatible for deep stride-2 pyramids).
+            int spatial = IsPatchVisionModel(model.ClassName) ? 112 : 128;
+            sb.AppendLine($"    protected override int[] InputShape => new[] {{ 3, {spatial}, {spatial} }};");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
         else if (family == TestFamily.TTS)

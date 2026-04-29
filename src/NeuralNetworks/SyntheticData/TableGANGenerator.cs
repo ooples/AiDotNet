@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -170,12 +170,12 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
             for (int i = 0; i < dims.Length; i++)
             {
                 int layerInput = i == 0 ? inputDim : dims[i - 1] + inputDim;
-                Layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-                _genBNLayers.Add(new BatchNormalizationLayer<T>(dims[i]));
+                Layers.Add(new FullyConnectedLayer<T>(dims[i], identity));
+                _genBNLayers.Add(new BatchNormalizationLayer<T>());
             }
 
             int lastHidden = dims.Length > 0 ? dims[^1] + inputDim : inputDim;
-            Layers.Add(new FullyConnectedLayer<T>(lastHidden, Architecture.OutputSize, identity));
+            Layers.Add(new FullyConnectedLayer<T>(Architecture.OutputSize, identity));
             _usingCustomLayers = false;
         }
     }
@@ -192,13 +192,13 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         for (int i = 0; i < dims.Length; i++)
         {
             int layerInput = i == 0 ? _dataWidth : dims[i - 1];
-            _discLayers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
+            _discLayers.Add(new FullyConnectedLayer<T>(dims[i], identity));
             _discLayerDims.Add((layerInput, dims[i]));
             _discDropoutLayers.Add(new DropoutLayer<T>(_options.DiscriminatorDropout));
         }
 
         int lastHidden = dims.Length > 0 ? dims[^1] : _dataWidth;
-        _discLayers.Add(new FullyConnectedLayer<T>(lastHidden, 1, identity));
+        _discLayers.Add(new FullyConnectedLayer<T>(1, identity));
         _discLayerDims.Add((lastHidden, 1));
     }
 
@@ -212,11 +212,11 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         for (int i = 0; i < dims.Length; i++)
         {
             int layerInput = i == 0 ? _dataWidth : dims[i - 1];
-            _classLayers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
+            _classLayers.Add(new FullyConnectedLayer<T>(dims[i], identity));
         }
 
         int lastDim = dims.Length > 0 ? dims[^1] : _dataWidth;
-        _classOutput = new FullyConnectedLayer<T>(lastDim, numClasses, identity);
+        _classOutput = new FullyConnectedLayer<T>(numClasses, identity);
     }
 
     #endregion
@@ -247,12 +247,12 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
             for (int i = 0; i < dims.Length; i++)
             {
                 int layerInput = i == 0 ? inputDim : dims[i - 1] + inputDim;
-                Layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-                _genBNLayers.Add(new BatchNormalizationLayer<T>(dims[i]));
+                Layers.Add(new FullyConnectedLayer<T>(dims[i], identity));
+                _genBNLayers.Add(new BatchNormalizationLayer<T>());
             }
 
             int lastHidden = dims.Length > 0 ? dims[^1] + inputDim : inputDim;
-            Layers.Add(new FullyConnectedLayer<T>(lastHidden, _dataWidth, identity));
+            Layers.Add(new FullyConnectedLayer<T>(_dataWidth, identity));
         }
 
         BuildDiscriminator();

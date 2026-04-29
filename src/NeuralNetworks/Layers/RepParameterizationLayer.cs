@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }")]
+[LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "")]
 public class RepParameterizationLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -144,9 +144,19 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// This layer doesn't have any trainable parameters - it just performs the reparameterization operation.
     /// </para>
     /// </remarks>
-    public RepParameterizationLayer(int[] inputShape)
-        : base(inputShape, ComputeOutputShape(inputShape))
+    public RepParameterizationLayer()
+        : base(new[] { -1 }, new[] { -1 })
     {
+    }
+
+    /// <summary>
+    /// Resolves shape on first forward; output halves the last dim (mean+logvar split).
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var shape = input.Shape.ToArray();
+        var output = ComputeOutputShape(shape);
+        ResolveShapes(shape, output);
     }
 
     private static int[] ComputeOutputShape(int[] inputShape)
@@ -186,6 +196,7 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;

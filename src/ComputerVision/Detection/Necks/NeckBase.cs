@@ -174,8 +174,12 @@ public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        int outHeight = height / 2;
-        int outWidth = width / 2;
+        // Use ceiling division so a 5x5 input produces a 3x3 output (matching the
+        // dynamic-spatial pyramid alignment used elsewhere). Floor division would
+        // silently drop the last row/column for odd-sized features and break
+        // multi-scale detection heads at non-power-of-two input sizes.
+        int outHeight = (height + 1) / 2;
+        int outWidth = (width + 1) / 2;
 
         var output = new Tensor<T>(new[] { batch, channels, outHeight, outWidth });
 
@@ -187,15 +191,27 @@ public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
                 {
                     for (int w = 0; w < outWidth; w++)
                     {
-                        // Max pooling 2x2
-                        T maxVal = input[b, c, h * 2, w * 2];
-                        T val1 = input[b, c, h * 2, w * 2 + 1];
-                        T val2 = input[b, c, h * 2 + 1, w * 2];
-                        T val3 = input[b, c, h * 2 + 1, w * 2 + 1];
-
-                        if (NumOps.GreaterThan(val1, maxVal)) maxVal = val1;
-                        if (NumOps.GreaterThan(val2, maxVal)) maxVal = val2;
-                        if (NumOps.GreaterThan(val3, maxVal)) maxVal = val3;
+                        int srcRow = h * 2;
+                        int srcCol = w * 2;
+                        // Max pooling 2x2 with bounds-checked sampling: the right/bottom
+                        // edge of an odd-sized window covers fewer than 4 source cells,
+                        // so we take the max only over the in-bounds entries.
+                        T maxVal = input[b, c, srcRow, srcCol];
+                        if (srcCol + 1 < width)
+                        {
+                            T v = input[b, c, srcRow, srcCol + 1];
+                            if (NumOps.GreaterThan(v, maxVal)) maxVal = v;
+                        }
+                        if (srcRow + 1 < height)
+                        {
+                            T v = input[b, c, srcRow + 1, srcCol];
+                            if (NumOps.GreaterThan(v, maxVal)) maxVal = v;
+                        }
+                        if (srcRow + 1 < height && srcCol + 1 < width)
+                        {
+                            T v = input[b, c, srcRow + 1, srcCol + 1];
+                            if (NumOps.GreaterThan(v, maxVal)) maxVal = v;
+                        }
 
                         output[b, c, h, w] = maxVal;
                     }
@@ -295,37 +311,78 @@ public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     #region ModelBase Overrides
 
     /// <summary>
-    /// Predicts by running the neck forward pass on a single feature map.
+    /// Single-tensor <c>Predict</c> is not a meaningful operation for a detection neck:
+    /// concrete necks (FPN, PANet, BiFPN) operate on the full backbone feature pyramid
+    /// (a <see cref="List{Tensor}"/> with one tensor per level) and would fail their own
+    /// feature-count validation if handed a single tensor. Use
+    /// <see cref="Forward(List{Tensor{T}})"/> directly instead — that is the public API
+    /// for running a neck.
     /// </summary>
+    /// <exception cref="NotSupportedException">Always.</exception>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        var features = Forward(new List<Tensor<T>> { input });
-        return features.Count > 0 ? features[0] : new Tensor<T>(new[] { 1, 0 });
+        throw new NotSupportedException(
+            $"{GetType().Name}: detection necks consume the full backbone feature pyramid, " +
+            "not a single tensor. Call Forward(List<Tensor<T>>) with one tensor per level " +
+            "instead, or run the parent detection model whose pipeline supplies the pyramid.");
     }
 
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+    /// <summary>
+    /// Detection necks (FPN, PANet, BiFPN) are not standalone-trainable: they are trained
+    /// as part of a parent detector that orchestrates the joint backbone+neck+head pass.
+    /// Calling <c>Train</c> directly on a neck is almost always a programming error.
+    /// </summary>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: detection necks are trained as part of a parent detector " +
+            "(e.g. FasterRCNN, YOLOv8) and do not support standalone Train(). " +
+            "Train the parent detection model instead.");
+    }
 
     /// <inheritdoc />
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters() => new Vector<T>(0);
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters) { }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    /// <summary>
+    /// Neck parameters live inside per-stage Conv2D wrappers and are serialized via
+    /// <c>WriteParameters</c>/<c>ReadParameters</c> on the concrete neck subclass.
+    /// The flat-vector contract is not the right shape for neck parameters, so callers
+    /// should round-trip through binary streams instead.
+    /// </summary>
+    public override Vector<T> GetParameters()
     {
-        var copy = DeepCopy();
-        ((IParameterizable<T, Tensor<T>, Tensor<T>>)copy).SetParameters(parameters);
-        return copy;
+        throw new NotSupportedException(
+            $"{GetType().Name}: necks do not expose a flat parameter vector. " +
+            "Use the concrete neck's WriteParameters(BinaryWriter) / ReadParameters(BinaryReader) " +
+            "to round-trip weights, or train as part of a parent detection model.");
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (NeckBase<T>)MemberwiseClone();
+    /// <summary>
+    /// See <see cref="GetParameters"/>.
+    /// </summary>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: necks do not accept a flat parameter vector. " +
+            "Use the concrete neck's ReadParameters(BinaryReader) to load saved weights.");
+    }
+
+    /// <summary>
+    /// See <see cref="GetParameters"/>.
+    /// </summary>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on necks. " +
+            "Use ReadParameters(BinaryReader) on a fresh instance.");
+    }
+
+    /// <summary>
+    /// Concrete necks are responsible for producing a true deep copy of their internal
+    /// Conv2D wrappers and config. Returning <see cref="object.MemberwiseClone"/> here
+    /// would silently share tensor references, so we require an explicit override.
+    /// </summary>
+    public override abstract IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy();
 
     #endregion
 }

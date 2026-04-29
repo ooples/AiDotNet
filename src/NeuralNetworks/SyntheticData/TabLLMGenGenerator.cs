@@ -183,8 +183,8 @@ public class TabLLMGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
 
             for (int layer = 0; layer < _options.NumLayers; layer++)
             {
-                Layers.Add(new FullyConnectedLayer<T>(embDim, ffnDim, gelu));
-                Layers.Add(new FullyConnectedLayer<T>(ffnDim, embDim, identity));
+                Layers.Add(new FullyConnectedLayer<T>(ffnDim, gelu));
+                Layers.Add(new FullyConnectedLayer<T>(embDim, identity));
             }
             _usingCustomLayers = false;
         }
@@ -203,17 +203,17 @@ public class TabLLMGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
         int embDim = _options.EmbeddingDimension;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        _tokenEmbedding = new FullyConnectedLayer<T>(_vocabSize, embDim, identity);
+        _tokenEmbedding = new FullyConnectedLayer<T>(embDim, identity);
 
         for (int layer = 0; layer < _options.NumLayers; layer++)
         {
-            _queryLayers.Add(new FullyConnectedLayer<T>(embDim, embDim, identity));
-            _keyLayers.Add(new FullyConnectedLayer<T>(embDim, embDim, identity));
-            _valueLayers.Add(new FullyConnectedLayer<T>(embDim, embDim, identity));
-            _outProjLayers.Add(new FullyConnectedLayer<T>(embDim, embDim, identity));
+            _queryLayers.Add(new FullyConnectedLayer<T>(embDim, identity));
+            _keyLayers.Add(new FullyConnectedLayer<T>(embDim, identity));
+            _valueLayers.Add(new FullyConnectedLayer<T>(embDim, identity));
+            _outProjLayers.Add(new FullyConnectedLayer<T>(embDim, identity));
         }
 
-        _outputHead = new FullyConnectedLayer<T>(embDim, _vocabSize, identity);
+        _outputHead = new FullyConnectedLayer<T>(_vocabSize, identity);
 
         // Rebuild default FFN layers if not using custom layers
         if (!_usingCustomLayers)
@@ -224,8 +224,8 @@ public class TabLLMGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
 
             for (int layer = 0; layer < _options.NumLayers; layer++)
             {
-                Layers.Add(new FullyConnectedLayer<T>(embDim, ffnDim, gelu));
-                Layers.Add(new FullyConnectedLayer<T>(ffnDim, embDim, identity));
+                Layers.Add(new FullyConnectedLayer<T>(ffnDim, gelu));
+                Layers.Add(new FullyConnectedLayer<T>(embDim, identity));
             }
         }
     }

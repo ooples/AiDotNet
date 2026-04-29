@@ -833,14 +833,12 @@ public class ControlNetEncoder<T>
         // Input projection: 3×3 conv, inputChannels → baseChannels, same padding
         int padding = 1; // 3×3 kernel with padding=1 preserves spatial size
         var inProj = new ConvolutionalLayer<T>(
-            _inputChannels, spatialSize, spatialSize,
             _baseChannels, kernelSize: 3, stride: 1, padding: padding,
             activationFunction: new SiLUActivation<T>());
         _downBlocks.Add(inProj);
 
         // Zero convolution for input: 1×1 conv initialized to zero (per paper)
         var zeroProj = new ConvolutionalLayer<T>(
-            _baseChannels, spatialSize, spatialSize,
             _baseChannels, kernelSize: 1, stride: 1, padding: 0,
             activationFunction: (IActivationFunction<T>?)null);
         ZeroInitializeConv(zeroProj);
@@ -855,7 +853,6 @@ public class ControlNetEncoder<T>
             // Conv output size: floor((input + 2*padding - kernel) / stride) + 1
             int outSpatial = Math.Max(1, (spatialSize + 2 * 1 - 3) / 2 + 1);
             var downBlock = new ConvolutionalLayer<T>(
-                prevChannels, spatialSize, spatialSize,
                 channels, kernelSize: 3, stride: 2, padding: 1,
                 activationFunction: new SiLUActivation<T>());
             _downBlocks.Add(downBlock);
@@ -864,7 +861,6 @@ public class ControlNetEncoder<T>
 
             // Zero convolution: 1×1 conv at this resolution
             var zc = new ConvolutionalLayer<T>(
-                channels, spatialSize, spatialSize,
                 channels, kernelSize: 1, stride: 1, padding: 0,
                 activationFunction: (IActivationFunction<T>?)null);
             ZeroInitializeConv(zc);

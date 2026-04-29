@@ -86,7 +86,6 @@ public class GANDALFClassifier<T> : GANDALFBase<T>
 
         // Classification head maps from leaf dimension to number of classes
         _classificationHead = new FullyConnectedLayer<T>(
-            Options.LeafDimension,
             numClasses,
             (IActivationFunction<T>?)null);
     }

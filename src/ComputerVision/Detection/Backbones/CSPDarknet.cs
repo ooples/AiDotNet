@@ -36,7 +36,9 @@ public class CSPDarknet<T> : BackboneBase<T>
     private readonly List<CSPBlock<T>> _stages;
     private readonly Conv2D<T> _stem;
     private readonly int _depth;
+    private readonly double _depthOriginal;
     private readonly double _widthMultiplier;
+    private readonly int _inChannels;
 
     /// <inheritdoc/>
     public override string Name => $"CSPDarknet-{_widthMultiplier:0.0}x";
@@ -67,8 +69,10 @@ public class CSPDarknet<T> : BackboneBase<T>
     /// <param name="inChannels">Number of input channels (default 3 for RGB).</param>
     public CSPDarknet(double depth = 1.0, double widthMultiplier = 1.0, int inChannels = 3)
     {
+        _depthOriginal = depth;
         _depth = Math.Max(1, (int)Math.Round(depth));
         _widthMultiplier = widthMultiplier;
+        _inChannels = inChannels;
         _stages = new List<CSPBlock<T>>();
 
         // Calculate channel sizes based on width multiplier
@@ -85,8 +89,7 @@ public class CSPDarknet<T> : BackboneBase<T>
             outChannels: _stageChannels[0] / 2,
             kernelSize: 3,
             stride: 2,
-            padding: 1,
-            useBias: false
+            padding: 1
         );
 
         // Build stages
@@ -143,7 +146,7 @@ public class CSPDarknet<T> : BackboneBase<T>
     }
 
     /// <inheritdoc/>
-    public override long GetParameterCount()
+    public override long GetBackboneParameterCount()
     {
         long count = _stem.GetParameterCount();
         for (int i = 0; i < _stages.Count; i++)
@@ -203,6 +206,15 @@ public class CSPDarknet<T> : BackboneBase<T>
         }
         return result;
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Constructs a fresh CSPDarknet with the same depth, width multiplier, and input
+    /// channel configuration. All internal CSPBlock and Conv2D layers are freshly
+    /// allocated; no state is shared with the original.
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        => new CSPDarknet<T>(_depthOriginal, _widthMultiplier, _inChannels);
 }
 
 /// <summary>
@@ -231,8 +243,7 @@ internal class CSPBlock<T>
             outChannels: outChannels,
             kernelSize: 3,
             stride: stride,
-            padding: 1,
-            useBias: false
+            padding: 1
         );
 
         // Split path 1
@@ -241,8 +252,7 @@ internal class CSPBlock<T>
             outChannels: hiddenChannels,
             kernelSize: 1,
             stride: 1,
-            padding: 0,
-            useBias: false
+            padding: 0
         );
 
         // Split path 2 (goes through bottlenecks)
@@ -251,8 +261,7 @@ internal class CSPBlock<T>
             outChannels: hiddenChannels,
             kernelSize: 1,
             stride: 1,
-            padding: 0,
-            useBias: false
+            padding: 0
         );
 
         // Bottleneck blocks
@@ -268,8 +277,7 @@ internal class CSPBlock<T>
             outChannels: outChannels,
             kernelSize: 1,
             stride: 1,
-            padding: 0,
-            useBias: false
+            padding: 0
         );
     }
 
@@ -386,8 +394,7 @@ internal class BottleneckBlock<T>
             outChannels: hiddenChannels,
             kernelSize: 3,
             stride: 1,
-            padding: 1,
-            useBias: false
+            padding: 1
         );
 
         _cv2 = new Conv2D<T>(
@@ -395,8 +402,7 @@ internal class BottleneckBlock<T>
             outChannels: outChannels,
             kernelSize: 3,
             stride: 1,
-            padding: 1,
-            useBias: false
+            padding: 1
         );
     }
 

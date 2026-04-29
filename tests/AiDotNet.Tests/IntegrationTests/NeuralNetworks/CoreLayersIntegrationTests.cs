@@ -60,7 +60,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int inputSize = 64;
         int outputSize = 32;
-        var layer = new DenseLayer<float>(inputSize, outputSize);
+        var layer = new DenseLayer<float>(outputSize);
         var input = Create2DInput(4, inputSize);
 
         // Act
@@ -78,7 +78,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int outputSize = 8;
-        var layer = new DenseLayer<float>(inputSize, outputSize);
+        var layer = new DenseLayer<float>(outputSize);
         var input = CreateRandomTensor([inputSize]);
 
         // Act
@@ -95,7 +95,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int outputSize = 8;
-        var layer = new DenseLayer<float>(inputSize, outputSize);
+        var layer = new DenseLayer<float>(outputSize);
         var input = CreateRandomTensor([2, 5, inputSize]); // [batch, sequence, features]
 
         // Act
@@ -116,7 +116,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int outputSize = 8;
-        var original = new DenseLayer<float>(inputSize, outputSize);
+        var original = new DenseLayer<float>(outputSize);
         var input = Create2DInput(2, inputSize);
 
         // Act
@@ -138,7 +138,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int inputSize = 8;
         int outputSize = 4;
-        var layer = new DenseLayer<float>(inputSize, outputSize);
+        var layer = new DenseLayer<float>(outputSize);
         var newWeights = CreateRandomTensor([inputSize, outputSize], 99);
 
         // Act - Use SetParameter from IWeightLoadable instead of protected SetWeights
@@ -159,7 +159,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int inputSize = 64;
         int outputSize = 32;
-        var layer = new DenseLayer<float>(inputSize, outputSize);
+        var layer = new DenseLayer<float>(outputSize);
 
         // Act
         int paramCount = layer.ParameterCount;
@@ -176,8 +176,8 @@ public class CoreLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int outputSize = 8;
-        var reluLayer = new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
-        var sigmoidLayer = new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new SigmoidActivation<float>());
+        var reluLayer = new DenseLayer<float>(outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
+        var sigmoidLayer = new DenseLayer<float>(outputSize, (IActivationFunction<float>)new SigmoidActivation<float>());
         var input = Create2DInput(2, inputSize);
 
         // Copy weights from relu to sigmoid for fair comparison
@@ -206,7 +206,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int outputSize = 8;
-        var layer = new DenseLayer<float>(inputSize, outputSize)
+        var layer = new DenseLayer<float>(outputSize)
         {
             UseAuxiliaryLoss = true,
             Regularization = RegularizationType.L2,
@@ -238,7 +238,6 @@ public class CoreLayersIntegrationTests
         int inputWidth = 28;
 
         var layer = new ConvolutionalLayer<float>(
-            inputChannels, inputHeight, inputWidth,
             outputChannels, kernelSize, stride, padding);
         var input = Create4DInput(2, inputChannels, inputHeight, inputWidth);
 
@@ -269,7 +268,6 @@ public class CoreLayersIntegrationTests
         int inputWidth = 16;
 
         var layer = new ConvolutionalLayer<float>(
-            inputChannels, inputHeight, inputWidth,
             outputChannels, kernelSize, stride, padding);
         var input = Create4DInput(1, inputChannels, inputHeight, inputWidth);
 
@@ -289,7 +287,7 @@ public class CoreLayersIntegrationTests
     {
         // Arrange
         // Constructor: (inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding)
-        var layer = new ConvolutionalLayer<float>(1, 8, 8, 4, 3, 1, 1);
+        var layer = new ConvolutionalLayer<float>(4, 3, 1, 1);
         var input = Create4DInput(1, 1, 8, 8);
 
         // Act
@@ -313,7 +311,7 @@ public class CoreLayersIntegrationTests
         int inputChannels = 3;
         int outputChannels = 16;
         int kernelSize = 3;
-        var layer = new ConvolutionalLayer<float>(inputChannels, 28, 28, outputChannels, kernelSize, 1, 1);
+        var layer = new ConvolutionalLayer<float>(outputChannels, kernelSize, 1, 1);
 
         // Act
         int paramCount = layer.ParameterCount;
@@ -338,7 +336,7 @@ public class CoreLayersIntegrationTests
         int poolSize = 2;
         int stride = 2;
 
-        var layer = new MaxPoolingLayer<float>([channels, inputHeight, inputWidth], poolSize, stride);
+        var layer = new MaxPoolingLayer<float>(poolSize, stride);
         var input = Create4DInput(2, channels, inputHeight, inputWidth);
 
         // Act
@@ -358,7 +356,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int channels = 1;
         int size = 4;
-        var layer = new MaxPoolingLayer<float>([channels, size, size], 2, 2);
+        var layer = new MaxPoolingLayer<float>(2, 2);
 
         // Create input with known values
         var input = new Tensor<float>([1, 1, 4, 4]);
@@ -385,7 +383,7 @@ public class CoreLayersIntegrationTests
     public async Task MaxPoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
-        var layer = new MaxPoolingLayer<float>([4, 8, 8], 2, 2);
+        var layer = new MaxPoolingLayer<float>(2, 2);
         var input = Create4DInput(1, 4, 8, 8);
 
         // Act
@@ -415,7 +413,7 @@ public class CoreLayersIntegrationTests
         int poolSize = 2;
         int stride = 2;
 
-        var layer = new AveragePoolingLayer<float>([channels, inputHeight, inputWidth], poolSize, stride);
+        var layer = new AveragePoolingLayer<float>(poolSize, stride);
         var input = Create4DInput(2, channels, inputHeight, inputWidth);
 
         // Act
@@ -435,7 +433,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int channels = 1;
         int size = 4;
-        var layer = new AveragePoolingLayer<float>([channels, size, size], 2, 2);
+        var layer = new AveragePoolingLayer<float>(2, 2);
 
         // Create input with known values
         var input = new Tensor<float>([1, 1, 4, 4]);
@@ -540,7 +538,7 @@ public class CoreLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [8, 8, 3];
-        var layer = new FlattenLayer<float>(inputShape);
+        var layer = new FlattenLayer<float>();
         var input = CreateRandomTensor([2, 8, 8, 3]); // [batch, height, width, channels]
 
         // Act
@@ -557,7 +555,7 @@ public class CoreLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [4, 4, 2];
-        var layer = new FlattenLayer<float>(inputShape);
+        var layer = new FlattenLayer<float>();
         var input = CreateRandomTensor([1, 4, 4, 2]);
 
         // Act
@@ -580,7 +578,7 @@ public class CoreLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [4, 4, 2];
-        var original = new FlattenLayer<float>(inputShape);
+        var original = new FlattenLayer<float>();
         var input = CreateRandomTensor([1, 4, 4, 2]);
 
         // Act
@@ -606,7 +604,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int[] inputShape = [32];
         int[] outputShape = [4, 8];
-        var layer = new ReshapeLayer<float>(inputShape, outputShape);
+        var layer = new ReshapeLayer<float>(outputShape);
         var input = CreateRandomTensor([2, 32]); // [batch, features]
 
         // Act
@@ -625,7 +623,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int[] inputShape = [24];
         int[] outputShape = [4, 6];
-        var layer = new ReshapeLayer<float>(inputShape, outputShape);
+        var layer = new ReshapeLayer<float>(outputShape);
         var input = CreateRandomTensor([1, 24]);
 
         // Act
@@ -649,7 +647,7 @@ public class CoreLayersIntegrationTests
         // Arrange
         int[] inputShape = [16];
         int[] outputShape = [4, 4];
-        var original = new ReshapeLayer<float>(inputShape, outputShape);
+        var original = new ReshapeLayer<float>(outputShape);
         var input = CreateRandomTensor([1, 16]);
 
         // Act
@@ -674,7 +672,7 @@ public class CoreLayersIntegrationTests
     {
         // Arrange
         int[] shape = [8, 16];
-        var layer = new ActivationLayer<float>(shape, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new ActivationLayer<float>((IActivationFunction<float>)new ReLUActivation<float>());
 
         // Create input with positive and negative values
         var input = new Tensor<float>([2, 8, 16]);
@@ -706,7 +704,7 @@ public class CoreLayersIntegrationTests
     {
         // Arrange
         int[] shape = [8, 16];
-        var layer = new ActivationLayer<float>(shape, (IActivationFunction<float>)new SigmoidActivation<float>());
+        var layer = new ActivationLayer<float>((IActivationFunction<float>)new SigmoidActivation<float>());
         var input = CreateRandomTensor([2, 8, 16]);
 
         // Act
@@ -725,7 +723,7 @@ public class CoreLayersIntegrationTests
     {
         // Arrange
         int[] shape = [8, 16];
-        var layer = new ActivationLayer<float>(shape, (IActivationFunction<float>)new TanhActivation<float>());
+        var layer = new ActivationLayer<float>((IActivationFunction<float>)new TanhActivation<float>());
         var input = CreateRandomTensor([2, 8, 16]);
 
         // Act
@@ -745,7 +743,7 @@ public class CoreLayersIntegrationTests
     {
         // Arrange
         int[] shape = [4, 8];
-        var original = new ActivationLayer<float>(shape, (IActivationFunction<float>)new ReLUActivation<float>());
+        var original = new ActivationLayer<float>((IActivationFunction<float>)new ReLUActivation<float>());
         var input = CreateRandomTensor([1, 4, 8]);
 
         // Act
@@ -777,7 +775,7 @@ public class CoreLayersIntegrationTests
         int inputSize = 8;
         int outputSize = 4;
         // ReLU is a fused-supported activation — exercises the changed branch
-        var layer = new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new DenseLayer<float>(outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
         var input = Create2DInput(2, inputSize, seed: 77);
 
         // Act
@@ -799,7 +797,7 @@ public class CoreLayersIntegrationTests
     public async Task DenseLayer_InferenceModeWithFusedActivation_ProducesFiniteOutput()
     {
         // Inference mode takes the new fused path — verify output is well-formed
-        var layer = new DenseLayer<float>(16, 8, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new DenseLayer<float>(8, (IActivationFunction<float>)new ReLUActivation<float>());
         layer.SetTrainingMode(false);
         var input = Create2DInput(4, 16, seed: 10);
 
@@ -816,7 +814,7 @@ public class CoreLayersIntegrationTests
     public async Task DenseLayer_TrainingModeWithFusedActivation_ProducesFiniteOutput()
     {
         // Training mode now always goes through else-branch — verify output shape and finiteness
-        var layer = new DenseLayer<float>(16, 8, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new DenseLayer<float>(8, (IActivationFunction<float>)new ReLUActivation<float>());
         layer.SetTrainingMode(true);
         var input = Create2DInput(4, 16, seed: 20);
 
@@ -834,7 +832,7 @@ public class CoreLayersIntegrationTests
     {
         // IdentityActivation has no fused type, so both training and inference go through else-branch.
         // The new Activate(Tensor) override returns the same reference — verify consistent results.
-        var layer = new DenseLayer<float>(8, 4, (IActivationFunction<float>)new IdentityActivation<float>());
+        var layer = new DenseLayer<float>(4, (IActivationFunction<float>)new IdentityActivation<float>());
         var input = Create2DInput(2, 8, seed: 55);
 
         layer.SetTrainingMode(false);
@@ -852,7 +850,7 @@ public class CoreLayersIntegrationTests
     {
         // Regression: after the PR change the else-branch applies ApplyActivation(preActivation).
         // ReLU should still zero out negatives.
-        var layer = new DenseLayer<float>(8, 4, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new DenseLayer<float>(4, (IActivationFunction<float>)new ReLUActivation<float>());
         layer.SetTrainingMode(true);
 
         // Use a fixed input where some pre-activation outputs will be negative
@@ -867,7 +865,7 @@ public class CoreLayersIntegrationTests
     public async Task DenseLayer_SwitchingModesDuringMultiplePasses_ProducesConsistentResults()
     {
         // Stress-test the training/inference switch: alternating modes should never corrupt output.
-        var layer = new DenseLayer<float>(8, 4, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new DenseLayer<float>(4, (IActivationFunction<float>)new ReLUActivation<float>());
         var input = Create2DInput(2, 8, seed: 99);
 
         layer.SetTrainingMode(false);
@@ -893,7 +891,7 @@ public class CoreLayersIntegrationTests
     public async Task DenseWithDropout_TrainingVsInference_BehavesDifferently()
     {
         // Arrange
-        var dense = new DenseLayer<float>(32, 16);
+        var dense = new DenseLayer<float>(16);
         var dropout = new DropoutLayer<float>(0.5);
         var input = Create2DInput(4, 32);
 

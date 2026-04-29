@@ -135,12 +135,12 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var layerSize in _options.PolicyHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            layers.Add(new DenseLayer<T>(layerSize, (IActivationFunction<T>)new ReLUActivation<T>()));
             previousSize = layerSize;
         }
 
         // Output: mean and log_std for Gaussian policy
-        layers.Add(new DenseLayer<T>(previousSize, _options.ActionSize * 2, (IActivationFunction<T>)new IdentityActivation<T>()));
+        layers.Add(new DenseLayer<T>(_options.ActionSize * 2, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
@@ -162,11 +162,11 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var layerSize in _options.QHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            layers.Add(new DenseLayer<T>(layerSize, (IActivationFunction<T>)new ReLUActivation<T>()));
             previousSize = layerSize;
         }
 
-        layers.Add(new DenseLayer<T>(previousSize, 1, (IActivationFunction<T>)new IdentityActivation<T>()));
+        layers.Add(new DenseLayer<T>(1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,

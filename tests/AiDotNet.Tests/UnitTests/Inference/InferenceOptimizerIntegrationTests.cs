@@ -370,7 +370,7 @@ public class InferenceOptimizerIntegrationTests
         const int numHeads = 4;
         const int flatSize = seqLen * embDim;
 
-        var mha = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads,
+        var mha = new MultiHeadAttentionLayer<float>(numHeads, (embDim) / (numHeads), 
             activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>());
         if (posEncoding != PositionalEncodingType.None)
         {
@@ -380,10 +380,10 @@ public class InferenceOptimizerIntegrationTests
         var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
         {
             new InputLayer<float>(flatSize),
-            new ReshapeLayer<float>(new[] { flatSize }, new[] { seqLen, embDim }),
+            new ReshapeLayer<float>(new[] { seqLen, embDim }),
             mha,
-            new FlattenLayer<float>(new[] { seqLen, embDim }),
-            new DenseLayer<float>(flatSize, flatSize,
+            new FlattenLayer<float>(),
+            new DenseLayer<float>(flatSize,
                 activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 
@@ -417,10 +417,10 @@ public class InferenceOptimizerIntegrationTests
         var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
         {
             new InputLayer<float>(flatSize),
-            new ReshapeLayer<float>(new[] { flatSize }, new[] { seqLen, embDim }),
+            new ReshapeLayer<float>(new[] { seqLen, embDim }),
             gqa,
-            new FlattenLayer<float>(new[] { seqLen, embDim }),
-            new DenseLayer<float>(flatSize, flatSize,
+            new FlattenLayer<float>(),
+            new DenseLayer<float>(flatSize,
                 activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 
@@ -441,18 +441,18 @@ public class InferenceOptimizerIntegrationTests
         const int embDim = 32;
         const int flatSize = seqLen * embDim;
 
-        var mha = new MultiHeadAttentionLayer<float>(seqLen, embDim, 4,
+        var mha = new MultiHeadAttentionLayer<float>(4, (embDim) / (4), 
             activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>());
 
         var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
         {
             new InputLayer<float>(flatSize),
-            new ReshapeLayer<float>(new[] { flatSize }, new[] { seqLen, embDim }),
+            new ReshapeLayer<float>(new[] { seqLen, embDim }),
             mha,
-            new FlattenLayer<float>(new[] { seqLen, embDim }),
-            new DenseLayer<float>(flatSize, 16,
+            new FlattenLayer<float>(),
+            new DenseLayer<float>(16,
                 activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>()),
-            new DenseLayer<float>(16, flatSize,
+            new DenseLayer<float>(flatSize,
                 activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 

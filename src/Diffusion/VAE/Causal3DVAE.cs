@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -112,13 +112,24 @@ public class Causal3DVAE<T> : VAEModelBase<T>
         int maxChannels = baseChannels * _channelMultipliers[^1];
 
         // Encoder: inputChannels -> baseChannels -> (norm at baseChannels) -> latentChannels*2
-        _encoderIn = new DenseLayer<T>(inputChannels, baseChannels, (IActivationFunction<T>)new GELUActivation<T>());
-        _encoderNorm = new LayerNormalizationLayer<T>(baseChannels);
-        _encoderOut = new DenseLayer<T>(baseChannels, latentChannels * 2, (IActivationFunction<T>)new IdentityActivation<T>());
+        _encoderIn = new DenseLayer<T>(baseChannels, (IActivationFunction<T>)new GELUActivation<T>());
+        _encoderNorm = new LayerNormalizationLayer<T>();
+        _encoderOut = new DenseLayer<T>(latentChannels * 2, (IActivationFunction<T>)new IdentityActivation<T>());
         // Decoder: latentChannels -> maxChannels -> (norm at maxChannels) -> inputChannels
-        _decoderIn = new DenseLayer<T>(latentChannels, maxChannels, (IActivationFunction<T>)new GELUActivation<T>());
-        _decoderNorm = new LayerNormalizationLayer<T>(maxChannels);
-        _decoderOut = new DenseLayer<T>(maxChannels, inputChannels, (IActivationFunction<T>)new IdentityActivation<T>());
+        _decoderIn = new DenseLayer<T>(maxChannels, (IActivationFunction<T>)new GELUActivation<T>());
+        _decoderNorm = new LayerNormalizationLayer<T>();
+        _decoderOut = new DenseLayer<T>(inputChannels, (IActivationFunction<T>)new IdentityActivation<T>());
+
+        // Pre-resolve every encoder/decoder sublayer from the ctor-known channel topology
+        // so ParameterCount, GetParameters, SetParameters, Clone, and the base save/load
+        // path all see consistent layouts on a freshly constructed VAE — without waiting
+        // for the first Encode/Decode call.
+        _encoderIn.ResolveFromShape(new[] { 1, inputChannels });
+        _encoderNorm.ResolveFromShape(new[] { 1, baseChannels });
+        _encoderOut.ResolveFromShape(new[] { 1, baseChannels });
+        _decoderIn.ResolveFromShape(new[] { 1, latentChannels });
+        _decoderNorm.ResolveFromShape(new[] { 1, maxChannels });
+        _decoderOut.ResolveFromShape(new[] { 1, maxChannels });
     }
 
     /// <inheritdoc />
@@ -264,4 +275,17 @@ public class Causal3DVAE<T> : VAEModelBase<T>
         }
         return combined;
     }
+    /// <inheritdoc />
+    /// <remarks>
+    /// This concrete VAE does not implement layer-level backprop yet, so the
+    /// exact-gradient path is unsupported. The base class catches this and falls
+    /// through to SPSA in ComputeGradients.
+    /// </remarks>
+    protected override void BackpropagateLossGradient(Tensor<T> lossGradient)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: layer-level BackpropagateLossGradient is not " +
+            "implemented. ComputeGradients will fall through to SPSA.");
+    }
+
 }

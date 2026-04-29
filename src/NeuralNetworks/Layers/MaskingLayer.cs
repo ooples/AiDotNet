@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }")]
+[LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "")]
 public class MaskingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -159,9 +159,18 @@ public class MaskingLayer<T> : LayerBase<T>
     /// so that the network ignores those padding values.
     /// </para>
     /// </remarks>
-    public MaskingLayer(int[] inputShape, double maskValue = 0) : base(inputShape, inputShape)
+    public MaskingLayer(double maskValue = 0) : base(new[] { -1 }, new[] { -1 })
     {
         _maskValue = NumOps.FromDouble(maskValue);
+    }
+
+    /// <summary>
+    /// Resolves shape on first forward; output equals input shape (passthrough).
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var shape = input.Shape.ToArray();
+        ResolveShapes(shape, shape);
     }
 
     /// <summary>
@@ -193,6 +202,7 @@ public class MaskingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
         _lastMask = CreateMask(input);
         return ApplyMask(input, _lastMask);

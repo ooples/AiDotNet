@@ -172,9 +172,6 @@ public class UNetDiscriminator<T> : LayerBase<T>
 
         // Initial convolution: inputChannels → numChannels
         _convFirst = new ConvolutionalLayer<T>(
-            inputDepth: inputChannels,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             outputDepth: numChannels,
             kernelSize: 3,
             stride: 1,
@@ -217,9 +214,6 @@ public class UNetDiscriminator<T> : LayerBase<T>
 
         // Final convolution: numChannels → 1 (per-pixel prediction)
         _convLast = new ConvolutionalLayer<T>(
-            inputDepth: numChannels,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             outputDepth: 1,
             kernelSize: 3,
             stride: 1,
@@ -424,9 +418,6 @@ internal partial class UNetConvBlock<T> : LayerBase<T>
 
         // First conv (with optional stride for downsampling)
         _conv1 = new ConvolutionalLayer<T>(
-            inputDepth: inChannels,
-            inputHeight: height,
-            inputWidth: width,
             outputDepth: outChannels,
             kernelSize: 3,
             stride: downsample ? 2 : 1,
@@ -435,9 +426,6 @@ internal partial class UNetConvBlock<T> : LayerBase<T>
 
         // Second conv (always stride 1)
         _conv2 = new ConvolutionalLayer<T>(
-            inputDepth: outChannels,
-            inputHeight: outHeight,
-            inputWidth: outWidth,
             outputDepth: outChannels,
             kernelSize: 3,
             stride: 1,
@@ -552,15 +540,10 @@ internal partial class UNetUpBlock<T> : LayerBase<T>
         int outWidth = width * 2;
 
         // Bilinear upsampling
-        _upsample = new UpsamplingLayer<T>(
-            [inChannels, height, width],
-            scaleFactor: 2);
+        _upsample = new UpsamplingLayer<T>(scaleFactor: 2);
 
         // Conv after concatenation (inChannels + skipChannels -> outChannels)
         _conv1 = new ConvolutionalLayer<T>(
-            inputDepth: inChannels + skipChannels,
-            inputHeight: outHeight,
-            inputWidth: outWidth,
             outputDepth: outChannels,
             kernelSize: 3,
             stride: 1,
@@ -568,9 +551,6 @@ internal partial class UNetUpBlock<T> : LayerBase<T>
             activationFunction: null);
 
         _conv2 = new ConvolutionalLayer<T>(
-            inputDepth: outChannels,
-            inputHeight: outHeight,
-            inputWidth: outWidth,
             outputDepth: outChannels,
             kernelSize: 3,
             stride: 1,

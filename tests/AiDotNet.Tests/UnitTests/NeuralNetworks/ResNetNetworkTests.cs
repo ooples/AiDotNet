@@ -614,10 +614,7 @@ public class ResNetNetworkTests
     public async Task AdaptiveAveragePoolingLayer_GlobalPool_CreatesValidLayer()
     {
         // Arrange & Act
-        var layer = AiDotNet.NeuralNetworks.Layers.AdaptiveAveragePoolingLayer<float>.GlobalPool(
-            inputChannels: 512,
-            inputHeight: 7,
-            inputWidth: 7);
+        var layer = AiDotNet.NeuralNetworks.Layers.AdaptiveAveragePoolingLayer<float>.GlobalPool();
 
         // Assert
         Assert.NotNull(layer);
@@ -630,9 +627,6 @@ public class ResNetNetworkTests
     {
         // Arrange & Act
         var layer = new AiDotNet.NeuralNetworks.Layers.AdaptiveAveragePoolingLayer<float>(
-            inputChannels: 256,
-            inputHeight: 14,
-            inputWidth: 14,
             outputHeight: 7,
             outputWidth: 7);
 

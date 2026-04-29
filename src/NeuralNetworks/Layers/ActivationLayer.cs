@@ -23,7 +23,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations (like float, double, etc.)</typeparam>
 [LayerCategory(LayerCategory.Activation)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.ReLUActivation<double>()")]
+[LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "(AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.ReLUActivation<double>()")]
 public class ActivationLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -110,7 +110,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// For example:
     /// ```csharp
     /// // Create a ReLU activation layer for 28x28 images
-    /// var reluLayer = new ActivationLayer<float>(new[] { 32, 28, 28, 1 }, new ReLUActivation<float>());
+    /// var reluLayer = new ActivationLayer<float>(new ReLUActivation<float>());
     /// ```
     /// 
     /// The inputShape parameter defines the dimensions of your data:
@@ -119,10 +119,19 @@ public class ActivationLayer<T> : LayerBase<T>
     /// - For simple data: [batchSize, features]
     /// </para>
     /// </remarks>
-    public ActivationLayer(int[] inputShape, IActivationFunction<T> activationFunction)
-        : base(inputShape, inputShape, activationFunction)
+    public ActivationLayer(IActivationFunction<T> activationFunction)
+        : base(new[] { -1 }, new[] { -1 }, activationFunction)
     {
         _useVectorActivation = false;
+    }
+
+    /// <summary>
+    /// Resolves shape on first forward; output equals input (passthrough).
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var shape = input.Shape.ToArray();
+        ResolveShapes(shape, shape);
     }
 
     /// <summary>
@@ -159,7 +168,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// For example:
     /// ```csharp
     /// // Create a Softmax layer for a classification network with 10 classes
-    /// var softmaxLayer = new ActivationLayer<float>(new[] { 32, 10 }, new Softmax<float>());
+    /// var softmaxLayer = new ActivationLayer<float>(new Softmax<float>());
     /// ```
     /// 
     /// The difference from the other constructor is that these functions need to
@@ -167,8 +176,8 @@ public class ActivationLayer<T> : LayerBase<T>
     /// processing each value independently.
     /// </para>
     /// </remarks>
-    public ActivationLayer(int[] inputShape, IVectorActivationFunction<T> vectorActivationFunction)
-        : base(inputShape, inputShape, vectorActivationFunction)
+    public ActivationLayer(IVectorActivationFunction<T> vectorActivationFunction)
+        : base(new[] { -1 }, new[] { -1 }, vectorActivationFunction)
     {
         _useVectorActivation = true;
     }
@@ -212,6 +221,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
         return _useVectorActivation ? ApplyVectorActivation(input) : ApplyScalarActivation(input);
     }

@@ -414,10 +414,9 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         }
         else
         {
-            int[] maskShape = [1, 2, freqBins, 1];
             _maskLayer = _useComplexMask
-                ? new ActivationLayer<T>(maskShape, (IActivationFunction<T>)new TanhActivation<T>())
-                : new ActivationLayer<T>(maskShape, (IActivationFunction<T>)new SigmoidActivation<T>());
+                ? new ActivationLayer<T>((IActivationFunction<T>)new TanhActivation<T>())
+                : new ActivationLayer<T>((IActivationFunction<T>)new SigmoidActivation<T>());
             Layers.Add(_maskLayer);
         }
     }

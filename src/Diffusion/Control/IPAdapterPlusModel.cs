@@ -60,6 +60,7 @@ public class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;
     private const int IMAGE_EMBED_DIM = 1024;
+    private const int CROSS_ATTENTION_DIM = 768;
     private const double DEFAULT_GUIDANCE = 7.5;
 
     private UNetNoisePredictor<T> _baseUNet;
@@ -118,7 +119,7 @@ public class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
             channelMultipliers: new[] { 1, 2, 4, 4 },
             numResBlocks: 2,
             attentionResolutions: new[] { 4, 2, 1 },
-            contextDim: 768,
+            contextDim: CROSS_ATTENTION_DIM,
             seed: seed);
 
         _vae = vae ?? new StandardVAE<T>(
@@ -129,8 +130,11 @@ public class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
             numResBlocksPerLevel: 2,
             seed: seed);
 
-        // Image projection: maps CLIP image embeddings to cross-attention space
-        _imageProjection = new DenseLayer<T>(IMAGE_EMBED_DIM, 768);
+        // Image projection: maps CLIP image embeddings (IMAGE_EMBED_DIM = 1024) to the
+        // UNet's cross-attention space (CROSS_ATTENTION_DIM = 768). Pre-resolved so
+        // ParameterCount, GetParameters, SetParameters, and Clone work before any forward.
+        _imageProjection = new DenseLayer<T>(CROSS_ATTENTION_DIM);
+        _imageProjection.ResolveFromShape(new[] { 1, IMAGE_EMBED_DIM });
     }
 
     /// <inheritdoc />

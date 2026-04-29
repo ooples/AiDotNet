@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Upsampling)]
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "new[] { 1, 4, 4 }, 2")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "2")]
 public class UpsamplingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -136,10 +136,30 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// channels but twice the height and width.
     /// </para>
     /// </remarks>
-    public UpsamplingLayer(int[] inputShape, int scaleFactor)
-        : base(inputShape, CalculateOutputShape(inputShape, scaleFactor))
+    public UpsamplingLayer(int scaleFactor)
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
     {
+        if (scaleFactor <= 0) throw new ArgumentOutOfRangeException(nameof(scaleFactor));
         _scaleFactor = scaleFactor;
+    }
+
+    /// <summary>
+    /// Resolves channel/spatial dims and computes output shape on first forward.
+    /// Output: [C, H*scaleFactor, W*scaleFactor].
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 3)
+            throw new ArgumentException(
+                $"UpsamplingLayer requires rank>=3 [...,C,H,W] input; got rank {rank}.",
+                nameof(input));
+
+        int c = input.Shape[rank - 3];
+        int h = input.Shape[rank - 2];
+        int w = input.Shape[rank - 1];
+
+        ResolveShapes(new[] { c, h, w }, new[] { c, h * _scaleFactor, w * _scaleFactor });
     }
 
     /// <summary>
@@ -215,6 +235,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
 
         return Engine.Upsample(input, _scaleFactor, _scaleFactor);

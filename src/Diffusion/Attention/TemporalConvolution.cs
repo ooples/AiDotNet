@@ -90,9 +90,9 @@ public class TemporalConvolution<T> : LayerBase<T>
         // and applies causal masking when _causal is true (zero-pad left, no right context).
         // The current dense layer captures per-frame channel mixing but does not model
         // cross-frame temporal dependencies. This serves as a placeholder for ONNX inference.
-        _conv = new DenseLayer<T>(channels, channels, (IActivationFunction<T>)new GELUActivation<T>());
+        _conv = new DenseLayer<T>(channels, (IActivationFunction<T>)new GELUActivation<T>());
 
-        _norm = new LayerNormalizationLayer<T>(channels);
+        _norm = new LayerNormalizationLayer<T>();
     }
 
     /// <summary>

@@ -150,7 +150,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         // normalized = (value - value) / sqrt(0 + eps) = 0
         // output = gamma * 0 + beta = 0 + 0 = 0 (gamma=1, beta=0 initially)
         int featureSize = 4;
-        var layer = new LayerNormalizationLayer<double>(featureSize);
+        var layer = new LayerNormalizationLayer<double>();
 
         var input = new Tensor<double>(new[] { 1, featureSize });
         for (int i = 0; i < featureSize; i++) input[0, i] = 5.0;
@@ -177,7 +177,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         // output[2] = (6-5)/sqrt(5+eps) = 1/sqrt(5) ≈ 0.4472
         // output[3] = (8-5)/sqrt(5+eps) = 3/sqrt(5) ≈ 1.3416
         int featureSize = 4;
-        var layer = new LayerNormalizationLayer<double>(featureSize);
+        var layer = new LayerNormalizationLayer<double>();
 
         var input = new Tensor<double>(new[] { 1, featureSize });
         input[0, 0] = 2.0;
@@ -203,7 +203,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     {
         // Layer normalization should produce output with mean ≈ 0 (when beta=0)
         int featureSize = 5;
-        var layer = new LayerNormalizationLayer<double>(featureSize);
+        var layer = new LayerNormalizationLayer<double>();
 
         var input = new Tensor<double>(new[] { 1, featureSize });
         input[0, 0] = 1.0;
@@ -226,7 +226,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     {
         // Layer normalization should produce output with variance ≈ 1 (when gamma=1)
         int featureSize = 5;
-        var layer = new LayerNormalizationLayer<double>(featureSize);
+        var layer = new LayerNormalizationLayer<double>();
 
         var input = new Tensor<double>(new[] { 1, featureSize });
         input[0, 0] = 1.0;
@@ -257,7 +257,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         // Layer norm normalizes each sample independently
         // So changing one sample should not affect another's output
         int featureSize = 3;
-        var layer = new LayerNormalizationLayer<double>(featureSize);
+        var layer = new LayerNormalizationLayer<double>();
 
         var input1 = new Tensor<double>(new[] { 2, featureSize });
         input1[0, 0] = 1.0; input1[0, 1] = 2.0; input1[0, 2] = 3.0;
@@ -283,7 +283,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     {
         // Set gamma=2, beta=1, then output = 2 * normalized + 1
         int featureSize = 4;
-        var layer = new LayerNormalizationLayer<double>(featureSize);
+        var layer = new LayerNormalizationLayer<double>();
 
         // Set gamma=2, beta=1 for all features
         var gammaValues = new double[featureSize];
@@ -338,7 +338,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
         // Input: [1, 2] (batch=1)
         // W: [3, 2] (outputSize x inputSize)
         // bias: [3]
-        var layer = new FullyConnectedLayer<double>(2, 3, (IActivationFunction<double>?)null);
+        var layer = new FullyConnectedLayer<double>(3, (IActivationFunction<double>?)null);
 
         // Set known weights and biases
         // Parameters: [weights (3*2=6), biases (3)] = 9 total
@@ -371,7 +371,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     public async Task FullyConnectedLayer_Forward_BatchProcessing()
     {
         // Test with batch size 2
-        var layer = new FullyConnectedLayer<double>(2, 2, (IActivationFunction<double>?)null);
+        var layer = new FullyConnectedLayer<double>(2, (IActivationFunction<double>?)null);
 
         var parameters = new Vector<double>(6);
         // Weights [2x2]: identity matrix
@@ -399,7 +399,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     public async Task FullyConnectedLayer_ParameterCount()
     {
         // FC layer with inputSize=3, outputSize=2 should have 3*2 + 2 = 8 parameters
-        var layer = new FullyConnectedLayer<double>(3, 2, (IActivationFunction<double>?)null);
+        var layer = new FullyConnectedLayer<double>(2, (IActivationFunction<double>?)null);
         Assert.Equal(8, layer.ParameterCount);
     }
 
@@ -485,7 +485,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     public async Task FlattenLayer_PreservesValues()
     {
         // FlattenLayer should reshape [batch, h, w] -> [batch, h*w]
-        var layer = new FlattenLayer<double>(new[] { 2, 3 }); // 2x3 input
+        var layer = new FlattenLayer<double>(); // 2x3 input
 
         var input = new Tensor<double>(new[] { 1, 2, 3 });
         input[0, 0, 0] = 1.0; input[0, 0, 1] = 2.0; input[0, 0, 2] = 3.0;

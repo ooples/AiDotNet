@@ -119,26 +119,22 @@ public class DeepCompressionVAE<T> : VAEModelBase<T>
         {
             int outChannels = Math.Min(channels * 2, 512);
             _encoderLayers.Add(new ConvolutionalLayer<T>(
-                inputDepth: i == 0 ? _inputChannels : channels,
                 outputDepth: outChannels,
-                kernelSize: 3, inputHeight: 32, inputWidth: 32,
-                stride: 2, padding: 1,
+                kernelSize: 3, stride: 2, padding: 1,
                 activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
             channels = outChannels;
         }
 
         // Latent projection
         _encoderLayers.Add(new ConvolutionalLayer<T>(
-            inputDepth: channels, outputDepth: _latentChannels,
-            kernelSize: 1, inputHeight: 8, inputWidth: 8,
-            stride: 1, padding: 0,
+            outputDepth: _latentChannels,
+            kernelSize: 1, stride: 1, padding: 0,
             activationFunction: new IdentityActivation<T>()));
 
         // Decoder: progressive upsampling
         _decoderLayers.Add(new ConvolutionalLayer<T>(
-            inputDepth: _latentChannels, outputDepth: channels,
-            kernelSize: 1, inputHeight: 8, inputWidth: 8,
-            stride: 1, padding: 0,
+            outputDepth: channels,
+            kernelSize: 1, stride: 1, padding: 0,
             activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
 
         for (int i = numStages - 1; i >= 0; i--)
@@ -148,7 +144,6 @@ public class DeepCompressionVAE<T> : VAEModelBase<T>
                 ? (IActivationFunction<T>)new TanhActivation<T>()
                 : (IActivationFunction<T>)new GELUActivation<T>();
             _decoderLayers.Add(new DeconvolutionalLayer<T>(
-                inputShape: [1, channels, 8, 8],
                 outputDepth: outChannels,
                 kernelSize: 4, stride: 2, padding: 1,
                 activationFunction: activation));
@@ -261,4 +256,17 @@ public class DeepCompressionVAE<T> : VAEModelBase<T>
         }
         return new Vector<T>(gradients.ToArray());
     }
+    /// <inheritdoc />
+    /// <remarks>
+    /// This concrete VAE does not implement layer-level backprop yet, so the
+    /// exact-gradient path is unsupported. The base class catches this and falls
+    /// through to SPSA in ComputeGradients.
+    /// </remarks>
+    protected override void BackpropagateLossGradient(Tensor<T> lossGradient)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: layer-level BackpropagateLossGradient is not " +
+            "implemented. ComputeGradients will fall through to SPSA.");
+    }
+
 }

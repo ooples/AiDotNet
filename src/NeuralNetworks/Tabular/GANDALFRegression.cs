@@ -92,7 +92,6 @@ public class GANDALFRegression<T> : GANDALFBase<T>
 
         // Regression head maps from leaf dimension to output dimension
         _regressionHead = new FullyConnectedLayer<T>(
-            Options.LeafDimension,
             outputDimension,
             (IActivationFunction<T>?)null);
     }

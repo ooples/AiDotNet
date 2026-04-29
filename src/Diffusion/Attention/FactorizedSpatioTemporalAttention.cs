@@ -85,8 +85,8 @@ public class FactorizedSpatioTemporalAttention<T> : LayerBase<T>
             numFrames: numFrames,
             spatialSize: spatialSize);
 
-        _spatialNorm = new LayerNormalizationLayer<T>(channels);
-        _temporalNorm = new LayerNormalizationLayer<T>(channels);
+        _spatialNorm = new LayerNormalizationLayer<T>();
+        _temporalNorm = new LayerNormalizationLayer<T>();
     }
 
     /// <summary>

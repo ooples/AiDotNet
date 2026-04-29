@@ -465,7 +465,7 @@ public class MixtureOfExpertsBuilder<T>
         }
 
         // Create router (output dimension = number of experts)
-        var router = new DenseLayer<T>(_inputDim, _numExperts, (IActivationFunction<T>?)new IdentityActivation<T>());
+        var router = new DenseLayer<T>(_numExperts, (IActivationFunction<T>?)new IdentityActivation<T>());
 
         // Create MoE layer
         var moeLayer = new MixtureOfExpertsLayer<T>(
@@ -492,13 +492,13 @@ public class MixtureOfExpertsBuilder<T>
         if (_useIntermediateLayer)
         {
             // Two-layer expert: Input → Hidden → Output
-            layers.Add(new DenseLayer<T>(_inputDim, _expertHiddenDim, (IActivationFunction<T>?)_expertActivation));
-            layers.Add(new DenseLayer<T>(_expertHiddenDim, _outputDim, (IActivationFunction<T>?)new IdentityActivation<T>()));
+            layers.Add(new DenseLayer<T>(_expertHiddenDim, (IActivationFunction<T>?)_expertActivation));
+            layers.Add(new DenseLayer<T>(_outputDim, (IActivationFunction<T>?)new IdentityActivation<T>()));
         }
         else
         {
             // Single-layer expert: Input → Output
-            layers.Add(new DenseLayer<T>(_inputDim, _outputDim, (IActivationFunction<T>?)_expertActivation));
+            layers.Add(new DenseLayer<T>(_outputDim, (IActivationFunction<T>?)_expertActivation));
         }
 
         return new ExpertLayer<T>(layers, new[] { _inputDim }, new[] { _outputDim });

@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -253,8 +253,8 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             // For custom layers, mean/logvar heads take from last custom layer output
             // We assume the user has set up their layers to output the desired hidden size
             int customLastOutputDim = latentDim;
-            _meanLayer = new FullyConnectedLayer<T>(customLastOutputDim, latentDim, identity);
-            _logVarLayer = new FullyConnectedLayer<T>(customLastOutputDim, latentDim, identity);
+            _meanLayer = new FullyConnectedLayer<T>(latentDim, identity);
+            _logVarLayer = new FullyConnectedLayer<T>(latentDim, identity);
         }
         else
         {
@@ -279,7 +279,7 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
         // Timestep projection
         var silu = new SiLUActivation<T>() as IActivationFunction<T>;
-        _timestepProjection = new FullyConnectedLayer<T>(teDim, teDim, silu);
+        _timestepProjection = new FullyConnectedLayer<T>(teDim, silu);
     }
 
     #endregion

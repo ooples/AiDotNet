@@ -79,7 +79,6 @@ public class MambularClassifier<T> : MambularBase<T>
         _numClasses = numClasses;
 
         _classificationHead = new FullyConnectedLayer<T>(
-            MLPOutputDimension,
             numClasses,
             (IActivationFunction<T>?)null);
     }

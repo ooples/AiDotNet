@@ -141,7 +141,7 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(NeuralNetworks.Layers.GlobalPoolingLayer<>))
         {
-            // GlobalPoolingLayer(int[] inputShape, PoolingType poolingType, IActivationFunction<T>?)
+            // GlobalPoolingLayer(PoolingType poolingType, IActivationFunction<T>?) — lazy ctor.
             var poolingTypeStr = additionalParams != null && additionalParams.TryGetValue("PoolingType", out var ptVal)
                 ? ptVal as string : null;
             var poolingType = !string.IsNullOrEmpty(poolingTypeStr) && Enum.TryParse<Enums.PoolingType>(poolingTypeStr, out var pt)
@@ -151,15 +151,13 @@ public static class DeserializationHelper
             object? activation = TryRestoreActivation<T>(additionalParams);
 
             var ctor = type.GetConstructors()
-                .FirstOrDefault(c => c.GetParameters().Length >= 2 &&
-                    c.GetParameters()[0].ParameterType == typeof(int[]) &&
-                    c.GetParameters()[1].ParameterType == typeof(Enums.PoolingType));
+                .FirstOrDefault(c => c.GetParameters().Length >= 1 &&
+                    c.GetParameters()[0].ParameterType == typeof(Enums.PoolingType));
             if (ctor is null)
                 throw new InvalidOperationException("Cannot find GlobalPoolingLayer constructor.");
             var args = new object?[ctor.GetParameters().Length];
-            args[0] = inputShape;
-            args[1] = poolingType;
-            if (args.Length > 2) args[2] = activation;
+            args[0] = poolingType;
+            if (args.Length > 1) args[1] = activation;
             instance = ctor.Invoke(args);
         }
         else if (genericDef == typeof(InputLayer<>))
@@ -175,25 +173,25 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(ReshapeLayer<>))
         {
-            // ReshapeLayer(int[] inputShape, int[] outputShape)
-            var ctor = type.GetConstructor(new Type[] { typeof(int[]), typeof(int[]) });
-            if (ctor is null)
-            {
-                throw new InvalidOperationException("Cannot find ReshapeLayer constructor with (int[], int[]).");
-            }
-
-            instance = ctor.Invoke(new object[] { inputShape, outputShape });
-        }
-        else if (genericDef == typeof(FlattenLayer<>))
-        {
-            // FlattenLayer(int[] inputShape)
+            // ReshapeLayer(int[] outputShape) — input shape resolved on first forward
             var ctor = type.GetConstructor(new Type[] { typeof(int[]) });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find FlattenLayer constructor with (int[]).");
+                throw new InvalidOperationException("Cannot find ReshapeLayer constructor with (int[]).");
             }
 
-            instance = ctor.Invoke(new object[] { inputShape });
+            instance = ctor.Invoke(new object[] { outputShape });
+        }
+        else if (genericDef == typeof(FlattenLayer<>))
+        {
+            // FlattenLayer() — lazy: input shape resolved on first forward
+            var ctor = type.GetConstructor(Type.EmptyTypes);
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find FlattenLayer parameterless constructor.");
+            }
+
+            instance = ctor.Invoke(new object[0]);
         }
         else if (genericDef == typeof(TransposeLayer<>))
         {
@@ -241,13 +239,13 @@ public static class DeserializationHelper
                 }
             }
 
-            var ctor = type.GetConstructor(new Type[] { typeof(int[]), typeof(int[]) });
+            var ctor = type.GetConstructor(new Type[] { typeof(int[]) });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find TransposeLayer constructor with (int[], int[]).");
+                throw new InvalidOperationException("Cannot find TransposeLayer constructor with (int[]).");
             }
 
-            instance = ctor.Invoke(new object[] { inputShape, permutation });
+            instance = ctor.Invoke(new object[] { permutation });
         }
         else if (genericDef == typeof(EmbeddingLayer<>))
         {
@@ -591,20 +589,19 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(ConvolutionalLayer<>))
         {
-            // ConvolutionalLayer(int inputDepth, int inputHeight, int inputWidth, int outputDepth, int kernelSize, int stride, int padding, IActivationFunction<T>?, IInitializationStrategy<T>?)
+            // ConvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding, IActivationFunction<T>?, IInitializationStrategy<T>?)
+            // Spatial dims (H/W) and inputDepth are resolved on the first Forward call via OnFirstForward.
+            // The serialized inputShape/outputShape arrays are used only to size the weights via SetParameters
+            // after construction — they do not feed the constructor anymore.
             int kernelSize = TryGetInt(additionalParams, "FilterSize") ?? 3;
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             int padding = TryGetInt(additionalParams, "Padding") ?? 0;
-            // inputShape format: [batch, depth, height, width] (NCHW format)
-            int inputDepth = inputShape.Length > 1 ? inputShape[1] : inputShape[0];
-            int inputHeight = inputShape.Length > 2 ? inputShape[2] : 1;
-            int inputWidth = inputShape.Length > 3 ? inputShape[3] : 1;
             // outputShape format: [batch, depth, height, width] (NCHW format)
             int outputDepth = outputShape.Length > 1 ? outputShape[1] : outputShape[0];
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             var initStrategyType = typeof(AiDotNet.Initialization.IInitializationStrategy<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
             if (ctor is null)
             {
                 throw new InvalidOperationException($"Cannot find ConvolutionalLayer constructor.");
@@ -612,27 +609,23 @@ public static class DeserializationHelper
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             if (activation is null && additionalParams is not null && additionalParams.ContainsKey("ScalarActivationType"))
                 throw new InvalidOperationException($"Failed to deserialize activation function of type '{additionalParams["ScalarActivationType"]}' for ConvolutionalLayer.");
-            instance = ctor.Invoke(new object?[] { inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding, activation, null });
+            instance = ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null });
         }
         else if (genericDef == typeof(Conv3DLayer<>))
         {
-            // Conv3DLayer(int inputChannels, int outputChannels, int kernelSize, int inputDepth, int inputHeight, int inputWidth, int stride, int padding, IActivationFunction<T>?)
-            // Input shape format: [channels, depth, height, width]
-            int inputChannels = inputShape.Length > 0 ? inputShape[0] : 1;
-            int inputDepthC = inputShape.Length > 1 ? inputShape[1] : 1;
-            int inputHeightC = inputShape.Length > 2 ? inputShape[2] : 1;
-            int inputWidthC = inputShape.Length > 3 ? inputShape[3] : 1;
+            // Conv3DLayer(int outputChannels, int kernelSize, int stride, int padding, IActivationFunction<T>?)
+            // — lazy ctor; spatial dims (D/H/W) and inputChannels resolved on first Forward.
             int outputChannels = outputShape.Length > 0 ? outputShape[0] : 1;
             int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 3;
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             int padding = TryGetInt(additionalParams, "Padding") ?? 0;
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType });
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType });
             if (ctor is null)
                 throw new InvalidOperationException("Cannot find Conv3DLayer constructor with expected signature.");
             var activation = TryRestoreActivation<T>(additionalParams);
-            instance = ctor.Invoke(new object?[] { inputChannels, outputChannels, kernelSize, inputDepthC, inputHeightC, inputWidthC, stride, padding, activation });
+            instance = ctor.Invoke(new object?[] { outputChannels, kernelSize, stride, padding, activation });
         }
         else if (genericDef == typeof(NeuralNetworks.Layers.MeshPoolLayer<>))
         {
@@ -735,7 +728,7 @@ public static class DeserializationHelper
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.UpsamplingLayer<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.UpsamplingLayer`1")))
         {
-            // UpsamplingLayer(int[] inputShape, int scaleFactor)
+            // UpsamplingLayer(int scaleFactor) — lazy: input shape resolved on first forward
             int scaleFactor = TryGetInt(additionalParams, "ScaleFactor") ?? 2;
             if (scaleFactor <= 0)
             {
@@ -743,31 +736,26 @@ public static class DeserializationHelper
                     $"Invalid UpsamplingLayer ScaleFactor metadata: {scaleFactor}. ScaleFactor must be positive.");
             }
 
-            var ctor = type.GetConstructor(new Type[] { typeof(int[]), typeof(int) });
+            var ctor = type.GetConstructor(new Type[] { typeof(int) });
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find UpsamplingLayer constructor.");
             }
-            instance = ctor.Invoke(new object[] { inputShape, scaleFactor });
+            instance = ctor.Invoke(new object[] { scaleFactor });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.MaxPoolingLayer<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.MaxPoolingLayer`1")))
         {
-            // MaxPoolingLayer(int[] inputShape, int poolSize, int strides)
+            // MaxPoolingLayer(int poolSize, int strides) — lazy ctor; spatial dims resolved on first Forward.
             int poolSize = TryGetInt(additionalParams, "PoolSize") ?? 2;
             int strides = TryGetInt(additionalParams, "Strides") ?? 2;
-            // inputShape format for MaxPoolingLayer: [channels, height, width]
-            int channels = inputShape.Length > 1 ? inputShape[1] : inputShape[0];
-            int height = inputShape.Length > 2 ? inputShape[2] : 1;
-            int width = inputShape.Length > 3 ? inputShape[3] : 1;
-            int[] layerInputShape = new int[] { channels, height, width };
 
-            var ctor = type.GetConstructor(new Type[] { typeof(int[]), typeof(int), typeof(int) });
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int) });
             if (ctor is null)
             {
                 throw new InvalidOperationException($"Cannot find MaxPoolingLayer constructor.");
             }
-            instance = ctor.Invoke(new object[] { layerInputShape, poolSize, strides });
+            instance = ctor.Invoke(new object[] { poolSize, strides });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.DenseBlock<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.DenseBlock`1")))
@@ -914,9 +902,9 @@ public static class DeserializationHelper
 
             var experts = new List<ILayer<T>>();
             for (int e = 0; e < numExperts; e++)
-                experts.Add(new DenseLayer<T>(inputSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>));
+                experts.Add(new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>));
 
-            var router = new DenseLayer<T>(inputSize, numExperts, new SoftmaxActivation<T>() as IActivationFunction<T>);
+            var router = new DenseLayer<T>(numExperts, new SoftmaxActivation<T>() as IActivationFunction<T>);
             instance = new MixtureOfExpertsLayer<T>(experts, router, inputShape, outputShape, topK);
         }
         else if (genericDef == typeof(ReservoirLayer<>))
@@ -988,10 +976,9 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(SpatialPoolerLayer<>))
         {
-            int inputSize = inputShape[0];
             int columnCount = outputShape[0];
             double sparsityThreshold = TryGetDouble(additionalParams, "SparsityThreshold") ?? 0.02;
-            instance = new SpatialPoolerLayer<T>(inputSize, columnCount, sparsityThreshold);
+            instance = new SpatialPoolerLayer<T>(columnCount, sparsityThreshold);
         }
         else if (genericDef == typeof(MeasurementLayer<>))
         {
@@ -1019,11 +1006,11 @@ public static class DeserializationHelper
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? innerActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            var innerLayer = new DenseLayer<T>(innerInputSize, innerOutputSize, innerActivation as IActivationFunction<T>);
+            var innerLayer = new DenseLayer<T>(innerOutputSize, innerActivation as IActivationFunction<T>);
 
             // Create ResidualLayer directly to avoid constructor ambiguity
             object? residualActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            instance = new ResidualLayer<T>(inputShape, innerLayer, residualActivation as IActivationFunction<T>);
+            instance = new ResidualLayer<T>(innerLayer, residualActivation as IActivationFunction<T>);
         }
         else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".MambaBlock`1"))
         {
@@ -1415,20 +1402,20 @@ public static class DeserializationHelper
 
         if (vectorActivationType.IsInstanceOfType(activationFunction))
         {
-            var ctor = type.GetConstructor(new Type[] { typeof(int[]), vectorActivationType });
+            var ctor = type.GetConstructor(new Type[] { vectorActivationType });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find ActivationLayer constructor with (int[], IVectorActivationFunction<T>).");
+                throw new InvalidOperationException("Cannot find ActivationLayer constructor with (IVectorActivationFunction<T>).");
             }
-            return ctor.Invoke(new object[] { inputShape, activationFunction });
+            return ctor.Invoke(new object[] { activationFunction });
         }
 
-        var scalarCtor = type.GetConstructor(new Type[] { typeof(int[]), scalarActivationType });
+        var scalarCtor = type.GetConstructor(new Type[] { scalarActivationType });
         if (scalarCtor is null)
         {
-            throw new InvalidOperationException("Cannot find ActivationLayer constructor with (int[], IActivationFunction<T>).");
+            throw new InvalidOperationException("Cannot find ActivationLayer constructor with (IActivationFunction<T>).");
         }
-        return scalarCtor.Invoke(new object[] { inputShape, activationFunction });
+        return scalarCtor.Invoke(new object[] { activationFunction });
     }
 
     /// <summary>

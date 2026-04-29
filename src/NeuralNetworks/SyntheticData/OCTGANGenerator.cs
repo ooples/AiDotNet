@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -197,7 +197,7 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
         for (int i = 0; i < _options.GeneratorDimensions.Length; i++)
         {
-            _genBNLayers.Add(new BatchNormalizationLayer<T>(_options.GeneratorDimensions[i]));
+            _genBNLayers.Add(new BatchNormalizationLayer<T>());
         }
     }
 
@@ -213,13 +213,13 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         for (int i = 0; i < dims.Length; i++)
         {
             int layerInput = i == 0 ? _dataWidth : dims[i - 1];
-            _discLayers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
+            _discLayers.Add(new FullyConnectedLayer<T>(dims[i], identity));
             _discLayerDims.Add((layerInput, dims[i]));
             _discDropoutLayers.Add(new DropoutLayer<T>(_options.DiscriminatorDropout));
         }
 
         int lastHidden = dims.Length > 0 ? dims[^1] : _dataWidth;
-        _svddEmbeddingLayer = new FullyConnectedLayer<T>(lastHidden, _options.SVDDEmbeddingDimension, identity);
+        _svddEmbeddingLayer = new FullyConnectedLayer<T>(_options.SVDDEmbeddingDimension, identity);
         _discLayerDims.Add((lastHidden, _options.SVDDEmbeddingDimension));
     }
 

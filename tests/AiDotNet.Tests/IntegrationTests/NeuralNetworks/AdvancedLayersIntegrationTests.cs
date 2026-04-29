@@ -178,7 +178,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 64;
         int outputSize = 32;
-        var layer = new FeedForwardLayer<float>(inputSize, outputSize, (IActivationFunction<float>?)null);
+        var layer = new FeedForwardLayer<float>(outputSize, (IActivationFunction<float>?)null);
 
         int batchSize = 4;
         var input = Tensor<float>.CreateRandom([batchSize, inputSize]);
@@ -200,7 +200,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 32;
         int outputSize = 16;
-        var original = new FeedForwardLayer<float>(inputSize, outputSize, (IActivationFunction<float>?)null);
+        var original = new FeedForwardLayer<float>(outputSize, (IActivationFunction<float>?)null);
 
         // Act
         var clone = original.Clone();
@@ -217,7 +217,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 64;
         int outputSize = 32;
-        var layer = new FeedForwardLayer<float>(inputSize, outputSize, (IActivationFunction<float>?)null);
+        var layer = new FeedForwardLayer<float>(outputSize, (IActivationFunction<float>?)null);
 
         // Act
         int paramCount = layer.ParameterCount;
@@ -234,7 +234,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 32;
         int outputSize = 16;
-        var layer = new FeedForwardLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new FeedForwardLayer<float>(outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
 
         // Use negative inputs to verify ReLU
         var input = Tensor<float>.CreateDefault([2, inputSize], -1.0f);
@@ -259,7 +259,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [32];
-        var layer = new ResidualLayer<float>(inputShape, null, (IActivationFunction<float>?)null);
+        var layer = new ResidualLayer<float>(null, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, 32]);
 
@@ -277,8 +277,8 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int size = 32;
         int[] inputShape = [size];
-        var innerLayer = new DenseLayer<float>(size, size);
-        var layer = new ResidualLayer<float>(inputShape, innerLayer, (IActivationFunction<float>?)null);
+        var innerLayer = new DenseLayer<float>(size);
+        var layer = new ResidualLayer<float>(innerLayer, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, size]);
 
@@ -297,8 +297,8 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int size = 32;
         int[] inputShape = [size];
-        var innerLayer = new DenseLayer<float>(size, size);
-        var original = new ResidualLayer<float>(inputShape, innerLayer, (IActivationFunction<float>?)null);
+        var innerLayer = new DenseLayer<float>(size);
+        var original = new ResidualLayer<float>(innerLayer, (IActivationFunction<float>?)null);
 
         // Act
         var clone = original.Clone();
@@ -322,7 +322,7 @@ public class AdvancedLayersIntegrationTests
         int kernelSize = 3;
         int stride = 2;
         int padding = 1;
-        var layer = new DeconvolutionalLayer<float>(inputShape, outputDepth, kernelSize, stride, padding, (IActivationFunction<float>?)null);
+        var layer = new DeconvolutionalLayer<float>(outputDepth, kernelSize, stride, padding, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([1, 4, 8, 8]);
 
@@ -344,7 +344,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [1, 4, 8, 8];
-        var original = new DeconvolutionalLayer<float>(inputShape, 2, 3, 2, 1, (IActivationFunction<float>?)null);
+        var original = new DeconvolutionalLayer<float>(2, 3, 2, 1, (IActivationFunction<float>?)null);
 
         // Act
         var clone = original.Clone();
@@ -365,7 +365,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [4, 8, 8]; // channels, height, width
         int scaleFactor = 2;
-        var layer = new UpsamplingLayer<float>(inputShape, scaleFactor);
+        var layer = new UpsamplingLayer<float>(scaleFactor);
 
         var input = Tensor<float>.CreateRandom([1, 4, 8, 8]);
 
@@ -387,7 +387,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [4, 8, 8];
-        var original = new UpsamplingLayer<float>(inputShape, 2);
+        var original = new UpsamplingLayer<float>(2);
 
         // Act
         var clone = original.Clone();
@@ -404,7 +404,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [2, 4, 4];
         int scaleFactor = 4;
-        var layer = new UpsamplingLayer<float>(inputShape, scaleFactor);
+        var layer = new UpsamplingLayer<float>(scaleFactor);
 
         var input = Tensor<float>.CreateRandom([1, 2, 4, 4]);
 
@@ -597,8 +597,8 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int size = 64;
         int[] inputShape = [size];
-        var innerLayer = new FeedForwardLayer<float>(size, size, (IActivationFunction<float>?)null);
-        var residualLayer = new ResidualLayer<float>(inputShape, innerLayer, (IActivationFunction<float>?)null);
+        var innerLayer = new FeedForwardLayer<float>(size, (IActivationFunction<float>?)null);
+        var residualLayer = new ResidualLayer<float>(innerLayer, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, size]);
 
@@ -615,12 +615,12 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] convInputShape = [1, 4, 16, 16]; // batch, channels, height, width
-        var conv = new ConvolutionalLayer<float>(4, 16, 16, 8, 3, 2, 1); // Downsample
+        var conv = new ConvolutionalLayer<float>(8, 3, 2, 1); // Downsample
 
         var convOutput = conv.Forward(Tensor<float>.CreateRandom(convInputShape));
         int[] deconvInputShape = [convOutput.Shape[0], convOutput.Shape[1], convOutput.Shape[2], convOutput.Shape[3]];
 
-        var deconv = new DeconvolutionalLayer<float>(deconvInputShape, 4, 3, 2, 1, (IActivationFunction<float>?)null); // Upsample
+        var deconv = new DeconvolutionalLayer<float>(4, 3, 2, 1, (IActivationFunction<float>?)null); // Upsample
 
         var input = Tensor<float>.CreateRandom(convInputShape);
 
@@ -640,9 +640,9 @@ public class AdvancedLayersIntegrationTests
         int size = 32;
         int[] inputShape = [size];
 
-        var block1 = new ResidualLayer<float>(inputShape, new DenseLayer<float>(size, size), (IActivationFunction<float>?)null);
-        var block2 = new ResidualLayer<float>(inputShape, new DenseLayer<float>(size, size), (IActivationFunction<float>?)null);
-        var block3 = new ResidualLayer<float>(inputShape, new DenseLayer<float>(size, size), (IActivationFunction<float>?)null);
+        var block1 = new ResidualLayer<float>(new DenseLayer<float>(size), (IActivationFunction<float>?)null);
+        var block2 = new ResidualLayer<float>(new DenseLayer<float>(size), (IActivationFunction<float>?)null);
+        var block3 = new ResidualLayer<float>(new DenseLayer<float>(size), (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, size]);
 
@@ -685,7 +685,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 1024;
         int outputSize = 2048;
-        var layer = new FeedForwardLayer<float>(inputSize, outputSize, (IActivationFunction<float>?)null);
+        var layer = new FeedForwardLayer<float>(outputSize, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([1, inputSize]);
 
@@ -702,7 +702,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [2, 2, 2]; // Very small spatial dimensions
-        var layer = new UpsamplingLayer<float>(inputShape, 2);
+        var layer = new UpsamplingLayer<float>(2);
 
         var input = Tensor<float>.CreateRandom([1, 2, 2, 2]);
 
@@ -768,7 +768,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputDim = 64;
         int outputDim = 32;
-        var layer = new GatedLinearUnitLayer<float>(inputDim, outputDim, (IActivationFunction<float>?)null);
+        var layer = new GatedLinearUnitLayer<float>(outputDim, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([4, inputDim]);
 
@@ -786,7 +786,7 @@ public class AdvancedLayersIntegrationTests
     public async Task GatedLinearUnitLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
-        var original = new GatedLinearUnitLayer<float>(32, 16, (IActivationFunction<float>?)null);
+        var original = new GatedLinearUnitLayer<float>(16, (IActivationFunction<float>?)null);
         var input = Tensor<float>.CreateRandom([2, 32]);
 
         // Act
@@ -804,7 +804,7 @@ public class AdvancedLayersIntegrationTests
     public async Task GatedLinearUnitLayer_ParameterCount_IsPositive()
     {
         // Arrange
-        var layer = new GatedLinearUnitLayer<float>(64, 32, (IActivationFunction<float>?)null);
+        var layer = new GatedLinearUnitLayer<float>(32, (IActivationFunction<float>?)null);
 
         // Act
         int paramCount = layer.ParameterCount;
@@ -879,7 +879,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange - 3D pooling for volumetric data [channels, depth, height, width]
         int[] inputShape = [3, 8, 8, 8]; // C, D, H, W
         int poolSize = 2;
-        var layer = new MaxPool3DLayer<float>(inputShape, poolSize);
+        var layer = new MaxPool3DLayer<float>(poolSize);
 
         var input = Tensor<float>.CreateRandom([2, 3, 8, 8, 8]); // [batch, C, D, H, W]
 
@@ -901,7 +901,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange - input shape must be [channels, depth, height, width]
         int[] inputShape = [2, 4, 4, 4];
-        var original = new MaxPool3DLayer<float>(inputShape, 2);
+        var original = new MaxPool3DLayer<float>(2);
         var input = Tensor<float>.CreateRandom([1, 2, 4, 4, 4]);
 
         // Act
@@ -991,7 +991,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [10, 32]; // sequence, features
-        var layer = new MaskingLayer<float>(inputShape, maskValue: 0);
+        var layer = new MaskingLayer<float>(maskValue: 0);
 
         var input = Tensor<float>.CreateRandom([2, 10, 32]);
 
@@ -1008,7 +1008,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [5, 16];
-        var original = new MaskingLayer<float>(inputShape);
+        var original = new MaskingLayer<float>();
         var input = Tensor<float>.CreateRandom([1, 5, 16]);
 
         // Act
@@ -1032,7 +1032,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange - Split tensor along last dimension
         int[] inputShape = [32];
         int numSplits = 4;
-        var layer = new SplitLayer<float>(inputShape, numSplits);
+        var layer = new SplitLayer<float>(numSplits);
 
         var input = Tensor<float>.CreateRandom([2, 32]);
 
@@ -1055,7 +1055,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [16];
-        var original = new SplitLayer<float>(inputShape, 2);
+        var original = new SplitLayer<float>(2);
         var input = Tensor<float>.CreateRandom([1, 16]);
 
         // Act
@@ -1079,7 +1079,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange - Reshape from [8, 4] to [32]
         int[] inputShape = [8, 4];
         int[] outputShape = [32];
-        var layer = new ReshapeLayer<float>(inputShape, outputShape);
+        var layer = new ReshapeLayer<float>(outputShape);
 
         var input = Tensor<float>.CreateRandom([2, 8, 4]); // batch + inputShape
 
@@ -1098,7 +1098,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange - Reshape from [16] to [4, 4]
         int[] inputShape = [16];
         int[] outputShape = [4, 4];
-        var layer = new ReshapeLayer<float>(inputShape, outputShape);
+        var layer = new ReshapeLayer<float>(outputShape);
 
         var input = Tensor<float>.CreateRandom([2, 16]);
 
@@ -1118,7 +1118,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [8, 4];
         int[] outputShape = [32];
-        var original = new ReshapeLayer<float>(inputShape, outputShape);
+        var original = new ReshapeLayer<float>(outputShape);
         var input = Tensor<float>.CreateRandom([1, 8, 4]);
 
         // Act
@@ -1144,8 +1144,7 @@ public class AdvancedLayersIntegrationTests
         int outputChannels = 8;
         int kernelSize = 3;
         int inputDepth = 8, inputHeight = 8, inputWidth = 8;
-        var layer = new Conv3DLayer<float>(inputChannels, outputChannels, kernelSize,
-            inputDepth, inputHeight, inputWidth, 1, 1, (IActivationFunction<float>?)null);
+        var layer = new Conv3DLayer<float>(outputChannels, kernelSize, 1, 1, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, inputChannels, inputDepth, inputHeight, inputWidth]);
 
@@ -1166,8 +1165,8 @@ public class AdvancedLayersIntegrationTests
         int inputChannels = 1;
         int outputChannels = 4;
         int kernelSize = 3;
-        var original = new Conv3DLayer<float>(inputChannels, outputChannels, kernelSize,
-            4, 4, 4, 1, 1, (IActivationFunction<float>?)null);
+        var original = new Conv3DLayer<float>(outputChannels, kernelSize,
+            1, 1, (IActivationFunction<float>?)null);
         var input = Tensor<float>.CreateRandom([1, inputChannels, 4, 4, 4]);
 
         // Act
@@ -1336,7 +1335,7 @@ public class AdvancedLayersIntegrationTests
         int sequenceLength = 10;
         int embeddingSize = 64;
         int numHeads = 8;
-        var layer = new MultiHeadAttentionLayer<float>(sequenceLength, embeddingSize, numHeads);
+        var layer = new MultiHeadAttentionLayer<float>(numHeads, (embeddingSize) / (numHeads));
 
         var input = Tensor<float>.CreateRandom([2, sequenceLength, embeddingSize]); // [batch, sequence, embedding]
 
@@ -1355,7 +1354,7 @@ public class AdvancedLayersIntegrationTests
         int sequenceLength = 4;
         int embeddingSize = 48;
         int numHeads = 6;
-        var layer = new MultiHeadAttentionLayer<float>(sequenceLength, embeddingSize, numHeads);
+        var layer = new MultiHeadAttentionLayer<float>(numHeads, (embeddingSize) / (numHeads));
 
         var input = Tensor<float>.CreateRandom([4, embeddingSize]); // [batch, embedding]
 
@@ -1374,7 +1373,7 @@ public class AdvancedLayersIntegrationTests
         int sequenceLength = 4;
         int embeddingSize = 32;
         int numHeads = 4;
-        var original = new MultiHeadAttentionLayer<float>(sequenceLength, embeddingSize, numHeads);
+        var original = new MultiHeadAttentionLayer<float>(numHeads, (embeddingSize) / (numHeads));
         var input = Tensor<float>.CreateRandom([1, sequenceLength, embeddingSize]);
 
         // Act
@@ -1395,7 +1394,7 @@ public class AdvancedLayersIntegrationTests
         int sequenceLength = 10;
         int embeddingSize = 64;
         int numHeads = 8;
-        var layer = new MultiHeadAttentionLayer<float>(sequenceLength, embeddingSize, numHeads);
+        var layer = new MultiHeadAttentionLayer<float>(numHeads, (embeddingSize) / (numHeads));
 
         // Act
         int paramCount = layer.ParameterCount;
@@ -1414,7 +1413,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 64;
         int outputSize = 32;
-        var layer = new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>?)null);
+        var layer = new DenseLayer<float>(outputSize, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([4, inputSize]);
 
@@ -1435,7 +1434,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int outputSize = 8;
-        var original = new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>?)null);
+        var original = new DenseLayer<float>(outputSize, (IActivationFunction<float>?)null);
         var input = Tensor<float>.CreateRandom([2, inputSize]);
 
         // Act
@@ -1455,7 +1454,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 64;
         int outputSize = 32;
-        var layer = new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>?)null);
+        var layer = new DenseLayer<float>(outputSize, (IActivationFunction<float>?)null);
 
         // Act
         int paramCount = layer.ParameterCount;
@@ -1471,7 +1470,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 32;
         int outputSize = 16;
-        var layer = new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new DenseLayer<float>(outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
 
         var input = Tensor<float>.CreateDefault([2, inputSize], -1.0f);
 
@@ -1648,7 +1647,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [8, 8, 3]; // H, W, C
-        var layer = new FlattenLayer<float>(inputShape);
+        var layer = new FlattenLayer<float>();
 
         var input = Tensor<float>.CreateRandom([2, 8, 8, 3]);
 
@@ -1667,7 +1666,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [4, 4, 4, 8]; // D, H, W, C
-        var layer = new FlattenLayer<float>(inputShape);
+        var layer = new FlattenLayer<float>();
 
         var input = Tensor<float>.CreateRandom([2, 4, 4, 4, 8]);
 
@@ -1687,7 +1686,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [4, 4, 2];
-        var original = new FlattenLayer<float>(inputShape);
+        var original = new FlattenLayer<float>();
         var input = Tensor<float>.CreateRandom([1, 4, 4, 2]);
 
         // Act
@@ -1710,7 +1709,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [64];
-        var layer = new ActivationLayer<float>(inputShape, (IActivationFunction<float>)new ReLUActivation<float>());
+        var layer = new ActivationLayer<float>((IActivationFunction<float>)new ReLUActivation<float>());
 
         var input = Tensor<float>.CreateRandom([4, 64]);
         // Make some values negative
@@ -1734,7 +1733,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [32];
-        var layer = new ActivationLayer<float>(inputShape, (IActivationFunction<float>)new SigmoidActivation<float>());
+        var layer = new ActivationLayer<float>((IActivationFunction<float>)new SigmoidActivation<float>());
 
         var input = Tensor<float>.CreateRandom([2, 32]);
 
@@ -1754,7 +1753,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [32];
-        var layer = new ActivationLayer<float>(inputShape, (IActivationFunction<float>)new TanhActivation<float>());
+        var layer = new ActivationLayer<float>((IActivationFunction<float>)new TanhActivation<float>());
 
         var input = Tensor<float>.CreateRandom([2, 32]);
 
@@ -1775,7 +1774,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [16];
-        var original = new ActivationLayer<float>(inputShape, (IActivationFunction<float>)new ReLUActivation<float>());
+        var original = new ActivationLayer<float>((IActivationFunction<float>)new ReLUActivation<float>());
         var input = Tensor<float>.CreateRandom([2, 16]);
 
         // Act
@@ -1846,7 +1845,7 @@ public class AdvancedLayersIntegrationTests
         // Input shape includes batch dimension; padding must match full input dimensions
         int[] inputShape = [2, 8, 8, 3];
         int[] padding = [0, 2, 2, 0]; // No batch pad, pad H and W by 2, no channel pad
-        var layer = new PaddingLayer<float>(inputShape, padding, (IActivationFunction<float>?)null);
+        var layer = new PaddingLayer<float>(padding, (IActivationFunction<float>?)null);
 
         var input = Tensor<float>.CreateRandom([2, 8, 8, 3]);
 
@@ -1865,7 +1864,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [1, 4, 4, 2];
         int[] padding = [0, 1, 1, 0];
-        var original = new PaddingLayer<float>(inputShape, padding, (IActivationFunction<float>?)null);
+        var original = new PaddingLayer<float>(padding, (IActivationFunction<float>?)null);
         var input = Tensor<float>.CreateRandom([1, 4, 4, 2]);
 
         // Act
@@ -1889,7 +1888,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [64];
         float stddev = 0.1f;
-        var layer = new GaussianNoiseLayer<float>(inputShape, stddev);
+        var layer = new GaussianNoiseLayer<float>(stddev);
         layer.SetTrainingMode(true);
 
         var input = Tensor<float>.CreateDefault([4, 64], 1.0f);
@@ -1920,7 +1919,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [64];
         float stddev = 0.1f;
-        var layer = new GaussianNoiseLayer<float>(inputShape, stddev);
+        var layer = new GaussianNoiseLayer<float>(stddev);
         layer.SetTrainingMode(false);
 
         var input = Tensor<float>.CreateDefault([4, 64], 1.0f);
@@ -1944,7 +1943,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int[] inputShape = [32];
-        var original = new GaussianNoiseLayer<float>(inputShape, 0.1f);
+        var original = new GaussianNoiseLayer<float>(0.1f);
         original.SetTrainingMode(false);
         var input = Tensor<float>.CreateRandom([2, 32]);
 
@@ -2037,7 +2036,7 @@ public class AdvancedLayersIntegrationTests
         int inputWidth = 28;
         int outputDepth = 16;
         int kernelSize = 3;
-        var layer = new ConvolutionalLayer<float>(inputDepth, inputHeight, inputWidth, outputDepth, kernelSize);
+        var layer = new ConvolutionalLayer<float>(outputDepth, kernelSize);
 
         var input = Tensor<float>.CreateRandom([2, inputDepth, inputHeight, inputWidth]);
 
@@ -2060,7 +2059,7 @@ public class AdvancedLayersIntegrationTests
         int inputWidth = 8;
         int outputDepth = 4;
         int kernelSize = 3;
-        var original = new ConvolutionalLayer<float>(inputDepth, inputHeight, inputWidth, outputDepth, kernelSize);
+        var original = new ConvolutionalLayer<float>(outputDepth, kernelSize);
         var input = Tensor<float>.CreateRandom([1, inputDepth, inputHeight, inputWidth]);
 
         // Act
@@ -2083,7 +2082,7 @@ public class AdvancedLayersIntegrationTests
         int inputWidth = 16;
         int outputDepth = 8;
         int kernelSize = 3;
-        var layer = new ConvolutionalLayer<float>(inputDepth, inputHeight, inputWidth, outputDepth, kernelSize);
+        var layer = new ConvolutionalLayer<float>(outputDepth, kernelSize);
 
         // Act
         int paramCount = layer.ParameterCount;
@@ -2101,7 +2100,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int numFeatures = 64;
-        var layer = new BatchNormalizationLayer<float>(numFeatures);
+        var layer = new BatchNormalizationLayer<float>();
 
         var input = Tensor<float>.CreateRandom([4, numFeatures]);
 
@@ -2119,7 +2118,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int numFeatures = 16;
-        var original = new BatchNormalizationLayer<float>(numFeatures);
+        var original = new BatchNormalizationLayer<float>();
         var input = Tensor<float>.CreateRandom([2, numFeatures]);
 
         // Act
@@ -2138,7 +2137,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int numFeatures = 64;
-        var layer = new BatchNormalizationLayer<float>(numFeatures);
+        var layer = new BatchNormalizationLayer<float>();
 
         // Act
         int paramCount = layer.ParameterCount;
@@ -2159,7 +2158,7 @@ public class AdvancedLayersIntegrationTests
         int[] inputShape = [3, 28, 28];
         int poolSize = 2;
         int stride = 2;
-        var layer = new MaxPoolingLayer<float>(inputShape, poolSize, stride);
+        var layer = new MaxPoolingLayer<float>(poolSize, stride);
 
         // Input tensor = [B, C, H, W] format
         var input = Tensor<float>.CreateRandom([4, 3, 28, 28]);
@@ -2184,7 +2183,7 @@ public class AdvancedLayersIntegrationTests
         int[] inputShape = [1, 8, 8];
         int poolSize = 2;
         int stride = 2;
-        var original = new MaxPoolingLayer<float>(inputShape, poolSize, stride);
+        var original = new MaxPoolingLayer<float>(poolSize, stride);
         // Input tensor = [B, C, H, W] format
         var input = Tensor<float>.CreateRandom([1, 1, 8, 8]);
 
@@ -2211,7 +2210,7 @@ public class AdvancedLayersIntegrationTests
         int[] inputShape = [3, 16, 16];
         int poolSize = 2;
         int stride = 2;
-        var layer = new AveragePoolingLayer<float>(inputShape, poolSize, stride);
+        var layer = new AveragePoolingLayer<float>(poolSize, stride);
 
         // Input tensor = [B, C, H, W] format
         var input = Tensor<float>.CreateRandom([4, 3, 16, 16]);
@@ -2236,7 +2235,7 @@ public class AdvancedLayersIntegrationTests
         int[] inputShape = [1, 4, 4];
         int poolSize = 2;
         int stride = 2;
-        var original = new AveragePoolingLayer<float>(inputShape, poolSize, stride);
+        var original = new AveragePoolingLayer<float>(poolSize, stride);
         // Input tensor = [B, C, H, W] format
         var input = Tensor<float>.CreateRandom([1, 1, 4, 4]);
 
@@ -2331,7 +2330,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int featureSize = 64;
-        var layer = new LayerNormalizationLayer<float>(featureSize);
+        var layer = new LayerNormalizationLayer<float>();
 
         var input = Tensor<float>.CreateRandom([4, featureSize]);
 
@@ -2349,7 +2348,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int featureSize = 16;
-        var original = new LayerNormalizationLayer<float>(featureSize);
+        var original = new LayerNormalizationLayer<float>();
         var input = Tensor<float>.CreateRandom([2, featureSize]);
 
         // Act
@@ -2368,7 +2367,7 @@ public class AdvancedLayersIntegrationTests
     {
         // Arrange
         int featureSize = 64;
-        var layer = new LayerNormalizationLayer<float>(featureSize);
+        var layer = new LayerNormalizationLayer<float>();
 
         // Act
         int paramCount = layer.ParameterCount;
@@ -2387,7 +2386,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         // GlobalPoolingLayer uses NHWC format: inputShape = [batch, height, width, channels]
         int[] inputShape = [4, 16, 16, 3];
-        var layer = new GlobalPoolingLayer<float>(inputShape, PoolingType.Max);
+        var layer = new GlobalPoolingLayer<float>(PoolingType.Max);
 
         // Input tensor = [batch, height, width, channels]
         var input = Tensor<float>.CreateRandom([4, 16, 16, 3]);
@@ -2407,7 +2406,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         // GlobalPoolingLayer uses NHWC format: inputShape = [batch, height, width, channels]
         int[] inputShape = [2, 16, 16, 3];
-        var layer = new GlobalPoolingLayer<float>(inputShape, PoolingType.Average);
+        var layer = new GlobalPoolingLayer<float>(PoolingType.Average);
         var input = Tensor<float>.CreateRandom([2, 16, 16, 3]);
 
         // Act
@@ -2424,7 +2423,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         // GlobalPoolingLayer uses NHWC format: inputShape = [batch, height, width, channels]
         int[] inputShape = [1, 8, 8, 2];
-        var original = new GlobalPoolingLayer<float>(inputShape, PoolingType.Max);
+        var original = new GlobalPoolingLayer<float>(PoolingType.Max);
         var input = Tensor<float>.CreateRandom([1, 8, 8, 2]);
 
         // Act
@@ -2581,9 +2580,9 @@ public class AdvancedLayersIntegrationTests
         int height = 32;
         int width = 32;
         int kernelSize = 3;
-        // Constructor: (inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, stride, padding, activation)
+        // Constructor (lazy): (outputDepth, kernelSize, stride, padding, activation)
         var layer = new DepthwiseSeparableConvolutionalLayer<float>(
-            inputChannels, outputChannels, kernelSize, height, width, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
+            outputChannels, kernelSize, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
 
         // Input: [batch, channels, height, width]
         var input = Tensor<float>.CreateRandom([2, inputChannels, height, width]);
@@ -2606,9 +2605,9 @@ public class AdvancedLayersIntegrationTests
         int height = 16;
         int width = 16;
         int kernelSize = 3;
-        // Constructor: (inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, stride, padding, activation)
+        // Constructor (lazy): (outputDepth, kernelSize, stride, padding, activation)
         var original = new DepthwiseSeparableConvolutionalLayer<float>(
-            inputChannels, outputChannels, kernelSize, height, width, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
+            outputChannels, kernelSize, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
         var input = Tensor<float>.CreateRandom([1, inputChannels, height, width]);
 
         // Act
@@ -2636,9 +2635,9 @@ public class AdvancedLayersIntegrationTests
         int width = 32;
         int kernelSize = 3;
         int dilation = 2;
-        // Constructor: (inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, dilation, stride, padding, activation)
+        // Constructor (lazy): (outputDepth, kernelSize, dilation, stride, padding, activation)
         var layer = new DilatedConvolutionalLayer<float>(
-            inputChannels, outputChannels, kernelSize, height, width, dilation, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
+            outputChannels, kernelSize, dilation, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
 
         // Input: [batch, channels, height, width]
         var input = Tensor<float>.CreateRandom([2, inputChannels, height, width]);
@@ -2662,9 +2661,9 @@ public class AdvancedLayersIntegrationTests
         int width = 16;
         int kernelSize = 3;
         int dilation = 2;
-        // Constructor: (inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, dilation, stride, padding, activation)
+        // Constructor (lazy): (outputDepth, kernelSize, dilation, stride, padding, activation)
         var original = new DilatedConvolutionalLayer<float>(
-            inputChannels, outputChannels, kernelSize, height, width, dilation, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
+            outputChannels, kernelSize, dilation, 1, 0, (IActivationFunction<float>)new ReLUActivation<float>());
         var input = Tensor<float>.CreateRandom([1, inputChannels, height, width]);
 
         // Act
@@ -2695,7 +2694,7 @@ public class AdvancedLayersIntegrationTests
         // SeparableConvolutionalLayer uses NHWC format: inputShape = [batch, height, width, channels]
         int[] inputShape = [batchSize, height, width, inputChannels];
         var layer = new SeparableConvolutionalLayer<float>(
-            inputShape, outputChannels, kernelSize, 1, 0, (IActivationFunction<float>)new IdentityActivation<float>());
+            outputChannels, kernelSize, 1, 0, (IActivationFunction<float>)new IdentityActivation<float>());
 
         // Input tensor matches inputShape: [batch, height, width, channels]
         var input = Tensor<float>.CreateRandom(inputShape);
@@ -2721,7 +2720,7 @@ public class AdvancedLayersIntegrationTests
         // SeparableConvolutionalLayer uses NHWC format: inputShape = [batch, height, width, channels]
         int[] inputShape = [batchSize, height, width, inputChannels];
         var original = new SeparableConvolutionalLayer<float>(
-            inputShape, outputChannels, kernelSize, 1, 0, (IActivationFunction<float>)new IdentityActivation<float>());
+            outputChannels, kernelSize, 1, 0, (IActivationFunction<float>)new IdentityActivation<float>());
         var input = Tensor<float>.CreateRandom(inputShape);
 
         // Act
@@ -2749,7 +2748,7 @@ public class AdvancedLayersIntegrationTests
         int outputHeight = 4;
         int outputWidth = 4;
         var layer = new AdaptiveAveragePoolingLayer<float>(
-            inputChannels, inputHeight, inputWidth, outputHeight, outputWidth);
+            outputHeight, outputWidth);
 
         // Input: [batch, channels, height, width]
         var input = Tensor<float>.CreateRandom([2, inputChannels, inputHeight, inputWidth]);
@@ -2770,8 +2769,7 @@ public class AdvancedLayersIntegrationTests
         int inputChannels = 3;
         int inputHeight = 16;
         int inputWidth = 16;
-        var original = new AdaptiveAveragePoolingLayer<float>(
-            inputChannels, inputHeight, inputWidth, 2, 2);
+        var original = new AdaptiveAveragePoolingLayer<float>(2, 2);
         var input = Tensor<float>.CreateRandom([1, inputChannels, inputHeight, inputWidth]);
 
         // Act
@@ -2838,7 +2836,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [4, 8, 16];
         int axis = 1; // Mean over axis 1
-        var layer = new MeanLayer<float>(inputShape, axis);
+        var layer = new MeanLayer<float>(axis);
 
         var input = Tensor<float>.CreateRandom([2, 4, 8, 16]);
 
@@ -2855,7 +2853,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [4, 8];
         int axis = 0;
-        var original = new MeanLayer<float>(inputShape, axis);
+        var original = new MeanLayer<float>(axis);
         var input = Tensor<float>.CreateRandom([2, 4, 8]);
 
         // Act
@@ -2931,7 +2929,7 @@ public class AdvancedLayersIntegrationTests
         int kernelSize = 3;
         int stride = 1;
         var layer = new LocallyConnectedLayer<float>(
-            inputHeight, inputWidth, inputChannels, outputChannels, kernelSize, stride,
+            outputChannels, kernelSize, stride,
             (IActivationFunction<float>)new ReLUActivation<float>());
 
         // LocallyConnectedLayer expects NHWC format: [batch, height, width, channels]
@@ -2956,7 +2954,7 @@ public class AdvancedLayersIntegrationTests
         int kernelSize = 3;
         int stride = 1;
         var original = new LocallyConnectedLayer<float>(
-            inputHeight, inputWidth, inputChannels, outputChannels, kernelSize, stride,
+            outputChannels, kernelSize, stride,
             (IActivationFunction<float>)new ReLUActivation<float>());
         // LocallyConnectedLayer expects NHWC format: [batch, height, width, channels]
         var input = Tensor<float>.CreateRandom([1, inputHeight, inputWidth, inputChannels]);
@@ -2980,7 +2978,7 @@ public class AdvancedLayersIntegrationTests
     public async Task SpectralNormalizationLayer_ForwardPass_ProducesValidOutput()
     {
         // Arrange
-        var innerLayer = new DenseLayer<float>(64, 32);
+        var innerLayer = new DenseLayer<float>(32);
         var layer = new SpectralNormalizationLayer<float>(innerLayer, powerIterations: 1);
 
         var input = Tensor<float>.CreateRandom([4, 64]);
@@ -2998,7 +2996,7 @@ public class AdvancedLayersIntegrationTests
     public async Task SpectralNormalizationLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
-        var innerLayer = new DenseLayer<float>(32, 16);
+        var innerLayer = new DenseLayer<float>(16);
         var original = new SpectralNormalizationLayer<float>(innerLayer, powerIterations: 2);
         var input = Tensor<float>.CreateRandom([2, 32]);
 
@@ -3028,7 +3026,7 @@ public class AdvancedLayersIntegrationTests
         int[] cropBottom = [2, 2, 0];   // crop 2 from bottom of height, 2 from right of width, 0 from channels
         int[] cropLeft = [0, 0, 0];     // additional left cropping per dimension
         int[] cropRight = [0, 0, 0];    // additional right cropping per dimension
-        var layer = new CroppingLayer<float>(inputShape, cropTop, cropBottom, cropLeft, cropRight,
+        var layer = new CroppingLayer<float>(cropTop, cropBottom, cropLeft, cropRight,
             (IActivationFunction<float>)new IdentityActivation<float>());
 
         // Input: matches inputShape
@@ -3052,7 +3050,7 @@ public class AdvancedLayersIntegrationTests
         int[] cropBottom = [1, 1, 0];
         int[] cropLeft = [0, 0, 0];
         int[] cropRight = [0, 0, 0];
-        var original = new CroppingLayer<float>(inputShape, cropTop, cropBottom, cropLeft, cropRight,
+        var original = new CroppingLayer<float>(cropTop, cropBottom, cropLeft, cropRight,
             (IActivationFunction<float>)new IdentityActivation<float>());
         var input = Tensor<float>.CreateRandom([1, 16, 16, 3]);
 
@@ -3228,7 +3226,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 64;
         int outputSize = 32;
-        var layer = new FullyConnectedLayer<float>(inputSize, outputSize,
+        var layer = new FullyConnectedLayer<float>(outputSize,
             (IActivationFunction<float>)new ReLUActivation<float>());
 
         // Input: [batch, inputSize]
@@ -3248,7 +3246,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 32;
         int outputSize = 16;
-        var original = new FullyConnectedLayer<float>(inputSize, outputSize,
+        var original = new FullyConnectedLayer<float>(outputSize,
             (IActivationFunction<float>)new ReLUActivation<float>());
         var input = Tensor<float>.CreateRandom([2, inputSize]);
 
@@ -3325,7 +3323,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 32;
         int outputSize = 16;
-        var innerLayer = new DenseLayer<float>(inputSize, outputSize);
+        var innerLayer = new DenseLayer<float>(outputSize);
         var layer = new TimeDistributedLayer<float>(innerLayer,
             activationFunction: (IActivationFunction<float>)new ReLUActivation<float>());
 
@@ -3346,7 +3344,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int outputSize = 8;
-        var innerLayer = new DenseLayer<float>(inputSize, outputSize);
+        var innerLayer = new DenseLayer<float>(outputSize);
         var original = new TimeDistributedLayer<float>(innerLayer,
             activationFunction: (IActivationFunction<float>)new ReLUActivation<float>());
         var input = Tensor<float>.CreateRandom([1, 4, inputSize]);
@@ -3414,7 +3412,7 @@ public class AdvancedLayersIntegrationTests
         // inputShape: [channels, depth, height, width]
         int[] inputShape = [3, 4, 8, 8];
         int scaleFactor = 2;
-        var layer = new Upsample3DLayer<float>(inputShape, scaleFactor);
+        var layer = new Upsample3DLayer<float>(scaleFactor);
 
         // Input: [batch, channels, depth, height, width]
         var input = Tensor<float>.CreateRandom([2, 3, 4, 8, 8]);
@@ -3433,7 +3431,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int[] inputShape = [2, 2, 4, 4];
         int scaleFactor = 2;
-        var original = new Upsample3DLayer<float>(inputShape, scaleFactor);
+        var original = new Upsample3DLayer<float>(scaleFactor);
         var input = Tensor<float>.CreateRandom([1, 2, 2, 4, 4]);
 
         // Act
@@ -3580,7 +3578,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 32;
         int attentionSize = 16;
-        var layer = new AttentionLayer<float>(inputSize, attentionSize,
+        var layer = new AttentionLayer<float>(attentionSize,
             (IActivationFunction<float>)new SoftmaxActivation<float>());
 
         // Input: [batch, sequenceLength, inputSize]
@@ -3600,7 +3598,7 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         int inputSize = 16;
         int attentionSize = 8;
-        var original = new AttentionLayer<float>(inputSize, attentionSize,
+        var original = new AttentionLayer<float>(attentionSize,
             (IActivationFunction<float>)new SoftmaxActivation<float>());
         var input = Tensor<float>.CreateRandom([1, 4, inputSize]);
 
@@ -3626,7 +3624,7 @@ public class AdvancedLayersIntegrationTests
         int inputSize = 32;
         int attentionSize = 16;
         int feedForwardSize = 64;
-        var layer = new DecoderLayer<float>(inputSize, attentionSize, feedForwardSize,
+        var layer = new DecoderLayer<float>(attentionSize, feedForwardSize,
             (IActivationFunction<float>)new ReLUActivation<float>());
 
         // Input: [batch, sequenceLength, inputSize]
@@ -3647,7 +3645,7 @@ public class AdvancedLayersIntegrationTests
         int inputSize = 16;
         int attentionSize = 8;
         int feedForwardSize = 32;
-        var original = new DecoderLayer<float>(inputSize, attentionSize, feedForwardSize,
+        var original = new DecoderLayer<float>(attentionSize, feedForwardSize,
             (IActivationFunction<float>)new ReLUActivation<float>());
         var input = Tensor<float>.CreateRandom([1, 4, inputSize]);
 
@@ -3805,7 +3803,7 @@ public class AdvancedLayersIntegrationTests
         int inputWidth = 28;
         int outputHeight = 28;
         int outputWidth = 28;
-        var layer = new SpatialTransformerLayer<float>(inputHeight, inputWidth, outputHeight, outputWidth,
+        var layer = new SpatialTransformerLayer<float>(outputHeight, outputWidth,
             (IActivationFunction<float>)new TanhActivation<float>());
 
         // Input: [batch, height, width]
@@ -3827,7 +3825,7 @@ public class AdvancedLayersIntegrationTests
         int inputWidth = 16;
         int outputHeight = 16;
         int outputWidth = 16;
-        var original = new SpatialTransformerLayer<float>(inputHeight, inputWidth, outputHeight, outputWidth,
+        var original = new SpatialTransformerLayer<float>(outputHeight, outputWidth,
             (IActivationFunction<float>)new TanhActivation<float>());
         var input = Tensor<float>.CreateRandom([1, inputHeight, inputWidth]);
 
@@ -3855,7 +3853,7 @@ public class AdvancedLayersIntegrationTests
         int channels = 3;
         int patchSize = 7;
         int embeddingDim = 64;
-        var layer = new PatchEmbeddingLayer<float>(imageHeight, imageWidth, channels, patchSize, embeddingDim);
+        var layer = new PatchEmbeddingLayer<float>(patchSize, embeddingDim);
 
         // Input: [batch, channels, height, width]
         var input = Tensor<float>.CreateRandom([2, channels, imageHeight, imageWidth]);
@@ -3877,7 +3875,7 @@ public class AdvancedLayersIntegrationTests
         int channels = 1;
         int patchSize = 4;
         int embeddingDim = 32;
-        var original = new PatchEmbeddingLayer<float>(imageHeight, imageWidth, channels, patchSize, embeddingDim);
+        var original = new PatchEmbeddingLayer<float>(patchSize, embeddingDim);
         var input = Tensor<float>.CreateRandom([1, channels, imageHeight, imageWidth]);
 
         // Act
@@ -4045,7 +4043,7 @@ public class AdvancedLayersIntegrationTests
         int numCapsules = 10;
         int capsuleDimension = 16;
         int numRoutingIterations = 3;
-        var layer = new CapsuleLayer<float>(inputCapsules, inputDimension, numCapsules, capsuleDimension, numRoutingIterations);
+        var layer = new CapsuleLayer<float>(numCapsules, capsuleDimension, numRoutingIterations);
 
         // Input: [batch, inputCapsules, inputDimension]
         var input = Tensor<float>.CreateRandom([2, inputCapsules, inputDimension]);
@@ -4067,7 +4065,7 @@ public class AdvancedLayersIntegrationTests
         int numCapsules = 5;
         int capsuleDimension = 8;
         int numRoutingIterations = 2;
-        var original = new CapsuleLayer<float>(inputCapsules, inputDimension, numCapsules, capsuleDimension, numRoutingIterations);
+        var original = new CapsuleLayer<float>(numCapsules, capsuleDimension, numRoutingIterations);
         var input = Tensor<float>.CreateRandom([1, inputCapsules, inputDimension]);
 
         // Act
@@ -4534,8 +4532,8 @@ public class AdvancedLayersIntegrationTests
         int outputSize = 8;
         var layers = new List<ILayer<float>>
         {
-            new DenseLayer<float>(inputSize, hiddenSize, (IActivationFunction<float>)new ReLUActivation<float>()),
-            new DenseLayer<float>(hiddenSize, outputSize, (IActivationFunction<float>)new IdentityActivation<float>())
+            new DenseLayer<float>(hiddenSize, (IActivationFunction<float>)new ReLUActivation<float>()),
+            new DenseLayer<float>(outputSize, (IActivationFunction<float>)new IdentityActivation<float>())
         };
         var layer = new ExpertLayer<float>(layers, [inputSize], [outputSize]);
 
@@ -4558,7 +4556,7 @@ public class AdvancedLayersIntegrationTests
         int outputSize = 4;
         var layers = new List<ILayer<float>>
         {
-            new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>())
+            new DenseLayer<float>(outputSize, (IActivationFunction<float>)new ReLUActivation<float>())
         };
         var original = new ExpertLayer<float>(layers, [inputSize], [outputSize]);
         var input = Tensor<float>.CreateRandom([2, inputSize]);
@@ -4734,10 +4732,10 @@ public class AdvancedLayersIntegrationTests
         int numExperts = 2;
         var experts = new List<ILayer<float>>
         {
-            new DenseLayer<float>(inputSize, outputSize),
-            new DenseLayer<float>(inputSize, outputSize)
+            new DenseLayer<float>(outputSize),
+            new DenseLayer<float>(outputSize)
         };
-        var router = new DenseLayer<float>(inputSize, numExperts);
+        var router = new DenseLayer<float>(numExperts);
         var layer = new MixtureOfExpertsLayer<float>(experts, router, [inputSize], [outputSize]);
         var input = Tensor<float>.CreateRandom([2, 3, inputSize]);
 
@@ -4758,11 +4756,11 @@ public class AdvancedLayersIntegrationTests
         int numExperts = 3;
         var experts = new List<ILayer<float>>
         {
-            new DenseLayer<float>(inputSize, outputSize),
-            new DenseLayer<float>(inputSize, outputSize),
-            new DenseLayer<float>(inputSize, outputSize)
+            new DenseLayer<float>(outputSize),
+            new DenseLayer<float>(outputSize),
+            new DenseLayer<float>(outputSize)
         };
-        var router = new DenseLayer<float>(inputSize, numExperts);
+        var router = new DenseLayer<float>(numExperts);
         var layer = new MixtureOfExpertsLayer<float>(experts, router, [inputSize], [outputSize], topK: 1);
         var input = Tensor<float>.CreateRandom([3, inputSize]);
 

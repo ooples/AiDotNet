@@ -27,7 +27,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "new[] { 1, 4, 4 }, 2, 2")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "2, 2")]
 public class MaxPoolingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -123,11 +123,33 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// <b>For Beginners:</b> This constructor sets up the max pooling layer with your chosen settings.
     /// It calculates what the output shape will be based on your input shape, pool size, and strides.
     /// </remarks>
-    public MaxPoolingLayer(int[] inputShape, int poolSize, int stride)
-        : base(inputShape, CalculateOutputShape(inputShape, poolSize, stride))
+    public MaxPoolingLayer(int poolSize, int stride)
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
     {
+        if (poolSize <= 0) throw new ArgumentOutOfRangeException(nameof(poolSize));
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
         PoolSize = poolSize;
         Stride = stride;
+    }
+
+    /// <summary>
+    /// Resolves input shape on first forward (PyTorch MaxPool2d-style). Computes
+    /// output spatial dims via the standard pooling arithmetic
+    /// <c>floor((H - poolSize) / stride) + 1</c>.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        int c, h, w;
+        if (rank == 4) { c = input.Shape[1]; h = input.Shape[2]; w = input.Shape[3]; }
+        else if (rank == 3) { c = input.Shape[0]; h = input.Shape[1]; w = input.Shape[2]; }
+        else throw new ArgumentException(
+            $"MaxPoolingLayer requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {rank}.",
+            nameof(input));
+
+        int outH = (h - PoolSize) / Stride + 1;
+        int outW = (w - PoolSize) / Stride + 1;
+        ResolveShapes(new[] { c, h, w }, new[] { c, outH, outW });
     }
 
     /// <summary>
@@ -265,6 +287,8 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
+
         // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
         if (input.Shape.Length < 3)
             throw new ArgumentException($"MaxPooling layer requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");

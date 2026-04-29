@@ -38,12 +38,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 [LayerCategory(LayerCategory.Activation)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }, 4, 1, 0.25")]
+[LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 1, 0.25")]
 public class PReLULayer<T> : LayerBase<T>
 {
     private readonly int _numParameters;
     private readonly int _channelAxis;
-    private readonly int[] _alphaBroadcastShape;
+    private int[] _alphaBroadcastShape;
 
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _alpha;
@@ -82,44 +82,50 @@ public class PReLULayer<T> : LayerBase<T>
     /// Thrown when <paramref name="numParameters"/> is less than 1, or when it is greater than 1 but
     /// does not match <c>inputShape[channelAxis]</c>.
     /// </exception>
-    public PReLULayer(int[] inputShape, int numParameters = 1, int channelAxis = 1, double initialAlpha = 0.25)
-        : base(inputShape, inputShape)
+    public PReLULayer(int numParameters = 1, int channelAxis = 1, double initialAlpha = 0.25)
+        : base(new[] { -1 }, new[] { -1 })
     {
         if (numParameters < 1)
             throw new ArgumentException("numParameters must be at least 1.", nameof(numParameters));
-
-        if (numParameters > 1)
-        {
-            if (channelAxis < 0 || channelAxis >= inputShape.Length)
-                throw new ArgumentException(
-                    $"channelAxis {channelAxis} is out of range for input of rank {inputShape.Length}.",
-                    nameof(channelAxis));
-            if (inputShape[channelAxis] != numParameters)
-                throw new ArgumentException(
-                    $"numParameters ({numParameters}) must match inputShape[{channelAxis}] ({inputShape[channelAxis]}).",
-                    nameof(numParameters));
-        }
+        if (numParameters > 1 && channelAxis < 0)
+            throw new ArgumentException(
+                $"channelAxis {channelAxis} must be non-negative when numParameters > 1.",
+                nameof(channelAxis));
 
         _numParameters = numParameters;
         _channelAxis = channelAxis;
 
         _alpha = Tensor<T>.CreateDefault(new[] { numParameters }, NumOps.FromDouble(initialAlpha));
 
-        // Pre-compute the broadcast shape: 1s everywhere except at channelAxis for per-channel α.
-        // For shared α we store it as [1] and let TensorBroadcastMultiply handle the rest.
-        if (numParameters == 1)
-        {
-            _alphaBroadcastShape = new[] { 1 };
-        }
-        else
-        {
-            _alphaBroadcastShape = new int[inputShape.Length];
-            for (int i = 0; i < inputShape.Length; i++)
-                _alphaBroadcastShape[i] = 1;
-            _alphaBroadcastShape[channelAxis] = numParameters;
-        }
+        // Broadcast shape resolved on first forward. Shared α uses [1].
+        _alphaBroadcastShape = new[] { 1 };
 
         RegisterTrainableParameter(_alpha, PersistentTensorRole.Weights);
+    }
+
+    /// <summary>
+    /// Resolves broadcast shape and validates channel-count compatibility on first forward.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var shape = input.Shape.ToArray();
+        if (_numParameters > 1)
+        {
+            if (_channelAxis >= shape.Length)
+                throw new ArgumentException(
+                    $"channelAxis {_channelAxis} is out of range for input of rank {shape.Length}.",
+                    nameof(input));
+            if (shape[_channelAxis] != _numParameters)
+                throw new ArgumentException(
+                    $"numParameters ({_numParameters}) must match input.Shape[{_channelAxis}] ({shape[_channelAxis]}).",
+                    nameof(input));
+
+            _alphaBroadcastShape = new int[shape.Length];
+            for (int i = 0; i < shape.Length; i++) _alphaBroadcastShape[i] = 1;
+            _alphaBroadcastShape[_channelAxis] = _numParameters;
+        }
+
+        ResolveShapes(shape, shape);
     }
 
     /// <summary>
@@ -127,6 +133,7 @@ public class PReLULayer<T> : LayerBase<T>
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         if (IsTrainingMode)
             _lastInput = input;
 
@@ -187,7 +194,7 @@ public class PReLULayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override LayerBase<T> Clone()
     {
-        var copy = new PReLULayer<T>(InputShape, _numParameters, _channelAxis,
+        var copy = new PReLULayer<T>(_numParameters, _channelAxis,
             Convert.ToDouble(_alpha.Data.Span[0]));
         // Copy current α values so Clone preserves trained state, not just init state.
         var dst = copy._alpha.Data.Span;

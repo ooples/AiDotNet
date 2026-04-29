@@ -50,7 +50,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, 4, 128, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var lap = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { lap[i, i] = 2.0; if (i > 0) { lap[i, i-1] = -1.0; lap[i-1, i] = -1.0; } } ((AiDotNet.NeuralNetworks.Layers.DiffusionConvLayer<double>)layer).SetLaplacian(lap);")]
+[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "4, 4, 128, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var lap = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { lap[i, i] = 2.0; if (i > 0) { lap[i, i-1] = -1.0; lap[i-1, i] = -1.0; } } ((AiDotNet.NeuralNetworks.Layers.DiffusionConvLayer<double>)layer).SetLaplacian(lap);")]
 public partial class DiffusionConvLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -298,21 +298,21 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
     /// </param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when parameters are non-positive.</exception>
     public DiffusionConvLayer(
-        int inputChannels,
         int outputChannels,
         int numTimeScales = 4,
         int numEigenvectors = 128,
-        int numVertices = 1,
         IActivationFunction<T>? activation = null,
         bool? preferSpectralDiffusion = null)
         : base(
-            [numVertices, inputChannels],
-            [numVertices, outputChannels],
+            new[] { -1, -1 },
+            new[] { -1, outputChannels },
             activation ?? new ReLUActivation<T>())
     {
-        ValidateParameters(inputChannels, outputChannels, numTimeScales, numEigenvectors);
+        if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
+        if (numTimeScales <= 0) throw new ArgumentOutOfRangeException(nameof(numTimeScales));
+        if (numEigenvectors <= 0) throw new ArgumentOutOfRangeException(nameof(numEigenvectors));
 
-        InputChannels = inputChannels;
+        InputChannels = -1;
         OutputChannels = outputChannels;
         NumTimeScales = numTimeScales;
         _numEigenvectors = numEigenvectors;
@@ -320,11 +320,8 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
 
         DiffusionTimes = InitializeDiffusionTimes(numTimeScales);
 
-        int weightSize = inputChannels * numTimeScales;
-        _weights = new Tensor<T>([outputChannels, weightSize]);
-        _biases = new Tensor<T>([outputChannels]);
-
-        InitializeWeights();
+        _weights = new Tensor<T>([0, 0]);
+        _biases = new Tensor<T>([0]);
     }
 
     /// <summary>
@@ -341,21 +338,21 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
     /// true = always compute, false = use direct Laplacian method.
     /// </param>
     public DiffusionConvLayer(
-        int inputChannels,
         int outputChannels,
-        int numTimeScales = 4,
-        int numEigenvectors = 128,
-        int numVertices = 1,
-        IVectorActivationFunction<T>? vectorActivation = null,
+        int numTimeScales,
+        int numEigenvectors,
+        IVectorActivationFunction<T> vectorActivation,
         bool? preferSpectralDiffusion = null)
         : base(
-            [numVertices, inputChannels],
-            [numVertices, outputChannels],
+            new[] { -1, -1 },
+            new[] { -1, outputChannels },
             vectorActivation ?? new ReLUActivation<T>())
     {
-        ValidateParameters(inputChannels, outputChannels, numTimeScales, numEigenvectors);
+        if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
+        if (numTimeScales <= 0) throw new ArgumentOutOfRangeException(nameof(numTimeScales));
+        if (numEigenvectors <= 0) throw new ArgumentOutOfRangeException(nameof(numEigenvectors));
 
-        InputChannels = inputChannels;
+        InputChannels = -1;
         OutputChannels = outputChannels;
         NumTimeScales = numTimeScales;
         _numEigenvectors = numEigenvectors;
@@ -363,11 +360,33 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
 
         DiffusionTimes = InitializeDiffusionTimes(numTimeScales);
 
-        int weightSize = inputChannels * numTimeScales;
-        _weights = new Tensor<T>([outputChannels, weightSize]);
-        _biases = new Tensor<T>([outputChannels]);
+        _weights = new Tensor<T>([0, 0]);
+        _biases = new Tensor<T>([0]);
+    }
 
+    /// <summary>
+    /// Resolves input channels and vertex count from input.Shape on first forward
+    /// (rank-2 [V, C] or rank-3 [B, V, C]) and allocates weights+biases.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        int v, c;
+        if (rank == 3) { v = input.Shape[1]; c = input.Shape[2]; }
+        else if (rank == 2) { v = input.Shape[0]; c = input.Shape[1]; }
+        else throw new ArgumentException(
+            $"DiffusionConvLayer requires rank-2 [V,C] or rank-3 [B,V,C] input; got rank {rank}.",
+            nameof(input));
+
+        InputChannels = c;
+        int weightSize = c * NumTimeScales;
+        _weights = new Tensor<T>([OutputChannels, weightSize]);
+        _biases = new Tensor<T>([OutputChannels]);
         InitializeWeights();
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+        ResolveShapes(new[] { v, c }, new[] { v, OutputChannels });
     }
 
     #endregion
@@ -508,6 +527,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
     /// <exception cref="InvalidOperationException">Thrown when eigenbasis/laplacian is not set.</exception>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         if (_eigenvalues == null && _laplacian == null)
         {
             throw new InvalidOperationException(
@@ -1656,13 +1676,15 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
 
         if (UsingVectorActivation)
         {
+            var vAct = VectorActivation ?? throw new InvalidOperationException(
+                "UsingVectorActivation is true but VectorActivation is null.");
             copy = new DiffusionConvLayer<T>(
-                InputChannels, OutputChannels, NumTimeScales, _numEigenvectors, InputShape[0], VectorActivation, _preferSpectralDiffusion);
+                OutputChannels, NumTimeScales, _numEigenvectors, vAct, _preferSpectralDiffusion);
         }
         else
         {
             copy = new DiffusionConvLayer<T>(
-                InputChannels, OutputChannels, NumTimeScales, _numEigenvectors, InputShape[0], ScalarActivation, _preferSpectralDiffusion);
+                OutputChannels, NumTimeScales, _numEigenvectors, ScalarActivation, _preferSpectralDiffusion);
         }
 
         copy.SetParameters(GetParameters());

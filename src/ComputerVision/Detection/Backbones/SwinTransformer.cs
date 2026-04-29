@@ -42,6 +42,7 @@ public class SwinTransformer<T> : BackboneBase<T>
     private readonly SwinVariant _variant;
     private readonly int _embedDim;
     private readonly int _windowSize;
+    private readonly int _inChannels;
 
     /// <inheritdoc/>
     public override string Name => $"Swin-{_variant}";
@@ -62,6 +63,7 @@ public class SwinTransformer<T> : BackboneBase<T>
     {
         _variant = variant;
         _windowSize = windowSize;
+        _inChannels = inChannels;
         _stages = new List<SwinStage<T>>();
 
         // Get configuration for variant
@@ -197,7 +199,7 @@ public class SwinTransformer<T> : BackboneBase<T>
     }
 
     /// <inheritdoc/>
-    public override long GetParameterCount()
+    public override long GetBackboneParameterCount()
     {
         long count = _patchEmbed.GetParameterCount();
         for (int i = 0; i < _stages.Count; i++)
@@ -264,6 +266,15 @@ public class SwinTransformer<T> : BackboneBase<T>
             stage.ReadParameters(reader);
         }
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Constructs a fresh Swin Transformer with the same variant, window size, and
+    /// input-channel configuration. All internal PatchEmbeddingBlock and SwinStage
+    /// layers are freshly allocated.
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        => new SwinTransformer<T>(_variant, _windowSize, _inChannels);
 }
 
 /// <summary>
@@ -299,8 +310,7 @@ internal class PatchEmbeddingBlock<T>
             outChannels: embedDim,
             kernelSize: patchSize,
             stride: patchSize,
-            padding: 0,
-            useBias: true
+            padding: 0
         );
     }
 

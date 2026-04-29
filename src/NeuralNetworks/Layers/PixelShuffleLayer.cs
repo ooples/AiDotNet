@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Upsampling)]
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 4, 4", TestConstructorArgs = "new[] { 4, 4, 4 }, 2")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 4, 4", TestConstructorArgs = "2")]
 public class PixelShuffleLayer<T> : LayerBase<T>
 {
     #region Fields
@@ -120,11 +120,38 @@ public class PixelShuffleLayer<T> : LayerBase<T>
     /// </code>
     /// </para>
     /// </remarks>
-    public PixelShuffleLayer(int[] inputShape, int upscaleFactor)
-        : base(inputShape, CalculateOutputShape(inputShape, upscaleFactor))
+    public PixelShuffleLayer(int upscaleFactor)
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
     {
-        ValidateInputShape(inputShape, upscaleFactor);
+        if (upscaleFactor < 1)
+            throw new ArgumentOutOfRangeException(nameof(upscaleFactor),
+                $"upscaleFactor must be at least 1. Got: {upscaleFactor}");
         _upscaleFactor = upscaleFactor;
+    }
+
+    /// <summary>
+    /// Resolves channel/spatial dims and registers the resolved output shape on first forward.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 3)
+            throw new ArgumentException(
+                $"PixelShuffleLayer requires rank>=3 [...,C,H,W] input; got rank {rank}.",
+                nameof(input));
+
+        int r2 = _upscaleFactor * _upscaleFactor;
+        int c = input.Shape[rank - 3];
+        int h = input.Shape[rank - 2];
+        int w = input.Shape[rank - 1];
+
+        if (c % r2 != 0)
+        {
+            throw new ArgumentException(
+                $"Channel count ({c}) must be divisible by upscaleFactor² ({r2}) for pixel shuffle.");
+        }
+
+        ResolveShapes(new[] { c, h, w }, new[] { c / r2, h * _upscaleFactor, w * _upscaleFactor });
     }
 
     #endregion
@@ -235,6 +262,7 @@ public class PixelShuffleLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _originalInputShape = input._shape;
         var shape = input._shape;
 

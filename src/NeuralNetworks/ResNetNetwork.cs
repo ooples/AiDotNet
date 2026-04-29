@@ -276,9 +276,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
         // Stage 0: Initial convolution (conv1)
         // 7x7 conv, 64, stride 2
         layers.Add(new ConvolutionalLayer<T>(
-            inputDepth: currentChannels,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
             outputDepth: 64,
             kernelSize: 7,
             stride: 2,
@@ -290,16 +287,14 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
         currentChannels = 64;
 
         // Batch normalization after conv1
-        layers.Add(new BatchNormalizationLayer<T>(currentChannels));
+        layers.Add(new BatchNormalizationLayer<T>());
 
         // ReLU activation
         layers.Add(new ActivationLayer<T>(
-            inputShape: [currentChannels, currentHeight, currentWidth],
             activationFunction: new ActivationFunctions.ReLUActivation<T>()));
 
         // Max pooling: 3x3 pool, stride 2
         layers.Add(new MaxPoolingLayer<T>(
-            inputShape: [currentChannels, currentHeight, currentWidth],
             poolSize: 3,
             stride: 2));
 
@@ -377,14 +372,10 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
 
         // Global average pooling
         int finalChannels = baseChannels[3] * expansion; // 512 for BasicBlock, 2048 for Bottleneck
-        layers.Add(AdaptiveAveragePoolingLayer<T>.GlobalPool(
-            inputChannels: finalChannels,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth));
+        layers.Add(AdaptiveAveragePoolingLayer<T>.GlobalPool());
 
         // Flatten for FC layer
-        layers.Add(new FlattenLayer<T>(
-            inputShape: [finalChannels, 1, 1]));
+        layers.Add(new FlattenLayer<T>());
 
         // Fully connected classifier
         if (config.IncludeClassifier)
@@ -394,7 +385,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
                 : new ActivationFunctions.SoftmaxActivation<T>();
 
             layers.Add(new DenseLayer<T>(
-                inputSize: finalChannels,
                 outputSize: config.NumClasses,
                 activationFunction: outputActivation));
         }

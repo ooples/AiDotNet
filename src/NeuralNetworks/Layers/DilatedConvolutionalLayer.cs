@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 2, 3, 8, 8, 2, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "2, 3, 2, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -60,7 +60,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// Think of it like layers of information stacked on top of each other at each position.
     /// </para>
     /// </remarks>
-    private readonly int _inputDepth;
+    private int _inputDepth;
 
     /// <summary>
     /// The number of filters (output channels) in the convolutional layer.
@@ -404,31 +404,28 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public DilatedConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth,
-                                     int dilation, int stride = 1, int padding = 0,
+    public DilatedConvolutionalLayer(int outputDepth, int kernelSize, int dilation, int stride = 1, int padding = 0,
                                      IActivationFunction<T>? activation = null,
                                      IInitializationStrategy<T>? initializationStrategy = null)
-        : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
-               CalculateOutputShape(outputDepth, CalculateOutputDimension(inputHeight, kernelSize, stride, padding, dilation),
-                   CalculateOutputDimension(inputWidth, kernelSize, stride, padding, dilation)),
+        : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 },
                activation ?? new ReLUActivation<T>())
     {
+        if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth));
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
+        if (dilation <= 0) throw new ArgumentOutOfRangeException(nameof(dilation));
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
+        if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding));
+
         InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.He;
-        _inputDepth = inputDepth;
+        _inputDepth = -1;
         _outputDepth = outputDepth;
         _kernelSize = kernelSize;
         _stride = stride;
         _padding = padding;
         _dilation = dilation;
 
-        _kernels = new Tensor<T>([_outputDepth, _inputDepth, _kernelSize, _kernelSize]);
-        _biases = new Tensor<T>([_outputDepth]);
-
-        InitializeWeights();
-
-        // Register trainable parameters for GPU memory persistence
-        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        _kernels = new Tensor<T>([0, 0, 0, 0]);
+        _biases = new Tensor<T>([0]);
     }
 
     /// <summary>
@@ -461,29 +458,53 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// For most basic uses, the regular constructor is sufficient.
     /// </para>
     /// </remarks>
-    public DilatedConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth,
-                                     int dilation, int stride = 1, int padding = 0,
-                                     IVectorActivationFunction<T>? vectorActivation = null)
-        : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
-               CalculateOutputShape(outputDepth, CalculateOutputDimension(inputHeight, kernelSize, stride, padding, dilation),
-                   CalculateOutputDimension(inputWidth, kernelSize, stride, padding, dilation)),
+    public DilatedConvolutionalLayer(int outputDepth, int kernelSize, int dilation, int stride, int padding,
+                                     IVectorActivationFunction<T> vectorActivation)
+        : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 },
                vectorActivation ?? new ReLUActivation<T>())
     {
-        _inputDepth = inputDepth;
+        if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth));
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
+        if (dilation <= 0) throw new ArgumentOutOfRangeException(nameof(dilation));
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
+        if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding));
+
+        _inputDepth = -1;
         _outputDepth = outputDepth;
         _kernelSize = kernelSize;
         _stride = stride;
         _padding = padding;
         _dilation = dilation;
 
+        _kernels = new Tensor<T>([0, 0, 0, 0]);
+        _biases = new Tensor<T>([0]);
+    }
+
+    /// <summary>
+    /// Resolves input depth and output spatial dims on first forward.
+    /// Output dim per axis: (input + 2 * padding - dilation * (kernelSize - 1) - 1) / stride + 1.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        int c, h, w;
+        if (rank == 4) { c = input.Shape[1]; h = input.Shape[2]; w = input.Shape[3]; }
+        else if (rank == 3) { c = input.Shape[0]; h = input.Shape[1]; w = input.Shape[2]; }
+        else throw new ArgumentException(
+            $"DilatedConvolutionalLayer requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {rank}.",
+            nameof(input));
+
+        _inputDepth = c;
+        int outH = (h + 2 * _padding - _dilation * (_kernelSize - 1) - 1) / _stride + 1;
+        int outW = (w + 2 * _padding - _dilation * (_kernelSize - 1) - 1) / _stride + 1;
+
         _kernels = new Tensor<T>([_outputDepth, _inputDepth, _kernelSize, _kernelSize]);
         _biases = new Tensor<T>([_outputDepth]);
-
         InitializeWeights();
-
-        // Register trainable parameters for GPU memory persistence
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+        ResolveShapes(new[] { c, h, w }, new[] { _outputDepth, outH, outW });
     }
 
     /// <summary>
@@ -542,6 +563,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 

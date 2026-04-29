@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Gating)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public partial class GatedLinearUnitLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -380,21 +380,39 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
     /// Other activations can be used for specialized gating behavior.
     /// </para>
     /// </remarks>
-    public GatedLinearUnitLayer(int inputDimension, int outputDimension, IActivationFunction<T>? gateActivation = null)
-        : base([inputDimension], [outputDimension], gateActivation ?? new SigmoidActivation<T>())
+    public GatedLinearUnitLayer(int outputDimension, IActivationFunction<T>? gateActivation = null)
+        : base(new[] { -1 }, new[] { outputDimension }, gateActivation ?? new SigmoidActivation<T>())
     {
-        _linearWeights = new Tensor<T>([outputDimension, inputDimension]);
-        _gateWeights = new Tensor<T>([outputDimension, inputDimension]);
+        if (outputDimension <= 0) throw new ArgumentOutOfRangeException(nameof(outputDimension));
+        _outputDimension = outputDimension;
+        _linearWeights = new Tensor<T>([0, 0]);
+        _gateWeights = new Tensor<T>([0, 0]);
         _linearBias = new Tensor<T>([outputDimension]);
         _gateBias = new Tensor<T>([outputDimension]);
+    }
 
+    private int _outputDimension;
+
+    /// <summary>
+    /// Resolves input dimension on first forward and allocates linear/gate weight matrices.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"GatedLinearUnitLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+
+        int inputDimension = input.Shape[rank - 1];
+        _linearWeights = new Tensor<T>([_outputDimension, inputDimension]);
+        _gateWeights = new Tensor<T>([_outputDimension, inputDimension]);
         InitializeParameters();
-
-        // Register tensors for GPU memory persistence
         RegisterTrainableParameter(_linearWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_linearBias, PersistentTensorRole.Biases);
         RegisterTrainableParameter(_gateBias, PersistentTensorRole.Biases);
+
+        ResolveShapes(new[] { inputDimension }, new[] { _outputDimension });
     }
 
     /// <summary>
@@ -424,21 +442,15 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
     /// choice for GLU layers because its 0-1 range makes it ideal for gating.
     /// </para>
     /// </remarks>
-    public GatedLinearUnitLayer(int inputDimension, int outputDimension, IVectorActivationFunction<T>? gateActivation = null)
-        : base([inputDimension], [outputDimension], gateActivation ?? new SigmoidActivation<T>())
+    public GatedLinearUnitLayer(int outputDimension, IVectorActivationFunction<T> gateActivation)
+        : base(new[] { -1 }, new[] { outputDimension }, gateActivation ?? new SigmoidActivation<T>())
     {
-        _linearWeights = new Tensor<T>([outputDimension, inputDimension]);
-        _gateWeights = new Tensor<T>([outputDimension, inputDimension]);
+        if (outputDimension <= 0) throw new ArgumentOutOfRangeException(nameof(outputDimension));
+        _outputDimension = outputDimension;
+        _linearWeights = new Tensor<T>([0, 0]);
+        _gateWeights = new Tensor<T>([0, 0]);
         _linearBias = new Tensor<T>([outputDimension]);
         _gateBias = new Tensor<T>([outputDimension]);
-
-        InitializeParameters();
-
-        // Register tensors for GPU memory persistence
-        RegisterTrainableParameter(_linearWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_linearBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_gateBias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -515,6 +527,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
 
         // Linear path: linear = input @ weights^T + bias

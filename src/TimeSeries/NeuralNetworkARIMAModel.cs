@@ -293,8 +293,8 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> linearActivation = new IdentityActivation<T>();
 
-        var hiddenLayer = new DenseLayer<T>(inputSize, hiddenSize, activationFunction: reluActivation);
-        var outputLayer = new DenseLayer<T>(hiddenSize, outputSize, activationFunction: linearActivation);
+        var hiddenLayer = new DenseLayer<T>(hiddenSize, activationFunction: reluActivation);
+        var outputLayer = new DenseLayer<T>(outputSize, activationFunction: linearActivation);
 
         var defaultArchitecture = new NeuralNetworkArchitecture<T>(
             InputType.OneDimensional,           // Input type

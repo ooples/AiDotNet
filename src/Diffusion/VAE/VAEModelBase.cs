@@ -464,17 +464,20 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
 
         var effectiveLossFunction = lossFunction ?? LossFunction;
 
-        // Primary path: layer-level backpropagation for exact gradients.
-        // Forward through encoder/decoder layers, compute loss gradient,
-        // then backpropagate through the layer chain.
+        // Primary path: tape-recorded forward + layer-level backprop. ForwardForTraining
+        // runs encode+decode without suppressing tape recording so the per-layer caches
+        // populate. We then push the loss derivative back through the layer chain via
+        // BackpropagateLossGradient, and finally read accumulated gradients via the
+        // concrete VAE's GetParameterGradients override.
         try
         {
-            var predicted = Predict(input);
+            var predicted = ForwardForTraining(input);
 
             var lossGrad = effectiveLossFunction.CalculateDerivative(
                 predicted.ToVector(), target.ToVector());
             var lossGradTensor = new Tensor<T>(predicted._shape, lossGrad);
 
+            BackpropagateLossGradient(lossGradTensor);
 
             var gradients = GetParameterGradients();
 
@@ -491,41 +494,64 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
             if (hasValidGradients)
                 return gradients;
         }
-        catch (Exception ex)
+        catch (NotSupportedException ex)
         {
+            // Subclass deliberately doesn't implement layer-level gradients (e.g. it
+            // hasn't overridden BackpropagateLossGradient yet) — fall back to SPSA.
             System.Diagnostics.Trace.TraceWarning(
-                $"VAE layer backpropagation failed, falling back to SPSA: {ex.Message}");
+                $"VAE layer backpropagation not implemented, falling back to SPSA: {ex.Message}");
         }
-
-        // Fallback: SPSA (6 forward passes total vs 2N for finite differences)
-        var parameters = GetParameters();
-        var gradients_spsa = new Vector<T>(parameters.Length);
-        var epsilon = NumOps.FromDouble(1e-3);
-        var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
-        var rng = RandomGenerator;
-        var delta = new Vector<T>(parameters.Length);
-
-        for (int s = 0; s < 3; s++)
+        catch (NotImplementedException ex)
         {
-            for (int i = 0; i < parameters.Length; i++)
-                delta[i] = rng.NextDouble() < 0.5 ? NumOps.FromDouble(-1.0) : NumOps.FromDouble(1.0);
-
-            var eDelta = Engine.Multiply(delta, epsilon);
-            SetParameters(Engine.Add(parameters, eDelta));
-            var lossPlus = effectiveLossFunction.CalculateLoss(Predict(input).ToVector(), target.ToVector());
-
-            SetParameters(Engine.Subtract(parameters, eDelta));
-            var lossMinus = effectiveLossFunction.CalculateLoss(Predict(input).ToVector(), target.ToVector());
-
-            var lossDiff = NumOps.Subtract(lossPlus, lossMinus);
-            var scaledDelta = Engine.Multiply(delta, twoEpsilon);
-            gradients_spsa = Engine.Add(gradients_spsa, Engine.Divide(
-                Engine.Fill(parameters.Length, lossDiff), scaledDelta));
+            // Same intent as NotSupportedException; some subclasses use this variant.
+            System.Diagnostics.Trace.TraceWarning(
+                $"VAE layer backpropagation not implemented, falling back to SPSA: {ex.Message}");
         }
+        // Other exceptions (shape bugs, broken overrides, serialization corruption,
+        // null derefs from incomplete state) are real implementation bugs — let them
+        // bubble up so regressions are caught at the test boundary instead of being
+        // silently masked by the SPSA fallback.
 
-        gradients_spsa = Engine.Multiply(gradients_spsa, NumOps.FromDouble(1.0 / 3.0));
-        SetParameters(parameters);
-        return gradients_spsa;
+        // Fallback: SPSA (6 forward passes total vs 2N for finite differences).
+        // Snapshot parameters BEFORE the perturbation loop and always restore them in a
+        // finally block — without that, an exception inside SetParameters/Predict/
+        // CalculateLoss would exit with perturbed weights still installed and silently
+        // corrupt later training/inference.
+        var parameters = GetParameters();
+        try
+        {
+            var gradients_spsa = new Vector<T>(parameters.Length);
+            var epsilon = NumOps.FromDouble(1e-3);
+            var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
+            var rng = RandomGenerator;
+            var delta = new Vector<T>(parameters.Length);
+
+            for (int s = 0; s < 3; s++)
+            {
+                for (int i = 0; i < parameters.Length; i++)
+                    delta[i] = rng.NextDouble() < 0.5 ? NumOps.FromDouble(-1.0) : NumOps.FromDouble(1.0);
+
+                var eDelta = Engine.Multiply(delta, epsilon);
+                SetParameters(Engine.Add(parameters, eDelta));
+                var lossPlus = effectiveLossFunction.CalculateLoss(Predict(input).ToVector(), target.ToVector());
+
+                SetParameters(Engine.Subtract(parameters, eDelta));
+                var lossMinus = effectiveLossFunction.CalculateLoss(Predict(input).ToVector(), target.ToVector());
+
+                var lossDiff = NumOps.Subtract(lossPlus, lossMinus);
+                var scaledDelta = Engine.Multiply(delta, twoEpsilon);
+                gradients_spsa = Engine.Add(gradients_spsa, Engine.Divide(
+                    Engine.Fill(parameters.Length, lossDiff), scaledDelta));
+            }
+
+            gradients_spsa = Engine.Multiply(gradients_spsa, NumOps.FromDouble(1.0 / 3.0));
+            return gradients_spsa;
+        }
+        finally
+        {
+            // Always restore the original weights, even on exception.
+            SetParameters(parameters);
+        }
     }
 
     /// <summary>
@@ -549,7 +575,12 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <param name="target">The target tensor for loss computation.</param>
     /// <param name="trainableParams">The trainable parameter tensors to compute gradients for.</param>
     /// <returns>Dictionary mapping each parameter tensor to its gradient.</returns>
-    public Dictionary<Tensor<T>, Tensor<T>> ComputeGradientsWithTape(
+    /// <remarks>
+    /// Internal training plumbing; library users should drive training through
+    /// <c>PredictionModelBuilder</c> and read results from <c>PredictionModelResult</c>
+    /// instead of calling this directly.
+    /// </remarks>
+    protected Dictionary<Tensor<T>, Tensor<T>> ComputeGradientsWithTape(
         Tensor<T> input,
         Tensor<T> target,
         Tensor<T>[] trainableParams)
@@ -571,14 +602,32 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     }
 
     /// <summary>
-    /// Extracts accumulated parameter gradients from all layers after backpropagation.
+    /// Pushes a loss gradient tensor (shape matching the decoder's output) back through
+    /// the decoder and encoder layer chain so each layer's parameter gradient cache is
+    /// populated. Concrete VAEs that don't have a tape-level backward path should
+    /// throw <see cref="NotSupportedException"/> from this override; the
+    /// <c>ComputeGradients</c> exception handler will catch it and fall through to SPSA.
     /// </summary>
-    protected virtual Vector<T> GetParameterGradients()
-    {
-        throw new NotSupportedException(
-            $"{GetType().Name} does not implement GetParameterGradients. " +
-            "Override this method to extract layer-level gradients.");
-    }
+    /// <remarks>
+    /// Made abstract instead of a no-op virtual: a silent default would let concrete
+    /// VAEs forget the override and quietly degrade to stale/zero gradients before
+    /// reaching the SPSA fallback. Forcing every subclass to make an explicit choice
+    /// (implement, or throw NotSupportedException) ensures the fallback path is hit
+    /// only when the model author has acknowledged it.
+    /// </remarks>
+    /// <param name="lossGradient">
+    /// dL/dy for the decoder's output. Shape must match what <see cref="ForwardForTraining"/>
+    /// returned.
+    /// </param>
+    protected abstract void BackpropagateLossGradient(Tensor<T> lossGradient);
+
+    /// <summary>
+    /// Extracts accumulated parameter gradients from all encoder/decoder/norm layers after
+    /// <see cref="BackpropagateLossGradient"/> has populated them. Concrete VAEs must walk
+    /// their owned layers and concatenate <see cref="LayerBase{T}.GetParameterGradients"/>
+    /// in the same order they expose their flat parameter vector via <see cref="GetParameters"/>.
+    /// </summary>
+    protected abstract Vector<T> GetParameterGradients();
 
     /// <inheritdoc />
     public virtual void ApplyGradients(Vector<T> gradients, T learningRate)

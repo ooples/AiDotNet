@@ -59,6 +59,8 @@ public class IPAdapterFaceIDPlusModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;
     private const int FACE_EMBED_DIM = 512;
+    private const int IMAGE_EMBED_DIM = 1024;
+    private const int CROSS_ATTENTION_DIM = 768;
 
     private UNetNoisePredictor<T> _baseUNet;
     private StandardVAE<T> _vae;
@@ -115,8 +117,16 @@ public class IPAdapterFaceIDPlusModel<T> : LatentDiffusionModelBase<T>
             inputChannels: 3, latentChannels: LATENT_CHANNELS, baseChannels: 128,
             channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
 
-        _faceProjection = new DenseLayer<T>(FACE_EMBED_DIM, 768);
-        _imageProjection = new DenseLayer<T>(1024, 768);
+        _faceProjection = new DenseLayer<T>(CROSS_ATTENTION_DIM);
+        _imageProjection = new DenseLayer<T>(CROSS_ATTENTION_DIM);
+
+        // Pre-resolve the lazy projections so ParameterCount, GetParameters, SetParameters,
+        // and Clone all see consistent param layouts on a freshly constructed model —
+        // before any forward pass. The face projection consumes a [B, FACE_EMBED_DIM]
+        // ArcFace embedding; the image projection consumes a [B, IMAGE_EMBED_DIM] CLIP
+        // image embedding.
+        _faceProjection.ResolveFromShape(new[] { 1, FACE_EMBED_DIM });
+        _imageProjection.ResolveFromShape(new[] { 1, IMAGE_EMBED_DIM });
     }
 
     /// <inheritdoc />

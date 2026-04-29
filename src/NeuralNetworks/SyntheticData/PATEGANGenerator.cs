@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -229,7 +229,7 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         // Create matching BN layers for hidden layers (all except output layer)
         for (int i = 0; i < _options.GeneratorDimensions.Length; i++)
         {
-            _genBNLayers.Add(new BatchNormalizationLayer<T>(_options.GeneratorDimensions[i]));
+            _genBNLayers.Add(new BatchNormalizationLayer<T>());
         }
     }
 
@@ -248,11 +248,11 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             for (int i = 0; i < dims.Length; i++)
             {
                 int layerInput = i == 0 ? _dataWidth : dims[i - 1];
-                layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
+                layers.Add(new FullyConnectedLayer<T>(dims[i], identity));
             }
 
             int lastDim = dims.Length > 0 ? dims[^1] : _dataWidth;
-            var output = new FullyConnectedLayer<T>(lastDim, 1, identity);
+            var output = new FullyConnectedLayer<T>(1, identity);
 
             _teacherLayers.Add(layers);
             _teacherOutputs.Add(output);
@@ -270,12 +270,12 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         for (int i = 0; i < dims.Length; i++)
         {
             int layerInput = i == 0 ? _dataWidth : dims[i - 1];
-            _studentLayers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
+            _studentLayers.Add(new FullyConnectedLayer<T>(dims[i], identity));
             _studentDropoutLayers.Add(new DropoutLayer<T>(_options.StudentDropout));
         }
 
         int lastDim = dims.Length > 0 ? dims[^1] : _dataWidth;
-        _studentLayers.Add(new FullyConnectedLayer<T>(lastDim, 1, identity));
+        _studentLayers.Add(new FullyConnectedLayer<T>(1, identity));
     }
 
     #endregion

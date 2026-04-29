@@ -39,6 +39,7 @@ public class EfficientNet<T> : BackboneBase<T>
     private readonly List<MBConvBlock<T>> _blocks;
     private readonly EfficientNetVariant _variant;
     private readonly int _stemChannels;
+    private readonly int _inChannels;
 
     /// <inheritdoc/>
     public override string Name => $"EfficientNet-{_variant}";
@@ -62,6 +63,7 @@ public class EfficientNet<T> : BackboneBase<T>
     public EfficientNet(EfficientNetVariant variant = EfficientNetVariant.B0, int inChannels = 3)
     {
         _variant = variant;
+        _inChannels = inChannels;
         _blocks = new List<MBConvBlock<T>>();
 
         // Get scaling factors for variant
@@ -95,8 +97,7 @@ public class EfficientNet<T> : BackboneBase<T>
             outChannels: _stemChannels,
             kernelSize: 3,
             stride: 2,
-            padding: 1,
-            useBias: false
+            padding: 1
         );
 
         // Build MBConv blocks
@@ -201,7 +202,7 @@ public class EfficientNet<T> : BackboneBase<T>
     }
 
     /// <inheritdoc/>
-    public override long GetParameterCount()
+    public override long GetBackboneParameterCount()
     {
         long count = _stem.GetParameterCount();
         foreach (var block in _blocks)
@@ -293,6 +294,14 @@ public class EfficientNet<T> : BackboneBase<T>
         }
         return result;
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Constructs a fresh EfficientNet with the same variant and input-channel
+    /// configuration. All internal MBConvBlock and Conv2D layers are freshly allocated.
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        => new EfficientNet<T>(_variant, _inChannels);
 }
 
 /// <summary>
@@ -351,8 +360,7 @@ internal class MBConvBlock<T>
                 outChannels: hiddenDim,
                 kernelSize: 1,
                 stride: 1,
-                padding: 0,
-                useBias: false
+                padding: 0
             );
         }
 
@@ -363,8 +371,7 @@ internal class MBConvBlock<T>
             outChannels: hiddenDim,
             kernelSize: kernelSize,
             stride: stride,
-            padding: padding,
-            useBias: false
+            padding: padding
         );
 
         // Squeeze-and-Excitation
@@ -380,8 +387,7 @@ internal class MBConvBlock<T>
             outChannels: outChannels,
             kernelSize: 1,
             stride: 1,
-            padding: 0,
-            useBias: false
+            padding: 0
         );
     }
 

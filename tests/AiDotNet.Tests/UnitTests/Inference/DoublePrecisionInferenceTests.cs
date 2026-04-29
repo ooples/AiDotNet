@@ -64,7 +64,7 @@ public class DoublePrecisionInferenceTests
         int seqLen = 4;
         int embDim = 32;
         int numHeads = 4;
-        var layer = new MultiHeadAttentionLayer<double>(seqLen, embDim, numHeads);
+        var layer = new MultiHeadAttentionLayer<double>(numHeads, (embDim) / (numHeads));
 
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
@@ -79,7 +79,7 @@ public class DoublePrecisionInferenceTests
         int seqLen = 4;
         int embDim = 32;
         int numHeads = 4;
-        var layer = new MultiHeadAttentionLayer<double>(seqLen, embDim, numHeads);
+        var layer = new MultiHeadAttentionLayer<double>(numHeads, (embDim) / (numHeads));
         layer.ConfigurePositionalEncoding(PositionalEncodingType.Rotary);
 
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
@@ -95,7 +95,7 @@ public class DoublePrecisionInferenceTests
         int seqLen = 4;
         int embDim = 32;
         int numHeads = 4;
-        var layer = new MultiHeadAttentionLayer<double>(seqLen, embDim, numHeads);
+        var layer = new MultiHeadAttentionLayer<double>(numHeads, (embDim) / (numHeads));
         layer.ConfigurePositionalEncoding(PositionalEncodingType.ALiBi);
 
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });

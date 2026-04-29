@@ -51,8 +51,7 @@ internal class YOLOHead<T>
                 outChannels: outputChannels,
                 kernelSize: 1,
                 stride: 1,
-                padding: 0,
-                useBias: true
+                padding: 0
             ));
         }
     }

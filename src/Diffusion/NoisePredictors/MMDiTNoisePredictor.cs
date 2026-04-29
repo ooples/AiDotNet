@@ -267,7 +267,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         _contextProj = LazyDense(_contextDim, _hiddenSize);
 
         // Final layers
-        _finalNorm = new LayerNormalizationLayer<T>(_hiddenSize);
+        _finalNorm = new LayerNormalizationLayer<T>();
         _adalnModulation = LazyDense(timeEmbedDim, _hiddenSize * 2);
         _outputProj = LazyDense(_hiddenSize, patchDim);
 
@@ -312,15 +312,15 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         return new MMDiTBlock
         {
             // Image stream
-            ImageNorm1 = new LayerNormalizationLayer<T>(_hiddenSize),
-            ImageNorm2 = new LayerNormalizationLayer<T>(_hiddenSize),
+            ImageNorm1 = new LayerNormalizationLayer<T>(),
+            ImageNorm2 = new LayerNormalizationLayer<T>(),
             ImageMLP1 = LazyDense(_hiddenSize, mlpHidden, new GELUActivation<T>()),
             ImageMLP2 = LazyDense(mlpHidden, _hiddenSize),
             ImageAdaLN = LazyDense(timeEmbedDim, _hiddenSize * 6),
 
             // Text stream
-            TextNorm1 = new LayerNormalizationLayer<T>(_hiddenSize),
-            TextNorm2 = new LayerNormalizationLayer<T>(_hiddenSize),
+            TextNorm1 = new LayerNormalizationLayer<T>(),
+            TextNorm2 = new LayerNormalizationLayer<T>(),
             TextMLP1 = LazyDense(_hiddenSize, mlpHidden, new GELUActivation<T>()),
             TextMLP2 = LazyDense(mlpHidden, _hiddenSize),
             TextAdaLN = LazyDense(timeEmbedDim, _hiddenSize * 6),
@@ -346,7 +346,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         {
             _singleBlocks.Add(new MMDiTSingleBlock
             {
-                Norm = new LayerNormalizationLayer<T>(_hiddenSize),
+                Norm = new LayerNormalizationLayer<T>(),
                 QProj = LazyDense(_hiddenSize, _hiddenSize),
                 KProj = LazyDense(_hiddenSize, _hiddenSize),
                 VProj = LazyDense(_hiddenSize, _hiddenSize),

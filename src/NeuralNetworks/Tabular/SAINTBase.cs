@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -116,7 +116,6 @@ public abstract class SAINTBase<T>
 
         // Numerical feature embedding
         _numericalEmbedding = new FullyConnectedLayer<T>(
-            1,
             Options.EmbeddingDimension,
             Options.HiddenActivation ?? new GELUActivation<T>());
 
@@ -153,23 +152,16 @@ public abstract class SAINTBase<T>
         for (int i = 0; i < Options.NumLayers; i++)
         {
             // Column attention layer
-            _columnAttentionLayers.Add(new MultiHeadAttentionLayer<T>(
-                Options.EmbeddingDimension,
-                Options.NumHeads,
-                Options.EmbeddingDimension / Options.NumHeads));
+            _columnAttentionLayers.Add(new MultiHeadAttentionLayer<T>(Options.EmbeddingDimension / Options.NumHeads, (Options.NumHeads) / (Options.EmbeddingDimension / Options.NumHeads)));
 
             // Row attention layer (if enabled)
             if (Options.UseIntersampleAttention)
             {
-                (_rowAttentionLayers ?? throw new InvalidOperationException("Row attention layers not initialized.")).Add(new MultiHeadAttentionLayer<T>(
-                    Options.EmbeddingDimension,
-                    Options.NumHeads,
-                    Options.EmbeddingDimension / Options.NumHeads));
+                (_rowAttentionLayers ?? throw new InvalidOperationException("Row attention layers not initialized.")).Add(new MultiHeadAttentionLayer<T>(Options.EmbeddingDimension / Options.NumHeads, (Options.NumHeads) / (Options.EmbeddingDimension / Options.NumHeads)));
             }
 
             // Feed-forward network
             _ffnLayers.Add(new FullyConnectedLayer<T>(
-                Options.EmbeddingDimension,
                 Options.EmbeddingDimension,
                 Options.HiddenActivation ?? new GELUActivation<T>()));
 
@@ -177,11 +169,11 @@ public abstract class SAINTBase<T>
             if (Options.UseLayerNorm)
             {
                 var layerNorms = _layerNorms ?? throw new InvalidOperationException("Layer norms not initialized.");
-                layerNorms.Add(new LayerNormalizationLayer<T>(Options.EmbeddingDimension));
-                layerNorms.Add(new LayerNormalizationLayer<T>(Options.EmbeddingDimension));
+                layerNorms.Add(new LayerNormalizationLayer<T>());
+                layerNorms.Add(new LayerNormalizationLayer<T>());
                 if (Options.UseIntersampleAttention)
                 {
-                    layerNorms.Add(new LayerNormalizationLayer<T>(Options.EmbeddingDimension));
+                    layerNorms.Add(new LayerNormalizationLayer<T>());
                 }
             }
         }
@@ -192,7 +184,6 @@ public abstract class SAINTBase<T>
         foreach (var hiddenDim in Options.MLPHiddenDimensions)
         {
             _mlpLayers.Add(new FullyConnectedLayer<T>(
-                mlpInput,
                 hiddenDim,
                 Options.HiddenActivation ?? new GELUActivation<T>()));
             mlpInput = hiddenDim;

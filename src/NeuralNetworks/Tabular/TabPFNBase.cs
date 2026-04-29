@@ -120,7 +120,6 @@ public abstract class TabPFNBase<T>
 
         // Feature encoder
         _featureEncoder = new FullyConnectedLayer<T>(
-            numNumericalFeatures,
             embDim,
             Options.HiddenActivation ?? new GELUActivation<T>());
 
@@ -131,7 +130,6 @@ public abstract class TabPFNBase<T>
         for (int i = 0; i < cardinalities.Length; i++)
         {
             _categoricalEncoders[i] = new FullyConnectedLayer<T>(
-                cardinalities[i],
                 embDim,
                 (IActivationFunction<T>?)null);
         }
@@ -165,13 +163,12 @@ public abstract class TabPFNBase<T>
         {
             bool isLast = i == mlpDims.Length - 1;
             _outputMLP[i] = new FullyConnectedLayer<T>(
-                inputDim,
                 mlpDims[i],
                 isLast ? null : Options.HiddenActivation ?? new GELUActivation<T>());
             inputDim = mlpDims[i];
         }
 
-        _finalNorm = new LayerNormalizationLayer<T>(mlpDims[^1]);
+        _finalNorm = new LayerNormalizationLayer<T>();
     }
 
     /// <summary>
@@ -477,18 +474,16 @@ public abstract class TabPFNBase<T>
 
             // Feed-forward network
             _ff1 = new FullyConnectedLayer<TBlock>(
-                embeddingDim,
                 ffDim,
                 new GELUActivation<TBlock>() as IActivationFunction<TBlock>);
 
             _ff2 = new FullyConnectedLayer<TBlock>(
-                ffDim,
                 embeddingDim,
                 (IActivationFunction<TBlock>?)null);
 
             // Layer normalizations
-            _norm1 = new LayerNormalizationLayer<TBlock>(embeddingDim);
-            _norm2 = new LayerNormalizationLayer<TBlock>(embeddingDim);
+            _norm1 = new LayerNormalizationLayer<TBlock>();
+            _norm2 = new LayerNormalizationLayer<TBlock>();
         }
 
         private static Tensor<TBlock> InitializeWeights(int[] shape, double scale, Random random)

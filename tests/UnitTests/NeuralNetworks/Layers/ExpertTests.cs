@@ -18,8 +18,8 @@ public class ExpertTests
         // Arrange
         var layers = new List<ILayer<float>>
         {
-            new DenseLayer<float>(10, 20, new ReLUActivation<float>()),
-            new DenseLayer<float>(20, 10, new ReLUActivation<float>())
+            new DenseLayer<float>(20, new ReLUActivation<float>()),
+            new DenseLayer<float>(10, new ReLUActivation<float>())
         };
 
         // Act
@@ -58,8 +58,8 @@ public class ExpertTests
         // Arrange
         var layers = new List<ILayer<float>>
         {
-            new DenseLayer<float>(10, 20, new ReLUActivation<float>()),
-            new DenseLayer<float>(20, 10, new ReLUActivation<float>())
+            new DenseLayer<float>(20, new ReLUActivation<float>()),
+            new DenseLayer<float>(10, new ReLUActivation<float>())
         };
         var expert = new Expert<float>(layers, new[] { 10 }, new[] { 10 });
         var input = new Tensor<float>(new[] { 1, 10 });
@@ -83,8 +83,8 @@ public class ExpertTests
         // Arrange
         var layers = new List<ILayer<float>>
         {
-            new DenseLayer<float>(5, 3, new ReLUActivation<float>()),
-            new DenseLayer<float>(3, 2, new ReLUActivation<float>())
+            new DenseLayer<float>(3, new ReLUActivation<float>()),
+            new DenseLayer<float>(2, new ReLUActivation<float>())
         };
         var expert = new Expert<float>(layers, new[] { 5 }, new[] { 2 });
         var input = new Tensor<float>(new[] { 1, 5 });
@@ -122,8 +122,8 @@ public class ExpertTests
         // Arrange
         var layers = new List<ILayer<float>>
         {
-            new DenseLayer<float>(5, 3, new ReLUActivation<float>()),
-            new DenseLayer<float>(3, 2, new ReLUActivation<float>())
+            new DenseLayer<float>(3, new ReLUActivation<float>()),
+            new DenseLayer<float>(2, new ReLUActivation<float>())
         };
         var expert = new Expert<float>(layers, new[] { 5 }, new[] { 2 });
 
@@ -142,8 +142,8 @@ public class ExpertTests
         // Arrange
         var layers = new List<ILayer<float>>
         {
-            new DenseLayer<float>(5, 3, new ReLUActivation<float>()),
-            new DenseLayer<float>(3, 2, new ReLUActivation<float>())
+            new DenseLayer<float>(3, new ReLUActivation<float>()),
+            new DenseLayer<float>(2, new ReLUActivation<float>())
         };
         var expert = new Expert<float>(layers, new[] { 5 }, new[] { 2 });
 
@@ -167,7 +167,7 @@ public class ExpertTests
         // Arrange
         var layers = new List<ILayer<float>>
         {
-            new DenseLayer<float>(5, 3, new ReLUActivation<float>())
+            new DenseLayer<float>(3, new ReLUActivation<float>())
         };
         var expert = new Expert<float>(layers, new[] { 5 }, new[] { 3 });
         var wrongSizeParams = new Vector<float>(new float[10]); // Wrong size
@@ -182,7 +182,7 @@ public class ExpertTests
         // Arrange
         var layers = new List<ILayer<float>>
         {
-            new DenseLayer<float>(5, 5, new ReLUActivation<float>())
+            new DenseLayer<float>(5, new ReLUActivation<float>())
         };
         var expert = new Expert<float>(layers, new[] { 5 }, new[] { 5 });
         var input = new Tensor<float>(new[] { 1, 5 });
@@ -205,8 +205,8 @@ public class ExpertTests
     public async Task ParameterCount_ReflectsSumOfAllLayers()
     {
         // Arrange
-        var layer1 = new DenseLayer<float>(10, 5); // 10*5 + 5 = 55 parameters
-        var layer2 = new DenseLayer<float>(5, 3);  // 5*3 + 3 = 18 parameters
+        var layer1 = new DenseLayer<float>(5); // 10*5 + 5 = 55 parameters
+        var layer2 = new DenseLayer<float>(3);  // 5*3 + 3 = 18 parameters
         var layers = new List<ILayer<float>> { layer1, layer2 };
 
         var expert = new Expert<float>(layers, new[] { 10 }, new[] { 3 });
@@ -225,7 +225,7 @@ public class ExpertTests
         // Arrange
         var layers = new List<ILayer<float>>
         {
-            new DenseLayer<float>(5, 3, new ReLUActivation<float>())
+            new DenseLayer<float>(3, new ReLUActivation<float>())
         };
         var expert = new Expert<float>(layers, new[] { 5 }, new[] { 3 });
 

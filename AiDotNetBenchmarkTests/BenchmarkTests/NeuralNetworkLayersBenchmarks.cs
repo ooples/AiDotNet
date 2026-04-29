@@ -56,11 +56,11 @@ public class NeuralNetworkLayersBenchmarks
 
         // Initialize layers with explicit activation function to avoid ambiguity
         IActivationFunction<double> relu = new ReLUActivation<double>();
-        _denseLayer = new DenseLayer<double>(InputSize, OutputSize, relu);
-        _activationLayer = new ActivationLayer<double>(new[] { BatchSize, InputSize }, relu);
+        _denseLayer = new DenseLayer<double>(OutputSize, relu);
+        _activationLayer = new ActivationLayer<double>(relu);
         _dropoutLayer = new DropoutLayer<double>(dropoutRate: 0.5);
-        _batchNormLayer = new BatchNormalizationLayer<double>(InputSize);
-        _layerNormLayer = new LayerNormalizationLayer<double>(InputSize);
+        _batchNormLayer = new BatchNormalizationLayer<double>();
+        _layerNormLayer = new LayerNormalizationLayer<double>();
     }
 
     #region Dense Layer
@@ -178,14 +178,14 @@ public class NeuralNetworkLayersBenchmarks
     public DenseLayer<double> DenseLayer_Create()
     {
         IActivationFunction<double> relu = new ReLUActivation<double>();
-        return new DenseLayer<double>(InputSize, OutputSize, relu);
+        return new DenseLayer<double>(OutputSize, relu);
     }
 
     [Benchmark]
     public ActivationLayer<double> ActivationLayer_Create()
     {
         IActivationFunction<double> relu = new ReLUActivation<double>();
-        return new ActivationLayer<double>(new[] { BatchSize, InputSize }, relu);
+        return new ActivationLayer<double>(relu);
     }
 
     [Benchmark]

@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Capsule)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.Routing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, UsesSurrogateGradient = true, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 2, 4, 3")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, UsesSurrogateGradient = true, TestInputShape = "4, 8", TestConstructorArgs = "2, 4, 3")]
 public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -186,8 +186,8 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// helps decide if they should be grouped together as a face.
     /// </para>
     /// </remarks>
-    public CapsuleLayer(int inputCapsules, int inputDimension, int numCapsules, int capsuleDimension, int numRoutingIterations, IActivationFunction<T>? activationFunction = null)
-        : base([inputCapsules, inputDimension], [numCapsules, capsuleDimension], activationFunction ?? new SquashActivation<T>())
+    public CapsuleLayer(int numCapsules, int capsuleDimension, int numRoutingIterations, IActivationFunction<T>? activationFunction = null)
+        : base(new[] { -1, -1 }, new[] { numCapsules, capsuleDimension }, activationFunction ?? new SquashActivation<T>())
     {
         if (numRoutingIterations < 1)
         {
@@ -201,13 +201,26 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _capsuleDimension = capsuleDimension;
         _numRoutingIterations = numRoutingIterations;
 
-        _transformationMatrix = new Tensor<T>([inputCapsules, inputDimension, numCapsules, capsuleDimension]);
+        _transformationMatrix = new Tensor<T>([0, 0, 0, 0]);
         _bias = new Tensor<T>([numCapsules * capsuleDimension]);
+    }
 
+    /// <inheritdoc/>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 2)
+            throw new ArgumentException(
+                $"CapsuleLayer requires rank>=2 input [...,inputCapsules,inputDimension]; got rank {rank}.", nameof(input));
+
+        int inputCapsules = input.Shape[rank - 2];
+        int inputDimension = input.Shape[rank - 1];
+        _transformationMatrix = new Tensor<T>([inputCapsules, inputDimension, _numCapsules, _capsuleDimension]);
         InitializeParameters();
-
         RegisterTrainableParameter(_transformationMatrix, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
+
+        ResolveShapes(new[] { inputCapsules, inputDimension }, new[] { _numCapsules, _capsuleDimension });
     }
 
     /// <summary>
@@ -467,6 +480,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;

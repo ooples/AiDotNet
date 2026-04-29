@@ -71,18 +71,13 @@ public class ContextEncoder<T>
         _headDim = embeddingDim / numHeads;
 
         // Cross-attention projections
-        _queryProjection = new FullyConnectedLayer<T>(
-            embeddingDim, embeddingDim, (IActivationFunction<T>?)null);
-        _keyProjection = new FullyConnectedLayer<T>(
-            embeddingDim, embeddingDim, (IActivationFunction<T>?)null);
-        _valueProjection = new FullyConnectedLayer<T>(
-            embeddingDim, embeddingDim, (IActivationFunction<T>?)null);
-        _outputProjection = new FullyConnectedLayer<T>(
-            embeddingDim, embeddingDim, (IActivationFunction<T>?)null);
+        _queryProjection = new FullyConnectedLayer<T>(embeddingDim, (IActivationFunction<T>?)null);
+        _keyProjection = new FullyConnectedLayer<T>(embeddingDim, (IActivationFunction<T>?)null);
+        _valueProjection = new FullyConnectedLayer<T>(embeddingDim, (IActivationFunction<T>?)null);
+        _outputProjection = new FullyConnectedLayer<T>(embeddingDim, (IActivationFunction<T>?)null);
 
         // Label embedding to same dimension as values
-        _labelEmbedding = new FullyConnectedLayer<T>(
-            labelDim, embeddingDim, new ReLUActivation<T>() as IActivationFunction<T>);
+        _labelEmbedding = new FullyConnectedLayer<T>(embeddingDim, new ReLUActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>

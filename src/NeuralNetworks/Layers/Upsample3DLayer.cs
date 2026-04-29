@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Upsampling)]
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.VolumetricProcessing)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "new[] { 1, 4, 4, 4 }, 2")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "2")]
 public class Upsample3DLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -141,8 +141,8 @@ public class Upsample3DLayer<T> : LayerBase<T>
     /// - Each voxel becomes a 2×2×2 block
     /// </para>
     /// </remarks>
-    public Upsample3DLayer(int[] inputShape, int scaleFactor)
-        : this(inputShape, scaleFactor, scaleFactor, scaleFactor)
+    public Upsample3DLayer(int scaleFactor)
+        : this(scaleFactor, scaleFactor, scaleFactor)
     {
     }
 
@@ -163,14 +163,35 @@ public class Upsample3DLayer<T> : LayerBase<T>
     /// - Video data where temporal and spatial scales differ
     /// </para>
     /// </remarks>
-    public Upsample3DLayer(int[] inputShape, int scaleDepth, int scaleHeight, int scaleWidth)
-        : base(inputShape, CalculateOutputShape(inputShape, scaleDepth, scaleHeight, scaleWidth))
+    public Upsample3DLayer(int scaleDepth, int scaleHeight, int scaleWidth)
+        : base(new[] { -1, -1, -1, -1 }, new[] { -1, -1, -1, -1 })
     {
-        ValidateParameters(inputShape, scaleDepth, scaleHeight, scaleWidth);
+        if (scaleDepth <= 0) throw new ArgumentOutOfRangeException(nameof(scaleDepth));
+        if (scaleHeight <= 0) throw new ArgumentOutOfRangeException(nameof(scaleHeight));
+        if (scaleWidth <= 0) throw new ArgumentOutOfRangeException(nameof(scaleWidth));
 
         ScaleDepth = scaleDepth;
         ScaleHeight = scaleHeight;
         ScaleWidth = scaleWidth;
+    }
+
+    /// <summary>
+    /// Resolves channel/spatial dims and registers the resolved output shape on first forward.
+    /// Output dims: [C, D*scaleDepth, H*scaleHeight, W*scaleWidth].
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        int c, d, h, w;
+        if (rank == 5) { c = input.Shape[1]; d = input.Shape[2]; h = input.Shape[3]; w = input.Shape[4]; }
+        else if (rank == 4) { c = input.Shape[0]; d = input.Shape[1]; h = input.Shape[2]; w = input.Shape[3]; }
+        else throw new ArgumentException(
+            $"Upsample3DLayer requires rank-4 [C,D,H,W] or rank-5 [B,C,D,H,W] input; got rank {rank}.",
+            nameof(input));
+
+        ResolveShapes(
+            new[] { c, d, h, w },
+            new[] { c, d * ScaleDepth, h * ScaleHeight, w * ScaleWidth });
     }
 
     #endregion
@@ -239,6 +260,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
         _originalInputShape = input._shape;
         int rank = input.Rank;
@@ -417,7 +439,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
     /// <returns>A new instance of the <see cref="Upsample3DLayer{T}"/> with identical configuration.</returns>
     public override LayerBase<T> Clone()
     {
-        return new Upsample3DLayer<T>(InputShape, ScaleDepth, ScaleHeight, ScaleWidth);
+        return new Upsample3DLayer<T>(ScaleDepth, ScaleHeight, ScaleWidth);
     }
 
     #endregion
@@ -513,7 +535,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
         var scaleH = reader.ReadInt32();
         var scaleW = reader.ReadInt32();
 
-        return new Upsample3DLayer<T>(inputShape, scaleD, scaleH, scaleW);
+        return new Upsample3DLayer<T>(scaleD, scaleH, scaleW);
     }
 
     #endregion

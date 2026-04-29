@@ -272,7 +272,7 @@ public class MemoryManagementTests : DiffusionUnitTestBase
         // Arrange
         var layers = CreateSimpleLayers(4);
         var shard = new ModelShard<float>(layers, numDevices: 2);
-        var unknownLayer = new DenseLayer<float>(10, 10, (IActivationFunction<float>?)null);
+        var unknownLayer = new DenseLayer<float>(10, (IActivationFunction<float>?)null);
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
@@ -402,7 +402,7 @@ public class MemoryManagementTests : DiffusionUnitTestBase
         for (int i = 0; i < count; i++)
         {
             // Use real DenseLayer for testing
-            layers[i] = new DenseLayer<float>(64, 64, (IActivationFunction<float>?)null);
+            layers[i] = new DenseLayer<float>(64, (IActivationFunction<float>?)null);
         }
         return layers;
     }

@@ -78,7 +78,6 @@ public class MambularRegression<T> : MambularBase<T>
         _outputDimension = outputDimension;
 
         _regressionHead = new FullyConnectedLayer<T>(
-            MLPOutputDimension,
             outputDimension,
             (IActivationFunction<T>?)null);
     }

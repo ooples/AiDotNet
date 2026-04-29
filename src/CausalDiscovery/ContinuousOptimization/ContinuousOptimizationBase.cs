@@ -31,10 +31,8 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     protected double Lambda1 { get; set; } = 0.1;
 
     /// <summary>
-    /// Edge weight threshold for post-optimization pruning.
-    /// </summary>
-    /// <summary>
-    /// Edge weight threshold for pruning. Default matches the NOTEARS reference implementation (0.3).
+    /// Edge weight threshold for post-optimization pruning. Default matches the NOTEARS
+    /// reference implementation (0.3).
     /// </summary>
     protected double WThreshold { get; set; } = 0.3;
 
@@ -54,22 +52,65 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     protected string LossType { get; set; } = "l2";
 
     /// <summary>
-    /// Applies common options from CausalDiscoveryOptions to the algorithm parameters.
+    /// Applies common options from <see cref="CausalDiscoveryOptions"/> to the algorithm
+    /// parameters. All values are validated before assignment so that invalid external
+    /// input fails fast with a clear message instead of silently corrupting optimization
+    /// behavior.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when any provided option is outside its accepted range.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <c>LossType</c> is not one of <c>"l2"</c>, <c>"logistic"</c>, <c>"poisson"</c>.
+    /// </exception>
     protected void ApplyOptions(Models.Options.CausalDiscoveryOptions? options)
     {
         if (options == null) return;
 
         if (options.SparsityPenalty.HasValue)
+        {
+            if (options.SparsityPenalty.Value < 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(options.SparsityPenalty),
+                    $"SparsityPenalty must be >= 0; got {options.SparsityPenalty.Value}.");
             Lambda1 = options.SparsityPenalty.Value;
+        }
         if (options.EdgeThreshold.HasValue)
+        {
+            if (options.EdgeThreshold.Value < 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(options.EdgeThreshold),
+                    $"EdgeThreshold must be >= 0; got {options.EdgeThreshold.Value}.");
             WThreshold = options.EdgeThreshold.Value;
+        }
         if (options.MaxIterations.HasValue)
+        {
+            if (options.MaxIterations.Value <= 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(options.MaxIterations),
+                    $"MaxIterations must be > 0; got {options.MaxIterations.Value}.");
             MaxIterations = options.MaxIterations.Value;
+        }
         if (options.AcyclicityTolerance.HasValue)
+        {
+            if (options.AcyclicityTolerance.Value <= 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(options.AcyclicityTolerance),
+                    $"AcyclicityTolerance must be > 0; got {options.AcyclicityTolerance.Value}.");
             HTolerance = options.AcyclicityTolerance.Value;
+        }
         if (options.LossType != null)
-            LossType = options.LossType;
+        {
+            // Normalize to lowercase + trim so callers passing "L2" or " l2 " hit the
+            // same code path as "l2". The downstream loss dispatch uses lowercase tokens.
+            var normalized = options.LossType.Trim().ToLowerInvariant();
+            if (normalized is not ("l2" or "logistic" or "poisson"))
+                throw new ArgumentException(
+                    $"LossType must be one of 'l2', 'logistic', 'poisson' " +
+                    $"(case-insensitive, whitespace trimmed); got '{options.LossType}'.",
+                    nameof(options.LossType));
+            LossType = normalized;
+        }
     }
 
     /// <summary>
@@ -136,12 +177,16 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
         // h = tr(expMatrix) - d
         double h = NumOps.ToDouble(expMatrix.Trace()) - d;
 
-        // Gradient: dh/dW = 2 * e^(W∘W) ∘ W
+        // Gradient: dh/dW = 2 * (e^(W∘W))^T ∘ W
+        // The transpose is required because h(W) = tr(exp(W∘W)) - d differentiates to
+        // (exp(W∘W))^T element-wise multiplied with d(W∘W)/dW = 2W. Reading expMatrix[i, j]
+        // without the transpose flips the derivative direction and steers NOTEARS away
+        // from the acyclic optimum.
         T two = NumOps.FromDouble(2.0);
         var gradient = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
-                gradient[i, j] = NumOps.Multiply(two, NumOps.Multiply(expMatrix[i, j], W[i, j]));
+                gradient[i, j] = NumOps.Multiply(two, NumOps.Multiply(expMatrix[j, i], W[i, j]));
 
         return (h, gradient);
     }
@@ -280,9 +325,12 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
             T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-15)));
 
             // Standardize and add tiny column-specific perturbation to break exact collinearity.
-            // Scale factor: (1 + 1e-4 * (j+1)) makes each column slightly different,
-            // breaking symmetric saddle points without changing statistical properties.
-            double perturbScale = 1.0 + 1e-4 * (j + 1);
+            // The perturbation must stay numerically negligible regardless of dimensionality,
+            // so we use a small base step (1e-8) and modulo-cycle the column index. This keeps
+            // the maximum perturbation bounded at ~ 1e-6 even at d ≈ 100 columns, instead of
+            // growing linearly to 1e-2 with the previous (1 + 1e-4 * (j+1)) scheme.
+            const double perturbBase = 1e-8;
+            double perturbScale = 1.0 + perturbBase * ((j % 97) + 1);
             T perturbT = NumOps.FromDouble(perturbScale);
             for (int i = 0; i < n; i++)
                 result[i, j] = NumOps.Multiply(NumOps.Divide(NumOps.Subtract(data[i, j], mean), std), perturbT);

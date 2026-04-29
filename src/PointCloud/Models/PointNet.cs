@@ -252,7 +252,6 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
         if (_classifierChannels.Length == 0)
         {
             var outputLayer = new DenseLayer<T>(
-                classifierInput,
                 _numClasses,
                 activationFunction: new IdentityActivation<T>());
             AddLayerToCollection(outputLayer);
@@ -263,7 +262,6 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
         foreach (var hidden in _classifierChannels)
         {
             var dense = new DenseLayer<T>(
-                classifierInput,
                 hidden,
                 activationFunction: new ReLUActivation<T>());
             AddLayerToCollection(dense);
@@ -279,7 +277,6 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
         }
 
         var output = new DenseLayer<T>(
-            classifierInput,
             _numClasses,
             activationFunction: new IdentityActivation<T>());
         AddLayerToCollection(output);

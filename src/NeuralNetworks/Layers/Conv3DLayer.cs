@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.VolumetricProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "1, 2, 3, 4, 4, 4, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)new AiDotNet.ActivationFunctions.LeakyReLUActivation<double>()")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)new AiDotNet.ActivationFunctions.LeakyReLUActivation<double>()")]
 public partial class Conv3DLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -250,39 +250,62 @@ public partial class Conv3DLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public Conv3DLayer(
-        int inputChannels,
         int outputChannels,
         int kernelSize,
-        int inputDepth,
-        int inputHeight,
-        int inputWidth,
         int stride = 1,
         int padding = 0,
         IActivationFunction<T>? activationFunction = null)
-        : base(
-            CalculateInputShape(inputChannels, inputDepth, inputHeight, inputWidth),
-            CalculateOutputShape(outputChannels, inputDepth, inputHeight, inputWidth, kernelSize, stride, padding),
+        : base(new[] { -1, -1, -1, -1 }, new[] { outputChannels, -1, -1, -1 },
             activationFunction ?? new ReLUActivation<T>())
     {
-        ValidateParameters(inputChannels, outputChannels, kernelSize, inputDepth, inputHeight, inputWidth, stride);
+        if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
+        if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding));
 
-        InputChannels = inputChannels;
+        InputChannels = -1;
         OutputChannels = outputChannels;
         KernelSize = kernelSize;
         Stride = stride;
         Padding = padding;
-        _inputDepth = inputDepth;
-        _inputHeight = inputHeight;
-        _inputWidth = inputWidth;
+        _inputDepth = -1;
+        _inputHeight = -1;
+        _inputWidth = -1;
 
-        _kernels = new Tensor<T>([outputChannels, inputChannels, kernelSize, kernelSize, kernelSize]);
-        _biases = new Tensor<T>([outputChannels]);
+        _kernels = new Tensor<T>([0, 0, 0, 0, 0]);
+        _biases = new Tensor<T>([0]);
+    }
 
+    /// <summary>
+    /// Resolves input shape (channels, depth, height, width) on first forward (PyTorch-style).
+    /// Allocates kernels [outputChannels, inputChannels, K, K, K] and biases [outputChannels].
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        int c, d, h, w;
+        if (rank == 5) { c = input.Shape[1]; d = input.Shape[2]; h = input.Shape[3]; w = input.Shape[4]; }
+        else if (rank == 4) { c = input.Shape[0]; d = input.Shape[1]; h = input.Shape[2]; w = input.Shape[3]; }
+        else throw new ArgumentException(
+            $"Conv3DLayer requires rank-4 [C,D,H,W] or rank-5 [B,C,D,H,W] input; got rank {rank}.",
+            nameof(input));
+
+        InputChannels = c;
+        _inputDepth = d;
+        _inputHeight = h;
+        _inputWidth = w;
+
+        int outD = (d + 2 * Padding - KernelSize) / Stride + 1;
+        int outH = (h + 2 * Padding - KernelSize) / Stride + 1;
+        int outW = (w + 2 * Padding - KernelSize) / Stride + 1;
+
+        _kernels = new Tensor<T>([OutputChannels, c, KernelSize, KernelSize, KernelSize]);
+        _biases = new Tensor<T>([OutputChannels]);
         InitializeWeights();
-
-        // Register trainable parameters for GPU memory persistence
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+        ResolveShapes(new[] { c, d, h, w }, new[] { OutputChannels, outD, outH, outW });
     }
 
     /// <summary>
@@ -304,39 +327,30 @@ public partial class Conv3DLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public Conv3DLayer(
-        int inputChannels,
         int outputChannels,
         int kernelSize,
-        int inputDepth,
-        int inputHeight,
-        int inputWidth,
-        int stride = 1,
-        int padding = 0,
-        IVectorActivationFunction<T>? vectorActivationFunction = null)
-        : base(
-            CalculateInputShape(inputChannels, inputDepth, inputHeight, inputWidth),
-            CalculateOutputShape(outputChannels, inputDepth, inputHeight, inputWidth, kernelSize, stride, padding),
-            vectorActivationFunction ?? new ReLUActivation<T>())
+        int stride,
+        int padding,
+        IVectorActivationFunction<T> vectorActivationFunction)
+        : base(new[] { -1, -1, -1, -1 }, new[] { outputChannels, -1, -1, -1 },
+            vectorActivationFunction)
     {
-        ValidateParameters(inputChannels, outputChannels, kernelSize, inputDepth, inputHeight, inputWidth, stride);
+        if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
+        if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding));
 
-        InputChannels = inputChannels;
+        InputChannels = -1;
         OutputChannels = outputChannels;
         KernelSize = kernelSize;
         Stride = stride;
         Padding = padding;
-        _inputDepth = inputDepth;
-        _inputHeight = inputHeight;
-        _inputWidth = inputWidth;
+        _inputDepth = -1;
+        _inputHeight = -1;
+        _inputWidth = -1;
 
-        _kernels = new Tensor<T>([outputChannels, inputChannels, kernelSize, kernelSize, kernelSize]);
-        _biases = new Tensor<T>([outputChannels]);
-
-        InitializeWeights();
-
-        // Register trainable parameters for GPU memory persistence
-        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        _kernels = new Tensor<T>([0, 0, 0, 0, 0]);
+        _biases = new Tensor<T>([0]);
     }
 
     #endregion
@@ -472,6 +486,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
         _originalInputShape = input._shape;
 
@@ -796,25 +811,17 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         if (UsingVectorActivation)
         {
             copy = new Conv3DLayer<T>(
-                InputChannels,
                 OutputChannels,
                 KernelSize,
-                _inputDepth,
-                _inputHeight,
-                _inputWidth,
                 Stride,
                 Padding,
-                VectorActivation);
+                VectorActivation!);
         }
         else
         {
             copy = new Conv3DLayer<T>(
-                InputChannels,
                 OutputChannels,
                 KernelSize,
-                _inputDepth,
-                _inputHeight,
-                _inputWidth,
                 Stride,
                 Padding,
                 ScalarActivation);

@@ -558,7 +558,7 @@ public class CameraPoseEncoder<T>
     {
         _embedDim = embedDim;
         // Input: sinusoidal encoding of polar, azimuth, radius (3 * 64 = 192)
-        _projection = new DenseLayer<T>(192, embedDim, (IActivationFunction<T>?)null);
+        _projection = new DenseLayer<T>(embedDim, (IActivationFunction<T>?)null);
     }
 
     /// <summary>

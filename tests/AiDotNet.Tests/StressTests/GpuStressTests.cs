@@ -334,8 +334,8 @@ public class GpuStressTests
             AiDotNetEngine.Current = engine; // Wire GPU context for layers
 
             var layer = new ConvolutionalLayer<float>(
-                inputDepth: 32, outputDepth: 64, kernelSize: 3,
-                inputHeight: 28, inputWidth: 28, stride: 1, padding: 1,
+                outputDepth: 64, kernelSize: 3,
+                stride: 1, padding: 1,
                 activationFunction: null);
 
             var input = CreateRandomTensor(new[] { 4, 32, 28, 28 });
@@ -394,9 +394,9 @@ public class GpuStressTests
             AiDotNetEngine.Current = engine; // Wire GPU context for layers
 
             // Build a small CNN: Conv -> ReLU -> Pool -> Conv -> ReLU -> Pool
-            var conv1 = new ConvolutionalLayer<float>(3, 16, 3, 32, 32, 1, 1, (AiDotNet.Interfaces.IActivationFunction<float>?)null);
+            var conv1 = new ConvolutionalLayer<float>(32, 32, 1, 1, (AiDotNet.Interfaces.IActivationFunction<float>?)null);
             var pool1 = new PoolingLayer<float>(16, 32, 32, 2, 2, PoolingType.Max);
-            var conv2 = new ConvolutionalLayer<float>(16, 32, 3, 16, 16, 1, 1, (AiDotNet.Interfaces.IActivationFunction<float>?)null);
+            var conv2 = new ConvolutionalLayer<float>(16, 16, 1, 1, (AiDotNet.Interfaces.IActivationFunction<float>?)null);
             var pool2 = new PoolingLayer<float>(32, 16, 16, 2, 2, PoolingType.Max);
 
             var input = CreateRandomTensor(new[] { 2, 3, 32, 32 }); // RGB images

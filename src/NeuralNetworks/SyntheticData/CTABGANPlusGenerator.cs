@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -227,7 +227,7 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
             _genBNLayers.Clear();
             foreach (int dim in _options.GeneratorDimensions)
             {
-                _genBNLayers.Add(new BatchNormalizationLayer<T>(dim));
+                _genBNLayers.Add(new BatchNormalizationLayer<T>());
             }
             _usingCustomLayers = false;
         }
@@ -251,7 +251,7 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
             _genBNLayers.Clear();
             foreach (int dim in _options.GeneratorDimensions)
             {
-                _genBNLayers.Add(new BatchNormalizationLayer<T>(dim));
+                _genBNLayers.Add(new BatchNormalizationLayer<T>());
             }
         }
 
@@ -266,7 +266,7 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
 
         // Build auxiliary classifier head from last hidden dim
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-        _classifierHead = new FullyConnectedLayer<T>(_discLastHiddenDim, _numClasses, identity);
+        _classifierHead = new FullyConnectedLayer<T>(_numClasses, identity);
     }
 
     /// <summary>

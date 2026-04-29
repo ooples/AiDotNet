@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Residual)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }, (AiDotNet.Interfaces.ILayer<double>?)null, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "(AiDotNet.Interfaces.ILayer<double>?)null, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class ResidualLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -244,8 +244,8 @@ public class ResidualLayer<T> : LayerBase<T>
     /// This constructor is for the more common case where you want to use a scalar activation function.
     /// </para>
     /// </remarks>
-    public ResidualLayer(int[] inputShape, ILayer<T>? innerLayer = null, IActivationFunction<T>? activationFunction = null)
-        : base(inputShape, inputShape, activationFunction ?? new IdentityActivation<T>())
+    public ResidualLayer(ILayer<T>? innerLayer = null, IActivationFunction<T>? activationFunction = null)
+        : base(new[] { -1 }, new[] { -1 }, activationFunction ?? new IdentityActivation<T>())
     {
         _innerLayer = innerLayer;
         ValidateInnerLayer();
@@ -278,11 +278,20 @@ public class ResidualLayer<T> : LayerBase<T>
     /// that can capture relationships between different elements in the output.
     /// </para>
     /// </remarks>
-    public ResidualLayer(int[] inputShape, ILayer<T>? innerLayer = null, IVectorActivationFunction<T>? vectorActivation = null)
-        : base(inputShape, inputShape, vectorActivation ?? new IdentityActivation<T>())
+    public ResidualLayer(ILayer<T>? innerLayer, IVectorActivationFunction<T> vectorActivation)
+        : base(new[] { -1 }, new[] { -1 }, vectorActivation ?? new IdentityActivation<T>())
     {
         _innerLayer = innerLayer;
         ValidateInnerLayer();
+    }
+
+    /// <summary>
+    /// Resolves shape on first forward; output equals input shape (skip connection).
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var shape = input.Shape.ToArray();
+        ResolveShapes(shape, shape);
     }
 
     /// <summary>
@@ -368,6 +377,7 @@ public class ResidualLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
         _lastInnerOutput = _innerLayer?.Forward(input);
         var result = _lastInnerOutput == null ? input : Engine.TensorAdd(input, _lastInnerOutput);

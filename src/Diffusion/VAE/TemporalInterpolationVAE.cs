@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -120,18 +120,32 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
         int hiddenChannels = baseChannels * 4;
 
         // Encoder: inputChannels -> baseChannels -> (norm at baseChannels) -> latentChannels*2
-        _encoderIn = new DenseLayer<T>(inputChannels, baseChannels, (IActivationFunction<T>)new GELUActivation<T>());
-        _encoderOut = new DenseLayer<T>(baseChannels, latentChannels * 2, (IActivationFunction<T>)new IdentityActivation<T>());
+        _encoderIn = new DenseLayer<T>(baseChannels, (IActivationFunction<T>)new GELUActivation<T>());
+        _encoderOut = new DenseLayer<T>(latentChannels * 2, (IActivationFunction<T>)new IdentityActivation<T>());
         // Decoder: latentChannels -> hiddenChannels -> (norm at hiddenChannels) -> inputChannels
-        _decoderIn = new DenseLayer<T>(latentChannels, hiddenChannels, (IActivationFunction<T>)new GELUActivation<T>());
-        _decoderOut = new DenseLayer<T>(hiddenChannels, inputChannels, (IActivationFunction<T>)new IdentityActivation<T>());
+        _decoderIn = new DenseLayer<T>(hiddenChannels, (IActivationFunction<T>)new GELUActivation<T>());
+        _decoderOut = new DenseLayer<T>(inputChannels, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        // Interpolation network: takes two latent frames and produces intermediate frame
-        _interpIn = new DenseLayer<T>(latentChannels * 2, hiddenChannels, (IActivationFunction<T>)new GELUActivation<T>());
-        _interpOut = new DenseLayer<T>(hiddenChannels, latentChannels, (IActivationFunction<T>)new IdentityActivation<T>());
+        // Interpolation network: takes concatenated [..., 2*latentChannels] frames and
+        // produces an intermediate frame of [..., latentChannels].
+        _interpIn = new DenseLayer<T>(hiddenChannels, (IActivationFunction<T>)new GELUActivation<T>());
+        _interpOut = new DenseLayer<T>(latentChannels, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        _encoderNorm = new LayerNormalizationLayer<T>(baseChannels);
-        _decoderNorm = new LayerNormalizationLayer<T>(hiddenChannels);
+        _encoderNorm = new LayerNormalizationLayer<T>();
+        _decoderNorm = new LayerNormalizationLayer<T>();
+
+        // Pre-resolve every sublayer from the ctor-known channel topology so that
+        // ParameterCount, GetParameters, SetParameters, Clone, and DeepCopy work
+        // correctly on a freshly constructed VAE — without waiting for the first
+        // Encode/Decode/Interpolate call.
+        _encoderIn.ResolveFromShape(new[] { 1, inputChannels });
+        _encoderNorm.ResolveFromShape(new[] { 1, baseChannels });
+        _encoderOut.ResolveFromShape(new[] { 1, baseChannels });
+        _decoderIn.ResolveFromShape(new[] { 1, latentChannels });
+        _decoderNorm.ResolveFromShape(new[] { 1, hiddenChannels });
+        _decoderOut.ResolveFromShape(new[] { 1, hiddenChannels });
+        _interpIn.ResolveFromShape(new[] { 1, latentChannels * 2 });
+        _interpOut.ResolveFromShape(new[] { 1, hiddenChannels });
     }
 
     /// <inheritdoc />
@@ -321,4 +335,17 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
         }
         return combined;
     }
+    /// <inheritdoc />
+    /// <remarks>
+    /// This concrete VAE does not implement layer-level backprop yet, so the
+    /// exact-gradient path is unsupported. The base class catches this and falls
+    /// through to SPSA in ComputeGradients.
+    /// </remarks>
+    protected override void BackpropagateLossGradient(Tensor<T> lossGradient)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: layer-level BackpropagateLossGradient is not " +
+            "implemented. ComputeGradients will fall through to SPSA.");
+    }
+
 }

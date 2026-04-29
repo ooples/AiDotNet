@@ -86,11 +86,13 @@ public class TemporalSelfAttention<T> : LayerBase<T>
         _numFrames = numFrames;
         _spatialSize = spatialSize;
 
-        _temporalAttention = new MultiHeadAttentionLayer<T>(
-            sequenceLength: numFrames,
-            embeddingDimension: channels,
-            headCount: numHeads,
+        _temporalAttention = new MultiHeadAttentionLayer<T>(numHeads, (channels) / (numHeads),
             activationFunction: new IdentityActivation<T>());
+
+        // Pre-resolve the lazy MHA layer from the ctor-known shape so GetParameters,
+        // SetParameters, ParameterCount, and ONNX export all work on a freshly
+        // constructed instance — without waiting for the first Forward.
+        _temporalAttention.ResolveFromShape(new[] { spatialSize * spatialSize, numFrames, channels });
     }
 
     /// <summary>

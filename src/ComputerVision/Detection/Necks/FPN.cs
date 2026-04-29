@@ -302,4 +302,53 @@ public class FPN<T> : NeckBase<T>
         }
         return result;
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Produces a bit-exact deep copy by reconstructing a fresh instance with the same
+    /// input/output channel configuration and copying every weight tensor element-by-element
+    /// in the native <typeparamref name="T"/> domain. Avoids the binary <c>WriteParameters</c>
+    /// path because that round-trips through <c>double</c> via
+    /// <c>NumOps.ToDouble</c>/<c>NumOps.FromDouble</c>, which is lossy for backends like
+    /// <c>decimal</c>, <c>Half</c>, or other non-<c>double</c> numeric types.
+    /// </remarks>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        var clone = new FPN<T>((int[])_inputChannels.Clone(), _outputChannels);
+        for (int i = 0; i < _numLevels; i++)
+        {
+            CopyTensorInto(_lateralWeights[i], clone._lateralWeights[i]);
+            CopyTensorInto(_lateralBiases[i], clone._lateralBiases[i]);
+            CopyTensorInto(_outputWeights[i], clone._outputWeights[i]);
+            CopyTensorInto(_outputBiases[i], clone._outputBiases[i]);
+        }
+        return clone;
+    }
+
+    /// <summary>
+    /// Copies every element from <paramref name="src"/> into <paramref name="dst"/> in
+    /// native <typeparamref name="T"/> arithmetic. Both tensors must share the same shape.
+    /// </summary>
+    private static void CopyTensorInto(Tensor<T> src, Tensor<T> dst)
+    {
+        if (src.Rank != dst.Rank || src.Length != dst.Length)
+        {
+            throw new InvalidOperationException(
+                $"DeepCopy tensor shape mismatch: src=[{string.Join(",", src._shape)}], " +
+                $"dst=[{string.Join(",", dst._shape)}].");
+        }
+        for (int i = 0; i < src.Rank; i++)
+        {
+            if (src._shape[i] != dst._shape[i])
+            {
+                throw new InvalidOperationException(
+                    $"DeepCopy tensor shape mismatch at axis {i}: src=[{string.Join(",", src._shape)}], " +
+                    $"dst=[{string.Join(",", dst._shape)}].");
+            }
+        }
+        for (int i = 0; i < src.Length; i++)
+        {
+            dst[i] = src[i];
+        }
+    }
 }

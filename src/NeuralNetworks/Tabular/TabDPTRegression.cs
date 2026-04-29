@@ -80,7 +80,6 @@ public class TabDPTRegression<T> : TabDPTBase<T>
         _outputDimension = outputDimension;
 
         _regressionHead = new FullyConnectedLayer<T>(
-            MLPOutputDimension,
             outputDimension,
             (IActivationFunction<T>?)null);
     }

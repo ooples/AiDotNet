@@ -53,9 +53,9 @@ public class FedBNFullModelAggregationStrategyTests
     {
         var layers = new List<ILayer<double>>
         {
-            new DenseLayer<double>(inputSize: 4, outputSize: 4, activationFunction: null),
-            new BatchNormalizationLayer<double>(numFeatures: 4),
-            new DenseLayer<double>(inputSize: 4, outputSize: 2, activationFunction: null)
+            new DenseLayer<double>( outputSize: 4, activationFunction: null),
+            new BatchNormalizationLayer<double>(),
+            new DenseLayer<double>( outputSize: 2, activationFunction: null)
         };
 
         var architecture = new NeuralNetworkArchitecture<double>(

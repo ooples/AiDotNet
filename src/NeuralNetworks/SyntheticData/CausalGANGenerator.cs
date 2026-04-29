@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -223,13 +223,13 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
         {
             // Residual: input dimension includes original input concatenated
             int layerInput = i == 0 ? inputDim : dims[i - 1] + inputDim;
-            Layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-            _genBNLayers.Add(new BatchNormalizationLayer<T>(dims[i]));
+            Layers.Add(new FullyConnectedLayer<T>(dims[i], identity));
+            _genBNLayers.Add(new BatchNormalizationLayer<T>());
         }
 
         // Output layer: produces raw features (no activation)
         int lastHidden = dims.Length > 0 ? dims[^1] + inputDim : inputDim;
-        Layers.Add(new FullyConnectedLayer<T>(lastHidden, outputDim, identity));
+        Layers.Add(new FullyConnectedLayer<T>(outputDim, identity));
     }
 
     /// <summary>
@@ -262,14 +262,14 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
         for (int i = 0; i < dims.Length; i++)
         {
             int layerInput = i == 0 ? inputDim : dims[i - 1];
-            _discLayers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
+            _discLayers.Add(new FullyConnectedLayer<T>(dims[i], identity));
             _discLayerDims.Add((layerInput, dims[i]));
             _discDropoutLayers.Add(new DropoutLayer<T>(_options.DiscriminatorDropout));
         }
 
         // Output layer: single scalar (raw Wasserstein score, no activation)
         int lastHidden = dims.Length > 0 ? dims[^1] : inputDim;
-        _discLayers.Add(new FullyConnectedLayer<T>(lastHidden, 1, identity));
+        _discLayers.Add(new FullyConnectedLayer<T>(1, identity));
         _discLayerDims.Add((lastHidden, 1));
     }
 

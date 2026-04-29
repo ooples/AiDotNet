@@ -655,10 +655,10 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         var concatenated = Engine.TensorConcatenate(new[] { meanPooled, maxPooled, sumPooled }, axis: 1);
 
         // Apply a small neural network to learn the best combination
-        var denseLayer = new DenseLayer<T>(concatenated.Shape[1], concatenated.Shape[1] / 2,
+        var denseLayer = new DenseLayer<T>(concatenated.Shape[1] / 2,
             _finalDenseLayerVectorActivation ?? new ReLUActivation<T>());
         // No separate activation layer needed since activation is included in the dense layer
-        var outputLayer = new DenseLayer<T>(concatenated.Shape[1] / 2, meanPooled.Shape[1],
+        var outputLayer = new DenseLayer<T>(meanPooled.Shape[1],
             _finalActivationLayerVectorActivation ?? new IdentityActivation<T>());
         var activation = new ReLUActivation<T>();
 

@@ -45,7 +45,7 @@ public enum SpatialTransformerDataFormat
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -289,7 +289,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// transformation and sampling operations.
     /// </para>
     /// </remarks>
-    private readonly int _inputHeight;
+    private int _inputHeight;
 
     /// <summary>
     /// The width of the input feature map.
@@ -304,7 +304,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// be transformed by this layer.
     /// </para>
     /// </remarks>
-    private readonly int _inputWidth;
+    private int _inputWidth;
 
     private readonly SpatialTransformerDataFormat _dataFormat;
 
@@ -388,26 +388,26 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// which works well for predicting transformation parameters.
     /// </para>
     /// </remarks>
-    public SpatialTransformerLayer(int inputHeight, int inputWidth, int outputHeight, int outputWidth, IActivationFunction<T>? activationFunction = null, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.Auto)
-        : base([inputHeight, inputWidth], [outputHeight, outputWidth], activationFunction ?? new TanhActivation<T>())
+    public SpatialTransformerLayer(int outputHeight, int outputWidth, IActivationFunction<T>? activationFunction = null, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.Auto)
+        : base(new[] { -1, -1 }, new[] { outputHeight, outputWidth }, activationFunction ?? new TanhActivation<T>())
     {
-        // Initialize auxiliary loss fields first so compiler knows they're set
+        if (outputHeight <= 0) throw new ArgumentOutOfRangeException(nameof(outputHeight));
+        if (outputWidth <= 0) throw new ArgumentOutOfRangeException(nameof(outputWidth));
+
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastTransformationLoss = NumOps.Zero;
 
-        _inputHeight = inputHeight;
-        _inputWidth = inputWidth;
+        _inputHeight = -1;
+        _inputWidth = -1;
         _outputHeight = outputHeight;
         _outputWidth = outputWidth;
         _dataFormat = dataFormat;
 
-        // Initialize localization network weights and biases as Tensor<T>
-        _localizationWeights1 = new Tensor<T>([inputHeight * inputWidth, 32]);
+        // Localization network weights/biases allocated on first forward when input H/W are known
+        _localizationWeights1 = new Tensor<T>([0, 0]);
         _localizationBias1 = new Tensor<T>([32]);
         _localizationWeights2 = new Tensor<T>([32, 6]);
         _localizationBias2 = new Tensor<T>([6]);
-
-        InitializeParameters();
     }
 
     /// <summary>
@@ -434,26 +434,49 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// for their neural networks. For most cases, the basic constructor is sufficient.
     /// </para>
     /// </remarks>
-    public SpatialTransformerLayer(int inputHeight, int inputWidth, int outputHeight, int outputWidth, IVectorActivationFunction<T>? vectorActivationFunction = null, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.Auto)
-        : base([inputHeight, inputWidth], [outputHeight, outputWidth], vectorActivationFunction ?? new TanhActivation<T>())
+    public SpatialTransformerLayer(int outputHeight, int outputWidth, IVectorActivationFunction<T> vectorActivationFunction, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.Auto)
+        : base(new[] { -1, -1 }, new[] { outputHeight, outputWidth }, vectorActivationFunction ?? new TanhActivation<T>())
     {
-        // Initialize auxiliary loss fields first so compiler knows they're set
+        if (outputHeight <= 0) throw new ArgumentOutOfRangeException(nameof(outputHeight));
+        if (outputWidth <= 0) throw new ArgumentOutOfRangeException(nameof(outputWidth));
+
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastTransformationLoss = NumOps.Zero;
 
-        _inputHeight = inputHeight;
-        _inputWidth = inputWidth;
+        _inputHeight = -1;
+        _inputWidth = -1;
         _outputHeight = outputHeight;
         _outputWidth = outputWidth;
         _dataFormat = dataFormat;
 
-        // Initialize localization network weights and biases as Tensor<T>
-        _localizationWeights1 = new Tensor<T>([inputHeight * inputWidth, 32]);
+        _localizationWeights1 = new Tensor<T>([0, 0]);
         _localizationBias1 = new Tensor<T>([32]);
         _localizationWeights2 = new Tensor<T>([32, 6]);
         _localizationBias2 = new Tensor<T>([6]);
+    }
 
+    /// <summary>
+    /// Resolves input H/W on first forward and allocates the localization network weights.
+    /// Locates the spatial dims as the trailing two axes of input.Shape.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 2)
+            throw new ArgumentException(
+                $"SpatialTransformerLayer requires rank>=2 input; got rank {rank}.", nameof(input));
+
+        _inputHeight = input.Shape[rank - 2];
+        _inputWidth = input.Shape[rank - 1];
+
+        _localizationWeights1 = new Tensor<T>([_inputHeight * _inputWidth, 32]);
         InitializeParameters();
+        RegisterTrainableParameter(_localizationWeights1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_localizationBias1, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_localizationWeights2, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_localizationBias2, PersistentTensorRole.Biases);
+
+        ResolveShapes(new[] { _inputHeight, _inputWidth }, new[] { _outputHeight, _outputWidth });
     }
 
     /// <summary>
@@ -557,6 +580,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
         if (rank < 2)

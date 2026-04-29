@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(NormalizesInput = true, IsTrainable = false, ChangesShape = true, TestInputShape = "2, 4", TestConstructorArgs = "new[] { 2, 4 }, 0")]
+[LayerProperty(NormalizesInput = true, IsTrainable = false, ChangesShape = true, TestInputShape = "2, 4", TestConstructorArgs = "0")]
 public class LogVarianceLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -157,10 +157,20 @@ public class LogVarianceLayer<T> : LayerBase<T>
     /// will have one fewer dimension than the input.
     /// </para>
     /// </remarks>
-    public LogVarianceLayer(int[] inputShape, int axis)
-        : base(inputShape, CalculateOutputShape(inputShape, axis))
+    public LogVarianceLayer(int axis)
+        : base(new[] { -1 }, new[] { -1 })
     {
         Axis = axis;
+    }
+
+    /// <summary>
+    /// Resolves shape on first forward by collapsing the axis dim from input.Shape.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var shape = input.Shape.ToArray();
+        var output = CalculateOutputShape(shape, Axis);
+        ResolveShapes(shape, output);
     }
 
     /// <summary>
@@ -230,6 +240,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
 
         // Use Engine operations for GPU/CPU acceleration

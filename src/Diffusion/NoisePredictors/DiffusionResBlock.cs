@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Helpers;
 using AiDotNet.Initialization;
 using AiDotNet.NeuralNetworks.Layers;
@@ -99,9 +99,6 @@ public class DiffusionResBlock<T> : LayerBase<T>
         // U-Nets contain dozens of these blocks and eager allocation OOMs CI.
         _norm1 = new GroupNormalizationLayer<T>(groups1, inChannels);
         _conv1 = new ConvolutionalLayer<T>(
-            inputDepth: inChannels,
-            inputHeight: spatialSize,
-            inputWidth: spatialSize,
             outputDepth: outChannels,
             kernelSize: 3,
             stride: 1,
@@ -111,7 +108,6 @@ public class DiffusionResBlock<T> : LayerBase<T>
 
         // Time embedding projection: projects time embed to outChannels for additive conditioning
         _timeMlp = new DenseLayer<T>(
-            timeEmbedDim > 0 ? timeEmbedDim : 1,
             outChannels,
             (IActivationFunction<T>)new SiLUActivation<T>(),
             InitializationStrategies<T>.Lazy);
@@ -119,9 +115,6 @@ public class DiffusionResBlock<T> : LayerBase<T>
         // Second block: GroupNorm(out) → SiLU → Conv3x3(out→out)
         _norm2 = new GroupNormalizationLayer<T>(groups2, outChannels);
         _conv2 = new ConvolutionalLayer<T>(
-            inputDepth: outChannels,
-            inputHeight: spatialSize,
-            inputWidth: spatialSize,
             outputDepth: outChannels,
             kernelSize: 3,
             stride: 1,
@@ -133,9 +126,6 @@ public class DiffusionResBlock<T> : LayerBase<T>
         if (inChannels != outChannels)
         {
             _skipConv = new ConvolutionalLayer<T>(
-                inputDepth: inChannels,
-                inputHeight: spatialSize,
-                inputWidth: spatialSize,
                 outputDepth: outChannels,
                 kernelSize: 1,
                 stride: 1,

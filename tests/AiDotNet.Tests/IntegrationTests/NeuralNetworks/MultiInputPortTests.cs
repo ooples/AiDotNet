@@ -132,7 +132,7 @@ public class MultiInputPortTests
     [Fact(Timeout = 120000)]
     public async Task SingleInputLayer_NamedForward_WithInputKey_Works()
     {
-        var layer = new DenseLayer<double>(4, 8);
+        var layer = new DenseLayer<double>(8);
 
         var input = Tensor<double>.CreateRandom([1, 4]);
         var inputs = new Dictionary<string, Tensor<double>>
@@ -149,7 +149,7 @@ public class MultiInputPortTests
     [Fact(Timeout = 120000)]
     public async Task SingleInputLayer_InputPorts_DefaultsSingleInput()
     {
-        var layer = new DenseLayer<double>(4, 8);
+        var layer = new DenseLayer<double>(8);
 
         Assert.Single(layer.InputPorts);
         Assert.Equal("input", layer.InputPorts[0].Name);
@@ -163,7 +163,7 @@ public class MultiInputPortTests
     [Fact(Timeout = 120000)]
     public async Task MultiHeadAttention_InputPorts_DeclaresQueryKeyValue()
     {
-        var layer = new MultiHeadAttentionLayer<double>(sequenceLength: 4, embeddingDimension: 8, headCount: 2);
+        var layer = new MultiHeadAttentionLayer<double>(2, (8) / (2));
 
         Assert.Equal(3, layer.InputPorts.Count);
         Assert.Equal("query", layer.InputPorts[0].Name);
@@ -177,7 +177,7 @@ public class MultiInputPortTests
     [Fact(Timeout = 120000)]
     public async Task MultiHeadAttention_NamedForward_QueryOnly_SelfAttention()
     {
-        var layer = new MultiHeadAttentionLayer<double>(sequenceLength: 4, embeddingDimension: 8, headCount: 2);
+        var layer = new MultiHeadAttentionLayer<double>(2, (8) / (2));
         var query = Tensor<double>.CreateRandom([1, 4, 8]);
 
         var output = layer.Forward(new Dictionary<string, Tensor<double>> { ["query"] = query });
@@ -189,7 +189,7 @@ public class MultiInputPortTests
     [Fact(Timeout = 120000)]
     public async Task MultiHeadAttention_NamedForward_QueryKeyValue_CrossAttention()
     {
-        var layer = new MultiHeadAttentionLayer<double>(sequenceLength: 4, embeddingDimension: 8, headCount: 2);
+        var layer = new MultiHeadAttentionLayer<double>(2, (8) / (2));
         var query = Tensor<double>.CreateRandom([1, 4, 8]);
         var key = Tensor<double>.CreateRandom([1, 6, 8]);
         var value = Tensor<double>.CreateRandom([1, 6, 8]);
@@ -210,7 +210,7 @@ public class MultiInputPortTests
     [Fact(Timeout = 120000)]
     public async Task DecoderLayer_InputPorts_DeclaresDecoderEncoderMask()
     {
-        var layer = new DecoderLayer<double>(inputSize: 8, attentionSize: 8, feedForwardSize: 16, activation: (IActivationFunction<double>?)null);
+        var layer = new DecoderLayer<double>(attentionSize: 8, feedForwardSize: 16, activation: (IActivationFunction<double>?)null);
 
         Assert.Equal(3, layer.InputPorts.Count);
         Assert.Equal("decoder_input", layer.InputPorts[0].Name);

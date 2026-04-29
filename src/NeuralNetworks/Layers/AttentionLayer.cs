@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.AttentionComputation)]
-[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IVectorActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, (AiDotNet.Interfaces.IVectorActivationFunction<double>?)null")]
 public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -100,7 +100,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// The size of the input features.
     /// </summary>
-    private readonly int _inputSize;
+    private int _inputSize;
 
     /// <summary>
     /// The size of the attention mechanism (typically smaller than the input size).
@@ -301,17 +301,35 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This is useful when you want to treat each attention score separately.
     /// </para>
     /// </remarks>
-    public AttentionLayer(int inputSize, int attentionSize, IActivationFunction<T>? activation = null,
+    public AttentionLayer(int attentionSize, IActivationFunction<T>? activation = null,
         IInitializationStrategy<T>? initializationStrategy = null)
-        : base([inputSize], [inputSize], activation ?? new SoftmaxActivation<T>()) // Output size = input size (with Wo projection)
+        : base(new[] { -1 }, new[] { -1 }, activation ?? new SoftmaxActivation<T>())
     {
+        if (attentionSize <= 0) throw new ArgumentOutOfRangeException(nameof(attentionSize));
+
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastAttentionEntropy = NumOps.Zero;
 
-        _inputSize = inputSize;
+        _inputSize = -1;
         _attentionSize = attentionSize;
-        // Set strategy on base property — defaults to Xavier for attention layers
         InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
+        _Wq = new Tensor<T>([0, 0]);
+        _Wk = new Tensor<T>([0, 0]);
+        _Wv = new Tensor<T>([0, 0]);
+        _Wo = new Tensor<T>([0, 0]);
+    }
+
+    /// <summary>
+    /// Resolves input feature size on first forward and allocates Q/K/V/O weights.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"AttentionLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+
+        _inputSize = input.Shape[rank - 1];
         _Wq = new Tensor<T>(new[] { _attentionSize, _inputSize });
         _Wk = new Tensor<T>(new[] { _attentionSize, _inputSize });
         _Wv = new Tensor<T>(new[] { _attentionSize, _inputSize });
@@ -320,12 +338,14 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         InitializeLayerWeights(_Wk, _inputSize, _attentionSize);
         InitializeLayerWeights(_Wv, _inputSize, _attentionSize);
         InitializeLayerWeights(_Wo, _attentionSize, _inputSize);
-
-        // Register trainable parameters for GPU memory optimization
         RegisterTrainableParameter(_Wq, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_Wk, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_Wv, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_Wo, PersistentTensorRole.Weights);
+
+        // Output last dim = input last dim (passthrough via Wo projection)
+        var inputShape = input.Shape.ToArray();
+        ResolveShapes(inputShape, inputShape);
     }
 
     /// <summary>
@@ -344,26 +364,20 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This can be more efficient and allows for more complex interactions between attention scores.
     /// </para>
     /// </remarks>
-    public AttentionLayer(int inputSize, int attentionSize, IVectorActivationFunction<T>? activation = null)
-        : base([inputSize], [inputSize], activation ?? new SoftmaxActivation<T>()) // Output size = input size (with Wo projection)
+    public AttentionLayer(int attentionSize, IVectorActivationFunction<T>? activation = null)
+        : base(new[] { -1 }, new[] { -1 }, activation ?? new SoftmaxActivation<T>())
     {
+        if (attentionSize <= 0) throw new ArgumentOutOfRangeException(nameof(attentionSize));
+
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastAttentionEntropy = NumOps.Zero;
 
-        _inputSize = inputSize;
+        _inputSize = -1;
         _attentionSize = attentionSize;
-        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _attentionSize)));
-        _Wq = InitializeTensor(new[] { _attentionSize, _inputSize }, scale);
-        _Wk = InitializeTensor(new[] { _attentionSize, _inputSize }, scale);
-        _Wv = InitializeTensor(new[] { _attentionSize, _inputSize }, scale);
-        // Output projection Wo: [inputSize, attentionSize] to project attention output back to input dimension
-        _Wo = InitializeTensor(new[] { _inputSize, _attentionSize }, scale);
-
-        // Register trainable parameters for GPU memory optimization
-        RegisterTrainableParameter(_Wq, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Wk, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Wv, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_Wo, PersistentTensorRole.Weights);
+        _Wq = new Tensor<T>([0, 0]);
+        _Wk = new Tensor<T>([0, 0]);
+        _Wv = new Tensor<T>([0, 0]);
+        _Wo = new Tensor<T>([0, 0]);
     }
 
     /// <summary>
@@ -442,6 +456,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        if (input != null) EnsureInitializedFromInput(input);
         // Validate input tensor
         if (input == null)
         {

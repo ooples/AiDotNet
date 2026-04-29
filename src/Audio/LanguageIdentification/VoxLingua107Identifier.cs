@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
 using AiDotNet.Enums;
@@ -241,8 +241,8 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         int channels = _options.TdnnChannels;
 
         // Initial TDNN layer
-        _tdnnLayers.Add(new DenseLayer<T>(inputDim, channels, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _tdnnLayers.Add(new BatchNormalizationLayer<T>(channels));
+        _tdnnLayers.Add(new DenseLayer<T>(channels, (IActivationFunction<T>)new ReLUActivation<T>()));
+        _tdnnLayers.Add(new BatchNormalizationLayer<T>());
 
         // ECAPA-TDNN SE-Res2 blocks
         foreach (int dilation in _options.Dilations)
@@ -254,31 +254,31 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         int mfaOutputDim = channels * _options.Dilations.Length;
 
         // Attentive Statistics Pooling
-        _poolingLayer = new DenseLayer<T>(mfaOutputDim, _options.EmbeddingDimension * 2);
+        _poolingLayer = new DenseLayer<T>(_options.EmbeddingDimension * 2);
 
         // Final layers
-        _finalBatchNorm = new BatchNormalizationLayer<T>(_options.EmbeddingDimension);
-        _classifierLayer = new DenseLayer<T>(_options.EmbeddingDimension, 107); // 107 languages
+        _finalBatchNorm = new BatchNormalizationLayer<T>();
+        _classifierLayer = new DenseLayer<T>(107); // 107 languages
     }
 
     private void AddSERes2Block(int channels, int dilation)
     {
         // 1x1 reduction
-        _resBlocks.Add(new DenseLayer<T>(channels, channels / 4, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _resBlocks.Add(new BatchNormalizationLayer<T>(channels / 4));
+        _resBlocks.Add(new DenseLayer<T>(channels / 4, (IActivationFunction<T>)new ReLUActivation<T>()));
+        _resBlocks.Add(new BatchNormalizationLayer<T>());
 
         // Dilated conv
-        _resBlocks.Add(new DenseLayer<T>(channels / 4, channels / 4, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _resBlocks.Add(new BatchNormalizationLayer<T>(channels / 4));
+        _resBlocks.Add(new DenseLayer<T>(channels / 4, (IActivationFunction<T>)new ReLUActivation<T>()));
+        _resBlocks.Add(new BatchNormalizationLayer<T>());
 
         // 1x1 expansion
-        _resBlocks.Add(new DenseLayer<T>(channels / 4, channels, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _resBlocks.Add(new BatchNormalizationLayer<T>(channels));
+        _resBlocks.Add(new DenseLayer<T>(channels, (IActivationFunction<T>)new ReLUActivation<T>()));
+        _resBlocks.Add(new BatchNormalizationLayer<T>());
 
         // SE block
         int seReduction = 8;
-        _seBlocks.Add(new DenseLayer<T>(channels, channels / seReduction, (IActivationFunction<T>)new ReLUActivation<T>()));
-        _seBlocks.Add(new DenseLayer<T>(channels / seReduction, channels, (IActivationFunction<T>)new SigmoidActivation<T>()));
+        _seBlocks.Add(new DenseLayer<T>(channels / seReduction, (IActivationFunction<T>)new ReLUActivation<T>()));
+        _seBlocks.Add(new DenseLayer<T>(channels, (IActivationFunction<T>)new SigmoidActivation<T>()));
     }
 
     #endregion

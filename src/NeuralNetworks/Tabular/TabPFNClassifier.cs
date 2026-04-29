@@ -93,7 +93,6 @@ public class TabPFNClassifier<T> : TabPFNBase<T>
         _numClasses = numClasses;
 
         _classificationHead = new FullyConnectedLayer<T>(
-            MLPOutputDimension,
             numClasses,
             (IActivationFunction<T>?)null);
     }

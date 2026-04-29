@@ -162,11 +162,9 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
             AiDotNet.Interfaces.IActivationFunction<T> idAct =
                 new AiDotNet.ActivationFunctions.IdentityActivation<T>();
             _visionHeadStart = Layers.Count;
-            Layers.Add(new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(
-                _options.FusionDim, outputSize, idAct));
+            Layers.Add(new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(outputSize, idAct));
             _textHeadStart = Layers.Count;
-            Layers.Add(new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(
-                _options.FusionDim, outputSize, idAct));
+            Layers.Add(new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(outputSize, idAct));
         }
     }
 

@@ -139,7 +139,6 @@ public abstract class TabNetBase<T>
 
         // Initialize output layer
         _outputLayer = new FullyConnectedLayer<T>(
-            Options.OutputDimension,
             outputDim,
             (IActivationFunction<T>?)null);
     }
@@ -154,7 +153,7 @@ public abstract class TabNetBase<T>
 
         for (int i = 0; i < Options.NumSharedLayers; i++)
         {
-            var fc = new FullyConnectedLayer<T>(currentDim, hiddenDim, (IActivationFunction<T>?)null);
+            var fc = new FullyConnectedLayer<T>(hiddenDim, (IActivationFunction<T>?)null);
             _sharedFCLayers.Add(fc);
 
             var bn = new GhostBatchNormalization<T>(

@@ -122,11 +122,11 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var layerSize in hiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            layers.Add(new DenseLayer<T>(layerSize, (IActivationFunction<T>)new ReLUActivation<T>()));
             previousSize = layerSize;
         }
 
-        layers.Add(new DenseLayer<T>(previousSize, outputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
+        layers.Add(new DenseLayer<T>(outputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,

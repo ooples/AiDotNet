@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -380,27 +380,21 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _numHeads = numHeads;
         _feedForwardDim = feedForwardDim;
 
-        int sequenceLength = 1; // Default to 1
-        _selfAttention = new MultiHeadAttentionLayer<T>(
-            sequenceLength,
-            _embeddingSize,
-            _numHeads,
+        _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, (_embeddingSize) / (_numHeads),
             new GELUActivation<T>() as IActivationFunction<T>);
 
-        _norm1 = new LayerNormalizationLayer<T>(_embeddingSize);
+        _norm1 = new LayerNormalizationLayer<T>();
 
         // Standard transformer FFN: Linear(embed -> ff) + GELU + Linear(ff -> embed)
         _feedForward1 = new FeedForwardLayer<T>(
-            _embeddingSize,
             _feedForwardDim,
             new GELUActivation<T>() as IActivationFunction<T>);
 
         _feedForward2 = new FeedForwardLayer<T>(
-            _feedForwardDim,
             _embeddingSize,
             (IActivationFunction<T>?)null); // No activation on projection layer
 
-        _norm2 = new LayerNormalizationLayer<T>(_embeddingSize);
+        _norm2 = new LayerNormalizationLayer<T>();
 
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);

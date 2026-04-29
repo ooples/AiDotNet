@@ -124,13 +124,27 @@ public class STDiTBlock<T> : LayerBase<T>
             spatialSize: spatialSize);
 
         int ffnHidden = channels * ffnMultiplier;
-        _ffnIn = new DenseLayer<T>(channels, ffnHidden, (IActivationFunction<T>)new GELUActivation<T>());
-        _ffnOut = new DenseLayer<T>(ffnHidden, channels, (IActivationFunction<T>)new IdentityActivation<T>());
+        _ffnIn = new DenseLayer<T>(ffnHidden, (IActivationFunction<T>)new GELUActivation<T>());
+        _ffnOut = new DenseLayer<T>(channels, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        _spatialNorm = new LayerNormalizationLayer<T>(channels);
-        _temporalNorm = new LayerNormalizationLayer<T>(channels);
-        _crossNorm = new LayerNormalizationLayer<T>(channels);
-        _ffnNorm = new LayerNormalizationLayer<T>(channels);
+        _spatialNorm = new LayerNormalizationLayer<T>();
+        _temporalNorm = new LayerNormalizationLayer<T>();
+        _crossNorm = new LayerNormalizationLayer<T>();
+        _ffnNorm = new LayerNormalizationLayer<T>();
+
+        // Pre-resolve the lazy FFN/norm sublayers from the ctor-known shape so
+        // GetParameters, SetParameters, ParameterCount, and ONNX export all work
+        // on a freshly constructed STDiTBlock — without waiting for the first Forward.
+        // Forward operates on input shape [1, numFrames * spatialSize * spatialSize, channels].
+        int tokenCount = numFrames * spatialSize * spatialSize;
+        var residualShape = new[] { 1, tokenCount, channels };
+        var ffnHiddenShape = new[] { 1, tokenCount, ffnHidden };
+        _spatialNorm.ResolveFromShape(residualShape);
+        _temporalNorm.ResolveFromShape(residualShape);
+        _crossNorm.ResolveFromShape(residualShape);
+        _ffnNorm.ResolveFromShape(residualShape);
+        _ffnIn.ResolveFromShape(residualShape);
+        _ffnOut.ResolveFromShape(ffnHiddenShape);
     }
 
     /// <summary>

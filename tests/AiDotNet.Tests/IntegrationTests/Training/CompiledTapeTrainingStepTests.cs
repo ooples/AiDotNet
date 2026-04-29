@@ -144,8 +144,8 @@ public class CompiledTapeTrainingStepTests
     private static (List<DenseLayer<float>> layers, Func<Tensor<float>, Tensor<float>> forward) BuildMLP()
     {
         // DenseLayer defaults to ReLU — don't apply ReLU externally
-        var layer1 = new DenseLayer<float>(4, 8);
-        var layer2 = new DenseLayer<float>(8, 2, (IActivationFunction<float>)new IdentityActivation<float>());
+        var layer1 = new DenseLayer<float>(8);
+        var layer2 = new DenseLayer<float>(2, (IActivationFunction<float>)new IdentityActivation<float>());
         var layers = new List<DenseLayer<float>> { layer1, layer2 };
 
         Tensor<float> Forward(Tensor<float> x)

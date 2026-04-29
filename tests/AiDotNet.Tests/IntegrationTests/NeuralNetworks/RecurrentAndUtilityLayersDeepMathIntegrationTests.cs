@@ -301,7 +301,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     {
         // Input [2, 3]: [[1, 2, 3], [4, 5, 6]]
         // Mean along axis 1: [(1+2+3)/3, (4+5+6)/3] = [2, 5]
-        var mean = new MeanLayer<double>(new[] { 2, 3 }, 1);
+        var mean = new MeanLayer<double>(1);
 
         var input = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
         var output = mean.Forward(input);
@@ -317,7 +317,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     {
         // Input [2, 3]: [[1, 2, 3], [7, 8, 9]]
         // Mean along axis 0: [(1+7)/2, (2+8)/2, (3+9)/2] = [4, 5, 6]
-        var mean = new MeanLayer<double>(new[] { 2, 3 }, 0);
+        var mean = new MeanLayer<double>(0);
 
         var input = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 7.0, 8.0, 9.0 }));
         var output = mean.Forward(input);
@@ -332,7 +332,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MeanLayer_UniformInput_MeanEqualsValue()
     {
-        var mean = new MeanLayer<double>(new[] { 3, 4 }, 1);
+        var mean = new MeanLayer<double>(1);
 
         var input = new Tensor<double>(new[] { 3, 4 });
         for (int i = 0; i < 3; i++)
@@ -349,7 +349,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MeanLayer_SingleElement_MeanIsElement()
     {
-        var mean = new MeanLayer<double>(new[] { 1, 5 }, 0);
+        var mean = new MeanLayer<double>(0);
 
         var input = new Tensor<double>(new[] { 1, 5 }, new Vector<double>(new double[] { 10.0, 20.0, 30.0, 40.0, 50.0 }));
         var output = mean.Forward(input);
@@ -363,7 +363,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MeanLayer_NegativeValues_HandComputed()
     {
-        var mean = new MeanLayer<double>(new[] { 1, 4 }, 1);
+        var mean = new MeanLayer<double>(1);
 
         var input = new Tensor<double>(new[] { 1, 4 }, new Vector<double>(new double[] { -2.0, -4.0, 6.0, 8.0 }));
         var output = mean.Forward(input);
@@ -376,7 +376,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MeanLayer_LargeValues_StillAccurate()
     {
-        var mean = new MeanLayer<double>(new[] { 1, 3 }, 1);
+        var mean = new MeanLayer<double>(1);
 
         var input = new Tensor<double>(new[] { 1, 3 }, new Vector<double>(new double[] { 1e10, 2e10, 3e10 }));
         var output = mean.Forward(input);
@@ -392,7 +392,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ReshapeLayer_PreservesAllValues()
     {
-        var reshape = new ReshapeLayer<double>(new[] { 2, 3 }, new[] { 3, 2 });
+        var reshape = new ReshapeLayer<double>(new[] { 3, 2 });
 
         var input = new Tensor<double>(new[] { 1, 2, 3 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
         var output = reshape.Forward(input);
@@ -407,7 +407,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ReshapeLayer_OutputShapeIsCorrect()
     {
-        var reshape = new ReshapeLayer<double>(new[] { 4, 3 }, new[] { 6, 2 });
+        var reshape = new ReshapeLayer<double>(new[] { 6, 2 });
 
         var input = new Tensor<double>(new[] { 1, 4, 3 });
         var output = reshape.Forward(input);
@@ -420,7 +420,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ReshapeLayer_NoTrainableParameters()
     {
-        var reshape = new ReshapeLayer<double>(new[] { 4 }, new[] { 2, 2 });
+        var reshape = new ReshapeLayer<double>(new[] { 2, 2 });
         Assert.Equal(0, reshape.ParameterCount);
     }
 

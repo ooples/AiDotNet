@@ -220,14 +220,7 @@ namespace AiDotNet.Autodiff
                 }
             }
 
-            return new AutoDiffResult(activations, first, second);
-        }
-
-        private static bool SupportsAutodiffGraph(NeuralNetworkBase<T> network)
-        {
-            // GradientTape-based autodiff works for all layers via Forward() recording.
-            // Only fail if network has zero layers (nothing to differentiate).
-            return network.Layers.Count > 0;
+            return new AutoDiffResult(first, second);
         }
 
         /// <summary>
@@ -772,14 +765,12 @@ namespace AiDotNet.Autodiff
 
         private sealed class AutoDiffResult
         {
-            public AutoDiffResult(T[] outputs, T[,] gradients, T[,,] hessians)
+            public AutoDiffResult(T[,] gradients, T[,,] hessians)
             {
-                Outputs = outputs;
                 Gradients = gradients;
                 Hessians = hessians;
             }
 
-            public T[] Outputs { get; }
             public T[,] Gradients { get; }
             public T[,,] Hessians { get; }
         }

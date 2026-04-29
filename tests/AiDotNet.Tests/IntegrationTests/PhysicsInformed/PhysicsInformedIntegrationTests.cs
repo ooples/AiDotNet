@@ -1441,8 +1441,8 @@ public class PhysicsInformedIntegrationTests
     {
         var layers = new List<ILayer<double>>
         {
-            new DenseLayer<double>(inputSize, 16, (IActivationFunction<double>)new TanhActivation<double>()),
-            new DenseLayer<double>(16, outputSize, (IActivationFunction<double>)new IdentityActivation<double>())
+            new DenseLayer<double>(16, (IActivationFunction<double>)new TanhActivation<double>()),
+            new DenseLayer<double>(outputSize, (IActivationFunction<double>)new IdentityActivation<double>())
         };
 
         return new NeuralNetworkArchitecture<double>(
@@ -1461,7 +1461,7 @@ public class PhysicsInformedIntegrationTests
     {
         var layers = new ILayer<double>[]
         {
-            new DenseLayer<double>(inputSize, outputSize, (IActivationFunction<double>)new IdentityActivation<double>())
+            new DenseLayer<double>(outputSize, (IActivationFunction<double>)new IdentityActivation<double>())
         };
 
         return new NeuralNetworkArchitecture<double>(

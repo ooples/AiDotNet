@@ -157,13 +157,10 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
             // Program structure encoding layers
             for (int i = 0; i < _architecture.NumEncoderLayers; i++)
             {
-                Layers.Add(new MultiHeadAttentionLayer<T>(
-                    sequenceLength: _architecture.MaxSequenceLength,
-                    embeddingDimension: _architecture.ModelDimension,
-                    headCount: _architecture.NumHeads,
+                Layers.Add(new MultiHeadAttentionLayer<T>(_architecture.NumHeads, (_architecture.ModelDimension) / (_architecture.NumHeads), 
                     activationFunction: new IdentityActivation<T>()));
 
-                Layers.Add(new LayerNormalizationLayer<T>(_architecture.ModelDimension));
+                Layers.Add(new LayerNormalizationLayer<T>());
 
                 if (_architecture.DropoutRate > 0)
                 {
@@ -173,7 +170,6 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
 
             // Output projection
             Layers.Add(new DenseLayer<T>(
-                inputSize: _architecture.ModelDimension,
                 outputSize: _architecture.VocabularySize,
                 activationFunction: new IdentityActivation<T>()));
         }

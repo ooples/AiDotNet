@@ -62,7 +62,7 @@ public class DebugQuantizationTest
         var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<float>>
         {
             new InputLayer<float>(inSize),
-            new DenseLayer<float>(inSize, outSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+            new DenseLayer<float>(outSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
         };
 
         var architecture = new NeuralNetworkArchitecture<float>(

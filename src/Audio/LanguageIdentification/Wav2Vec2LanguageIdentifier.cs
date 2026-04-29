@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -194,14 +194,14 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
             // Using DenseLayer to simulate 1D conv (simplified)
             // In production, would use actual 1D convolution
             int outputDim = channels[i];
-            _featureEncoder.Add(new DenseLayer<T>(inputDim * kernelSizes[i], outputDim,
+            _featureEncoder.Add(new DenseLayer<T>(outputDim,
                 (IActivationFunction<T>)new GELUActivation<T>()));
-            _featureEncoder.Add(new LayerNormalizationLayer<T>(outputDim));
+            _featureEncoder.Add(new LayerNormalizationLayer<T>());
             inputDim = outputDim;
         }
 
         // Feature projection
-        _featureProjection.Add(new DenseLayer<T>(channels[^1], _options.HiddenSize,
+        _featureProjection.Add(new DenseLayer<T>(_options.HiddenSize,
             (IActivationFunction<T>)new GELUActivation<T>()));
         _featureProjection.Add(new DropoutLayer<T>(_options.FeatureProjectionDropout));
 
@@ -209,21 +209,21 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
         for (int i = 0; i < _options.NumLayers; i++)
         {
             // Self-attention (simplified as dense layers)
-            _transformerLayers.Add(new DenseLayer<T>(_options.HiddenSize, _options.HiddenSize));
-            _transformerLayers.Add(new LayerNormalizationLayer<T>(_options.HiddenSize));
+            _transformerLayers.Add(new DenseLayer<T>(_options.HiddenSize));
+            _transformerLayers.Add(new LayerNormalizationLayer<T>());
 
             // Feed-forward
-            _transformerLayers.Add(new DenseLayer<T>(_options.HiddenSize, _options.IntermediateSize,
+            _transformerLayers.Add(new DenseLayer<T>(_options.IntermediateSize,
                 (IActivationFunction<T>)new GELUActivation<T>()));
-            _transformerLayers.Add(new DenseLayer<T>(_options.IntermediateSize, _options.HiddenSize));
-            _transformerLayers.Add(new LayerNormalizationLayer<T>(_options.HiddenSize));
+            _transformerLayers.Add(new DenseLayer<T>(_options.HiddenSize));
+            _transformerLayers.Add(new LayerNormalizationLayer<T>());
             _transformerLayers.Add(new DropoutLayer<T>(_options.HiddenDropout));
         }
 
         // Classification head
-        _poolingProjection = new DenseLayer<T>(_options.HiddenSize, _options.HiddenSize,
+        _poolingProjection = new DenseLayer<T>(_options.HiddenSize,
             (IActivationFunction<T>)new TanhActivation<T>());
-        _classifierLayer = new DenseLayer<T>(_options.HiddenSize, numLanguages);
+        _classifierLayer = new DenseLayer<T>(numLanguages);
     }
 
     #endregion

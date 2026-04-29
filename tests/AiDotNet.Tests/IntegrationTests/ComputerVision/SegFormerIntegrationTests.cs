@@ -265,11 +265,9 @@ public class SegFormerIntegrationTests
         // Create an architecture with custom layers
         var customLayers = new List<ILayer<double>>
         {
-            new DenseLayer<double>(
-                3 * 32 * 32, 100,
+            new DenseLayer<double>(100,
                 new ReLUActivation<double>() as IActivationFunction<double>),
-            new DenseLayer<double>(
-                100, 10,
+            new DenseLayer<double>(10,
                 new IdentityActivation<double>() as IActivationFunction<double>)
         };
 

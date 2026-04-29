@@ -33,7 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Embedding)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "8, 8, 3, 4, 16")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "4, 16")]
 public partial class PatchEmbeddingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -49,32 +49,32 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     /// <summary>
     /// The height of the input image.
     /// </summary>
-    private readonly int _imageHeight;
+    private int _imageHeight;
 
     /// <summary>
     /// The width of the input image.
     /// </summary>
-    private readonly int _imageWidth;
+    private int _imageWidth;
 
     /// <summary>
     /// The number of color channels in the input image (e.g., 3 for RGB).
     /// </summary>
-    private readonly int _channels;
+    private int _channels;
 
     /// <summary>
     /// The number of patches along the height dimension.
     /// </summary>
-    private readonly int _numPatchesHeight;
+    private int _numPatchesHeight;
 
     /// <summary>
     /// The number of patches along the width dimension.
     /// </summary>
-    private readonly int _numPatchesWidth;
+    private int _numPatchesWidth;
 
     /// <summary>
     /// The total number of patches (height x width).
     /// </summary>
-    private readonly int _numPatches;
+    private int _numPatches;
 
     /// <summary>
     /// The projection weights that transform flattened patches to embeddings.
@@ -180,48 +180,74 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public PatchEmbeddingLayer(
-        int imageHeight,
-        int imageWidth,
-        int channels,
         int patchSize,
         int embeddingDim,
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(
-            [channels, imageHeight, imageWidth],
-            [(imageHeight / patchSize) * (imageWidth / patchSize), embeddingDim],
+            new[] { -1, -1, -1 },
+            new[] { -1, embeddingDim },
             activationFunction ?? new IdentityActivation<T>())
     {
-        if (imageHeight % patchSize != 0)
-        {
-            throw new ArgumentException($"Image height {imageHeight} must be divisible by patch size {patchSize}", nameof(imageHeight));
-        }
+        if (patchSize <= 0) throw new ArgumentOutOfRangeException(nameof(patchSize));
+        if (embeddingDim <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDim));
 
-        if (imageWidth % patchSize != 0)
-        {
-            throw new ArgumentException($"Image width {imageWidth} must be divisible by patch size {patchSize}", nameof(imageWidth));
-        }
-
-        _imageHeight = imageHeight;
-        _imageWidth = imageWidth;
-        _channels = channels;
         _patchSize = patchSize;
         _embeddingDim = embeddingDim;
 
-        _numPatchesHeight = imageHeight / patchSize;
-        _numPatchesWidth = imageWidth / patchSize;
+        // Lazy: image H/W, channels, num patches resolved on first Forward.
+        _imageHeight = -1;
+        _imageWidth = -1;
+        _channels = -1;
+        _numPatchesHeight = -1;
+        _numPatchesWidth = -1;
+        _numPatches = -1;
+
+        _projectionWeights = new Tensor<T>([0, embeddingDim]);
+        _projectionBias = new Tensor<T>([embeddingDim]);
+
+        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
+    }
+
+    /// <summary>
+    /// Resolves image height/width/channels from input on first forward (PyTorch-style).
+    /// Per Dosovitskiy et al. 2021, the input is [B, C, H, W] (or [C, H, W]); we read
+    /// channels from input.Shape[^3], H from [^2], W from [^1], assert divisibility by
+    /// patchSize, and allocate the projection weights [C*P*P, embeddingDim].
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 3)
+            throw new ArgumentException(
+                $"PatchEmbeddingLayer requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {rank}.",
+                nameof(input));
+
+        _channels = input.Shape[rank - 3];
+        _imageHeight = input.Shape[rank - 2];
+        _imageWidth = input.Shape[rank - 1];
+
+        if (_imageHeight % _patchSize != 0 || _imageWidth % _patchSize != 0)
+            throw new ArgumentException(
+                $"Image H/W ({_imageHeight}/{_imageWidth}) must be divisible by patchSize ({_patchSize}).",
+                nameof(input));
+
+        _numPatchesHeight = _imageHeight / _patchSize;
+        _numPatchesWidth = _imageWidth / _patchSize;
         _numPatches = _numPatchesHeight * _numPatchesWidth;
 
         int patchDim = _channels * _patchSize * _patchSize;
         _projectionWeights = new Tensor<T>([patchDim, _embeddingDim]);
         _projectionBias = new Tensor<T>([_embeddingDim]);
 
-        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
         InitializeParameters();
 
-        // Register trainable parameters for GPU memory persistence
         RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_projectionBias, PersistentTensorRole.Biases);
+
+        ResolveShapes(
+            new[] { _channels, _imageHeight, _imageWidth },
+            new[] { _numPatches, _embeddingDim });
     }
 
     /// <summary>
@@ -255,6 +281,8 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
+
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;

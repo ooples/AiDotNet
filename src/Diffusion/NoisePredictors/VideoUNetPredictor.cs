@@ -1123,7 +1123,6 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         // sequence lengths — documented on the constructor's inputHeight param.
         int inputRes = ResolutionAtLevel(level + 1);
         return new DeconvolutionalLayer<T>(
-            inputShape: new[] { 1, channels, inputRes, inputRes },
             outputDepth: channels,
             kernelSize: 4,
             stride: 2,

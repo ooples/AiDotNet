@@ -133,11 +133,11 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var hiddenSize in _options.HiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            layers.Add(new DenseLayer<T>(hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
             prevSize = hiddenSize;
         }
 
-        layers.Add(new DenseLayer<T>(prevSize, _options.ActionSize, (IActivationFunction<T>)new IdentityActivation<T>()));
+        layers.Add(new DenseLayer<T>(_options.ActionSize, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,

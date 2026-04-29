@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureFusion)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "4", TestConstructorArgs = "new[] { 4 }, 2")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "4", TestConstructorArgs = "2")]
 public class SplitLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -132,10 +132,20 @@ public class SplitLayer<T> : LayerBase<T>
     /// because you'd get splits of size 33.33... which isn't a whole number.
     /// </para>
     /// </remarks>
-    public SplitLayer(int[] inputShape, int numSplits)
-        : base(inputShape, CalculateOutputShape(inputShape, numSplits))
+    public SplitLayer(int numSplits)
+        : base(new[] { -1 }, new[] { -1 })
     {
         _numSplits = numSplits;
+    }
+
+    /// <summary>
+    /// Resolves shape on first forward; output adds a leading dim of size numSplits and divides last dim.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var shape = input.Shape.ToArray();
+        var output = CalculateOutputShape(shape, _numSplits);
+        ResolveShapes(shape, output);
     }
 
     /// <summary>
@@ -195,6 +205,7 @@ public class SplitLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;

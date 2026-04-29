@@ -123,7 +123,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Hidden layers
         foreach (var hiddenSize in _ppoOptions.PolicyHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new TanhActivation<T>()));
+            layers.Add(new DenseLayer<T>(hiddenSize, (IActivationFunction<T>)new TanhActivation<T>()));
             prevSize = hiddenSize;
         }
 
@@ -131,12 +131,12 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         if (_ppoOptions.IsContinuous)
         {
             // For continuous: output mean and log_std for Gaussian policy
-            layers.Add(new DenseLayer<T>(prevSize, _ppoOptions.ActionSize * 2, (IActivationFunction<T>)new IdentityActivation<T>()));
+            layers.Add(new DenseLayer<T>(_ppoOptions.ActionSize * 2, (IActivationFunction<T>)new IdentityActivation<T>()));
         }
         else
         {
             // For discrete: output action logits (softmax applied later)
-            layers.Add(new DenseLayer<T>(prevSize, _ppoOptions.ActionSize, (IActivationFunction<T>)new IdentityActivation<T>()));
+            layers.Add(new DenseLayer<T>(_ppoOptions.ActionSize, (IActivationFunction<T>)new IdentityActivation<T>()));
         }
 
         int finalOutputSize = _ppoOptions.IsContinuous ? _ppoOptions.ActionSize * 2 : _ppoOptions.ActionSize;
@@ -159,12 +159,12 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Hidden layers
         foreach (var hiddenSize in _ppoOptions.ValueHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new TanhActivation<T>()));
+            layers.Add(new DenseLayer<T>(hiddenSize, (IActivationFunction<T>)new TanhActivation<T>()));
             prevSize = hiddenSize;
         }
 
         // Output layer (single value)
-        layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new IdentityActivation<T>()));
+        layers.Add(new DenseLayer<T>(1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,

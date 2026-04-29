@@ -4706,7 +4706,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         ILayer<T> layer = layerType switch
         {
-            LayerType.Dense => new DenseLayer<T>(inputSize, units, activationFunc),
+            LayerType.Dense => new DenseLayer<T>(units, activationFunc),
             _ => throw new NotSupportedException($"Layer type {layerType} not supported in AddLayer method")
         };
         AddLayerToCollection(layer);
@@ -4720,7 +4720,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         throw new InvalidOperationException(
             "AddConvolutionalLayer requires additional parameters that are not provided in this method signature. " +
             "Use ConvolutionalLayer.Configure() with the full input shape, or create the layer directly with " +
-            "new ConvolutionalLayer<T>(inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, stride, padding, activation) " +
+            "new ConvolutionalLayer<T>(inputHeight, inputWidth, stride, padding, activation) " +
             "and add it to Layers manually.");
     }
 
@@ -4752,7 +4752,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <param name="momentum">The momentum for running statistics (default: 0.9).</param>
     public virtual void AddBatchNormalizationLayer(int featureSize, double epsilon = 1e-5, double momentum = 0.9)
     {
-        var layer = new BatchNormalizationLayer<T>(featureSize, epsilon, momentum);
+        var layer = new BatchNormalizationLayer<T>();
         AddLayerToCollection(layer);
     }
 
@@ -4765,7 +4765,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <param name="strides">The step size when moving the pooling window (default: same as poolSize).</param>
     public virtual void AddPoolingLayer(int[] inputShape, PoolingType poolingType, int poolSize, int? strides = null)
     {
-        var layer = new MaxPoolingLayer<T>(inputShape, poolSize, strides ?? poolSize);
+        // inputShape is now ignored (lazy ctor resolves it on first forward); kept on the
+        // signature for backwards compatibility with existing callers.
+        var layer = new MaxPoolingLayer<T>(poolSize, strides ?? poolSize);
         AddLayerToCollection(layer);
     }
 

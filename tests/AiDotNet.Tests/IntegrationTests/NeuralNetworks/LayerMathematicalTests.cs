@@ -26,7 +26,7 @@ public class LayerMathematicalTests
     [Fact(Timeout = 120000)]
     public async Task DenseLayer_ZeroInput_ReturnsBias()
     {
-        var layer = new DenseLayer<double>(3, 2);
+        var layer = new DenseLayer<double>(2);
         var biases = layer.GetBiases();
 
         var input = new Tensor<double>(new[] { 0.0, 0.0, 0.0 }, [3]);
@@ -43,7 +43,7 @@ public class LayerMathematicalTests
     [Fact(Timeout = 120000)]
     public async Task DenseLayer_ParameterCount()
     {
-        var layer = new DenseLayer<double>(10, 5);
+        var layer = new DenseLayer<double>(5);
         Assert.Equal(55, layer.ParameterCount); // 10*5 + 5
     }
 
@@ -53,7 +53,7 @@ public class LayerMathematicalTests
     [Fact(Timeout = 120000)]
     public async Task DenseLayer_OutputShape_1D()
     {
-        var layer = new DenseLayer<double>(4, 3);
+        var layer = new DenseLayer<double>(3);
         var input = new Tensor<double>(new[] { 1.0, 2.0, 3.0, 4.0 }, [4]);
         var output = layer.Forward(input);
         Assert.Single(output.Shape.ToArray());
@@ -78,7 +78,7 @@ public class LayerMathematicalTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_Forward_ApproximatelyZeroMean()
     {
-        var layer = new BatchNormalizationLayer<double>(2, epsilon: 1e-5);
+        var layer = new BatchNormalizationLayer<double>();
 
         var input = new Tensor<double>(new[] {
             1.0, 2.0,
@@ -104,7 +104,7 @@ public class LayerMathematicalTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_ConstantInput_ProducesZero()
     {
-        var layer = new BatchNormalizationLayer<double>(1, epsilon: 1e-5);
+        var layer = new BatchNormalizationLayer<double>();
 
         var input = new Tensor<double>(new[] { 5.0, 5.0, 5.0 }, [3, 1]);
         var output = layer.Forward(input);

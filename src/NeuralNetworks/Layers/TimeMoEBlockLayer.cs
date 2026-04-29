@@ -85,17 +85,14 @@ public class TimeMoEBlockLayer<T> : LayerBase<T>
         _numExperts = numExperts;
         _topK = topK;
 
-        _norm1 = new LayerNormalizationLayer<T>(hiddenDim);
+        _norm1 = new LayerNormalizationLayer<T>();
 
         // sequenceLength=1 is the placeholder used by TransformerEncoderLayer; the attention
         // layer supports any rank and reshapes internally.
-        _selfAttention = new MultiHeadAttentionLayer<T>(
-            sequenceLength: 1,
-            embeddingDimension: hiddenDim,
-            headCount: numHeads,
+        _selfAttention = new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
             activationFunction: new GELUActivation<T>() as IActivationFunction<T>);
 
-        _norm2 = new LayerNormalizationLayer<T>(hiddenDim);
+        _norm2 = new LayerNormalizationLayer<T>();
 
         // Build numExperts experts, each a 2-layer Dense FFN: hiddenDim -> intermediateSize
         // (GELU) -> hiddenDim. ExpertLayer wraps a list of sub-layers and applies them
@@ -106,11 +103,9 @@ public class TimeMoEBlockLayer<T> : LayerBase<T>
             var innerLayers = new List<ILayer<T>>
             {
                 new DenseLayer<T>(
-                    inputSize: hiddenDim,
                     outputSize: intermediateSize,
                     activationFunction: new GELUActivation<T>()),
                 new DenseLayer<T>(
-                    inputSize: intermediateSize,
                     outputSize: hiddenDim,
                     activationFunction: null),
             };
@@ -122,7 +117,6 @@ public class TimeMoEBlockLayer<T> : LayerBase<T>
 
         // Router: dense projection from per-token hidden → per-expert score.
         var router = new DenseLayer<T>(
-            inputSize: hiddenDim,
             outputSize: numExperts,
             activationFunction: null);
 

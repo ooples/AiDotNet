@@ -127,7 +127,6 @@ public abstract class GANDALFBase<T>
         for (int i = 0; i < Options.NumGatingLayers; i++)
         {
             var layer = new FullyConnectedLayer<T>(
-                prevDim,
                 Options.GatingHiddenDimension,
                 new ReLUActivation<T>() as IActivationFunction<T>);
             _gatingLayers.Add(layer);
@@ -136,7 +135,6 @@ public abstract class GANDALFBase<T>
 
         // Gating output produces importance weights for each feature
         _gatingOutput = new FullyConnectedLayer<T>(
-            prevDim,
             numFeatures,
             (IActivationFunction<T>?)null);  // Sigmoid applied separately
 

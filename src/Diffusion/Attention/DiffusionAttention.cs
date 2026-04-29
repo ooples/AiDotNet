@@ -171,10 +171,7 @@ public class DiffusionAttention<T> : LayerBase<T>
             config: _flashConfig);
 
         // Create standard attention as fallback for short sequences
-        _standardAttention = new MultiHeadAttentionLayer<T>(
-            sequenceLength: sequenceLength,
-            embeddingDimension: channels,
-            headCount: numHeads,
+        _standardAttention = new MultiHeadAttentionLayer<T>(numHeads, (channels) / (numHeads), 
             activationFunction: new IdentityActivation<T>());
     }
 

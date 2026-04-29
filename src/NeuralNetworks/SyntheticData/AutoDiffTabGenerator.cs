@@ -275,10 +275,10 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
             var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
             int teDim = _options.TimestepEmbeddingDimension;
-            _timestepProjection = new FullyConnectedLayer<T>(teDim, teDim, siluAux);
+            _timestepProjection = new FullyConnectedLayer<T>(teDim, siluAux);
 
             int lastDim = Layers.Count > 0 ? GetLayerOutputSize(Layers[^1]) : inputDim;
-            _denoiserOutput = new FullyConnectedLayer<T>(lastDim, outputDim, identity);
+            _denoiserOutput = new FullyConnectedLayer<T>(outputDim, identity);
 
             // Add auxiliary layers to Layers for proper registration
             Layers.Add(_timestepProjection);

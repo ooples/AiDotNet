@@ -85,7 +85,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
 
     // Patch embedding for spatiotemporal input
     // Initialized in InitializeNetworkLayers(), called from constructor
-    private ConvolutionalLayer<T> _patchEmbed = new ConvolutionalLayer<T>(1, 1, 1, 1, 1, 1, 0);
+    private ConvolutionalLayer<T> _patchEmbed = new ConvolutionalLayer<T>(1, 1, 1, 0);
 
     // DiT blocks (transformer layers with proper self-attention)
     // Following the Diffusion Transformer (DiT) architecture
@@ -98,15 +98,15 @@ public class OpenSora<T> : NeuralNetworkBase<T>
 
     // Text encoder projection
     // Initialized in InitializeNetworkLayers(), called from constructor
-    private ConvolutionalLayer<T> _textProjection = new ConvolutionalLayer<T>(1, 1, 1, 1, 1, 1, 0);
+    private ConvolutionalLayer<T> _textProjection = new ConvolutionalLayer<T>(1, 1, 1, 0);
 
     // Time embedding
     // Initialized in InitializeNetworkLayers(), called from constructor
-    private ConvolutionalLayer<T> _timeEmbed = new ConvolutionalLayer<T>(1, 1, 1, 1, 1, 1, 0);
+    private ConvolutionalLayer<T> _timeEmbed = new ConvolutionalLayer<T>(1, 1, 1, 0);
 
     // Final layer
     // Initialized in InitializeNetworkLayers(), called from constructor
-    private ConvolutionalLayer<T> _finalLayer = new ConvolutionalLayer<T>(1, 1, 1, 1, 1, 1, 0);
+    private ConvolutionalLayer<T> _finalLayer = new ConvolutionalLayer<T>(1, 1, 1, 0);
 
     // VAE decoder (latent to pixel)
     private List<ConvolutionalLayer<T>> _vaeDecoder = [];

@@ -219,7 +219,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// the input shape might be [1, 28, 28] (channels, height, width).
     /// </para>
     /// </remarks>
-    protected int[] InputShape { get; private set; }
+    protected int[] InputShape { get; set; }
 
     /// <summary>
     /// Gets the input shapes for this layer, supporting multiple inputs.
@@ -240,7 +240,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// would need to know the shape of each source.
     /// </para>
     /// </remarks>
-    protected int[][] InputShapes { get; private set; }
+    protected int[][] InputShapes { get; set; }
 
     protected void UpdateInputShape(int[] inputShape)
     {
@@ -273,7 +273,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// the output shape might be [16, 14, 14] (channels, height, width).
     /// </para>
     /// </remarks>
-    protected int[] OutputShape { get; private set; }
+    protected int[] OutputShape { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether the layer is in training mode.
@@ -413,6 +413,122 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     {
         // Default implementation does nothing.
         // Layers with lazy initialization override this to allocate weights.
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Default implementation: a layer is shape-resolved when both InputShape and OutputShape
+    /// are non-null and contain no <c>-1</c> placeholders. Lazy-shape layers (PyTorch-style
+    /// LazyConv2d/LazyLinear analogs) override <see cref="OnFirstForward"/> to resolve dims
+    /// from the actual input on the first forward call; this property flips false → true at
+    /// that point.
+    /// </para>
+    /// </remarks>
+    public virtual bool IsShapeResolved =>
+        InputShape is not null && !ShapeContainsSentinel(InputShape)
+        && OutputShape is not null && !ShapeContainsSentinel(OutputShape);
+
+    private static bool ShapeContainsSentinel(int[] shape)
+    {
+        for (int i = 0; i < shape.Length; i++)
+        {
+            if (shape[i] < 0) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Hook fired once when a deferred-shape layer sees its first input. Override to
+    /// read <paramref name="input"/>.Shape, compute the layer's output shape, allocate
+    /// weights, and call <see cref="ResolveShapes"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// PyTorch-style lazy layers (e.g. a convolution constructed with only outputDepth + kernelSize)
+    /// set their <see cref="InputShape"/> / <see cref="OutputShape"/> to placeholders containing
+    /// <c>-1</c> in the dynamic axes. <see cref="EnsureInitializedFromInput"/> calls this hook
+    /// before the rest of forward executes; the override resolves shapes and finishes weight
+    /// initialization. Calls after the first are short-circuited by the <see cref="IsShapeResolved"/>
+    /// gate, so the override only runs once per layer instance.
+    /// </para>
+    /// </remarks>
+    /// <param name="input">The input tensor whose shape determines the deferred dims.</param>
+    protected virtual void OnFirstForward(Tensor<T> input)
+    {
+        // Default: do nothing. Layers with deferred shape override this.
+    }
+
+    /// <summary>
+    /// Resolves a deferred-shape layer's input and output shapes. Call from inside an
+    /// <see cref="OnFirstForward"/> override after computing the concrete dims.
+    /// </summary>
+    /// <param name="resolvedInputShape">The fully-resolved input shape (no <c>-1</c> entries).</param>
+    /// <param name="resolvedOutputShape">The fully-resolved output shape (no <c>-1</c> entries).</param>
+    /// <exception cref="ArgumentNullException">Thrown when either shape array is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when either shape still contains a <c>-1</c> placeholder.</exception>
+    protected void ResolveShapes(int[] resolvedInputShape, int[] resolvedOutputShape)
+    {
+        if (resolvedInputShape is null) throw new ArgumentNullException(nameof(resolvedInputShape));
+        if (resolvedOutputShape is null) throw new ArgumentNullException(nameof(resolvedOutputShape));
+        if (ShapeContainsSentinel(resolvedInputShape))
+            throw new ArgumentException("Resolved input shape still contains a -1 placeholder.", nameof(resolvedInputShape));
+        if (ShapeContainsSentinel(resolvedOutputShape))
+            throw new ArgumentException("Resolved output shape still contains a -1 placeholder.", nameof(resolvedOutputShape));
+
+        InputShape = resolvedInputShape;
+        InputShapes = new[] { resolvedInputShape };
+        OutputShape = resolvedOutputShape;
+        _cachedInputPorts = null;
+    }
+
+    /// <summary>
+    /// Convenience helper for deferred-shape layers: invokes <see cref="OnFirstForward"/>
+    /// (if shapes are not yet resolved) followed by <see cref="EnsureInitialized"/>. Lazy
+    /// layer Forward overrides should call this instead of <see cref="EnsureInitialized"/>
+    /// directly so weight allocation always happens after shape resolution.
+    /// </summary>
+    /// <param name="input">The input tensor whose shape resolves the deferred dims.</param>
+    protected void EnsureInitializedFromInput(Tensor<T> input)
+    {
+        if (!IsShapeResolved)
+        {
+            OnFirstForward(input);
+        }
+        EnsureInitialized();
+    }
+
+    /// <summary>
+    /// Eagerly resolves a lazy layer's shape (and allocates its weights) from a known
+    /// input shape, without running an actual forward pass. Parent wrappers that already
+    /// know their child layer's input shape at construction time call this so that
+    /// <see cref="GetParameters"/>, <see cref="SetParameters"/>, <c>ParameterCount</c>,
+    /// and ONNX export work correctly on a freshly constructed model — i.e. before any
+    /// real <c>Forward</c> has fired.
+    /// </summary>
+    /// <param name="inputShape">
+    /// Concrete (no <c>-1</c>) shape that this layer would receive on its first forward.
+    /// Each dim must be positive.
+    /// </param>
+    /// <remarks>
+    /// Idempotent: returns immediately if the layer's shape has already been resolved.
+    /// The dummy tensor allocated here is discarded; only the shape is consumed.
+    /// </remarks>
+    public void ResolveFromShape(int[] inputShape)
+    {
+        if (IsShapeResolved) return;
+        if (inputShape == null) throw new ArgumentNullException(nameof(inputShape));
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            if (inputShape[i] <= 0)
+            {
+                throw new ArgumentException(
+                    $"ResolveFromShape requires concrete positive dims; got {inputShape[i]} at axis {i}.",
+                    nameof(inputShape));
+            }
+        }
+        var dummy = new Tensor<T>(inputShape);
+        EnsureInitializedFromInput(dummy);
     }
 
     /// <summary>

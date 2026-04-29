@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.VolumetricProcessing)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "new[] { 1, 4, 4, 4 }, 2, 2")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "2, 2")]
 public class MaxPool3DLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -126,66 +126,42 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     /// For example, with pool size 2 and stride 2, a 32x32x32 input becomes 16x16x16.
     /// </para>
     /// </remarks>
-    public MaxPool3DLayer(int[] inputShape, int poolSize, int stride = 0)
-        : base(inputShape, CalculateOutputShape(inputShape, poolSize, stride == 0 ? poolSize : stride))
+    public MaxPool3DLayer(int poolSize, int stride = 0)
+        : base(new[] { -1, -1, -1, -1 }, new[] { -1, -1, -1, -1 })
     {
-        ValidateParameters(inputShape, poolSize, stride);
+        if (poolSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(poolSize), "Pool size must be positive.");
+        if (stride < 0)
+            throw new ArgumentOutOfRangeException(nameof(stride), "Stride cannot be negative.");
 
         PoolSize = poolSize;
         Stride = stride == 0 ? poolSize : stride;
     }
 
-    #endregion
-
-    #region Static Helper Methods
-
     /// <summary>
-    /// Calculates the output shape based on input shape and pooling parameters.
+    /// Resolves channel/spatial dims and registers the resolved output shape on first forward.
+    /// Output dims per axis: (input - poolSize) / stride + 1.
     /// </summary>
-    /// <param name="inputShape">The input shape [channels, depth, height, width].</param>
-    /// <param name="poolSize">The pooling window size.</param>
-    /// <param name="stride">The stride value.</param>
-    /// <returns>The output shape [channels, outputDepth, outputHeight, outputWidth].</returns>
-    /// <exception cref="ArgumentException">Thrown when output dimensions would be invalid.</exception>
-    private static int[] CalculateOutputShape(int[] inputShape, int poolSize, int stride)
+    protected override void OnFirstForward(Tensor<T> input)
     {
-        if (inputShape.Length != 4)
-            throw new ArgumentException("Input shape must be [channels, depth, height, width].", nameof(inputShape));
+        int rank = input.Shape.Length;
+        int c, d, h, w;
+        if (rank == 5) { c = input.Shape[1]; d = input.Shape[2]; h = input.Shape[3]; w = input.Shape[4]; }
+        else if (rank == 4) { c = input.Shape[0]; d = input.Shape[1]; h = input.Shape[2]; w = input.Shape[3]; }
+        else throw new ArgumentException(
+            $"MaxPool3DLayer requires rank-4 [C,D,H,W] or rank-5 [B,C,D,H,W] input; got rank {rank}.",
+            nameof(input));
 
-        int channels = inputShape[0];
-        int depth = inputShape[1];
-        int height = inputShape[2];
-        int width = inputShape[3];
+        int outD = (d - PoolSize) / Stride + 1;
+        int outH = (h - PoolSize) / Stride + 1;
+        int outW = (w - PoolSize) / Stride + 1;
 
-        int outputDepth = (depth - poolSize) / stride + 1;
-        int outputHeight = (height - poolSize) / stride + 1;
-        int outputWidth = (width - poolSize) / stride + 1;
-
-        if (outputDepth <= 0 || outputHeight <= 0 || outputWidth <= 0)
+        if (outD <= 0 || outH <= 0 || outW <= 0)
             throw new ArgumentException(
-                $"Pool size {poolSize} with stride {stride} produces invalid output dimensions " +
-                $"[{outputDepth}, {outputHeight}, {outputWidth}] for input [{depth}, {height}, {width}].",
-                nameof(inputShape));
+                $"Pool size {PoolSize} with stride {Stride} produces invalid output dimensions " +
+                $"[{outD}, {outH}, {outW}] for input [{d}, {h}, {w}].");
 
-        return [channels, outputDepth, outputHeight, outputWidth];
-    }
-
-    /// <summary>
-    /// Validates constructor parameters.
-    /// </summary>
-    /// <param name="inputShape">The input shape.</param>
-    /// <param name="poolSize">The pool size.</param>
-    /// <param name="stride">The stride.</param>
-    /// <exception cref="ArgumentException">Thrown when inputShape is invalid.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when poolSize or stride is invalid.</exception>
-    private static void ValidateParameters(int[] inputShape, int poolSize, int stride)
-    {
-        if (inputShape == null || inputShape.Length != 4)
-            throw new ArgumentException("Input shape must be [channels, depth, height, width].", nameof(inputShape));
-        if (poolSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(poolSize), "Pool size must be positive.");
-        if (stride < 0)
-            throw new ArgumentOutOfRangeException(nameof(stride), "Stride cannot be negative.");
+        ResolveShapes(new[] { c, d, h, w }, new[] { c, outD, outH, outW });
     }
 
     #endregion
@@ -210,6 +186,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
         _originalInputShape = input._shape;
         int rank = input.Rank;

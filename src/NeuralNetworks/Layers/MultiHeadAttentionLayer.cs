@@ -29,7 +29,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 8", TestConstructorArgs = "4, 8, 2")]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 8", TestConstructorArgs = "2, 4")]
 public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -328,14 +328,13 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     public MultiHeadAttentionLayer(
-        int sequenceLength,
-        int embeddingDimension,
         int headCount,
+        int headDimension,
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
-        : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], activationFunction ?? new IdentityActivation<T>())
+        : base(new[] { -1, headCount * headDimension }, new[] { -1, headCount * headDimension },
+               activationFunction ?? new IdentityActivation<T>())
     {
-        // Initialize auxiliary loss fields first so compiler knows they're set
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         HeadDiversityWeight = NumOps.FromDouble(0.01);
         _lastEntropyLoss = NumOps.Zero;
@@ -344,47 +343,23 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         if (headCount <= 0)
             throw new ArgumentOutOfRangeException(nameof(headCount),
                 $"headCount must be positive, got {headCount}.");
-        if (embeddingDimension % headCount != 0)
-            throw new ArgumentException(
-                $"embeddingDimension ({embeddingDimension}) must be divisible by headCount ({headCount}).",
-                nameof(headCount));
+        if (headDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(headDimension),
+                $"headDimension must be positive, got {headDimension}.");
 
         _headCount = headCount;
-        _headDimension = embeddingDimension / headCount;
-        _embeddingDimension = embeddingDimension;
+        _headDimension = headDimension;
+        _embeddingDimension = headCount * headDimension;
         InitializationStrategy = initializationStrategy;
 
-        if (initializationStrategy is { IsLazy: true })
-        {
-            // Lazy path: keep all five tensors at size 0. Full Q/K/V/O projection
-            // at DiT-XL scale is 4 × 1152² = ~42 MB per head, × 16 heads × 28 blocks
-            // = ~18 GB eager alloc across a single DiT tower. EnsureInitialized()
-            // rebuilds the real tensors when Forward / GetParameters runs.
-            _queryWeights = new Tensor<T>([0, 0]);
-            _keyWeights = new Tensor<T>([0, 0]);
-            _valueWeights = new Tensor<T>([0, 0]);
-            _outputWeights = new Tensor<T>([0, 0]);
-            _outputBias = new Tensor<T>([0]);
-            _isInitialized = false;
-        }
-        else
-        {
-            // Eager path: same behavior as before lazy init was added.
-            _queryWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-            _keyWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-            _valueWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-            _outputWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-            _outputBias = new Tensor<T>([embeddingDimension]);
-
-            InitializeParameters();
-
-            RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
-            _isInitialized = true;
-        }
+        // Always lazy now. Q/K/V/O projection weights are allocated on first forward
+        // (or via EnsureInitialized when GetParameters is called before forward).
+        _queryWeights = new Tensor<T>([0, 0]);
+        _keyWeights = new Tensor<T>([0, 0]);
+        _valueWeights = new Tensor<T>([0, 0]);
+        _outputWeights = new Tensor<T>([0, 0]);
+        _outputBias = new Tensor<T>([0]);
+        _isInitialized = false;
     }
 
     /// <summary>
@@ -395,53 +370,56 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <param name="headCount">The number of attention heads to use.</param>
     /// <param name="vectorActivationFunction">The vector activation function to apply (required to disambiguate from IActivationFunction overload).</param>
     public MultiHeadAttentionLayer(
-        int sequenceLength,
-        int embeddingDimension,
         int headCount,
+        int headDimension,
         IVectorActivationFunction<T> vectorActivationFunction,
         IInitializationStrategy<T>? initializationStrategy = null)
-        : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], vectorActivationFunction)
+        : base(new[] { -1, headCount * headDimension }, new[] { -1, headCount * headDimension }, vectorActivationFunction)
     {
-        // Initialize auxiliary loss fields first so compiler knows they're set
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         HeadDiversityWeight = NumOps.FromDouble(0.01);
         _lastEntropyLoss = NumOps.Zero;
         _lastDiversityLoss = NumOps.Zero;
 
+        if (headCount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(headCount));
+        if (headDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(headDimension));
+
         _headCount = headCount;
-        _headDimension = embeddingDimension / headCount;
-        _embeddingDimension = embeddingDimension;
+        _headDimension = headDimension;
+        _embeddingDimension = headCount * headDimension;
         InitializationStrategy = initializationStrategy;
 
-        if (initializationStrategy is { IsLazy: true })
-        {
-            // See the scalar-activation overload above for rationale. Both overloads
-            // support lazy init; the only difference is which activation interface the
-            // caller targets.
-            _queryWeights = new Tensor<T>([0, 0]);
-            _keyWeights = new Tensor<T>([0, 0]);
-            _valueWeights = new Tensor<T>([0, 0]);
-            _outputWeights = new Tensor<T>([0, 0]);
-            _outputBias = new Tensor<T>([0]);
-            _isInitialized = false;
-        }
-        else
-        {
-            _queryWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-            _keyWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-            _valueWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-            _outputWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-            _outputBias = new Tensor<T>([embeddingDimension]);
+        _queryWeights = new Tensor<T>([0, 0]);
+        _keyWeights = new Tensor<T>([0, 0]);
+        _valueWeights = new Tensor<T>([0, 0]);
+        _outputWeights = new Tensor<T>([0, 0]);
+        _outputBias = new Tensor<T>([0]);
+        _isInitialized = false;
+    }
 
-            InitializeParameters();
+    /// <summary>
+    /// Resolves shape on first forward; passthrough since output equals input shape.
+    /// Validates that input.Shape[^1] == headCount * headDimension.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 2)
+            throw new ArgumentException(
+                $"MultiHeadAttentionLayer requires rank>=2 input; got rank {rank}.",
+                nameof(input));
 
-            RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
-            _isInitialized = true;
-        }
+        int actualEmbed = input.Shape[rank - 1];
+        if (actualEmbed != _embeddingDimension)
+            throw new ArgumentException(
+                $"MultiHeadAttentionLayer was constructed with embeddingDimension={_embeddingDimension} " +
+                $"(headCount={_headCount} * headDimension={_headDimension}), but input.Shape[^1]={actualEmbed}.",
+                nameof(input));
+
+        var shape = input.Shape.ToArray();
+        ResolveShapes(shape, shape);
     }
 
     /// <summary>

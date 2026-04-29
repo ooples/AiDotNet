@@ -213,9 +213,6 @@ public class RRDBNetGenerator<T> : LayerBase<T>
 
         // Initial convolution: inputChannels → numFeatures
         _convFirst = new ConvolutionalLayer<T>(
-            inputDepth: inputChannels,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             outputDepth: numFeatures,
             kernelSize: 3,
             stride: 1,
@@ -236,9 +233,6 @@ public class RRDBNetGenerator<T> : LayerBase<T>
 
         // Trunk convolution (after RRDB blocks)
         _trunkConv = new ConvolutionalLayer<T>(
-            inputDepth: numFeatures,
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             outputDepth: numFeatures,
             kernelSize: 3,
             stride: 1,
@@ -258,9 +252,6 @@ public class RRDBNetGenerator<T> : LayerBase<T>
         {
             // Conv: numFeatures → numFeatures * 4 (for 2x PixelShuffle)
             _upsampleConvs[i] = new ConvolutionalLayer<T>(
-                inputDepth: numFeatures,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth,
                 outputDepth: numFeatures * 4, // 4x channels for 2x spatial upscale
                 kernelSize: 3,
                 stride: 1,
@@ -268,9 +259,7 @@ public class RRDBNetGenerator<T> : LayerBase<T>
                 activationFunction: null);
 
             // PixelShuffle: 2x upscaling
-            _pixelShuffleLayers[i] = new PixelShuffleLayer<T>(
-                [numFeatures * 4, currentHeight, currentWidth],
-                upscaleFactor: 2);
+            _pixelShuffleLayers[i] = new PixelShuffleLayer<T>(upscaleFactor: 2);
 
             currentHeight *= 2;
             currentWidth *= 2;
@@ -278,9 +267,6 @@ public class RRDBNetGenerator<T> : LayerBase<T>
 
         // HR convolution (after upsampling)
         _hrConv = new ConvolutionalLayer<T>(
-            inputDepth: numFeatures,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
             outputDepth: numFeatures,
             kernelSize: 3,
             stride: 1,
@@ -289,9 +275,6 @@ public class RRDBNetGenerator<T> : LayerBase<T>
 
         // Final convolution: numFeatures → outputChannels
         _convLast = new ConvolutionalLayer<T>(
-            inputDepth: numFeatures,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
             outputDepth: outputChannels,
             kernelSize: 3,
             stride: 1,

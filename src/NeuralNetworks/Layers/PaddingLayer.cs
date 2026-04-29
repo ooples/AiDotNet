@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "new[] { 1, 4, 4, 1 }, new[] { 0, 1, 1, 0 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "new[] { 0, 1, 1, 0 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class PaddingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -230,8 +230,8 @@ public class PaddingLayer<T> : LayerBase<T>
     /// 4 pixels to the width (2 on the left and 2 on the right).
     /// </para>
     /// </remarks>
-    public PaddingLayer(int[] inputShape, int[] padding, IActivationFunction<T>? activationFunction = null)
-        : base(inputShape, CalculateOutputShape(inputShape, padding), activationFunction ?? new IdentityActivation<T>())
+    public PaddingLayer(int[] padding, IActivationFunction<T>? activationFunction = null)
+        : base(MakeUnknownShape(padding), MakeUnknownShape(padding), activationFunction ?? new IdentityActivation<T>())
     {
         _padding = padding;
     }
@@ -261,10 +261,42 @@ public class PaddingLayer<T> : LayerBase<T>
     /// that consider the relationships between different values after padding.
     /// </para>
     /// </remarks>
-    public PaddingLayer(int[] inputShape, int[] padding, IVectorActivationFunction<T>? vectorActivationFunction = null)
-        : base(inputShape, CalculateOutputShape(inputShape, padding), vectorActivationFunction ?? new IdentityActivation<T>())
+    public PaddingLayer(int[] padding, IVectorActivationFunction<T> vectorActivationFunction)
+        : base(MakeUnknownShape(padding), MakeUnknownShape(padding), vectorActivationFunction ?? new IdentityActivation<T>())
     {
         _padding = padding;
+    }
+
+    private static int[] MakeUnknownShape(int[] padding)
+    {
+        var s = new int[padding.Length];
+        for (int i = 0; i < s.Length; i++) s[i] = -1;
+        return s;
+    }
+
+    /// <summary>
+    /// Resolves output shape on first forward by adding 2*padding to input.Shape per axis.
+    /// Padding array may be shorter than input rank; alignment is to trailing axes.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var inputShape = input.Shape.ToArray();
+        int rank = inputShape.Length;
+        int padRank = _padding.Length;
+        if (padRank > rank)
+            throw new ArgumentException(
+                $"PaddingLayer padding array length ({padRank}) must be <= input rank ({rank}).",
+                nameof(input));
+
+        int[] outputShape = new int[rank];
+        for (int i = 0; i < rank - padRank; i++) outputShape[i] = inputShape[i];
+        for (int j = 0; j < padRank; j++)
+        {
+            int axis = rank - padRank + j;
+            outputShape[axis] = inputShape[axis] + 2 * _padding[j];
+        }
+
+        ResolveShapes(inputShape, outputShape);
     }
 
     /// <summary>
@@ -334,6 +366,7 @@ public class PaddingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
         if (_padding.Length != input.Shape.Length)
             throw new ArgumentException("Padding array length must match input dimensions.");

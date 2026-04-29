@@ -125,8 +125,7 @@ public class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionMo
             _taskHeadIdx = Layers.Count;
             AiDotNet.Interfaces.IActivationFunction<T> idAct =
                 new AiDotNet.ActivationFunctions.IdentityActivation<T>();
-            Layers.Add(new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(
-                _options.FusionDim, Architecture.OutputSize, idAct));
+            Layers.Add(new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(Architecture.OutputSize, idAct));
         }
     }
 

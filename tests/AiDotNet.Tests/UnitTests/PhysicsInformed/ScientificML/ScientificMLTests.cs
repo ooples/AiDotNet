@@ -163,7 +163,6 @@ public class ScientificMLTests
     private static DenseLayer<double> CreateLinearLayer(int inputSize, int outputSize)
     {
         return new DenseLayer<double>(
-            inputSize,
             outputSize,
             (IActivationFunction<double>)new IdentityActivation<double>());
     }

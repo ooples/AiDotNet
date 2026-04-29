@@ -37,6 +37,7 @@ public class ResNet<T> : BackboneBase<T>
     private readonly Conv2D<T> _conv1;
     private readonly List<ResNetStage<T>> _stages;
     private readonly ResNetVariant _variant;
+    private readonly int _inChannels;
 
     /// <inheritdoc/>
     public override string Name => $"ResNet-{GetLayerCount(_variant)}";
@@ -55,6 +56,7 @@ public class ResNet<T> : BackboneBase<T>
     public ResNet(ResNetVariant variant = ResNetVariant.ResNet50, int inChannels = 3)
     {
         _variant = variant;
+        _inChannels = inChannels;
         _stages = new List<ResNetStage<T>>();
 
         // Base channels and expansion factor
@@ -69,8 +71,7 @@ public class ResNet<T> : BackboneBase<T>
             outChannels: 64,
             kernelSize: 7,
             stride: 2,
-            padding: 3,
-            useBias: false
+            padding: 3
         );
 
         // Get block counts for this variant
@@ -140,7 +141,7 @@ public class ResNet<T> : BackboneBase<T>
     }
 
     /// <inheritdoc/>
-    public override long GetParameterCount()
+    public override long GetBackboneParameterCount()
     {
         long count = _conv1.GetParameterCount();
         for (int i = 0; i < _stages.Count; i++)
@@ -248,6 +249,15 @@ public class ResNet<T> : BackboneBase<T>
 
         return output;
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Constructs a fresh ResNet with the same variant and input-channel configuration.
+    /// All internal Conv2D / ResidualBlock / Conv layers are freshly allocated; no state
+    /// is shared with the original.
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        => new ResNet<T>(_variant, _inChannels);
 }
 
 /// <summary>
@@ -356,8 +366,7 @@ internal class ResidualBlock<T>
                 outChannels: outChannels,
                 kernelSize: 1,
                 stride: 1,
-                padding: 0,
-                useBias: false
+                padding: 0
             );
 
             _conv2 = new Conv2D<T>(
@@ -365,8 +374,7 @@ internal class ResidualBlock<T>
                 outChannels: outChannels,
                 kernelSize: 3,
                 stride: stride,
-                padding: 1,
-                useBias: false
+                padding: 1
             );
 
             _conv3 = new Conv2D<T>(
@@ -374,8 +382,7 @@ internal class ResidualBlock<T>
                 outChannels: outChannels * expansion,
                 kernelSize: 1,
                 stride: 1,
-                padding: 0,
-                useBias: false
+                padding: 0
             );
         }
         else
@@ -386,8 +393,7 @@ internal class ResidualBlock<T>
                 outChannels: outChannels,
                 kernelSize: 3,
                 stride: stride,
-                padding: 1,
-                useBias: false
+                padding: 1
             );
 
             _conv2 = new Conv2D<T>(
@@ -395,8 +401,7 @@ internal class ResidualBlock<T>
                 outChannels: outChannels * expansion,
                 kernelSize: 3,
                 stride: 1,
-                padding: 1,
-                useBias: false
+                padding: 1
             );
         }
 
@@ -407,8 +412,7 @@ internal class ResidualBlock<T>
                 outChannels: outChannels * expansion,
                 kernelSize: 1,
                 stride: stride,
-                padding: 0,
-                useBias: false
+                padding: 0
             );
         }
     }

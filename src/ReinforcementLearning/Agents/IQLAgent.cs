@@ -124,12 +124,12 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var layerSize in _options.PolicyHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, layerSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            layers.Add(new DenseLayer<T>(layerSize, (IActivationFunction<T>)new ReLUActivation<T>()));
             prevSize = layerSize;
         }
 
         // Output: mean and log_std for Gaussian policy
-        layers.Add(new DenseLayer<T>(prevSize, _options.ActionSize * 2, (IActivationFunction<T>)new IdentityActivation<T>()));
+        layers.Add(new DenseLayer<T>(_options.ActionSize * 2, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
@@ -149,11 +149,11 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var layerSize in _options.ValueHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, layerSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            layers.Add(new DenseLayer<T>(layerSize, (IActivationFunction<T>)new ReLUActivation<T>()));
             prevSize = layerSize;
         }
 
-        layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new IdentityActivation<T>()));
+        layers.Add(new DenseLayer<T>(1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
@@ -174,11 +174,11 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var layerSize in _options.QHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, layerSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            layers.Add(new DenseLayer<T>(layerSize, (IActivationFunction<T>)new ReLUActivation<T>()));
             prevSize = layerSize;
         }
 
-        layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new IdentityActivation<T>()));
+        layers.Add(new DenseLayer<T>(1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,

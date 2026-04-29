@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
@@ -118,12 +118,12 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
         _scale = 1.0 / Math.Sqrt(_headDim);
 
         // Layer normalizations (pre-norm architecture)
-        _norm1 = new LayerNormalizationLayer<T>(dim);
-        _norm2 = new LayerNormalizationLayer<T>(dim);
+        _norm1 = new LayerNormalizationLayer<T>();
+        _norm2 = new LayerNormalizationLayer<T>();
 
         // QKV projection (3 * dim for Q, K, V combined)
-        _qkvProj = new DenseLayer<T>(dim, dim * 3);
-        _outProj = new DenseLayer<T>(dim, dim);
+        _qkvProj = new DenseLayer<T>(dim * 3);
+        _outProj = new DenseLayer<T>(dim);
 
         // Relative position bias table
         int biasTableSize = (2 * windowSize - 1) * (2 * windowSize - 1);
@@ -135,8 +135,8 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
 
         // MLP (2-layer with GELU)
         int mlpHiddenDim = dim * mlpRatio;
-        _mlpFc1 = new DenseLayer<T>(dim, mlpHiddenDim, (IActivationFunction<T>)new GELUActivation<T>());
-        _mlpFc2 = new DenseLayer<T>(mlpHiddenDim, dim);
+        _mlpFc1 = new DenseLayer<T>(mlpHiddenDim, (IActivationFunction<T>)new GELUActivation<T>());
+        _mlpFc2 = new DenseLayer<T>(dim);
 
         RegisterSubLayer(_norm1);
         RegisterSubLayer(_norm2);

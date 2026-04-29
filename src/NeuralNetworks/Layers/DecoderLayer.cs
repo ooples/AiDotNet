@@ -29,7 +29,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class DecoderLayer<T> : LayerBase<T>
 {
 
@@ -47,7 +47,7 @@ public class DecoderLayer<T> : LayerBase<T>
     /// The feed-forward neural network component of the decoder layer.
     /// </summary>
     private readonly FeedForwardLayer<T> _feedForward1;
-    private readonly FeedForwardLayer<T> _feedForward2;
+    private FeedForwardLayer<T> _feedForward2;
 
     /// <summary>
     /// Layer normalization applied after self-attention.
@@ -149,29 +149,50 @@ public class DecoderLayer<T> : LayerBase<T>
     /// <param name="feedForwardSize">The size of the feed-forward network.</param>
     /// <param name="activation">The scalar activation function to use. If null, ReLUActivation is used.</param>
     /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
-    public DecoderLayer(int inputSize, int attentionSize, int feedForwardSize, IActivationFunction<T>? activation = null)
-        : base([inputSize], [inputSize], activation ?? new ReLUActivation<T>())
+    public DecoderLayer(int attentionSize, int feedForwardSize, IActivationFunction<T>? activation = null)
+        : base(new[] { -1 }, new[] { -1 }, activation ?? new ReLUActivation<T>())
     {
-        _selfAttention = new AttentionLayer<T>(inputSize, attentionSize, (IVectorActivationFunction<T>?)null);
-        _crossAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
+        _selfAttention = new AttentionLayer<T>(attentionSize, (IVectorActivationFunction<T>?)null);
+        _crossAttention = new AttentionLayer<T>(attentionSize, activation);
 
-        // Standard transformer FFN: Linear(input -> ff) + activation + Linear(ff -> input)
-        _feedForward1 = new FeedForwardLayer<T>(inputSize, feedForwardSize, activation);
-        _feedForward2 = new FeedForwardLayer<T>(feedForwardSize, inputSize, (IActivationFunction<T>?)null);
+        // FFN's second projection matches input feature size (resolved on first forward).
+        // We use a sentinel-large outputDim that the lazy ctor accepts; OnFirstForward
+        // rebuilds it once input size is known.
+        _feedForward1 = new FeedForwardLayer<T>(feedForwardSize, activation);
+        _feedForwardInputSize = -1;
+        _feedForward2 = null!;
 
-        InputSize = inputSize;
+        InputSize = -1;
 
-        _norm1 = new LayerNormalizationLayer<T>(inputSize);
-        _norm2 = new LayerNormalizationLayer<T>(inputSize);
-        _norm3 = new LayerNormalizationLayer<T>(inputSize);
+        _norm1 = new LayerNormalizationLayer<T>();
+        _norm2 = new LayerNormalizationLayer<T>();
+        _norm3 = new LayerNormalizationLayer<T>();
 
         RegisterSubLayer(_selfAttention);
         RegisterSubLayer(_crossAttention);
         RegisterSubLayer(_feedForward1);
-        RegisterSubLayer(_feedForward2);
         RegisterSubLayer(_norm1);
         RegisterSubLayer(_norm2);
         RegisterSubLayer(_norm3);
+    }
+
+    private int _feedForwardInputSize;
+
+    /// <inheritdoc/>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"DecoderLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+        int inputSize = input.Shape[rank - 1];
+        InputSize = inputSize;
+        _feedForwardInputSize = inputSize;
+        _feedForward2 = new FeedForwardLayer<T>(inputSize, (IActivationFunction<T>?)null);
+        RegisterSubLayer(_feedForward2);
+
+        var inputShape = input.Shape.ToArray();
+        ResolveShapes(inputShape, inputShape);
     }
 
     /// <summary>
@@ -182,26 +203,26 @@ public class DecoderLayer<T> : LayerBase<T>
     /// <param name="feedForwardSize">The size of the feed-forward network.</param>
     /// <param name="activation">The vector activation function to use. If null, ReLUActivation is used.</param>
     /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
-    public DecoderLayer(int inputSize, int attentionSize, int feedForwardSize, IVectorActivationFunction<T>? activation = null)
-        : base([inputSize], [inputSize], activation ?? new ReLUActivation<T>())
+    public DecoderLayer(int attentionSize, int feedForwardSize, IVectorActivationFunction<T> activation)
+        : base(new[] { -1 }, new[] { -1 }, activation ?? new ReLUActivation<T>())
     {
-        _selfAttention = new AttentionLayer<T>(inputSize, attentionSize, (IVectorActivationFunction<T>?)null);
-        _crossAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
+        _selfAttention = new AttentionLayer<T>(attentionSize, (IVectorActivationFunction<T>?)null);
+        _crossAttention = new AttentionLayer<T>(attentionSize, activation);
 
-        // Standard transformer FFN: Linear(input -> ff) + activation + Linear(ff -> input)
-        _feedForward1 = new FeedForwardLayer<T>(inputSize, feedForwardSize, activation);
-        _feedForward2 = new FeedForwardLayer<T>(feedForwardSize, inputSize, (IVectorActivationFunction<T>?)null);
+        var ffActivation = activation ?? (IVectorActivationFunction<T>)new ReLUActivation<T>();
+        _feedForward1 = new FeedForwardLayer<T>(feedForwardSize, ffActivation);
+        _feedForwardInputSize = -1;
+        _feedForward2 = null!;
 
-        InputSize = inputSize;
+        InputSize = -1;
 
-        _norm1 = new LayerNormalizationLayer<T>(inputSize);
-        _norm2 = new LayerNormalizationLayer<T>(inputSize);
-        _norm3 = new LayerNormalizationLayer<T>(inputSize);
+        _norm1 = new LayerNormalizationLayer<T>();
+        _norm2 = new LayerNormalizationLayer<T>();
+        _norm3 = new LayerNormalizationLayer<T>();
 
         RegisterSubLayer(_selfAttention);
         RegisterSubLayer(_crossAttention);
         RegisterSubLayer(_feedForward1);
-        RegisterSubLayer(_feedForward2);
         RegisterSubLayer(_norm1);
         RegisterSubLayer(_norm2);
         RegisterSubLayer(_norm3);
@@ -224,6 +245,7 @@ public class DecoderLayer<T> : LayerBase<T>
         if (inputs.Length < 2 || inputs.Length > 3)
             throw new ArgumentException("DecoderLayer requires two or three input tensors: decoder input, encoder output, and optionally an attention mask.");
 
+        EnsureInitializedFromInput(inputs[0]);
         var decoderInput = inputs[0];
         var encoderOutput = inputs[1];
         Tensor<T>? attentionMask = inputs.Length == 3 ? inputs[2] : null;
