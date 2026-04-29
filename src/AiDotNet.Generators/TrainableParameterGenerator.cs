@@ -232,18 +232,23 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// Auto-generated — do not modify. Edit the [TrainableParameter] attributes instead.");
             sb.AppendLine("    /// </summary>");
             sb.AppendLine("    /// <remarks>");
-            sb.AppendLine("    /// Calls EnsureInitialized() ONLY when shape resolution has already");
-            sb.AppendLine("    /// happened (IsShapeResolved == true). For lazy layers that haven't yet");
-            sb.AppendLine("    /// received a Forward() call (e.g., a conditioning branch that's only");
-            sb.AppendLine("    /// activated when text embeddings are present), InputShape/OutputShape");
-            sb.AppendLine("    /// still hold the -1 sentinel and EnsureInitialized would overflow on");
-            sb.AppendLine("    /// TensorAllocator.Rent. In that case we return the (still-empty)");
-            sb.AppendLine("    /// placeholder tensors — those layers will materialize their real weights");
-            sb.AppendLine("    /// on their first Forward() and a subsequent CollectTrainableParameters");
-            sb.AppendLine("    /// pass will pick them up.");
+            sb.AppendLine("    /// Always discovers nested sub-layers via EnsureSubLayersRegistered()");
+            sb.AppendLine("    /// so optimizers and exporters see the full parameter graph even for");
+            sb.AppendLine("    /// lazy parents that have not received a Forward() call yet. Only");
+            sb.AppendLine("    /// the *weight materialization* step is gated on IsShapeResolved:");
+            sb.AppendLine("    /// for lazy layers that haven't yet received a Forward() call,");
+            sb.AppendLine("    /// InputShape/OutputShape still hold the -1 sentinel and");
+            sb.AppendLine("    /// EnsureInitialized would overflow on TensorAllocator.Rent. In that");
+            sb.AppendLine("    /// case we return the (still-empty) placeholder tensors — those");
+            sb.AppendLine("    /// layers will materialize their real weights on their first Forward()");
+            sb.AppendLine("    /// and a subsequent CollectTrainableParameters pass will pick them up.");
             sb.AppendLine("    /// </remarks>");
             sb.AppendLine($"    public override System.Collections.Generic.IReadOnlyList<Tensor<{GetTypeParamName(classSymbol)}>> GetTrainableParameters()");
             sb.AppendLine("    {");
+            if (subLayerFields.Count > 0)
+            {
+                sb.AppendLine("        EnsureSubLayersRegistered();");
+            }
             sb.AppendLine("        if (IsShapeResolved) EnsureInitialized();");
             sb.AppendLine($"        return new Tensor<{GetTypeParamName(classSymbol)}>[] {{ {string.Join(", ", paramFields.Select(f => f.Name))} }};");
             sb.AppendLine("    }");
@@ -358,20 +363,23 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    }");
         }
 
-        // Sub-layer registration via EnsureInitialized override (called before every forward pass)
+        // Sub-layer registration. Hoisted into EnsureSubLayersRegistered() so it runs
+        // independently of weight materialization — GetTrainableParameters() must see the
+        // sub-layer graph even on a pre-Forward() collection pass, which would otherwise
+        // skip EnsureInitialized() (and its TensorAllocator.Rent on -1 placeholder shapes).
         if (subLayerFields.Count > 0)
         {
             sb.AppendLine();
             sb.AppendLine("    private bool _subLayersRegistered;");
             sb.AppendLine();
             sb.AppendLine("    /// <summary>");
-            sb.AppendLine("    /// Registers discovered sub-layer fields for recursive parameter collection.");
-            sb.AppendLine("    /// Auto-generated from fields typed as ILayer or LayerBase subclasses.");
-            sb.AppendLine("    /// Called automatically via EnsureInitialized before the first forward pass.");
+            sb.AppendLine("    /// Registers discovered sub-layer fields exactly once. Cheap (no weight");
+            sb.AppendLine("    /// allocation), so safe to call before the first Forward() — keeps");
+            sb.AppendLine("    /// optimizer/export discovery working for lazy parents that haven't yet");
+            sb.AppendLine("    /// resolved their own input shape.");
             sb.AppendLine("    /// </summary>");
-            sb.AppendLine("    protected override void EnsureInitialized()");
+            sb.AppendLine("    private void EnsureSubLayersRegistered()");
             sb.AppendLine("    {");
-            sb.AppendLine("        base.EnsureInitialized();");
             sb.AppendLine("        if (_subLayersRegistered) return;");
             sb.AppendLine("        _subLayersRegistered = true;");
             foreach (var sl in subLayerFields)
@@ -381,6 +389,16 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 else
                     sb.AppendLine($"        RegisterSubLayer({sl.Name});");
             }
+            sb.AppendLine("    }");
+            sb.AppendLine();
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// Auto-generated EnsureInitialized: registers sub-layers (cheap), then");
+            sb.AppendLine("    /// delegates to base for weight allocation.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    protected override void EnsureInitialized()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        EnsureSubLayersRegistered();");
+            sb.AppendLine("        base.EnsureInitialized();");
             sb.AppendLine("    }");
         }
 

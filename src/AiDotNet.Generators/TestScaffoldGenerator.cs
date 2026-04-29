@@ -1149,6 +1149,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     }
 
     /// <summary>
+    /// Single source of truth for the spatial trace size used by vision-model scaffolds.
+    /// Patch-based ViT-/14 and ViT-/16 families use 112 (= lcm(14,16)) so both patch sizes
+    /// divide evenly. CNN / FPN / U-Net / ResNet / EfficientNet families use 128 (= 2^7)
+    /// so it survives every stride-2 downsample up to a 7-level pyramid. Callers must use
+    /// this helper for both the architecture's <c>inputHeight</c>/<c>inputWidth</c> args
+    /// and the test class's <c>InputShape</c> override so they always agree.
+    /// </summary>
+    private static int GetVisionSpatialSize(string className)
+        => IsPatchVisionModel(className) ? 112 : 128;
+
+    /// <summary>
     /// Checks if a type IS exactly <c>NeuralNetworkArchitecture&lt;T&gt;</c> (not a derived type).
     /// Uses <see cref="SymbolEqualityComparer"/> for cross-assembly robustness, with a
     /// metadata-name fallback when the resolved compilation symbol is unavailable.
@@ -1603,22 +1614,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 else if (isVision)
                 {
                     inputTypeExpr = "AiDotNet.Enums.InputType.ThreeDimensional";
-                    if (IsPatchVisionModel(model.ClassName))
-                    {
-                        // Patch-based vision (ViT-/14 and ViT-/16 families): 112 = lcm(14, 16)
-                        // so both patch sizes divide evenly. DINOv2/v3, SigLIP, InternViT,
-                        // PerceptionEncoder use ViT-/14 (112÷14=8 tokens); ViT-B, SAM, RADIO,
-                        // MobileSAM use ViT-/16 (112÷16=7 tokens).
-                        sizeExpr = "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 4";
-                    }
-                    else
-                    {
-                        // CNN / FPN / U-Net / ResNet / EfficientNet style: 128 = 2^7 so it
-                        // survives every stride-2 downsample up to a 7-level pyramid without
-                        // producing odd-sized intermediate tensors. 112 is not divisible by
-                        // 32 so it broke 5-level pyramid models.
-                        sizeExpr = "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4";
-                    }
+                    int spatial = GetVisionSpatialSize(model.ClassName);
+                    sizeExpr = $"inputHeight: {spatial}, inputWidth: {spatial}, inputDepth: 3, outputSize: 4";
                 }
                 else if (isAudio)
                 {
@@ -1795,10 +1792,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (isVisionModel)
         {
-            // Must match the architecture's inputHeight/inputWidth emitted above. ViT
-            // families use 112 (divisible by both 14 and 16); CNN/FPN/U-Net families use
-            // 128 (2^7-compatible for deep stride-2 pyramids).
-            int spatial = IsPatchVisionModel(model.ClassName) ? 112 : 128;
+            // Must match the architecture's inputHeight/inputWidth emitted above. Use
+            // the same helper so the two emission sites cannot drift apart.
+            int spatial = GetVisionSpatialSize(model.ClassName);
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ 3, {spatial}, {spatial} }};");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
