@@ -1203,18 +1203,26 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        // Mirror GetParameters: a deferred-shape layer that was Cloned
-        // before its first Forward has no concrete weight/bias storage to
-        // copy into, and the source-side GetParameters returned an empty
-        // vector. Accept the empty vector as a no-op so Clone roundtrip
-        // works on uninitialised conditioning branches; reject non-empty
-        // input that wouldn't fit any meaningful shape.
+        // Round-trip from saved parameters when the layer is still in lazy
+        // placeholder state (Clone / DeepCopy / Save+Load before first Forward).
+        // The parameter vector's length + the known outputSize uniquely determines
+        // inputSize for the (inputSize × outputSize + outputSize) layout, so we
+        // can resolve from the parameter vector alone — fixes #1221's "trained
+        // weights silently dropped on serialize/deserialize round-trip".
         if (!IsShapeResolved)
         {
             if (parameters.Length == 0) return;
-            throw new InvalidOperationException(
-                "Cannot SetParameters with non-empty data on a deferred-shape DenseLayer " +
-                "before its first Forward — the input feature size has not been resolved yet.");
+            int outputSize = OutputShape[0];
+            if (outputSize <= 0)
+                throw new InvalidOperationException(
+                    "Cannot SetParameters on a deferred-shape DenseLayer before " +
+                    "outputSize is known.");
+            int candidateInput = (parameters.Length - outputSize) / outputSize;
+            if (candidateInput <= 0 || candidateInput * outputSize + outputSize != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer inputSize for DenseLayer from {parameters.Length} parameters " +
+                    $"and outputSize={outputSize}: not consistent with weights[{candidateInput},{outputSize}] + biases[{outputSize}].");
+            ResolveFromShape(new[] { candidateInput });
         }
 
         EnsureInitialized();

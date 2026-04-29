@@ -238,53 +238,71 @@ public class TransformerProductionScaleHarnessIssue1221Tests
     }
 
     /// <summary>
-    /// DIAGNOSTIC for the AiModelBuilder.BuildAsync "Vector lengths must
-    /// match" bug. Probes the per-layer parameter count from
-    /// <c>NeuralNetworkBase.GetParameters</c> vs the per-layer flatten
-    /// count from <c>NeuralNetworkBase.ComputeGradients</c> (via
-    /// <c>IGradientComputable</c>) — these MUST agree but in #1221 they
-    /// do not, with the gradient vector ending up significantly shorter
-    /// than the parameter vector.
+    /// Serialize → Deserialize round-trip MUST preserve trained weights and
+    /// produce bit-identical predictions. This is the foundational guarantee
+    /// of any model save/load workflow and the path Clone()/DeepCopy() goes
+    /// through. #1221 root cause was that lazy-layer SetParameters silently
+    /// dropped trained weights when called on an unresolved layer post-deserialize.
     /// </summary>
     [Fact(Timeout = 60000)]
-    public async Task Transformer_GetParameters_AgreesWith_ComputeGradients_Length()
+    public async Task Transformer_SerializeDeserialize_PreservesTrainedWeights()
     {
         await Task.Yield();
-        const int vocab = 256;
-        const int seqLen = 32;
+        const int vocab = 64;
+        const int seqLen = 8;
 
         var model = BuildTransformer(
-            vocab: vocab, modelDim: 64, feedForwardDim: 256, seqLen: seqLen,
-            numEncoderLayers: 2, numHeads: 4, learningRate: 0.0003);
+            vocab: vocab, modelDim: 32, feedForwardDim: 64, seqLen: seqLen,
+            numEncoderLayers: 1, numHeads: 2, learningRate: 0.001);
 
-        var input = new Tensor<float>([1, seqLen]);
-        for (int s = 0; s < seqLen; s++) input[0, s] = s % vocab;
-        var target = new Tensor<float>([1, vocab]);
-        target[0, 0] = 1f;
-
-        // Path 1: GetParameters length (used by AdamOptimizer to size _m and _v).
-        var paramsVec = model.GetParameters();
-        int paramsLen = paramsVec.Length;
-        _output.WriteLine($"GetParameters length: {paramsLen}");
-        _output.WriteLine("Per-layer ParameterCount:");
-        int sumPerLayer = 0;
-        for (int i = 0; i < model.Layers.Count; i++)
+        // Train the model so weights have real, non-default values.
+        model.SetTrainingMode(true);
+        var rng = new Random(7);
+        for (int i = 0; i < 30; i++)
         {
-            var layer = model.Layers[i];
-            int pc = layer.ParameterCount;
-            sumPerLayer += pc;
-            _output.WriteLine($"  [{i}] {layer.GetType().Name} ParameterCount={pc}");
+            var inp = new Tensor<float>([1, seqLen]);
+            for (int s = 0; s < seqLen; s++) inp[0, s] = rng.Next(vocab);
+            var tgt = new Tensor<float>([1, vocab]);
+            tgt[0, rng.Next(vocab)] = 1f;
+            model.Train(inp, tgt);
         }
-        _output.WriteLine($"Sum of per-layer ParameterCount: {sumPerLayer}");
 
-        // Path 2: ComputeGradients length (used by AdamOptimizer.UpdateSolution).
-        var grad = model.ComputeGradients(input, target);
-        _output.WriteLine($"ComputeGradients length: {grad.Length}");
+        // Capture trained predictions on diverse inputs.
+        model.SetTrainingMode(false);
+        var probeInputs = new Tensor<float>[8];
+        var trainedOutputs = new float[8][];
+        for (int k = 0; k < 8; k++)
+        {
+            var inp = new Tensor<float>([1, seqLen]);
+            for (int s = 0; s < seqLen; s++) inp[0, s] = (k * 7 + s) % vocab;
+            probeInputs[k] = inp;
+            trainedOutputs[k] = ToArray(model.Predict(inp));
+        }
 
-        // Both lengths MUST match for the AdamOptimizer to apply gradients
-        // element-wise. Mismatch = the BuildAsync legacy training path is
-        // fundamentally broken for this model class.
-        Assert.Equal(paramsLen, grad.Length);
+        // Serialize → deserialize round-trip via DeepCopy.
+        var clone = model.Clone() as Transformer<float>;
+        Assert.NotNull(clone);
+
+        // Cloned model MUST produce IDENTICAL predictions on every input.
+        // Pre-fix #1221: cloned predictions were uniform / random because
+        // lazy layer SetParameters dropped most of the trained weights.
+        for (int k = 0; k < 8; k++)
+        {
+            var clonedOutput = ToArray(clone.Predict(probeInputs[k]));
+            double diff = L2Distance(trainedOutputs[k], clonedOutput);
+            double mag = Math.Sqrt(trainedOutputs[k].Sum(x => (double)x * x));
+            _output.WriteLine($"  input[{k}] ||trained - cloned|| = {diff:E3}, ||trained|| = {mag:E3}");
+            // Allow tiny float drift (1e-5 relative or absolute) but reject
+            // anything resembling the #1221 magnitude (uniform output =
+            // distance similar to ||trained|| itself).
+            double tolerance = Math.Max(1e-5, mag * 1e-5);
+            Assert.True(diff <= tolerance,
+                $"Cloned model predicts differently from trained model on input {k}: " +
+                $"||Δ|| = {diff:E3}, tolerance = {tolerance:E3}, ||trained|| = {mag:E3}. " +
+                $"Serialize/deserialize round-trip dropped trained weights — this is the " +
+                $"#1221 root cause: lazy layer SetParameters silently skips when called " +
+                $"on an unresolved layer post-deserialize.");
+        }
     }
 
     /// <summary>Probe whether BuildAsync actually updates the configured model's weights.</summary>

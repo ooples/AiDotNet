@@ -1228,22 +1228,12 @@ public static class DeserializationHelper
             throw new InvalidOperationException($"Failed to create instance of layer type {layerType}.");
         }
 
-        // After per-branch construction, lazy-migrated layers (Dense, Conv*,
-        // BatchNorm, LayerNorm, MaxPool, etc.) still have placeholder shapes
-        // [-1, ...] until OnFirstForward runs. Deserialization's next step is
-        // SetParameters(savedParams) — which throws "Expected 0 parameters"
-        // because the lazy weight tensors are zero-sized until shape resolves.
-        // Trigger ResolveFromShape with the serialized inputShape so the
-        // layer materialises kernels/biases/weights at the correct shape
-        // before SetParameters runs. Per-branch ResolveFromShape calls for
-        // DenseLayer / MeanLayer remain (they have known 1D shapes / axis
-        // metadata); this fallback covers Conv3DLayer, ConvolutionalLayer,
-        // and any other lazy layer not handled by a dedicated branch.
-        // Wrap in try/catch — some layers' ResolveFromShape contract requires
-        // a specific input rank that the serialized inputShape may not match
-        // (e.g., LayerNormalizationLayer's lazy ctor reads feature size from
-        // the LAST axis); for those, the per-branch handler already produced
-        // a fully-resolved layer and the IsShapeResolved guard short-circuits.
+        // Resolve lazy layers from the serialized inputShape so SetParameters
+        // can land trained weights. Layers whose lazy SetParameters can self-
+        // resolve from the parameter vector (DenseLayer, FullyConnectedLayer,
+        // FeedForwardLayer, LayerNormalizationLayer, BatchNormalizationLayer)
+        // tolerate ResolveFromShape failures here since SetParameters will
+        // recover; for others the layer's first Forward resolves it.
         if (instance is NeuralNetworks.Layers.LayerBase<T> lb
             && !lb.IsShapeResolved
             && inputShape != null
@@ -1254,14 +1244,17 @@ public static class DeserializationHelper
             {
                 lb.ResolveFromShape(inputShape);
             }
-            catch
+            catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
             {
-                // Layer's OnFirstForward expects a different input rank than
-                // the serialized inputShape provides. Leave the layer in lazy
-                // state — first real Forward will resolve it from a real
-                // input tensor. SetParameters may still fail on this path,
-                // but at that point the per-branch handler should have done
-                // explicit resolution; this fallback is a best-effort cover.
+                // Layer's OnFirstForward expects a different input rank.
+                // SetParameters now self-resolves from the parameter vector
+                // size for the lazy-migrated layer family, so the trained
+                // weights still land. Trace it for telemetry — silent swallow
+                // hid #1221 for too long.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"DeserializationHelper: ResolveFromShape failed for {lb.GetType().Name} " +
+                    $"with inputShape [{string.Join(", ", inputShape)}]: {ex.GetType().Name}: {ex.Message}. " +
+                    "Layer will resolve via SetParameters or first Forward.");
             }
         }
 

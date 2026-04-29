@@ -602,16 +602,24 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        // Mirror GetParameters: deferred-shape layer cloned before its
-        // first Forward accepts an empty vector as a no-op so Clone
-        // roundtrip works on uninitialised layers; non-empty input on
-        // unresolved shapes is a real misuse.
+        // Round-trip from saved parameters when the layer is still in lazy
+        // placeholder state. The vector length + known outputSize uniquely
+        // determines inputSize for the (inputSize × outputSize + outputSize)
+        // layout — fixes #1221 where serialize/deserialize round-trip silently
+        // dropped trained weights.
         if (!IsShapeResolved)
         {
             if (parameters.Length == 0) return;
-            throw new InvalidOperationException(
-                "Cannot SetParameters with non-empty data on a deferred-shape FullyConnectedLayer " +
-                "before its first Forward — the input feature size has not been resolved yet.");
+            int outputSize = OutputShape[0];
+            if (outputSize <= 0)
+                throw new InvalidOperationException(
+                    "Cannot SetParameters on a deferred-shape FullyConnectedLayer before outputSize is known.");
+            int candidateInput = (parameters.Length - outputSize) / outputSize;
+            if (candidateInput <= 0 || candidateInput * outputSize + outputSize != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer inputSize for FullyConnectedLayer from {parameters.Length} parameters " +
+                    $"and outputSize={outputSize}.");
+            ResolveFromShape(new[] { candidateInput });
         }
 
         int weightCount = _weights.Shape[0] * _weights.Shape[1];
