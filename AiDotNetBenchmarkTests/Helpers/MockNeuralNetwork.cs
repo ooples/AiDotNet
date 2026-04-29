@@ -138,4 +138,10 @@ public class MockNeuralNetwork<T, TInput, TOutput> : IFullModel<T, TInput, TOutp
     }
 
     public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
+    public void Dispose()
+    {
+        // Mock - no resources to release
+        GC.SuppressFinalize(this);
+    }
 }
