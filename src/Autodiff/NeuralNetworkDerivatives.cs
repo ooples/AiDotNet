@@ -77,7 +77,15 @@ namespace AiDotNet.Autodiff
                 throw new ArgumentNullException(nameof(inputs));
             }
 
-            var derivatives = ComputeDerivatives(network, inputs, outputIndex + 1);
+            int outputDim = GetOutputDimension(network, inputs);
+            if (outputIndex < 0 || outputIndex >= outputDim)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(outputIndex),
+                    $"Output index must be in [0, {outputDim - 1}] for a network with {outputDim} outputs.");
+            }
+
+            var derivatives = ComputeDerivatives(network, inputs, outputDim);
             if (derivatives.SecondDerivatives == null)
             {
                 throw new InvalidOperationException("Second derivatives were not computed.");
@@ -94,6 +102,22 @@ namespace AiDotNet.Autodiff
             }
 
             return hessian;
+        }
+
+        private static int GetOutputDimension(NeuralNetworkBase<T> network, T[] inputs)
+        {
+            var inputTensor = CreateInputTensor(inputs);
+            var outputTensor = network.Predict(inputTensor);
+
+            if (outputTensor.Rank == 2 && outputTensor.Shape[0] == 1)
+            {
+                return outputTensor.Shape[1];
+            }
+            if (outputTensor.Rank == 1)
+            {
+                return outputTensor.Shape[0];
+            }
+            throw new InvalidOperationException("Unexpected output tensor shape for derivative evaluation.");
         }
 
         private static AutoDiffResult EvaluateNetworkAnalytic(
