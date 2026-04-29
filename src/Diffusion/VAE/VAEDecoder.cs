@@ -177,10 +177,29 @@ public class VAEDecoder<T> : LayerBase<T>
         if (baseChannels <= 0)
             throw new ArgumentOutOfRangeException(nameof(baseChannels));
 
+        var resolvedChannelMults = channelMults ?? new[] { 1, 2, 4, 4 };
+        if (resolvedChannelMults.Length == 0)
+            throw new ArgumentException("At least one channel multiplier is required.", nameof(channelMults));
+        for (int i = 0; i < resolvedChannelMults.Length; i++)
+        {
+            if (resolvedChannelMults[i] <= 0)
+            {
+                throw new ArgumentException(
+                    $"channelMults[{i}] = {resolvedChannelMults[i]} must be positive.",
+                    nameof(channelMults));
+            }
+        }
+        if (numResBlocks <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numResBlocks), "Number of residual blocks must be positive.");
+        if (outputSpatialSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSpatialSize), "Output spatial size must be positive.");
+        if (numGroups <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numGroups), "Number of groups must be positive.");
+
         _outputChannels = outputChannels;
         _latentChannels = latentChannels;
         _baseChannels = baseChannels;
-        _channelMults = channelMults ?? new[] { 1, 2, 4, 4 };
+        _channelMults = resolvedChannelMults;
         _numGroups = numGroups;
         _numResBlocks = numResBlocks;
         _outputSpatialSize = outputSpatialSize;
