@@ -303,6 +303,38 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 }
             }
             sb.AppendLine("    }");
+
+            // ReturnPooledParameters — issue #1136 plan part 3 hook.
+            // Returns rented parameter tensors back to the TensorAllocator
+            // pool so sequential Diffusion / NN tests on 16 GB CI runners
+            // don't accumulate pool-orphaned buffers in the gen-2 LOH and
+            // OOM after a few hundred tests. Emitted as a separate hook
+            // (instead of a full Dispose(bool) override) so layers with
+            // their own Dispose(bool) override (DenseLayer, ConvolutionalLayer,
+            // SpiralConvLayer, SynapticPlasticityLayer) don't get a
+            // duplicate-member error — LayerBase.Dispose(bool) calls this
+            // hook on every Dispose path, and hand-written overrides
+            // continue to work via the base.Dispose(disposing) call they
+            // already make.
+            sb.AppendLine();
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// Returns rented parameter tensors to the TensorAllocator pool.");
+            sb.AppendLine("    /// Auto-generated from [TrainableParameter] fields per issue #1136 plan part 3.");
+            sb.AppendLine("    /// Called from <see cref=\"LayerBase{T}.Dispose(bool)\"/>; do not call directly.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    protected override void ReturnPooledParameters()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        // Lazy-init layers that never received a Forward have zero-length");
+            sb.AppendLine("        // placeholder tensors that were never Rented — skip them.");
+            sb.AppendLine("        if (!IsShapeResolved) return;");
+            foreach (var param in paramFields)
+            {
+                sb.AppendLine($"        if ({param.Name} != null && {param.Name}.Length > 0)");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            AiDotNet.Tensors.Helpers.TensorAllocator.Return({param.Name});");
+                sb.AppendLine("        }");
+            }
+            sb.AppendLine("    }");
         }
 
         // GetParameterRoles — maps parameter names to their roles for per-role learning rates / weight decay

@@ -1546,23 +1546,18 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     {
         if (disposing)
         {
-            // Release GPU handles for persistent tensors
+            // Release GPU handles for persistent tensors. base.Dispose
+            // already Unregisters them; Invalidate evicts the GPU cache so
+            // subsequent re-uploads see a clean slate (Unregister alone
+            // doesn't free GPU device memory if the runtime is keeping a
+            // pinned reference).
             Engine.InvalidatePersistentTensor(_kernels);
             Engine.InvalidatePersistentTensor(_biases);
 
-            // Return rented kernel tensor to the TensorAllocator pool so it can
-            // be reused by subsequent layer constructors. Check Length > 0
-            // rather than _isInitialized — EnsureInitialized rents BEFORE
-            // flipping the flag, so a partial init failure (e.g., exception
-            // during weight population) leaves Length > 0 but _isInitialized
-            // == false. The old `_isInitialized &&` guard would leak the
-            // rented tensor in that window. Length > 0 is sufficient:
-            // lazy-init placeholders sit at [0, 0, 0, 0] with Length == 0
-            // and aren't pool-rented.
-            if (_kernels.Length > 0)
-            {
-                TensorAllocator.Return(_kernels);
-            }
+            // Trainable-parameter pool returns (_kernels, _biases) are now
+            // handled by the auto-generated ReturnPooledParameters hook
+            // invoked from LayerBase.Dispose(bool) — issue #1136 plan part 3.
+            // We only need to return the NON-trainable rented buffer here.
 
             // Return the rented forward-pass output buffer. Without this,
             // disposing many ConvolutionalLayer instances (one per conv in

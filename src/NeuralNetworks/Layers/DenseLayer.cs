@@ -1400,20 +1400,15 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         if (disposing)
         {
-            // Release GPU handles for persistent tensors
+            // Release GPU handles. base.Dispose Unregisters _registeredTensors;
+            // Invalidate additionally evicts the GPU cache so the next
+            // re-allocated layer gets a clean slate.
             Engine.InvalidatePersistentTensor(_weights);
             Engine.InvalidatePersistentTensor(_biases);
 
-            // Return rented tensors to the TensorAllocator pool so they can be reused
-            // by subsequent layer constructors. Without this the eager-init path leaks
-            // the rented buffers and silently degrades the pooling optimization.
-            // Skip when the layer was lazy-initialized — those zero-sized placeholders
-            // were not rented and SetParameters/EnsureInitialized creates fresh tensors.
-            if (_isInitialized && _weights.Length > 0)
-            {
-                TensorAllocator.Return(_weights);
-                TensorAllocator.Return(_biases);
-            }
+            // Trainable-parameter pool returns (_weights, _biases) are now
+            // handled by the auto-generated ReturnPooledParameters hook
+            // invoked from LayerBase.Dispose(bool) — issue #1136 plan part 3.
 
             // Clear other managed resources (CPU)
             _weightsGradient = null;

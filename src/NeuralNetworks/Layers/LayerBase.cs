@@ -3301,6 +3301,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
 
         if (disposing)
         {
+            // Issue #1136 plan part 3: return rented parameter tensors
+            // back to the TensorAllocator pool BEFORE unregistering them
+            // from the engine, so sequential model creation (255+ models
+            // per Diffusion CI shard) doesn't leak pool-orphaned LOH
+            // buffers. The hook is a no-op for layers that don't have
+            // [TrainableParameter] fields and an auto-generated body for
+            // those that do (TrainableParameterGenerator).
+            ReturnPooledParameters();
+
             // Unregister all persistent tensors (parameters + buffers) from the engine
             // This releases GPU memory that was cached for these tensors
             foreach (var tensor in _registeredTensors)
@@ -3317,6 +3326,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         }
 
         _disposed = true;
+    }
+
+    /// <summary>
+    /// Hook called by <see cref="Dispose(bool)"/> to return rented parameter
+    /// tensors to the <c>TensorAllocator</c> pool. Default is a no-op for
+    /// layers without trainable parameters; layers with [TrainableParameter]
+    /// fields get an auto-generated override via <c>TrainableParameterGenerator</c>
+    /// that calls <c>TensorAllocator.Return</c> on each parameter tensor that
+    /// was Rent'd. Issue #1136 plan part 3.
+    /// </summary>
+    protected virtual void ReturnPooledParameters()
+    {
+        // No-op for layers without [TrainableParameter] fields.
     }
 
     // Note: No finalizer in base class - derived classes should implement their own
