@@ -179,6 +179,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc />
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        ThrowIfDisposed();
         // Compute gradients and apply them
         var gradients = ComputeGradients(input, expectedOutput, LossFunction);
         var learningRate = NumOps.FromDouble(1e-4);
@@ -188,6 +189,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc />
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
+        ThrowIfDisposed();
         // Suppress tape recording during inference
         using var _ = new NoGradScope<T>();
         var latent = Encode(input, sampleMode: false);
@@ -232,6 +234,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc />
     public virtual byte[] Serialize()
     {
+        ThrowIfDisposed();
         ModelPersistenceGuard.EnforceBeforeSerialize();
         using var stream = new MemoryStream();
         SaveState(stream);
@@ -241,6 +244,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc />
     public virtual void Deserialize(byte[] data)
     {
+        ThrowIfDisposed();
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         using var stream = new MemoryStream(data);
         LoadState(stream);
@@ -275,6 +279,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
+        ThrowIfDisposed();
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
@@ -297,6 +302,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc />
     public virtual void LoadModel(string filePath)
     {
+        ThrowIfDisposed();
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
@@ -485,19 +491,13 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
             BackpropagateLossGradient(lossGradTensor);
 
             var gradients = GetParameterGradients();
-
-            bool hasValidGradients = false;
-            for (int i = 0; i < Math.Min(gradients.Length, 100); i++)
-            {
-                if (!NumOps.Equals(gradients[i], NumOps.Zero))
-                {
-                    hasValidGradients = true;
-                    break;
-                }
-            }
-
-            if (hasValidGradients)
-                return gradients;
+            // Trust the subclass's exact gradients — we already gated entry to this
+            // branch on SupportsExactGradients == true. A heuristic that rejected
+            // "all-zero in the first 100 entries" silently dropped valid converged
+            // gradients (zero IS a valid exact gradient at convergence) and sparse
+            // gradients whose only non-zero entries fall past index 100, both of
+            // which would inject SPSA noise into a path the subclass marked exact.
+            return gradients;
         }
 
         // Fallback: SPSA (6 forward passes total vs 2N for finite differences).
@@ -506,6 +506,16 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         // CalculateLoss would exit with perturbed weights still installed and silently
         // corrupt later training/inference.
         var parameters = GetParameters();
+        if (parameters.Length == 0 && SupportsParameterInitialization)
+        {
+            // Lazy VAEs return an empty parameter vector before the first forward
+            // resolves their layers' input dims. Run one Predict to materialize
+            // the real weights so SPSA snapshots a populated parameter vector;
+            // otherwise we'd estimate a zero-length gradient and Train() would
+            // hit a length mismatch on the next call.
+            _ = Predict(input);
+            parameters = GetParameters();
+        }
         try
         {
             var gradients_spsa = new Vector<T>(parameters.Length);
@@ -709,5 +719,17 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     {
         if (_vaeDisposed) return;
         _vaeDisposed = true;
+    }
+
+    /// <summary>
+    /// Throws <see cref="System.ObjectDisposedException"/> when this VAE has already
+    /// been disposed. Subclasses must call this from public entry points that touch
+    /// model state (Train, Predict, Encode, Decode, Serialize, Deserialize, SaveModel,
+    /// LoadModel, GetParameters, SetParameters) so post-Dispose calls fail predictably
+    /// instead of corrupting derived resources.
+    /// </summary>
+    protected void ThrowIfDisposed()
+    {
+        if (_vaeDisposed) throw new System.ObjectDisposedException(GetType().FullName);
     }
 }
