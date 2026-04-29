@@ -25,29 +25,72 @@ internal class Conv2D<T>
     private readonly int _stride;
     private readonly int _padding;
 
-    public Tensor<T> Weights => _layer.GetParameters() is { Length: > 0 } v
-        ? new Tensor<T>(new[] { _outChannels, _inChannels, _kernelSize, _kernelSize },
-                        new Vector<T>(v.ToArray().AsSpan(0, _outChannels * _inChannels * _kernelSize * _kernelSize).ToArray()))
-        : new Tensor<T>(new[] { _outChannels, _inChannels, _kernelSize, _kernelSize });
+    private Tensor<T>? _cachedWeights;
+    private Tensor<T>? _cachedBias;
+    private long _cachedParamVersion = -1;
+
+    /// <summary>
+    /// Reshaped view of the underlying <see cref="ConvolutionalLayer{T}"/>'s convolutional
+    /// kernel as a [outChannels, inChannels, kernelSize, kernelSize] tensor. Cached so
+    /// repeated reads do not re-allocate; cache invalidates when the layer's parameters change.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the underlying layer has not yet been forward-resolved (its input depth
+    /// is still the <c>-1</c> sentinel and weights have not been allocated).
+    /// </exception>
+    public Tensor<T> Weights
+    {
+        get
+        {
+            if (!_layer.IsShapeResolved)
+                throw new InvalidOperationException(
+                    $"Conv2D weights are unavailable until the layer's first Forward(): " +
+                    $"input depth is still the lazy sentinel. Call Forward(input) once before reading Weights.");
+            RefreshCacheIfStale();
+            return _cachedWeights!;
+        }
+    }
 
     /// <summary>
     /// Bias tensor extracted from the underlying <see cref="ConvolutionalLayer{T}"/>'s parameter
     /// vector. <see cref="ConvolutionalLayer{T}"/> always allocates a bias of length
-    /// <c>OutputDepth</c>; before the layer has been forward-resolved the parameter vector is
-    /// empty and we return an empty placeholder.
+    /// <c>OutputDepth</c>. Cached identically to <see cref="Weights"/>.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the underlying layer has not yet been forward-resolved.
+    /// </exception>
     public Tensor<T> Bias
     {
         get
         {
-            var p = _layer.GetParameters();
-            int weightLen = _outChannels * _inChannels * _kernelSize * _kernelSize;
-            if (p.Length < weightLen + _outChannels)
-                return new Tensor<T>(new[] { _outChannels });
-            var arr = new T[_outChannels];
-            for (int i = 0; i < _outChannels; i++) arr[i] = p[weightLen + i];
-            return new Tensor<T>(new[] { _outChannels }, new Vector<T>(arr));
+            if (!_layer.IsShapeResolved)
+                throw new InvalidOperationException(
+                    $"Conv2D bias is unavailable until the layer's first Forward(): " +
+                    $"input depth is still the lazy sentinel. Call Forward(input) once before reading Bias.");
+            RefreshCacheIfStale();
+            return _cachedBias!;
         }
+    }
+
+    private void RefreshCacheIfStale()
+    {
+        var p = _layer.GetParameters();
+        // ParameterCount is the canonical version key — it changes when the layer is
+        // re-initialized (e.g., a different input depth resolves the lazy sentinel).
+        long version = _layer.ParameterCount;
+        if (_cachedWeights is not null && _cachedBias is not null && _cachedParamVersion == version)
+            return;
+
+        int weightLen = _outChannels * _inChannels * _kernelSize * _kernelSize;
+        var weightArr = new T[weightLen];
+        for (int i = 0; i < weightLen; i++) weightArr[i] = p[i];
+        _cachedWeights = new Tensor<T>(new[] { _outChannels, _inChannels, _kernelSize, _kernelSize }, new Vector<T>(weightArr));
+
+        var biasArr = new T[_outChannels];
+        for (int i = 0; i < _outChannels; i++) biasArr[i] = p[weightLen + i];
+        _cachedBias = new Tensor<T>(new[] { _outChannels }, new Vector<T>(biasArr));
+
+        _cachedParamVersion = version;
     }
 
     /// <summary>
