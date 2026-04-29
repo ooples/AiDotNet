@@ -615,7 +615,10 @@ public static class DeserializationHelper
         {
             // Conv3DLayer(int outputChannels, int kernelSize, int stride, int padding, IActivationFunction<T>?)
             // — lazy ctor; spatial dims (D/H/W) and inputChannels resolved on first Forward.
-            int outputChannels = outputShape.Length > 0 ? outputShape[0] : 1;
+            // Output shape follows NCDHW layout: [batch, channels, depth, height, width].
+            // Channels is axis 1, NOT axis 0 (which is the batch dim) — pulling
+            // outputShape[0] would reconstruct the layer with batchSize kernels.
+            int outputChannels = outputShape.Length > 1 ? outputShape[1] : (outputShape.Length > 0 ? outputShape[0] : 1);
             int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 3;
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             int padding = TryGetInt(additionalParams, "Padding") ?? 0;
