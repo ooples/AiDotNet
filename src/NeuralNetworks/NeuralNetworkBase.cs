@@ -4043,13 +4043,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {
-        // Create a deep copy of the current network
-        var newNetwork = (NeuralNetworkBase<T>)DeepCopy();
-
-        // Update the parameters of the new network
-        newNetwork.UpdateParameters(parameters);
-
-        return newNetwork;
+        // In-place update — issue #1221: DeepCopy + UpdateParameters loses
+        // gradients for lazy layers because deserialization resets them to
+        // placeholder state where ParameterCount=0, so UpdateParameters
+        // skips them.
+        UpdateParameters(parameters);
+        return this;
     }
 
     /// <summary>
