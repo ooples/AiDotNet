@@ -2037,8 +2037,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected virtual bool AreLayersCompatible(ILayer<T> prevLayer, ILayer<T> currentLayer)
     {
-        // Check if the output shape of the previous layer matches the input shape of the current layer
-        if (!Enumerable.SequenceEqual(prevLayer.GetOutputShape(), currentLayer.GetInputShape()))
+        // Lazy layers (post-0.68.0 PyTorch-style) report InputShape = [-1] until
+        // first Forward resolves it. A lazy current layer is compatible with any
+        // previous layer that produces a positive feature dim — the lazy layer
+        // will resolve its input to that dim on first forward. Skip the strict
+        // shape-equality check in this case so the validator doesn't reject
+        // perfectly-valid lazy chains (NeuralNetworkARIMA + every other model
+        // that builds layer chains with lazy DenseLayer / FullyConnectedLayer
+        // and validates them at construction time).
+        var currentInputShape = currentLayer.GetInputShape();
+        bool currentIsLazy = currentInputShape.Length > 0 &&
+                             currentInputShape.Any(d => d <= 0);
+        if (!currentIsLazy && !Enumerable.SequenceEqual(prevLayer.GetOutputShape(), currentInputShape))
             return false;
 
         // Special checks for specific layer combinations
