@@ -454,7 +454,6 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         // Create tokenizer
         _tokenizer = new WhisperTokenizer();
 
-        // Create mel spectrogram preprocessor
         _melSpectrogram = new MelSpectrogram<T>(
             sampleRate: sampleRate,
             nMels: numMels,

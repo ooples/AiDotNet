@@ -69,7 +69,18 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     public T ComputeSimilarity(Tensor<T> image, string text) => CosineSimilarity(EncodeImage(image), EncodeText(text));
     public Dictionary<string, T> ZeroShotClassify(Tensor<T> image, string[] labels) { var ie = EncodeImage(image); var te = EncodeTexts(labels); var logits = new Tensor<T>([labels.Length]); double temp = _options.Temperature; for (int i = 0; i < labels.Length; i++) logits[i] = NumOps.FromDouble(NumOps.ToDouble(CosineSimilarity(ie, te[i])) / temp); var probs = Softmax(logits); var r = new Dictionary<string, T>(); for (int i = 0; i < labels.Length; i++) r[labels[i]] = probs[i]; return r; }
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _visionLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultOpenCLIPLayers(_options.VisionEmbeddingDim, _options.TextEmbeddingDim, _options.ProjectionDim, _options.NumVisionLayers, _options.NumTextLayers, _options.NumVisionHeads, _options.NumTextHeads, _options.DropoutRate)); int lpb = _options.DropoutRate > 0 ? 6 : 5; _visionLayerEnd = 2 + _options.NumVisionLayers * lpb; } }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(input);
+        SetTrainingMode(false);
+        var c = PatchEmbedHelper.TokenizeImageNCHWToBSC(
+            input, _options.VisionEmbeddingDim, _options.ImageSize, ref _patchEmbed, Engine);
+        foreach (var l in Layers) c = l.Forward(c);
+        return c;
+    }
+
+    private ConvolutionalLayer<T>? _patchEmbed;
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);

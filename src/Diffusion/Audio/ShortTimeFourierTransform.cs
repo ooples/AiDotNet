@@ -146,12 +146,25 @@ public class ShortTimeFourierTransform<T>
     {
         if (nFft <= 0)
             throw new ArgumentOutOfRangeException(nameof(nFft), "FFT size must be positive.");
+
+        // Librosa / Whisper / standard audio configs commonly pass non-pow2
+        // window lengths (Whisper = 400, BEATs = 1024, Mel-Band RoFormer
+        // sometimes 1023). Round nFft up to the next pow2 — the windowed
+        // signal is zero-padded out to that size before the FFT, equivalent
+        // to librosa's default behaviour. Preserve windowLength = original
+        // nFft when not explicitly passed so the window function still
+        // uses the requested length.
+        int requestedWindowLength = windowLength ?? nFft;
         if ((nFft & (nFft - 1)) != 0)
-            throw new ArgumentException("FFT size must be a power of 2.", nameof(nFft));
+        {
+            int pow2 = 1;
+            while (pow2 < nFft) pow2 <<= 1;
+            nFft = pow2;
+        }
 
         _nFft = nFft;
         _hopLength = hopLength ?? nFft / 4;
-        _windowLength = windowLength ?? nFft;
+        _windowLength = requestedWindowLength;
         _center = center;
         _padMode = padMode;
         _fft = new FastFourierTransform<T>();

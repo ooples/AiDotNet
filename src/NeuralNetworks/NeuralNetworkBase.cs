@@ -16,6 +16,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Validation;
@@ -2037,17 +2038,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected virtual bool AreLayersCompatible(ILayer<T> prevLayer, ILayer<T> currentLayer)
     {
-        // Lazy layers (post-0.68.0 PyTorch-style) report InputShape = [-1] until
-        // first Forward resolves it. A lazy current layer is compatible with any
-        // previous layer that produces a positive feature dim — the lazy layer
-        // will resolve its input to that dim on first forward. Skip the strict
-        // shape-equality check in this case so the validator doesn't reject
-        // perfectly-valid lazy chains (NeuralNetworkARIMA + every other model
-        // that builds layer chains with lazy DenseLayer / FullyConnectedLayer
-        // and validates them at construction time).
+        // Lazy layers report InputShape = [-1] until first Forward — skip the
+        // strict shape-equality check; resolution happens at first forward.
         var currentInputShape = currentLayer.GetInputShape();
-        bool currentIsLazy = currentInputShape.Length > 0 &&
-                             currentInputShape.Any(d => d <= 0);
+        bool currentIsLazy = currentInputShape.Length > 0 && currentInputShape.Any(d => d <= 0);
         if (!currentIsLazy && !Enumerable.SequenceEqual(prevLayer.GetOutputShape(), currentInputShape))
             return false;
 
@@ -2743,84 +2737,25 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
-    /// Configures engine-side weight lifetime management (streaming pool +
-    /// optional GPU offload) per ooples/AiDotNet.Tensors 0.68.0.
+    /// Opts the model into the AiDotNet.Tensors 0.68.0 weight-lifetime
+    /// machinery — streaming pool, pinned-host, and GPU offload — so models
+    /// larger than RAM can run without OOMing.
     /// </summary>
-    /// <param name="options">
-    /// Streaming / offload options. <c>StreamingPoolMaxResidentBytes</c> sets
-    /// the in-RAM weight budget — weights past that budget are evicted to the
-    /// backing store and rehydrated on demand. <c>PreferredScheme</c> picks
-    /// CPU-only, pinned-host, GpuManaged, or GpuOffload mappings.
-    /// </param>
-    /// <param name="allocator">
-    /// Optional <see cref="IGpuOffloadAllocator"/> implementation. Pass null to
-    /// run CPU-only with the streaming pool active and no GPU staging.
-    /// </param>
-    /// <remarks>
-    /// <para>
-    /// This is the model-side opt-in for the four engine capabilities shipped
-    /// in AiDotNet.Tensors 0.68.0 (BFloat16/Float16 numerics, weight streaming,
-    /// quantization, GPU offload — see ooples/AiDotNet.Tensors#276).
-    /// </para>
-    /// <para>
-    /// What this method does:
-    /// <list type="number">
-    ///   <item>Calls <c>WeightRegistry.Configure</c> with the supplied options
-    ///         + allocator so subsequent weight registrations route through
-    ///         the streaming pool / offload allocator.</item>
-    ///   <item>Walks every layer in <see cref="Layers"/> and registers its
-    ///         weight tensors with the registry. The registry tags each tensor
-    ///         with its lifetime — <see cref="AiDotNet.Tensors.LinearAlgebra.WeightLifetime.Streaming"/>
-    ///         when the streaming pool is configured, <see cref="AiDotNet.Tensors.LinearAlgebra.WeightLifetime.GpuOffload"/>
-    ///         or <see cref="AiDotNet.Tensors.LinearAlgebra.WeightLifetime.GpuManaged"/>
-    ///         when an offload allocator is supplied — so the engine can
-    ///         evict / rehydrate / DMA them as needed.</item>
-    /// </list>
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> Call this once after constructing a large model
-    /// (Stable Diffusion XL, PaLM-E, Whisper-large) to keep weights from
-    /// monopolising RAM. The engine pages cold weights out and reads them back
-    /// when their layer's Forward fires. Per-step latency increases (NVMe is
-    /// slower than RAM) but the model becomes runnable on commodity hardware
-    /// instead of OOMing.
-    /// </para>
-    /// <para>
-    /// Example:
-    /// <code>
-    /// var model = new PaLME&lt;float&gt;(architecture);
-    /// model.ConfigureWeightLifetime(
-    ///     new GpuOffloadOptions
-    ///     {
-    ///         PreferredScheme = OffloadScheme.AutoBestFit,
-    ///         StreamingPoolMaxResidentBytes = 16L * 1024 * 1024 * 1024,
-    ///         StreamingBackingStorePath = "C:/temp/palme-weights"
-    ///     });
-    /// </code>
-    /// </para>
-    /// </remarks>
     public virtual void ConfigureWeightLifetime(
-        AiDotNet.Tensors.LinearAlgebra.GpuOffloadOptions options,
-        AiDotNet.Tensors.Engines.DirectGpu.IGpuOffloadAllocator? allocator = null)
+        GpuOffloadOptions options,
+        IGpuOffloadAllocator? allocator = null)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
 
-        // Configure the registry singleton — every subsequent RegisterWeight
-        // routes through the streaming pool / offload allocator chosen here.
-        AiDotNet.Tensors.LinearAlgebra.WeightRegistry.Configure(options, allocator!);
+        WeightRegistry.Configure(options, allocator!);
 
-        // Walk every existing layer and register its already-allocated weights
-        // so eviction / offload bookkeeping picks them up right now (rather
-        // than waiting for layer-internal RegisterTrainableParameter calls
-        // that only fire on first Forward for lazy layers).
         for (int i = 0; i < Layers.Count; i++)
         {
-            var layer = Layers[i] as Layers.LayerBase<T>;
-            if (layer is null) continue;
+            if (Layers[i] is not LayerBase<T> layer) continue;
             foreach (var tensor in layer.GetTrainableParameters())
             {
                 if (tensor is null || tensor.Length == 0) continue;
-                AiDotNet.Tensors.LinearAlgebra.WeightRegistry.RegisterWeight(tensor);
+                WeightRegistry.RegisterWeight(tensor);
             }
         }
     }

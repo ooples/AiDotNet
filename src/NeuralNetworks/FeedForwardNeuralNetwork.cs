@@ -213,8 +213,17 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
-            nameof(FeedForwardNeuralNetwork<T>), "forward pass");
+        // Accept batched input [B, ...expectedShape] by validating trailing
+        // dimensions, matching Predict's behaviour. Without this, callers
+        // that batch their input (the standard test scaffold for CGAN /
+        // ConditionalGAN / etc.) hit a shape-mismatch exception even though
+        // the trailing dims are correct.
+        var expectedShape = Architecture.GetInputShape();
+        bool batchedTrailingMatch = input.Rank == expectedShape.Length + 1
+            && input.Length / input.Shape[0] == expectedShape.Aggregate(1, (a, b) => a * b);
+        if (!batchedTrailingMatch)
+            TensorValidator.ValidateShape(input, expectedShape,
+                nameof(FeedForwardNeuralNetwork<T>), "forward pass");
 
         // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))

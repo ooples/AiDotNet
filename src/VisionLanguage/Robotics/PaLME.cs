@@ -3,6 +3,8 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
@@ -69,7 +71,7 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     // step the very first MHA layer in the encoder receives raw NCHW pixels
     // and reads `W` (e.g. 128) as the embedding dim, which mismatches the
     // [VisionDim, VisionDim] (1408×1408) Q/K/V weights and throws.
-    private NeuralNetworks.Layers.ConvolutionalLayer<T>? _patchEmbed;
+    private ConvolutionalLayer<T>? _patchEmbed;
     private int PatchSize => Math.Max(1, _options.ImageSize / 16);
 
     public PaLME(NeuralNetworkArchitecture<T> architecture, string modelPath, PaLMEOptions? options = null) : base(architecture) { _options = options ?? new PaLMEOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
@@ -84,22 +86,14 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
 
-        // Opt the paper-faithful 562B config (Driess et al. 2023) into the
-        // engine-side weight streaming + GPU offload that AiDotNet.Tensors
-        // 0.68.0 ships. Without this, materialising every layer's MHA / FFN
-        // weights at the same time hits ~140 GB at double precision and
-        // OOMs on every commodity machine. The defaults here track what
-        // PaLM-E's reference codebase would do at this scale: 16 GB
-        // resident budget, automatic best-fit scheme (managed unified
-        // memory when the GPU supports it, pinned host otherwise), and a
-        // backing store next to the system temp dir.
-        ConfigureWeightLifetime(
-            new AiDotNet.Tensors.LinearAlgebra.GpuOffloadOptions
-            {
-                PreferredScheme = AiDotNet.Tensors.LinearAlgebra.OffloadScheme.Auto,
-                StreamingPoolMaxResidentBytes = 16L * 1024 * 1024 * 1024,
-                StreamingBackingStorePath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet-palme-weights")
-            });
+        // Stream / offload PaLM-E's 562B weights — at double precision the
+        // chain otherwise OOMs at ~140 GB resident.
+        ConfigureWeightLifetime(new GpuOffloadOptions
+        {
+            PreferredScheme = OffloadScheme.Auto,
+            StreamingPoolMaxResidentBytes = 16L * 1024 * 1024 * 1024,
+            StreamingBackingStorePath = Path.Combine(Path.GetTempPath(), "aidotnet-palme-weights")
+        });
     }
 
     public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName; public int ActionDimension => _options.ActionDimension;
@@ -354,35 +348,10 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         return PoolSequence(bse, wasBatched: input.Rank == 4);
     }
 
-    private Tensor<T> TokenizeImageInput(Tensor<T> input)
-    {
-        bool isImage = (input.Rank == 3 && input.Shape[0] == 3) ||
-                       (input.Rank == 4 && input.Shape[1] == 3);
-        if (!isImage) return input;
+    private Tensor<T> TokenizeImageInput(Tensor<T> input) =>
+        PatchEmbedHelper.TokenizeImageNCHWToBSC(
+            input, _options.VisionDim, _options.ImageSize, ref _patchEmbed, Engine);
 
-        if (_patchEmbed is null)
-        {
-            _patchEmbed = new NeuralNetworks.Layers.ConvolutionalLayer<T>(
-                outputDepth: _options.VisionDim,
-                kernelSize: PatchSize,
-                stride: PatchSize,
-                padding: 0,
-                activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<T>());
-        }
-        var patched = _patchEmbed.Forward(input);
-        int b, ch, h, w;
-        if (patched.Rank == 4)
-        {
-            b = patched.Shape[0]; ch = patched.Shape[1]; h = patched.Shape[2]; w = patched.Shape[3];
-        }
-        else
-        {
-            b = 1; ch = patched.Shape[0]; h = patched.Shape[1]; w = patched.Shape[2];
-            patched = Engine.Reshape(patched, new[] { 1, ch, h, w });
-        }
-        var bhwc = Engine.TensorPermute(patched, new[] { 0, 2, 3, 1 }).Contiguous();
-        return Engine.Reshape(bhwc, new[] { b, h * w, ch });
-    }
     /// <inheritdoc />
     /// <remarks>
     /// PaLME owns a patch-embedding Conv2D outside the standard

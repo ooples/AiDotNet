@@ -198,15 +198,8 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
 
     private ILossFunction<T> _lossFunction;
 
-    /// <summary>
-    /// Picks the right sub-network backbone for a generator / discriminator /
-    /// Q-network architecture: a CNN when the architecture has 2-D/3-D input
-    /// (image-domain InfoGAN per Chen et al. 2016 §4.1/§4.4), and an MLP
-    /// otherwise (tabular / mixture-of-categoricals per §4.2). Without this
-    /// dispatch the test scaffold's 1-D OneDimensional architecture sends
-    /// tabular input through CreateDefaultCNNLayers and throws
-    /// "CNN requires 2D or 3D input".
-    /// </summary>
+    // CNN backbone for image domains (Chen et al. 2016 §4.1/§4.4),
+    // MLP backbone for tabular / mixture-of-categoricals (§4.2).
     private static NeuralNetworkBase<T> CreateBackboneForArchitecture(NeuralNetworkArchitecture<T> arch)
     {
         if (arch.InputType == InputType.TwoDimensional || arch.InputType == InputType.ThreeDimensional)
@@ -348,11 +341,6 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         _latentCodeSize = latentCodeSize;
         _mutualInfoCoefficient = NumOps.FromDouble(mutualInfoCoefficient);
 
-        // InfoGAN per Chen et al. 2016 §4: the generator/discriminator/Q
-        // networks use a CNN backbone for image inputs (MNIST §4.1, CelebA
-        // §4.4) and an MLP backbone for tabular / 1D inputs (mixture-of-
-        // categoricals §4.2). Pick the right backbone per architecture so a
-        // 1D architecture doesn't fail with "CNN requires 2D or 3D input".
         Generator = CreateBackboneForArchitecture(generatorArchitecture);
         Discriminator = CreateBackboneForArchitecture(discriminatorArchitecture);
         QNetwork = CreateBackboneForArchitecture(qNetworkArchitecture);

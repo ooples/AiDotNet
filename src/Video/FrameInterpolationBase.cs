@@ -169,8 +169,44 @@ public abstract class FrameInterpolationBase<T> : VideoNeuralNetworkBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Two-frame interpolation models accept either:
+    /// <list type="bullet">
+    ///   <item>A rank-4 frame sequence <c>[N, C, H, W]</c> — calls
+    ///         <see cref="InterpolateSequence"/>.</item>
+    ///   <item>A channel-concatenated frame pair <c>[2C, H, W]</c> or
+    ///         <c>[B, 2C, H, W]</c> emitted by the standard test scaffold —
+    ///         splits and calls <see cref="Interpolate"/> with t = 0.5.</item>
+    /// </list>
+    /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        bool isPairConcat = (input.Rank == 3 && input.Shape[0] % 2 == 0 && input.Shape[0] > 0) ||
+                            (input.Rank == 4 && input.Shape[1] % 2 == 0 && input.Shape[0] == 1);
+        if (isPairConcat) return InterpolatePairConcat(input);
         return InterpolateSequence(input);
+    }
+
+    private Tensor<T> InterpolatePairConcat(Tensor<T> pair)
+    {
+        bool batched = pair.Rank == 4;
+        int channels = (batched ? pair.Shape[1] : pair.Shape[0]) / 2;
+        int height = batched ? pair.Shape[2] : pair.Shape[1];
+        int width = batched ? pair.Shape[3] : pair.Shape[2];
+
+        var frame0 = new Tensor<T>([channels, height, width]);
+        var frame1 = new Tensor<T>([channels, height, width]);
+        var src = pair.AsSpan();
+        var f0 = frame0.AsWritableSpan();
+        var f1 = frame1.AsWritableSpan();
+        int hw = height * width;
+        int batchOff = batched ? 0 : 0;
+        for (int c = 0; c < channels; c++)
+        {
+            src.Slice(batchOff + c * hw, hw).CopyTo(f0.Slice(c * hw, hw));
+            src.Slice(batchOff + (channels + c) * hw, hw).CopyTo(f1.Slice(c * hw, hw));
+        }
+        return Interpolate(frame0, frame1, t: 0.5);
     }
 }

@@ -212,29 +212,18 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// residual block has gamma initialized to zero. This makes the residual blocks
     /// start as identity mappings, which can improve training.
     /// </remarks>
-    /// <summary>
-    /// When the BatchNormalization layer is in lazy / deferred-shape state
-    /// (InputShape == [-1] until first Forward), <see cref="ZeroInitGamma"/>
-    /// can't allocate gamma at the right size yet. Set this flag and apply
-    /// the zero init on first OnFirstForward.
-    /// </summary>
     private bool _zeroInitGammaPending;
 
     public void ZeroInitGamma()
     {
-        // ResNet zero-init residual: per He et al. 2019 ("Bag of Tricks for
-        // Image Classification with Convolutional Neural Networks" §3) the
-        // last BatchNorm in each residual block has gamma init=0 so the
-        // block starts as an identity mapping. With 0.68.0 lazy layers the
-        // BN layer's InputShape is the lazy sentinel [-1] until first
-        // Forward — defer the zero init to the resolution step.
+        // ResNet zero-init residual (He et al. 2019). Defer when shape is
+        // still lazy ([-1]); the resolution step picks up _zeroInitGammaPending.
         if (InputShape.Length == 0 || InputShape[0] <= 0)
         {
             _zeroInitGammaPending = true;
             return;
         }
-        int featureSize = InputShape[0];
-        _gamma = Tensor<T>.CreateDefault([featureSize], NumOps.Zero);
+        _gamma = Tensor<T>.CreateDefault([InputShape[0]], NumOps.Zero);
     }
 
     /// <summary>
@@ -350,9 +339,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
                 nameof(input));
         }
 
-        // If ZeroInitGamma was called before the layer resolved its shape
-        // (ResNet zero-init residual pattern on a lazy BN layer), apply the
-        // zero init now instead of the default one-init.
+        // Apply deferred ZeroInitGamma if requested before shape resolution.
         T gammaInit = _zeroInitGammaPending ? NumOps.Zero : NumOps.One;
         _zeroInitGammaPending = false;
         _gamma = Tensor<T>.CreateDefault([numFeatures], gammaInit);
