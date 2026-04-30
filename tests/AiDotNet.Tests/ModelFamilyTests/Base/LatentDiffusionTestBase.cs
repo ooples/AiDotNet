@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
@@ -14,6 +15,125 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
 {
     // =====================================================
+    // OVERRIDE: Output shape relation for latent diffusion
+    //
+    // The parent test (DiffusionModelTestBase.OutputShape_ShouldMatchInputShape)
+    // asserts output.Length == input.Length, which is correct for
+    // single-forward-pass diffusion models but mathematically wrong for
+    // *latent* diffusion: LatentDiffusionModelBase.Predict runs
+    // Generate → DecodeFromLatent (VAE.Decode) and returns a tensor in
+    // pixel/audio space, with spatial dimensions scaled up by
+    // VAE.DownsampleFactor relative to the latent input.
+    //
+    // Concrete example (AudioLDM, the failing test that triggered this
+    // override): InputShape = [1, 8, 16, 16] (2,048 latent elements);
+    // VAE decodes to [1, 1, 128, 128] (16,384 mel-spec elements) — an
+    // 8× spatial upsample. Asserting `output.Length == input.Length`
+    // is therefore wrong by construction for every latent variant; the
+    // correct invariant is the latent → pixel scaling factor exposed
+    // by VAE.DownsampleFactor.
+    //
+    // We also relax the assumption that all four spatial dims are
+    // bound: only batch and the last two spatial dims are checked, so
+    // a model that decodes 8×8 latent into 1×1×64×64 (no channel
+    // collapse) and one that decodes 8×16×16 into 1×1×128×128 (8→1
+    // channel collapse, AudioLDM-style) both pass under the same rule.
+    // =====================================================
+
+    [Fact(Timeout = 120000)]
+    public override async Task OutputShape_ShouldMatchInputShape()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var model = CreateModel();
+        var input = CreateRandomTensor(InputShape, rng);
+        var output = model.Predict(input);
+
+        // Latent diffusion's Predict() returns the VAE-decoded sample,
+        // so spatial dims scale by the VAE downsample factor while
+        // batch is preserved. CreateModel() returns IDiffusionModel<T>;
+        // the latent-specific properties live on ILatentDiffusionModel<T>.
+        var latentModel = (ILatentDiffusionModel<double>)model;
+        int downsample = latentModel.VAE.DownsampleFactor;
+        Assert.True(downsample >= 1,
+            $"VAE.DownsampleFactor must be >= 1; got {downsample}.");
+
+        Assert.Equal(input.Shape[0], output.Shape[0]);
+
+        if (input.Rank >= 4 && output.Rank >= 4)
+        {
+            Assert.Equal(input.Shape[2] * downsample, output.Shape[2]);
+            Assert.Equal(input.Shape[3] * downsample, output.Shape[3]);
+        }
+        else
+        {
+            // Lower-rank fallback: total element count must scale by
+            // (downsample² × decoder_channels / latent_channels). We
+            // can't compute that without VAE.OutputChannels, but at
+            // minimum the output must be non-empty and at least as
+            // large as a 1× decode (downsample=1 case).
+            Assert.True(output.Length > 0,
+                $"Predict produced an empty output for input length {input.Length}.");
+        }
+    }
+
+    // =====================================================
+    // OVERRIDE: Noise schedule monotonicity for latent diffusion
+    //
+    // The parent test scales the input by [0.1, 0.5, 1.0, 2.0] and
+    // calls Predict each time, expecting output magnitudes to be
+    // non-decreasing. That's a coin flip on diffusion models because
+    // Predict derives a deterministic seed FROM the input bits:
+    // scaling the input changes the seed, the seed produces different
+    // random noise, and the *generated* sample's magnitude is
+    // unrelated to the input scale. The original test passed for
+    // non-latent diffusion only by chance (random outputs hitting the
+    // ≤1-violation threshold); on AudioLDM that luck runs out and we
+    // get [24.6, 30.0, 27.9, 24.4] — 2 violations → fail.
+    //
+    // The actual paper-correct invariant the parent's xml-doc claimed
+    // to test ("at higher timesteps, the noise magnitude should
+    // increase") lives on the *scheduler*, not on the trained model:
+    // alpha_bar(t) (cumulative product of alphas) decreases
+    // monotonically with t in every standard schedule (DDPM linear,
+    // cosine, sigmoid), so noise level (1 - alpha_bar) increases
+    // monotonically. This invariant holds on untrained models too —
+    // the schedule is a fixed mathematical configuration, independent
+    // of any learned weights.
+    // =====================================================
+
+    [Fact(Timeout = 120000)]
+    public override async Task NoiseSchedule_ShouldBeMonotonic()
+    {
+        await Task.Yield();
+        using var model = CreateModel();
+        int total = model.Scheduler.TrainTimesteps;
+        Assert.True(total > 1,
+            $"Scheduler must declare at least 2 train timesteps; got {total}.");
+
+        int[] timesteps = { 0, total / 4, total / 2, (3 * total) / 4, total - 1 };
+        double[] noiseLevels = new double[timesteps.Length];
+        for (int i = 0; i < timesteps.Length; i++)
+        {
+            // alpha_bar(t) is monotonically non-increasing in t for
+            // every standard noise schedule; (1 - alpha_bar) is the
+            // expected residual noise variance at time t.
+            double alphaBar = Convert.ToDouble(model.Scheduler.GetAlphaCumulativeProduct(timesteps[i]));
+            noiseLevels[i] = 1.0 - alphaBar;
+        }
+
+        for (int i = 1; i < noiseLevels.Length; i++)
+        {
+            Assert.True(noiseLevels[i] >= noiseLevels[i - 1] - 1e-10,
+                $"Noise schedule is not monotonic: noiseLevel[t={timesteps[i - 1]}]={noiseLevels[i - 1]:F6} " +
+                $"> noiseLevel[t={timesteps[i]}]={noiseLevels[i]:F6}. The cumulative-product alpha_bar " +
+                $"of any standard DDPM/DDIM/cosine/sigmoid schedule is non-increasing in t, so " +
+                $"(1 - alpha_bar) must be non-decreasing.");
+        }
+    }
+
+    // =====================================================
     // LATENT DIFFUSION INVARIANT: Denoising Progress Monotonic
     // More denoising steps (less noise in input) should produce
     // output closer to the target. If error increases with less
@@ -26,7 +146,7 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var target = CreateRandomTensor(InputShape, rng);
 
         // Input with more noise vs. less noise
@@ -74,15 +194,27 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
 
         var input1 = CreateRandomTensor(InputShape, rng);
         var input2 = new Tensor<double>(InputShape);
         for (int i = 0; i < input1.Length; i++)
             input2[i] = input1[i] + 1e-4;  // tiny perturbation
 
-        var out1 = model.Predict(input1);
-        var out2 = model.Predict(input2);
+        // Probe the noise predictor directly via PredictNoise(sample, t).
+        // Predict() runs the full Generate + VAE.Decode pipeline whose
+        // first step derives a deterministic SEED from input bits — a
+        // 1e-4 perturbation changes the seed, the sampled noise, and
+        // the entire denoise trajectory, making Predict()'s output a
+        // pseudo-random function of the input rather than a continuous
+        // one. PredictNoise(sample, t) is the deterministic single-
+        // forward step of the noise predictor (no seed, no sampling),
+        // and continuity of the noise predictor is the actual
+        // mathematical invariant the original test was meant to
+        // express ("nearby points in latent space → nearby outputs").
+        int probeTimestep = model.Scheduler.TrainTimesteps / 2;
+        var out1 = model.PredictNoise(input1, probeTimestep);
+        var out2 = model.PredictNoise(input2, probeTimestep);
 
         // Compute cosine similarity
         double dot = 0, norm1 = 0, norm2 = 0;
@@ -98,8 +230,9 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
         {
             double cosineSim = dot / (Math.Sqrt(norm1) * Math.Sqrt(norm2));
             Assert.True(cosineSim > 0.5,
-                $"Latent space cosine similarity = {cosineSim:F4} for epsilon-close inputs. " +
-                "Latent diffusion output is not continuous.");
+                $"Noise predictor cosine similarity = {cosineSim:F4} for epsilon-close latent inputs " +
+                $"at timestep {probeTimestep}. A continuous noise-predictor neural network must map " +
+                $"ε-close inputs to ε-close outputs.");
         }
     }
 
@@ -116,7 +249,7 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var input = CreateRandomTensor(InputShape, rng);
 
         // Train briefly then predict

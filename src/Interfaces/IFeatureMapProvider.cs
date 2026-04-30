@@ -40,14 +40,16 @@ public interface IFeatureMapProvider<T>
 
     /// <summary>
     /// The number of channels in each scale's feature map. Indexed in the same order as
-    /// <see cref="GetFeatureMaps"/>'s return value.
+    /// <see cref="GetFeatureMaps"/>'s return value. Read-only — implementations should
+    /// expose a fresh or cached snapshot, not a mutable backing array.
     /// </summary>
-    int[] OutputChannels { get; }
+    IReadOnlyList<int> OutputChannels { get; }
 
     /// <summary>
     /// The downsampling stride at each scale (input pixel count divided by feature pixel count).
     /// Indexed in the same order as <see cref="GetFeatureMaps"/>'s return value. Standard
-    /// detection backbones produce <c>{ 4, 8, 16, 32 }</c>.
+    /// detection backbones produce <c>{ 4, 8, 16, 32 }</c>. Read-only — see remarks on
+    /// <see cref="OutputChannels"/>.
     /// </summary>
-    int[] Strides { get; }
+    IReadOnlyList<int> Strides { get; }
 }

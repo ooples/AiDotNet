@@ -731,8 +731,14 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Ensure weights are initialized (for lazy initialization)
-        EnsureInitialized();
+        // Lazy layers must run shape resolution (OnFirstForward) BEFORE
+        // EnsureInitialized — calling EnsureInitialized() directly on a
+        // lazily-constructed DenseLayer reads InputShape[0]/OutputShape[0]
+        // while they still hold the -1 sentinel and TensorAllocator.Rent
+        // overflows int on the resulting negative dimension product.
+        // EnsureInitializedFromInput is the correct lazy entry per
+        // LayerBase docs.
+        EnsureInitializedFromInput(input);
 
         _lastInput = input;
         _originalInputShape = input._shape;
@@ -1139,7 +1145,15 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Ensure weights and biases are initialized (supports lazy initialization)
+        // Deferred-shape layers that haven't seen their first Forward
+        // (e.g., a conditioning branch only activated by text embeddings)
+        // have InputShape[0] == -1 and EnsureInitialized would overflow on
+        // TensorAllocator.Rent. Return an empty vector — Clone /
+        // SetParameters / ParameterCount semantically have nothing to copy
+        // and pick up the real values once the first Forward materialises
+        // them.
+        if (!IsShapeResolved) return new Vector<T>(0);
+
         EnsureInitialized();
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
@@ -1189,7 +1203,28 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        // Ensure weights and biases are initialized (supports lazy initialization)
+        // Round-trip from saved parameters when the layer is still in lazy
+        // placeholder state (Clone / DeepCopy / Save+Load before first Forward).
+        // The parameter vector's length + the known outputSize uniquely determines
+        // inputSize for the (inputSize × outputSize + outputSize) layout, so we
+        // can resolve from the parameter vector alone — fixes #1221's "trained
+        // weights silently dropped on serialize/deserialize round-trip".
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            int outputSize = OutputShape[0];
+            if (outputSize <= 0)
+                throw new InvalidOperationException(
+                    "Cannot SetParameters on a deferred-shape DenseLayer before " +
+                    "outputSize is known.");
+            int candidateInput = (parameters.Length - outputSize) / outputSize;
+            if (candidateInput <= 0 || candidateInput * outputSize + outputSize != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer inputSize for DenseLayer from {parameters.Length} parameters " +
+                    $"and outputSize={outputSize}: not consistent with weights[{candidateInput},{outputSize}] + biases[{outputSize}].");
+            ResolveFromShape(new[] { candidateInput });
+        }
+
         EnsureInitialized();
 
         int expected = _weights.Length + _biases.Length;
@@ -1373,20 +1408,15 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         if (disposing)
         {
-            // Release GPU handles for persistent tensors
+            // Release GPU handles. base.Dispose Unregisters _registeredTensors;
+            // Invalidate additionally evicts the GPU cache so the next
+            // re-allocated layer gets a clean slate.
             Engine.InvalidatePersistentTensor(_weights);
             Engine.InvalidatePersistentTensor(_biases);
 
-            // Return rented tensors to the TensorAllocator pool so they can be reused
-            // by subsequent layer constructors. Without this the eager-init path leaks
-            // the rented buffers and silently degrades the pooling optimization.
-            // Skip when the layer was lazy-initialized — those zero-sized placeholders
-            // were not rented and SetParameters/EnsureInitialized creates fresh tensors.
-            if (_isInitialized && _weights.Length > 0)
-            {
-                TensorAllocator.Return(_weights);
-                TensorAllocator.Return(_biases);
-            }
+            // Trainable-parameter pool returns (_weights, _biases) are now
+            // handled by the auto-generated ReturnPooledParameters hook
+            // invoked from LayerBase.Dispose(bool) — issue #1136 plan part 3.
 
             // Clear other managed resources (CPU)
             _weightsGradient = null;

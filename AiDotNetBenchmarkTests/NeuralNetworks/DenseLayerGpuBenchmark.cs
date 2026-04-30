@@ -58,13 +58,15 @@ public class DenseLayerGpuBenchmark
 
         _input = new Tensor<float>(_inputData, new[] { BatchSize, MatrixSize });
 
+        // Resolve the lazy DenseLayer (input dim materialized from input.Shape, weights
+        // allocated) BEFORE reading GetWeights/GetBiases. This also warms up the GPU path
+        // so first-call resource init does not contaminate steady-state measurements.
+        var warmup = _denseLayer.Forward(_input);
+        GC.KeepAlive(warmup);
+
         // Pre-extract weights and biases for naive benchmark (avoid overhead in benchmark loop)
         _weightsData = _denseLayer.GetWeights().ToArray();
         _biasesData = _denseLayer.GetBiases().ToArray();
-
-        // Warm up the GPU path (first call initializes GPU resources)
-        var warmup = _denseLayer.Forward(_input);
-        GC.KeepAlive(warmup);
     }
 
     private static float DeterministicValue(int i)

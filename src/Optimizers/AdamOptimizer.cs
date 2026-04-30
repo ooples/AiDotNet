@@ -134,9 +134,12 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // Initialize with random solution
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
-        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
-        _m = new Vector<T>(parameters.Length);
-        _v = new Vector<T>(parameters.Length);
+
+        // Issue #1221: defer _m/_v allocation. Lazy-shape models report a
+        // truncated parameter count before the first Forward; UpdateSolution
+        // right-sizes against the actual gradient.
+        _m = Vector<T>.Empty();
+        _v = Vector<T>.Empty();
         _t = 0;
 
         // Initialize parameters
@@ -233,6 +236,17 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
+
+        // Right-size _m/_v to gradient on first call or after lazy-layer expansion.
+        if (_m.Length != gradient.Length)
+        {
+            var newM = new Vector<T>(gradient.Length);
+            var newV = new Vector<T>(gradient.Length);
+            int copyLen = Math.Min(_m.Length, gradient.Length);
+            for (int i = 0; i < copyLen; i++) { newM[i] = _m[i]; newV[i] = _v[i]; }
+            _m = newM;
+            _v = newV;
+        }
 
         // === Vectorized Adam Update using IEngine ===
         // Phase B: US-GPU-015 - GPU-accelerated gradient updates

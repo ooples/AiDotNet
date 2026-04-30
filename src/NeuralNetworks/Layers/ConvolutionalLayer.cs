@@ -1366,6 +1366,16 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
+        // For deferred-shape layers that haven't seen their first Forward
+        // yet (e.g., conditioning branch in UNetNoisePredictor that's only
+        // activated when text embeddings are present), EnsureInitialized
+        // would throw because InputDepth is still the -1 sentinel. Return
+        // an empty parameter vector — Clone/SetParameters/ParameterCount
+        // semantically have nothing to copy/set/count for an uninitialised
+        // layer and will pick up the real parameters on a subsequent pass
+        // after the first Forward materialises them.
+        if (!IsShapeResolved) return new Vector<T>(0);
+
         EnsureInitialized();
         // Bulk copy from contiguous tensor storage — replaces 4-nested scalar loops
         return Vector<T>.Concatenate(
@@ -1429,6 +1439,30 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Round-trip from saved parameters: derive inputDepth from vector length.
+        // Layout: kernels [outputDepth, inputDepth, kernelSize, kernelSize] + biases [outputDepth].
+        // inputDepth = (length - outputDepth) / (outputDepth * kernelSize * kernelSize).
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            int kernelArea = OutputDepth * KernelSize * KernelSize;
+            if (OutputDepth <= 0 || kernelArea <= 0)
+                throw new InvalidOperationException(
+                    "Cannot SetParameters on deferred-shape ConvolutionalLayer before OutputDepth/KernelSize are known.");
+            int candidateInputDepth = (parameters.Length - OutputDepth) / kernelArea;
+            if (candidateInputDepth <= 0
+                || candidateInputDepth * kernelArea + OutputDepth != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer inputDepth for ConvolutionalLayer from {parameters.Length} parameters " +
+                    $"(outputDepth={OutputDepth}, kernelSize={KernelSize}).");
+            // Convolutional layers need a 3D inputShape [C, H, W]; H/W can't be
+            // derived from the parameter vector alone. ResolveFromShape with
+            // dummy spatial dims = 1 — kernels and biases only depend on
+            // inputDepth/outputDepth/kernelSize, so spatial dims here are
+            // immaterial for SetParameters.
+            ResolveFromShape(new[] { candidateInputDepth, 1, 1 });
+        }
+
         EnsureInitialized();
         int kernelLen = _kernels.Length;
         int biasLen = _biases.Shape[0];
@@ -1522,23 +1556,18 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     {
         if (disposing)
         {
-            // Release GPU handles for persistent tensors
+            // Release GPU handles for persistent tensors. base.Dispose
+            // already Unregisters them; Invalidate evicts the GPU cache so
+            // subsequent re-uploads see a clean slate (Unregister alone
+            // doesn't free GPU device memory if the runtime is keeping a
+            // pinned reference).
             Engine.InvalidatePersistentTensor(_kernels);
             Engine.InvalidatePersistentTensor(_biases);
 
-            // Return rented kernel tensor to the TensorAllocator pool so it can
-            // be reused by subsequent layer constructors. Check Length > 0
-            // rather than _isInitialized — EnsureInitialized rents BEFORE
-            // flipping the flag, so a partial init failure (e.g., exception
-            // during weight population) leaves Length > 0 but _isInitialized
-            // == false. The old `_isInitialized &&` guard would leak the
-            // rented tensor in that window. Length > 0 is sufficient:
-            // lazy-init placeholders sit at [0, 0, 0, 0] with Length == 0
-            // and aren't pool-rented.
-            if (_kernels.Length > 0)
-            {
-                TensorAllocator.Return(_kernels);
-            }
+            // Trainable-parameter pool returns (_kernels, _biases) are now
+            // handled by the auto-generated ReturnPooledParameters hook
+            // invoked from LayerBase.Dispose(bool) — issue #1136 plan part 3.
+            // We only need to return the NON-trainable rented buffer here.
 
             // Return the rented forward-pass output buffer. Without this,
             // disposing many ConvolutionalLayer instances (one per conv in

@@ -349,28 +349,30 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(LayerNormalizationLayer<>))
         {
-            // LayerNormalizationLayer(int featureSize, double epsilon = ...)
-            int featureSize = inputShape[0];
+            // LayerNormalizationLayer is now lazy: ctor signature is (double epsilon).
+            // Feature size is inferred from input.Shape[^1] on first Forward.
+            // The fallback ResolveFromShape below the per-branch dispatch picks up
+            // the serialized inputShape so SetParameters has concrete shapes to load.
             double epsilon = TryGetDouble(additionalParams, "Epsilon") ?? NumericalStabilityHelper.LargeEpsilon;
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(double) });
+            var ctor = type.GetConstructor(new Type[] { typeof(double) });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find LayerNormalizationLayer constructor with (int, double).");
+                throw new InvalidOperationException("Cannot find LayerNormalizationLayer constructor with (double).");
             }
-            instance = ctor.Invoke(new object[] { featureSize, epsilon });
+            instance = ctor.Invoke(new object[] { epsilon });
         }
         else if (genericDef == typeof(BatchNormalizationLayer<>))
         {
-            // BatchNormalizationLayer(int featureSize, double epsilon = ..., double momentum = ...)
-            int featureSize = inputShape[0];
+            // BatchNormalizationLayer is now lazy: ctor signature is (double epsilon, double momentum).
+            // Feature size is inferred from input.Shape[^1] on first Forward.
             double epsilon = TryGetDouble(additionalParams, "Epsilon") ?? NumericalStabilityHelper.LargeEpsilon;
             double momentum = TryGetDouble(additionalParams, "Momentum") ?? 0.9;
-            var ctor = type.GetConstructor([typeof(int), typeof(double), typeof(double)]);
+            var ctor = type.GetConstructor([typeof(double), typeof(double)]);
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find BatchNormalizationLayer constructor with (int, double, double).");
+                throw new InvalidOperationException("Cannot find BatchNormalizationLayer constructor with (double, double).");
             }
-            instance = ctor.Invoke([featureSize, epsilon, momentum]);
+            instance = ctor.Invoke([epsilon, momentum]);
         }
         else if (genericDef == typeof(MultiHeadAttentionLayer<>))
         {
@@ -378,19 +380,30 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(TransformerEncoderLayer<>))
         {
-            // TransformerEncoderLayer(int embeddingSize, int numHeads, int feedForwardDim)
-            int embeddingSize = inputShape[0];
+            // The current TransformerEncoderLayer<T> constructor is (numHeads, feedForwardDim);
+            // the embeddingSize is resolved lazily from the first forward call. Use the
+            // saved input shape to pre-resolve the layer so deserialized weights can be
+            // reattached without an extra warm-up forward pass.
+            int embeddingSize = inputShape[^1];
             int numHeads = TryGetInt(additionalParams, "NumHeads") ?? ResolveDefaultHeadCount(embeddingSize);
             int feedForwardDim = TryGetInt(additionalParams, "FeedForwardDim")
                 ?? TryGetInt(additionalParams, "FeedForwardDimension")
                 ?? embeddingSize * 4;
 
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int) });
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int) });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find TransformerEncoderLayer constructor with (int, int, int).");
+                throw new InvalidOperationException("Cannot find TransformerEncoderLayer constructor with (int, int).");
             }
-            instance = ctor.Invoke(new object[] { embeddingSize, numHeads, feedForwardDim });
+            instance = ctor.Invoke(new object[] { numHeads, feedForwardDim });
+
+            // Pre-resolve shapes from the saved inputShape so GetParameters/SetParameters
+            // see fully-allocated sublayer tensors before SetParameters runs.
+            if (instance is LayerBase<T> layerBase && inputShape.Length > 0)
+            {
+                int[] resolvedShape = inputShape.Select(d => d > 0 ? d : 1).ToArray();
+                layerBase.ResolveShapesOnly(resolvedShape);
+            }
         }
         else if (genericDef == typeof(TransformerDecoderLayer<>))
         {
@@ -596,8 +609,18 @@ public static class DeserializationHelper
             int kernelSize = TryGetInt(additionalParams, "FilterSize") ?? 3;
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             int padding = TryGetInt(additionalParams, "Padding") ?? 0;
-            // outputShape format: [batch, depth, height, width] (NCHW format)
-            int outputDepth = outputShape.Length > 1 ? outputShape[1] : outputShape[0];
+            // outputShape can be rank-4 [batch, depth, height, width] (NCHW) when
+            // serialized after a batched forward, OR rank-3 [depth, height, width]
+            // when GetOutputShape() returns the layer-only shape (no batch axis).
+            // In rank-3, outputShape[1] is HEIGHT, not depth — reading axis 1 in
+            // both cases produces wrong-depth weights on Clone() and breaks
+            // SetParameters with "Expected N, but got M".
+            int outputDepth = outputShape.Length switch
+            {
+                >= 4 => outputShape[1],
+                3 => outputShape[0],
+                _ => outputShape[0]
+            };
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             var initStrategyType = typeof(AiDotNet.Initialization.IInitializationStrategy<>).MakeGenericType(typeof(T));
@@ -610,12 +633,49 @@ public static class DeserializationHelper
             if (activation is null && additionalParams is not null && additionalParams.ContainsKey("ScalarActivationType"))
                 throw new InvalidOperationException($"Failed to deserialize activation function of type '{additionalParams["ScalarActivationType"]}' for ConvolutionalLayer.");
             instance = ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null });
+
+            // Pre-resolve the lazy layer using the serialized inputShape so SetParameters
+            // sees the correct InputDepth and the kernel/bias counts match the saved
+            // parameter vector exactly. Without this the auto-resolve heuristic in
+            // ConvolutionalLayer.SetParameters can pick a different InputDepth than the
+            // original (especially when outputDepth × kernelSize² happens to factor the
+            // saved parameter count more than one way), and Clone()/DeepCopy() throw
+            // "Expected N parameters, but got M".
+            // Saved inputShape format: [batch, channels, height, width] (NCHW); some
+            // legacy paths serialize without the batch dim, so accept rank 3 too.
+            if (instance is ConvolutionalLayer<T> conv && inputShape != null && inputShape.Length >= 3)
+            {
+                int inDepth, inH, inW;
+                if (inputShape.Length == 4)
+                {
+                    inDepth = inputShape[1] > 0 ? inputShape[1] : 1;
+                    inH = inputShape[2] > 0 ? inputShape[2] : 1;
+                    inW = inputShape[3] > 0 ? inputShape[3] : 1;
+                }
+                else
+                {
+                    inDepth = inputShape[0] > 0 ? inputShape[0] : 1;
+                    inH = inputShape[1] > 0 ? inputShape[1] : 1;
+                    inW = inputShape[2] > 0 ? inputShape[2] : 1;
+                }
+                conv.ResolveShapesOnly(new[] { inDepth, inH, inW });
+            }
         }
         else if (genericDef == typeof(Conv3DLayer<>))
         {
             // Conv3DLayer(int outputChannels, int kernelSize, int stride, int padding, IActivationFunction<T>?)
             // — lazy ctor; spatial dims (D/H/W) and inputChannels resolved on first Forward.
-            int outputChannels = outputShape.Length > 0 ? outputShape[0] : 1;
+            // outputShape can be:
+            //   rank-5 [batch, channels, depth, height, width] (NCDHW after batched forward)
+            //   rank-4 [channels, depth, height, width]        (layer-only OutputShape)
+            // Reading axis 1 in rank-4 returns DEPTH, not channels — same trap as
+            // ConvolutionalLayer. Switch on rank explicitly.
+            int outputChannels = outputShape.Length switch
+            {
+                >= 5 => outputShape[1],
+                4 => outputShape[0],
+                _ => outputShape.Length > 0 ? outputShape[0] : 1
+            };
             int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 3;
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             int padding = TryGetInt(additionalParams, "Padding") ?? 0;
@@ -626,6 +686,113 @@ public static class DeserializationHelper
                 throw new InvalidOperationException("Cannot find Conv3DLayer constructor with expected signature.");
             var activation = TryRestoreActivation<T>(additionalParams);
             instance = ctor.Invoke(new object?[] { outputChannels, kernelSize, stride, padding, activation });
+
+            // Pre-resolve from saved inputShape so SetParameters sees the correct
+            // InputChannels and matches the saved parameter count.
+            // inputShape is rank-4 [channels, depth, height, width] for the layer-only
+            // OutputShape, or rank-5 [batch, channels, depth, height, width] post-batch.
+            if (instance is Conv3DLayer<T> conv3d && inputShape != null && inputShape.Length >= 4)
+            {
+                int inC, inD, inH, inW;
+                if (inputShape.Length == 5)
+                {
+                    inC = inputShape[1] > 0 ? inputShape[1] : 1;
+                    inD = inputShape[2] > 0 ? inputShape[2] : 1;
+                    inH = inputShape[3] > 0 ? inputShape[3] : 1;
+                    inW = inputShape[4] > 0 ? inputShape[4] : 1;
+                }
+                else
+                {
+                    inC = inputShape[0] > 0 ? inputShape[0] : 1;
+                    inD = inputShape[1] > 0 ? inputShape[1] : 1;
+                    inH = inputShape[2] > 0 ? inputShape[2] : 1;
+                    inW = inputShape[3] > 0 ? inputShape[3] : 1;
+                }
+                conv3d.ResolveShapesOnly(new[] { inC, inD, inH, inW });
+            }
+        }
+        else if (genericDef == typeof(NeuralNetworks.Layers.DeconvolutionalLayer<>))
+        {
+            // DeconvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding, IActivationFunction<T>?)
+            // — lazy ctor; spatial dims (H/W) and inputDepth resolved on first Forward.
+            // Same NCHW vs CHW disambiguation as ConvolutionalLayer above.
+            int outputDepth = outputShape.Length switch
+            {
+                >= 4 => outputShape[1],
+                3 => outputShape[0],
+                _ => outputShape[0]
+            };
+            int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 3;
+            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
+            int padding = TryGetInt(additionalParams, "Padding") ?? 0;
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType });
+            if (ctor is null)
+                throw new InvalidOperationException("Cannot find DeconvolutionalLayer constructor with expected signature.");
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            instance = ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation });
+
+            // Pre-resolve from inputShape so SetParameters matches saved counts.
+            if (instance is NeuralNetworks.Layers.DeconvolutionalLayer<T> deconv && inputShape != null && inputShape.Length >= 3)
+            {
+                int inDepth, inH, inW;
+                if (inputShape.Length == 4)
+                {
+                    inDepth = inputShape[1] > 0 ? inputShape[1] : 1;
+                    inH = inputShape[2] > 0 ? inputShape[2] : 1;
+                    inW = inputShape[3] > 0 ? inputShape[3] : 1;
+                }
+                else
+                {
+                    inDepth = inputShape[0] > 0 ? inputShape[0] : 1;
+                    inH = inputShape[1] > 0 ? inputShape[1] : 1;
+                    inW = inputShape[2] > 0 ? inputShape[2] : 1;
+                }
+                deconv.ResolveShapesOnly(new[] { inDepth, inH, inW });
+            }
+        }
+        else if (genericDef == typeof(NeuralNetworks.Layers.FullyConnectedLayer<>))
+        {
+            // FullyConnectedLayer(int outputSize, IActivationFunction<T>? activationFunction = null)
+            // — lazy ctor; input feature size resolved from input.Shape[^1] on first Forward.
+            int outputSize = outputShape.Length > 0 ? outputShape[^1] : 0;
+            if (outputSize <= 0)
+                throw new InvalidOperationException(
+                    $"FullyConnectedLayer deserialization requires positive outputSize; got {outputSize}.");
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int), activationFuncType });
+            if (ctor is null)
+                throw new InvalidOperationException("Cannot find FullyConnectedLayer constructor with (int, IActivationFunction<T>).");
+            instance = ctor.Invoke(new object?[] { outputSize, activation });
+        }
+        else if (genericDef == typeof(NeuralNetworks.Layers.Upsample3DLayer<>))
+        {
+            // Upsample3DLayer(int scaleDepth, int scaleHeight, int scaleWidth) — preferred lazy ctor.
+            // Falls back to (int scaleFactor) when only a single scale was serialized.
+            int? scaleD = TryGetInt(additionalParams, "ScaleDepth");
+            int? scaleH = TryGetInt(additionalParams, "ScaleHeight");
+            int? scaleW = TryGetInt(additionalParams, "ScaleWidth");
+            int? scaleF = TryGetInt(additionalParams, "ScaleFactor");
+
+            if (scaleD.HasValue && scaleH.HasValue && scaleW.HasValue)
+            {
+                var ctor3 = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int) });
+                if (ctor3 is null)
+                    throw new InvalidOperationException("Cannot find Upsample3DLayer constructor with (int, int, int).");
+                instance = ctor3.Invoke(new object[] { scaleD.Value, scaleH.Value, scaleW.Value });
+            }
+            else
+            {
+                int sf = scaleF ?? 2;
+                var ctor1 = type.GetConstructor(new Type[] { typeof(int) });
+                if (ctor1 is null)
+                    throw new InvalidOperationException("Cannot find Upsample3DLayer constructor with (int).");
+                instance = ctor1.Invoke(new object[] { sf });
+            }
         }
         else if (genericDef == typeof(NeuralNetworks.Layers.MeshPoolLayer<>))
         {
@@ -698,14 +865,18 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(MaxPool3DLayer<>))
         {
-            // MaxPool3DLayer(int[] inputShape, int poolSize, int stride = 0)
+            // MaxPool3DLayer is now lazy: ctor signature is (int poolSize, int stride = 0).
+            // Spatial dims (D/H/W) and channel count resolve on first Forward via OnFirstForward.
+            // The fallback ResolveFromShape below the per-branch dispatch picks up the
+            // serialized inputShape so the layer's lazy state is materialised before
+            // SetParameters runs.
             int poolSize = TryGetInt(additionalParams, "PoolSize") ?? 2;
             int stride = TryGetInt(additionalParams, "Stride") ?? 0;
 
-            var ctor = type.GetConstructor(new Type[] { typeof(int[]), typeof(int), typeof(int) });
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int) });
             if (ctor is null)
-                throw new InvalidOperationException("Cannot find MaxPool3DLayer constructor.");
-            instance = ctor.Invoke(new object[] { inputShape, poolSize, stride });
+                throw new InvalidOperationException("Cannot find MaxPool3DLayer constructor with (int, int).");
+            instance = ctor.Invoke(new object[] { poolSize, stride });
         }
         else if (genericDef == typeof(PoolingLayer<>))
         {
@@ -729,9 +900,9 @@ public static class DeserializationHelper
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.UpsamplingLayer`1")))
         {
             // UpsamplingLayer(int scaleFactor) — lazy: input shape resolved on first forward.
-            // Master added the ScaleFactor > 0 validation; we keep that guard, and route
-            // through the new 1-arg lazy ctor (the legacy 2-arg eager ctor was removed
-            // in the lazy-shape-inference migration).
+            // Keep the ScaleFactor > 0 validation guard; route through the new 1-arg
+            // lazy ctor (the legacy 2-arg eager ctor was removed in the lazy-shape-
+            // inference migration).
             int scaleFactor = TryGetInt(additionalParams, "ScaleFactor") ?? 2;
             if (scaleFactor <= 0)
             {
@@ -997,9 +1168,18 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))
         {
-            // MeanLayer/LogVarianceLayer(int[] inputShape, int axis)
+            // MeanLayer/LogVarianceLayer are now lazy: ctor signature is (int axis).
+            // Resolve from input shape after construction so the deserialized layer
+            // has concrete shapes for any subsequent SetParameters call.
             int axis = TryGetInt(additionalParams, "Axis") ?? 0;
-            instance = Activator.CreateInstance(type, inputShape, axis);
+            instance = Activator.CreateInstance(type, axis);
+            if (instance is NeuralNetworks.Layers.LayerBase<T> meanOrVarLayer
+                && !meanOrVarLayer.IsShapeResolved
+                && inputShape.Length > 0
+                && Array.TrueForAll(inputShape, d => d > 0))
+            {
+                meanOrVarLayer.ResolveFromShape(inputShape);
+            }
         }
         else if (genericDef == typeof(ResidualLayer<>))
         {
@@ -1084,23 +1264,22 @@ public static class DeserializationHelper
         }
         else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".FeedForwardLayer`1"))
         {
-            // FeedForwardLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
-            // Resolve (inputSize, outputSize) from the serialized shapes — FeedForwardLayer
-            // uses flat 1D shapes ([inputSize] → [outputSize]).
-            int inputSize = inputShape.Length > 0 ? inputShape[^1] : 0;
+            // FeedForwardLayer is now lazy:
+            //   FeedForwardLayer(int outputSize, IActivationFunction<T>? activationFunction = null)
+            // Input feature size is resolved from input.Shape[^1] on first Forward.
             int outputSize = outputShape.Length > 0 ? outputShape[^1] : 0;
-            if (inputSize <= 0 || outputSize <= 0)
+            if (outputSize <= 0)
                 throw new InvalidOperationException(
-                    $"FeedForwardLayer deserialization requires positive inputSize/outputSize; got ({inputSize}, {outputSize}).");
+                    $"FeedForwardLayer deserialization requires positive outputSize; got {outputSize}.");
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
 
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType });
+            var ctor = type.GetConstructor(new Type[] { typeof(int), activationFuncType });
             if (ctor is null)
                 throw new InvalidOperationException(
-                    "Cannot find FeedForwardLayer constructor with (int, int, IActivationFunction<T>).");
-            instance = ctor.Invoke(new object?[] { inputSize, outputSize, activation });
+                    "Cannot find FeedForwardLayer constructor with (int, IActivationFunction<T>).");
+            instance = ctor.Invoke(new object?[] { outputSize, activation });
         }
         else if (openGenericType.FullName != null
             && (openGenericType.FullName.EndsWith(".RWKVLayer`1")
@@ -1159,56 +1338,101 @@ public static class DeserializationHelper
             throw new InvalidOperationException($"Failed to create instance of layer type {layerType}.");
         }
 
+        // Resolve lazy layers from the serialized inputShape so SetParameters
+        // can land trained weights. Layers whose lazy SetParameters can self-
+        // resolve from the parameter vector (DenseLayer, FullyConnectedLayer,
+        // FeedForwardLayer, LayerNormalizationLayer, BatchNormalizationLayer)
+        // tolerate ResolveFromShape failures here since SetParameters will
+        // recover; for others the layer's first Forward resolves it.
+        if (instance is NeuralNetworks.Layers.LayerBase<T> lb
+            && !lb.IsShapeResolved
+            && inputShape != null
+            && inputShape.Length > 0
+            && System.Array.TrueForAll(inputShape, d => d > 0))
+        {
+            try
+            {
+                lb.ResolveFromShape(inputShape);
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
+            {
+                // Layer's OnFirstForward expects a different input rank.
+                // SetParameters now self-resolves from the parameter vector
+                // size for the lazy-migrated layer family, so the trained
+                // weights still land. Trace it for telemetry — silent swallow
+                // hid #1221 for too long.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"DeserializationHelper: ResolveFromShape failed for {lb.GetType().Name} " +
+                    $"with inputShape [{string.Join(", ", inputShape)}]: {ex.GetType().Name}: {ex.Message}. " +
+                    "Layer will resolve via SetParameters or first Forward.");
+            }
+        }
+
         return (ILayer<T>)instance;
     }
 
     private static object CreateDenseLayer<T>(Type type, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams)
     {
-        // DenseLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null, IInitializationStrategy<T>? initializationStrategy = null)
-        // Use specific constructor to avoid ambiguity with vector activation constructor.
+        // DenseLayer is now lazy-only:
+        //   DenseLayer(int outputSize, IActivationFunction<T>? activationFunction = null,
+        //              IInitializationStrategy<T>? initializationStrategy = null)
+        // After construction we MUST call ResolveFromShape so SetParameters can load
+        // saved weights without hitting the -1 sentinel guard.
         var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
         var initStrategyType = typeof(AiDotNet.Initialization.IInitializationStrategy<>).MakeGenericType(typeof(T));
-        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType, initStrategyType });
+        var ctor = type.GetConstructor(new Type[] { typeof(int), activationFuncType, initStrategyType });
         if (ctor is null)
         {
-            throw new InvalidOperationException("Cannot find DenseLayer constructor with (int, int, IActivationFunction<T>, IInitializationStrategy<T>).");
+            throw new InvalidOperationException("Cannot find DenseLayer constructor with (int, IActivationFunction<T>, IInitializationStrategy<T>).");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke(new object?[] { inputShape[0], outputShape[0], activation, null });
+        object instance = ctor.Invoke(new object?[] { outputShape[0], activation, null });
+
+        // Resolve lazy shape so SetParameters can populate weights/biases on the deserialized layer.
+        if (instance is NeuralNetworks.Layers.LayerBase<T> layerBase && !layerBase.IsShapeResolved && inputShape.Length > 0 && inputShape[0] > 0)
+        {
+            layerBase.ResolveFromShape(new[] { inputShape[0] });
+        }
+        return instance;
     }
 
     private static object CreateMultiHeadAttentionLayer<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)
     {
-        // MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension,
-        //   int headCount, IActivationFunction<T>? activationFunction = null,
-        //   IInitializationStrategy<T>? initializationStrategy = null)
+        // MultiHeadAttentionLayer is now lazy:
+        //   MultiHeadAttentionLayer(int headCount, int headDimension,
+        //                           IActivationFunction<T>? activationFunction = null,
+        //                           IInitializationStrategy<T>? initializationStrategy = null)
+        // Sequence length is inferred per-forward; embeddingDimension = headCount * headDimension.
+        // Q/K/V/O projection weights are allocated lazily on first Forward.
         //
         // The optional initializationStrategy parameter MUST be included in
         // the reflection signature even though it has a default — Type.GetConstructor
-        // matches by exact parameter list, not by "first N + defaults". Without it
-        // the lookup returns null and Clone-via-serialization (used by
-        // InferenceOptimizer.OptimizeForInference and any model save/load
-        // round-trip) fails on every transformer with an MHA layer.
+        // matches by exact parameter list, not by "first N + defaults".
         if (inputShape.Length < 2)
         {
             throw new InvalidOperationException("MultiHeadAttentionLayer requires input shape [sequenceLength, embeddingDimension].");
         }
 
-        int seqLen = inputShape[0];
         int embDim = inputShape[1];
         int headCount = TryGetInt(additionalParams, "HeadCount") ?? ResolveDefaultHeadCount(embDim);
+        int headDimension = TryGetInt(additionalParams, "HeadDimension") ?? (embDim / headCount);
+        if (headDimension * headCount != embDim)
+        {
+            throw new InvalidOperationException(
+                $"MultiHeadAttentionLayer deserialization: embeddingDimension {embDim} is not divisible by headCount {headCount}.");
+        }
 
         var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
         var initStrategyType = typeof(IInitializationStrategy<>).MakeGenericType(typeof(T));
-        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
+        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType, initStrategyType });
         if (ctor is null)
         {
-            throw new InvalidOperationException("Cannot find MultiHeadAttentionLayer constructor with (int, int, int, IActivationFunction<T>, IInitializationStrategy<T>).");
+            throw new InvalidOperationException("Cannot find MultiHeadAttentionLayer constructor with (int, int, IActivationFunction<T>, IInitializationStrategy<T>).");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke(new object?[] { seqLen, embDim, headCount, activation, null });
+        return ctor.Invoke(new object?[] { headCount, headDimension, activation, null });
     }
 
     private static object CreateFlashAttentionLayer<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)

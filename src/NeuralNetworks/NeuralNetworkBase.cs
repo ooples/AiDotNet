@@ -461,17 +461,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual Vector<T> GetParameters()
     {
-        // Two-pass to keep peak memory bounded. Retaining every layer's per-layer
-        // vector simultaneously would roughly double peak allocation (final
-        // concatenated vector + sum of all per-layer vectors) and elevate OOM risk
-        // for large models. Here, at most one per-layer vector is live at a time in
-        // addition to the final output.
-        //
-        // We intentionally call GetParameters() twice rather than pre-sizing via
-        // ParameterCount: lazy layers allocate their parameter buffer inside
-        // GetParameters() itself, so ParameterCount can under-report until after the
-        // first call. The first pass both triggers lazy init and measures actual
-        // length; the second pass copies into the final destination.
+        // Pre-resolve any lazy layer shapes from the architecture before
+        // walking parameters. Issue #1209's lazy-shape-inference layers
+        // return empty vectors for their GetParameters when their input
+        // shape is still the -1 sentinel — pre-Forward queries on the
+        // parent network would otherwise return a 0-length vector even
+        // for a fully-architecturally-defined model. Idempotent: chain
+        // resolution only happens once per network instance, guarded by
+        // each layer's IsShapeResolved short-circuit.
+        ResolveLazyLayerShapes();
+
+        // Single pass: ResolveLazyLayerShapes above has materialized
+        // every lazy layer reachable from the architecture, so each
+        // layer's GetParameters() now returns its concrete vector — no
+        // need to two-pass to "trigger lazy init via the first pass".
         int totalParameterCount = 0;
         foreach (var layer in Layers)
         {
@@ -1713,6 +1716,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             if (_cachedParameterCount == null)
             {
+                // Pre-resolve any lazy layers' shapes from the architecture
+                // BEFORE summing per-layer ParameterCount. Lazy DenseLayer /
+                // ConvolutionalLayer / FullyConnectedLayer / FeedForwardLayer
+                // return 0 from ParameterCount when InputShape[0] is still
+                // the -1 sentinel (issue #1209's lazy-shape-inference
+                // migration), which makes a freshly-constructed model
+                // report ParameterCount == 0 even though the architecture
+                // fully defines the layer chain. Resolving shapes via
+                // chain-walked input/output shapes turns the -1 sentinel
+                // into the architecture's concrete dim and lets the test
+                // (issue #1136 plan part 5) `network.ParameterCount > 0`
+                // pre-Forward query work as designed.
+                ResolveLazyLayerShapes();
+
                 // Accumulate as long so the addition itself doesn't overflow
                 // under the checked Linq Sum overload introduced in .NET 7+.
                 // If the total exceeds int.MaxValue we MUST fail fast: the
@@ -2088,6 +2105,142 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             // Initialize network-specific layers
             InitializeLayers();
+
+            // Pre-resolve lazy layers' shapes from the architecture so
+            // ParameterCount / GetParameters / Clone / ONNX export work
+            // before the first Forward — issue #1209 lazy migration left
+            // every DenseLayer / FullyConnectedLayer / FeedForwardLayer /
+            // Conv variant with InputShape[0] = -1 sentinel until first
+            // Forward, which made `network.ParameterCount` return 0 for
+            // a freshly-constructed model and broke the
+            // `Parameters_ShouldBeNonEmpty` invariant test that runs
+            // BEFORE any Forward by design (the docstring says
+            // "ParameterCount reads the declared count without forcing
+            // lazy layers to materialize", which only works once the
+            // chain has been resolved through architecture-known shapes).
+            //
+            // Walks layer-by-layer: the architecture's input shape feeds
+            // the first layer; each layer's resolved output shape feeds
+            // the next. ResolveFromShape is idempotent and only allocates
+            // weight tensors for actually-lazy layers (eager layers
+            // short-circuit on their already-resolved IsShapeResolved).
+            ResolveLazyLayerShapes();
+        }
+    }
+
+    /// <summary>
+    /// Tracks whether <see cref="ResolveLazyLayerShapes"/> has already
+    /// run once on this network instance. Once every lazy layer's shape
+    /// is resolved (or once we've decided we can't resolve them from
+    /// the architecture alone), there's no point re-walking on every
+    /// ParameterCount / GetParameters call — a no-op pass through 100+
+    /// layers in a deep DiT/UNet on every parameter query is the
+    /// difference between sub-second tests and 120-second timeouts.
+    /// </summary>
+    private bool _layerShapesResolved;
+
+    /// <summary>
+    /// Walks <see cref="Layers"/> in order, propagating concrete input
+    /// shapes through the chain so every lazy layer has its
+    /// <c>InputShape</c> / <c>OutputShape</c> resolved before any
+    /// Forward / GetParameters / ParameterCount call. Bridges the gap
+    /// between #1209's lazy-shape-inference layers and pre-Forward
+    /// queries on the parent network. Issue #1136 plan part 3 cleanup.
+    /// Idempotent — runs at most once per network instance.
+    /// </summary>
+    private void ResolveLazyLayerShapes()
+    {
+        if (_layerShapesResolved) return;
+        if (Layers is null || Layers.Count == 0) return;
+
+        int[]? currentShape = TryGetArchitectureInputShape();
+        if (currentShape is null)
+        {
+            // Architecture can't yield a concrete input shape — still
+            // mark "resolved" so subsequent queries don't re-attempt
+            // the walk. Layers will resolve lazily on first Forward as
+            // before.
+            _layerShapesResolved = true;
+            return;
+        }
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            var layer = Layers[i];
+            if (layer is null) continue;
+
+            try
+            {
+                if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
+                {
+                    // Shape-only resolution — does NOT allocate or initialize
+                    // weights, so we don't consume RNG state and perturb
+                    // training. Weight allocation still happens lazily on the
+                    // first real Forward via EnsureInitializedFromInput.
+                    lb.ResolveShapesOnly(currentShape);
+                }
+
+                // Advance the chain via the layer's now-resolved output
+                // shape. We re-read GetOutputShape after ResolveFromShape
+                // so a lazy layer that just resolved contributes its
+                // real shape to the next iteration.
+                int[] outShape = layer.GetOutputShape();
+                if (outShape != null && outShape.Length > 0 && System.Array.TrueForAll(outShape, d => d > 0))
+                {
+                    currentShape = outShape;
+                }
+                else
+                {
+                    // Layer can't yield a concrete output shape (e.g., a
+                    // dynamic-size layer with -1 dims). Stop pre-resolution;
+                    // remaining layers will lazy-resolve on first Forward.
+                    break;
+                }
+            }
+            catch
+            {
+                // ResolveFromShape can fail for layers that need richer
+                // shape info than we can derive from a flat array (e.g.,
+                // some attention layers expect contextual metadata).
+                // Swallow so InitializeLayers always succeeds — those
+                // layers retain their lazy state and resolve on first
+                // Forward as before.
+                break;
+            }
+        }
+
+        _layerShapesResolved = true;
+    }
+
+    /// <summary>
+    /// Returns the architecture's input shape as a positive-dim array,
+    /// or null if the architecture doesn't declare a usable shape.
+    /// Used by <see cref="ResolveLazyLayerShapes"/>; intentionally
+    /// silent on missing data so dynamic-spatial models that depend on
+    /// runtime shape feeding still work.
+    /// </summary>
+    private int[]? TryGetArchitectureInputShape()
+    {
+        try
+        {
+            int[] shape = Architecture.GetInputShape();
+            if (shape == null || shape.Length == 0) return null;
+            for (int i = 0; i < shape.Length; i++)
+            {
+                if (shape[i] <= 0) return null;
+            }
+            // Prepend a unit batch dim so layers expecting [B, ...] see
+            // a coherent rank — matches what the first real Forward
+            // would feed. Layers that don't care about rank are
+            // unaffected.
+            int[] withBatch = new int[shape.Length + 1];
+            withBatch[0] = 1;
+            for (int i = 0; i < shape.Length; i++) withBatch[i + 1] = shape[i];
+            return withBatch;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -3890,13 +4043,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {
-        // Create a deep copy of the current network
-        var newNetwork = (NeuralNetworkBase<T>)DeepCopy();
-
-        // Update the parameters of the new network
-        newNetwork.UpdateParameters(parameters);
-
-        return newNetwork;
+        // In-place update — issue #1221: DeepCopy + UpdateParameters loses
+        // gradients for lazy layers because deserialization resets them to
+        // placeholder state where ParameterCount=0, so UpdateParameters
+        // skips them.
+        UpdateParameters(parameters);
+        return this;
     }
 
     /// <summary>

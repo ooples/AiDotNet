@@ -487,5 +487,17 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
             InterfaceGuard.GradientComputable(_inner).ApplyGradients(gradients, learningRate);
         }
 
+        /// <inheritdoc/>
+        /// <remarks>
+        /// Issue #1136 plan part 3: forwards Dispose to the inner
+        /// model when it implements IDisposable. The preprocessing
+        /// wrapper itself owns no additional disposable state.
+        /// </remarks>
+        public void Dispose()
+        {
+            (_inner as System.IDisposable)?.Dispose();
+            System.GC.SuppressFinalize(this);
+        }
+
     }
 }

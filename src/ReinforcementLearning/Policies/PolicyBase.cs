@@ -174,9 +174,11 @@ namespace AiDotNet.ReinforcementLearning.Policies
 
         /// <summary>
         /// Releases the unmanaged resources used by the policy and optionally releases the managed resources.
+        /// Override of <see cref="ModelBase{T, TInput, TOutput}.Dispose(bool)"/> — derived policies should
+        /// override this and call <c>base.Dispose(disposing)</c> at the end.
         /// </summary>
         /// <param name="disposing">True to release both managed and unmanaged resources; false to release only unmanaged resources.</param>
-        protected virtual void Dispose(bool disposing)
+        protected override void Dispose(bool disposing)
         {
             if (!_disposed)
             {
@@ -187,15 +189,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
                 }
                 _disposed = true;
             }
-        }
-
-        /// <summary>
-        /// Releases all resources used by the policy.
-        /// </summary>
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
+            base.Dispose(disposing);
         }
     }
 }

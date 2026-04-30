@@ -40,7 +40,8 @@ namespace AiDotNet.Interfaces;
 /// </remarks>
 public interface IFullModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>,
     IModelSerializer, ICheckpointableModel, IFeatureImportance<T>,
-    ICloneable<IFullModel<T, TInput, TOutput>>
+    ICloneable<IFullModel<T, TInput, TOutput>>,
+    System.IDisposable
 {
     /// <summary>
     /// Gets the default loss function used by this model for gradient computation.

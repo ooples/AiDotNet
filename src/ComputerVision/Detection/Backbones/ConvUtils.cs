@@ -25,28 +25,53 @@ internal class Conv2D<T>
     private readonly int _stride;
     private readonly int _padding;
 
-    public Tensor<T> Weights => _layer.GetParameters() is { Length: > 0 } v
-        ? new Tensor<T>(new[] { _outChannels, _inChannels, _kernelSize, _kernelSize },
-                        new Vector<T>(v.ToArray().AsSpan(0, _outChannels * _inChannels * _kernelSize * _kernelSize).ToArray()))
-        : new Tensor<T>(new[] { _outChannels, _inChannels, _kernelSize, _kernelSize });
+    /// <summary>
+    /// Reshaped view of the underlying <see cref="ConvolutionalLayer{T}"/>'s convolutional
+    /// kernel as a [outChannels, inChannels, kernelSize, kernelSize] tensor. Built fresh
+    /// on every access so training updates and parameter restores are always reflected —
+    /// caching by ParameterCount alone would miss same-shape parameter updates.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the underlying layer has not yet been forward-resolved (its input depth
+    /// is still the <c>-1</c> sentinel and weights have not been allocated).
+    /// </exception>
+    public Tensor<T> Weights
+    {
+        get
+        {
+            if (!_layer.IsShapeResolved)
+                throw new InvalidOperationException(
+                    $"Conv2D weights are unavailable until the layer's first Forward(): " +
+                    $"input depth is still the lazy sentinel. Call Forward(input) once before reading Weights.");
+            var p = _layer.GetParameters();
+            int weightLen = _outChannels * _inChannels * _kernelSize * _kernelSize;
+            var weightArr = new T[weightLen];
+            for (int i = 0; i < weightLen; i++) weightArr[i] = p[i];
+            return new Tensor<T>(new[] { _outChannels, _inChannels, _kernelSize, _kernelSize }, new Vector<T>(weightArr));
+        }
+    }
 
     /// <summary>
     /// Bias tensor extracted from the underlying <see cref="ConvolutionalLayer{T}"/>'s parameter
     /// vector. <see cref="ConvolutionalLayer{T}"/> always allocates a bias of length
-    /// <c>OutputDepth</c>; before the layer has been forward-resolved the parameter vector is
-    /// empty and we return an empty placeholder.
+    /// <c>OutputDepth</c>. Built fresh on every access (see <see cref="Weights"/>).
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the underlying layer has not yet been forward-resolved.
+    /// </exception>
     public Tensor<T> Bias
     {
         get
         {
+            if (!_layer.IsShapeResolved)
+                throw new InvalidOperationException(
+                    $"Conv2D bias is unavailable until the layer's first Forward(): " +
+                    $"input depth is still the lazy sentinel. Call Forward(input) once before reading Bias.");
             var p = _layer.GetParameters();
             int weightLen = _outChannels * _inChannels * _kernelSize * _kernelSize;
-            if (p.Length < weightLen + _outChannels)
-                return new Tensor<T>(new[] { _outChannels });
-            var arr = new T[_outChannels];
-            for (int i = 0; i < _outChannels; i++) arr[i] = p[weightLen + i];
-            return new Tensor<T>(new[] { _outChannels }, new Vector<T>(arr));
+            var biasArr = new T[_outChannels];
+            for (int i = 0; i < _outChannels; i++) biasArr[i] = p[weightLen + i];
+            return new Tensor<T>(new[] { _outChannels }, new Vector<T>(biasArr));
         }
     }
 
@@ -126,10 +151,12 @@ internal class Dense<T>
     {
         get
         {
+            if (!_layer.IsShapeResolved)
+                throw new InvalidOperationException(
+                    "Dense weights are unavailable until the layer's first Forward(): " +
+                    "input dim is still the lazy sentinel. Call Forward(input) once before reading Weights.");
             var p = _layer.GetParameters();
             int wlen = _inDim * _outDim;
-            if (p.Length < wlen)
-                return new Tensor<T>(new[] { _outDim, _inDim });
             var arr = new T[wlen];
             for (int i = 0; i < wlen; i++) arr[i] = p[i];
             return new Tensor<T>(new[] { _outDim, _inDim }, new Vector<T>(arr));
@@ -140,10 +167,12 @@ internal class Dense<T>
     {
         get
         {
+            if (!_layer.IsShapeResolved)
+                throw new InvalidOperationException(
+                    "Dense bias is unavailable until the layer's first Forward(): " +
+                    "input dim is still the lazy sentinel. Call Forward(input) once before reading Bias.");
             var p = _layer.GetParameters();
             int wlen = _inDim * _outDim;
-            if (p.Length < wlen + _outDim)
-                return new Tensor<T>(new[] { _outDim });
             var arr = new T[_outDim];
             for (int i = 0; i < _outDim; i++) arr[i] = p[wlen + i];
             return new Tensor<T>(new[] { _outDim }, new Vector<T>(arr));

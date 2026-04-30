@@ -708,6 +708,18 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Round-trip from saved parameters when in lazy placeholder state.
+        // Layout: [gamma, beta] each featureSize long, so featureSize = length/2.
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            if (parameters.Length % 2 != 0 || parameters.Length == 0)
+                throw new ArgumentException(
+                    $"Cannot infer featureSize for BatchNormalizationLayer from {parameters.Length} parameters.");
+            int inferredFeatureSize = parameters.Length / 2;
+            ResolveFromShape(new[] { inferredFeatureSize });
+        }
+
         int featureSize = InputShape[0];
         if (parameters.Length != featureSize * 2)
             throw new ArgumentException($"Expected {featureSize * 2} parameters, but got {parameters.Length}", nameof(parameters));

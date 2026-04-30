@@ -43,10 +43,10 @@ public class ResNet<T> : BackboneBase<T>
     public override string Name => $"ResNet-{GetLayerCount(_variant)}";
 
     /// <inheritdoc/>
-    public override int[] OutputChannels { get; }
+    public override IReadOnlyList<int> OutputChannels { get; }
 
     /// <inheritdoc/>
-    public override int[] Strides => new[] { 4, 8, 16, 32 };
+    public override IReadOnlyList<int> Strides => new[] { 4, 8, 16, 32 };
 
     /// <summary>
     /// Creates a new ResNet backbone.

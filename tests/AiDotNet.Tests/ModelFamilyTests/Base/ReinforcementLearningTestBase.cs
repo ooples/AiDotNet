@@ -35,7 +35,7 @@ public abstract class ReinforcementLearningTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var state = CreateRandomState(rng);
 
         // Train briefly
@@ -58,7 +58,7 @@ public abstract class ReinforcementLearningTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var state = CreateRandomState(rng);
 
         var action1 = model.Predict(state);
@@ -74,7 +74,7 @@ public abstract class ReinforcementLearningTestBase
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        var model = CreateModel();
+        using var model = CreateModel();
 
         var state1 = new Vector<double>(StateDim);
         var state2 = new Vector<double>(StateDim);
@@ -107,7 +107,7 @@ public abstract class ReinforcementLearningTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
 
         var paramsBefore = ((IParameterizable<double, Vector<double>, Vector<double>>)model).GetParameters();
         var snapshot = new double[paramsBefore.Length];
@@ -138,7 +138,7 @@ public abstract class ReinforcementLearningTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var state = CreateRandomState(rng);
 
         var cloned = model.Clone();
@@ -154,7 +154,7 @@ public abstract class ReinforcementLearningTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var state = CreateRandomState(rng);
         var target = new Vector<double>(StateDim);
         model.Train(state, target);
@@ -166,7 +166,7 @@ public abstract class ReinforcementLearningTestBase
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        var model = CreateModel();
+        using var model = CreateModel();
         Assert.True(((IParameterizable<double, Vector<double>, Vector<double>>)model).GetParameters().Length > 0, "RL agent should have parameters.");
     }
 }

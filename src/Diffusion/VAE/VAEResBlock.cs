@@ -274,6 +274,12 @@ public class VAEResBlock<T> : LayerBase<T>
         _skipConv?.UpdateParameters(learningRate);
     }
 
+    /// <inheritdoc />
+    public override int ParameterCount =>
+        _norm1.ParameterCount + _conv1.ParameterCount +
+        _norm2.ParameterCount + _conv2.ParameterCount +
+        (_skipConv?.ParameterCount ?? 0);
+
     /// <summary>
     /// Gets all trainable parameters as a single vector.
     /// </summary>

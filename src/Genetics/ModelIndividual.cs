@@ -406,4 +406,31 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
 
 
     #endregion
+
+    // --- IDisposable (issue #1136 plan part 3) ---
+
+    private bool _disposed;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Forwards Dispose to the inner model when it implements
+    /// IDisposable. The individual itself owns no additional
+    /// disposable state beyond the wrapped model reference.
+    /// </remarks>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Disposes the inner model. Override + call base for additional cleanup.</summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        if (disposing)
+        {
+            (_innerModel as System.IDisposable)?.Dispose();
+        }
+        _disposed = true;
+    }
 }

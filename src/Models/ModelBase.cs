@@ -169,4 +169,36 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     /// <inheritdoc/>
     public virtual Dictionary<string, T> GetFeatureImportance() => new(StringComparer.Ordinal);
 
+    // --- IDisposable ---
+
+    private bool _disposed;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Implements <see cref="System.IDisposable.Dispose"/>. Calls
+    /// <see cref="Dispose(bool)"/> with disposing=true and
+    /// suppresses finalization. Derived classes that own disposable
+    /// resources (neural-network layers, GPU handles, rented tensor
+    /// buffers from <c>TensorAllocator</c>) should override the
+    /// protected <see cref="Dispose(bool)"/> overload — issue #1136
+    /// plan part 3.
+    /// </remarks>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases resources held by this model. Derived classes with
+    /// disposable state (layers, GPU handles, rented tensors)
+    /// override and call <c>base.Dispose(disposing)</c> at the end.
+    /// Default is a no-op for value-only models (linear regressors,
+    /// naive Bayes, etc.) that have nothing to release.
+    /// </summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+    }
 }

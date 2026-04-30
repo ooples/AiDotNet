@@ -48,10 +48,10 @@ public class SwinTransformer<T> : BackboneBase<T>
     public override string Name => $"Swin-{_variant}";
 
     /// <inheritdoc/>
-    public override int[] OutputChannels { get; }
+    public override IReadOnlyList<int> OutputChannels { get; }
 
     /// <inheritdoc/>
-    public override int[] Strides => new[] { 4, 8, 16, 32 };
+    public override IReadOnlyList<int> Strides => new[] { 4, 8, 16, 32 };
 
     /// <summary>
     /// Creates a new Swin Transformer backbone.
@@ -71,11 +71,12 @@ public class SwinTransformer<T> : BackboneBase<T>
         _embedDim = embedDim;
 
         // Calculate output channels (doubles each stage after patch merging)
-        OutputChannels = new int[4];
+        var outputChannels = new int[4];
         for (int i = 0; i < 4; i++)
         {
-            OutputChannels[i] = embedDim * (1 << i);
+            outputChannels[i] = embedDim * (1 << i);
         }
+        OutputChannels = outputChannels;
 
         // Patch embedding: convert image to sequence of patches
         _patchEmbed = new PatchEmbeddingBlock<T>(

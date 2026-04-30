@@ -160,4 +160,6 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
     }
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+    public void Dispose() { /* test mock holds no resources */ }
 }

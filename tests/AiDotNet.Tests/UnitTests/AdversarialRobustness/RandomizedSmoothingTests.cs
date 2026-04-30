@@ -80,6 +80,8 @@ public class RandomizedSmoothingTests
         public Dictionary<string, double> GetFeatureImportance() => Enumerable.Range(0, _inputDim).ToDictionary(i => $"Feature{i}", i => 1.0 / _inputDim);
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+        public void Dispose() { /* test mock holds no resources */ }
     }
 
     /// <summary>

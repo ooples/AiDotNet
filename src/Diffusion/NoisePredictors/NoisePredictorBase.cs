@@ -55,6 +55,18 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     private bool _disposed;
 
     /// <summary>
+    /// Throws <see cref="ObjectDisposedException"/> when the predictor has already
+    /// been disposed. Public entry points that touch <see cref="_compileHost"/>,
+    /// the timestep-embedding cache, or the layer graph must call this first so
+    /// post-Dispose use surfaces a predictable error instead of arbitrary downstream
+    /// failures from torn-down resources.
+    /// </summary>
+    protected void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName);
+    }
+
+    /// <summary>
     /// Concrete predictors can override to expose their <see cref="ILayer{T}"/>
     /// instances for (a) Dispose cascade — pool-rented weight tensors return to
     /// the allocator, and (b) future compilation features (plan serialization,
@@ -317,12 +329,18 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <summary>
     /// Creates a <see cref="DenseLayer{T}"/> with lazy weight allocation —
     /// weight/bias tensors stay zero-sized until the first Forward() call.
+    /// Resolves shape eagerly (without consuming RNG) so <c>ParameterCount</c>,
+    /// <c>GetParameters</c>, and <c>SetParameters</c> work before the first forward pass.
     /// </summary>
     protected static DenseLayer<T> LazyDense(
         int inputSize,
         int outputSize,
         IActivationFunction<T>? activation = null)
-        => new DenseLayer<T>(outputSize, activation, InitializationStrategies<T>.Lazy);
+    {
+        var layer = new DenseLayer<T>(outputSize, activation, InitializationStrategies<T>.Lazy);
+        layer.ResolveShapesOnly(new[] { inputSize });
+        return layer;
+    }
 
     /// <summary>
     /// Creates a <see cref="DenseLayer{T}"/> with a vector activation and lazy weight
@@ -334,7 +352,36 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         int inputSize,
         int outputSize,
         IVectorActivationFunction<T> vectorActivation)
-        => new DenseLayer<T>(outputSize, vectorActivation, InitializationStrategies<T>.Lazy);
+    {
+        var layer = new DenseLayer<T>(outputSize, vectorActivation, InitializationStrategies<T>.Lazy);
+        layer.ResolveShapesOnly(new[] { inputSize });
+        return layer;
+    }
+
+    /// <summary>
+    /// Creates a <see cref="LayerNormalizationLayer{T}"/> pre-resolved against
+    /// <paramref name="featureSize"/> so its gamma/beta tensors are fully allocated
+    /// at construction time. Use when callers iterate <c>ParameterCount</c>,
+    /// <c>GetParameters</c>, <c>SetParameters</c>, or <c>Clone</c> before the first
+    /// forward — a stock lazy LayerNorm would report zero parameters until forward,
+    /// leading to wrong parameter vectors during initialization, serialization,
+    /// or cloning.
+    /// </summary>
+    protected static LayerNormalizationLayer<T> EagerLayerNorm(int featureSize)
+    {
+        if (featureSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(featureSize),
+                $"EagerLayerNorm requires a positive feature size; got {featureSize}.");
+        }
+        var ln = new LayerNormalizationLayer<T>();
+        // Resolve from a [1, featureSize] shape — LayerNorm reads input.Shape[^1]
+        // as featureSize, allocates gamma + beta, and registers them. The dummy
+        // tensor allocated by ResolveFromShape is discarded; only the shape is used.
+        ln.ResolveFromShape(new[] { 1, featureSize });
+        return ln;
+    }
 
     /// <summary>
     /// Creates a <see cref="ConvolutionalLayer{T}"/> with lazy weight allocation.
@@ -436,12 +483,15 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public virtual Tensor<T> GetTimestepEmbedding(int timestep)
     {
+        ThrowIfDisposed();
         if (_timestepEmbeddingCache.TryGetValue(timestep, out var cached))
             return cached;
 
-        // Sinusoidal timestep embedding (like in Transformers)
+        // Sinusoidal timestep embedding emitted as rank-2 [1, TimeEmbeddingDim].
+        // DiffusionResBlock requires rank >= 2 to validate the timeEmbed contract
+        // before its lazy time-MLP bakes the input feature dim from the last axis.
         var halfDim = TimeEmbeddingDim / 2;
-        var embedding = new Tensor<T>(new[] { TimeEmbeddingDim });
+        var embedding = new Tensor<T>(new[] { 1, TimeEmbeddingDim });
         var embSpan = embedding.AsWritableSpan();
 
         var logScale = Math.Log(10000.0) / (halfDim - 1);
@@ -466,6 +516,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        ThrowIfDisposed();
         // Compute gradients and apply them
         var gradients = ComputeGradients(input, expectedOutput, LossFunction);
         var learningRate = NumOps.FromDouble(1e-4);
@@ -528,6 +579,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public virtual byte[] Serialize()
     {
+        ThrowIfDisposed();
         ModelPersistenceGuard.EnforceBeforeSerialize();
         using var stream = new MemoryStream();
         SaveState(stream);
@@ -537,6 +589,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public virtual void Deserialize(byte[] data)
     {
+        ThrowIfDisposed();
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         using var stream = new MemoryStream(data);
         LoadState(stream);
@@ -564,6 +617,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
+        ThrowIfDisposed();
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path cannot be null or whitespace.", nameof(filePath));
 
@@ -576,6 +630,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public virtual void LoadModel(string filePath)
     {
+        ThrowIfDisposed();
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path cannot be null or whitespace.", nameof(filePath));
 
@@ -594,6 +649,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public virtual void SaveState(Stream stream)
     {
+        ThrowIfDisposed();
         if (stream == null)
             throw new ArgumentNullException(nameof(stream));
         if (!stream.CanWrite)
@@ -619,6 +675,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     public virtual void LoadState(Stream stream)
     {
+        ThrowIfDisposed();
         if (stream == null)
             throw new ArgumentNullException(nameof(stream));
         if (!stream.CanRead)

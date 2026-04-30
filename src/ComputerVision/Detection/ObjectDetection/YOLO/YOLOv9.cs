@@ -80,7 +80,7 @@ public class YOLOv9<T> : ObjectDetectorBase<T>
         Backbone = new CSPDarknet<T>(depth: depth * 1.2, widthMultiplier: width);
 
         // Initialize GELAN-enhanced neck
-        Neck = new PANet<T>(Backbone.OutputChannels, outputChannels: (int)(256 * width));
+        Neck = new PANet<T>(Backbone.OutputChannels.ToArray(), outputChannels: (int)(256 * width));
 
         // GELAN additional blocks for feature enhancement
         _gelanBlocks = new List<Conv2D<T>>();
@@ -98,7 +98,7 @@ public class YOLOv9<T> : ObjectDetectorBase<T>
         var neckChannels = Enumerable.Repeat(Neck.OutputChannels, Neck.NumLevels).ToArray();
         _head = new YOLOv8Head<T>(neckChannels, options.NumClasses);
 
-        _strides = Backbone.Strides;
+        _strides = Backbone.Strides.ToArray();
         _nms = new NMS<T>();
     }
 

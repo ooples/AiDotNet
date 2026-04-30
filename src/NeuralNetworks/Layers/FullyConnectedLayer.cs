@@ -517,6 +517,12 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        // Deferred-shape layers cloned/walked before first Forward have
+        // zero-length placeholder weights/biases — return empty so Clone
+        // / SetParameters / ParameterCount roundtrip. Real parameters
+        // are picked up on the next Collect after the first Forward.
+        if (!IsShapeResolved) return new Vector<T>(0);
+
         // Flatten weight tensor and concatenate with biases
         int weightCount = _weights.Shape[0] * _weights.Shape[1];
         int biasCount = _biases.Shape[0];
@@ -596,6 +602,26 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Round-trip from saved parameters when the layer is still in lazy
+        // placeholder state. The vector length + known outputSize uniquely
+        // determines inputSize for the (inputSize × outputSize + outputSize)
+        // layout — fixes #1221 where serialize/deserialize round-trip silently
+        // dropped trained weights.
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            int outputSize = OutputShape[0];
+            if (outputSize <= 0)
+                throw new InvalidOperationException(
+                    "Cannot SetParameters on a deferred-shape FullyConnectedLayer before outputSize is known.");
+            int candidateInput = (parameters.Length - outputSize) / outputSize;
+            if (candidateInput <= 0 || candidateInput * outputSize + outputSize != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer inputSize for FullyConnectedLayer from {parameters.Length} parameters " +
+                    $"and outputSize={outputSize}.");
+            ResolveFromShape(new[] { candidateInput });
+        }
+
         int weightCount = _weights.Shape[0] * _weights.Shape[1];
         int biasCount = _biases.Shape[0];
 
@@ -714,6 +740,14 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
 
         var input = inputs[0];
         int[] inputShape = input._shape;
+
+        // Lazy-shape resolution must run before any read of _weights.Shape:
+        // a lazily-constructed FullyConnectedLayer holds zero-length
+        // placeholder weights with no resolved input feature size.
+        // EnsureInitializedFromInput resolves shapes from input.Shape[^1]
+        // via OnFirstForward (no-op once resolved) and then allocates the
+        // real weights — same contract as the CPU Forward path above.
+        EnsureInitializedFromInput(input);
 
         // FullyConnectedLayer stores weights as [outputSize, inputSize]
         // We need to transpose for FusedLinearGpu which expects [inputSize, outputSize]

@@ -503,4 +503,31 @@ public abstract class ShardedModelBase<T, TInput, TOutput> :
     {
         WrappedModel.LoadState(stream);
     }
+
+    // --- IDisposable (issue #1136 plan part 3) ---
+
+    private bool _disposed;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Forwards Dispose to <see cref="WrappedModel"/> when it
+    /// implements IDisposable. The shard wrapper itself owns no
+    /// additional disposable state beyond the wrapped model.
+    /// </remarks>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Disposes the wrapped sharded model. Override + call base for additional cleanup.</summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        if (disposing)
+        {
+            (WrappedModel as System.IDisposable)?.Dispose();
+        }
+        _disposed = true;
+    }
 }

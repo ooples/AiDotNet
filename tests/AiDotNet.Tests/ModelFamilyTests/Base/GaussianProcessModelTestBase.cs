@@ -59,7 +59,7 @@ public abstract class GaussianProcessModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng);
 
         model.Fit(trainX, trainY);
@@ -97,7 +97,7 @@ public abstract class GaussianProcessModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng, noise: 0.01);
 
         model.Fit(trainX, trainY);
@@ -134,7 +134,7 @@ public abstract class GaussianProcessModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         // Cluster training data near origin
         var trainX = new Matrix<double>(20, Features);
         var trainY = new Vector<double>(20);
@@ -182,7 +182,7 @@ public abstract class GaussianProcessModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         // Use small dataset with low noise for clear interpolation test
         var (trainX, trainY) = GenerateNormalizedLinearData(15, Features, rng, noise: 0.001);
 
@@ -244,7 +244,7 @@ public abstract class GaussianProcessModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng, noise: 0.1);
 
         model.Fit(trainX, trainY);
@@ -271,7 +271,7 @@ public abstract class GaussianProcessModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng);
 
         model.Fit(trainX, trainY);
@@ -290,7 +290,7 @@ public abstract class GaussianProcessModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng);
 
         model.Fit(trainX, trainY);
@@ -316,7 +316,7 @@ public abstract class GaussianProcessModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateNormalizedLinearData(10, Features, rng);
 
         model.Fit(trainX, trainY);
@@ -351,7 +351,7 @@ public abstract class GaussianProcessModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         double noiseStd = 0.1;
         var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng, noise: noiseStd);
 
@@ -480,7 +480,7 @@ public abstract class GaussianProcessModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng);
 
         model.Fit(trainX, trainY);
@@ -570,7 +570,7 @@ public abstract class GaussianProcessModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         // Generate data from known function y = x1 + x2 with small noise
         int n = 25;
         var trainX = new Matrix<double>(n, Features);
@@ -629,7 +629,7 @@ public abstract class GaussianProcessModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng);
 
         model.Fit(trainX, trainY);
@@ -666,7 +666,7 @@ public abstract class GaussianProcessModelTestBase
         var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng);
 
         // GP models implement IGaussianProcess but also IFullModel for the builder
-        var model = CreateModel();
+        using var model = CreateModel();
         if (model is IFullModel<double, Matrix<double>, Vector<double>> fullModel)
         {
             var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);

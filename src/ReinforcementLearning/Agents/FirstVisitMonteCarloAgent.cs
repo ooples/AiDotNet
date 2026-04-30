@@ -220,6 +220,7 @@ public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         EnsureStateExists(stateKey);
         int bestAction = 0;
         T bestValue = _qTable[stateKey][0];
+        bool allEqual = true;
 
         for (int a = 1; a < _options.ActionSize; a++)
         {
@@ -227,8 +228,15 @@ public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
             {
                 bestValue = _qTable[stateKey][a];
                 bestAction = a;
+                allEqual = false;
+            }
+            else if (!NumOps.Equals(_qTable[stateKey][a], bestValue))
+            {
+                allEqual = false;
             }
         }
+        if (allEqual)
+            bestAction = HashStateToAction(stateKey, _options.ActionSize);
         return bestAction;
     }
 
@@ -245,7 +253,7 @@ public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    public override int ParameterCount => _qTable.Count * _options.ActionSize;
+    public override int ParameterCount => Math.Max(_qTable.Count, 1) * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
 
     public override byte[] Serialize()
@@ -282,8 +290,9 @@ public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override Vector<T> GetParameters()
     {
-        // Flatten Q-table into vector
-        int stateCount = _qTable.Count;
+        // Flatten Q-table into vector. Min one row × actionSize so the result
+        // matches ParameterCount on a freshly-constructed agent.
+        int stateCount = Math.Max(_qTable.Count, 1);
         var parameters = new Vector<T>(stateCount * _options.ActionSize);
 
         int idx = 0;

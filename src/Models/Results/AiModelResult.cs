@@ -6657,4 +6657,31 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
     #endregion
 
+    // --- IDisposable (issue #1136 plan part 3) ---
+
+    private bool _disposed;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Forwards Dispose to the underlying <see cref="Model"/> when
+    /// it implements IDisposable. AiModelResult itself is a result-
+    /// container with no additional disposable state.
+    /// </remarks>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Disposes the contained model. Override + call base for additional cleanup.</summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        if (disposing)
+        {
+            (Model as System.IDisposable)?.Dispose();
+        }
+        _disposed = true;
+    }
+
 }

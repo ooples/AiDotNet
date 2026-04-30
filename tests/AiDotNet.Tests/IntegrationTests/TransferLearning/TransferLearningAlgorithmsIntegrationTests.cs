@@ -551,6 +551,8 @@ public class TransferLearningAlgorithmsIntegrationTests
         }
 
     public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
+        public void Dispose() { /* test mock holds no resources */ }
     }
 
     #endregion

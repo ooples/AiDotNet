@@ -85,7 +85,7 @@ public class FasterRCNN<T> : ObjectDetectorBase<T>
 
         // Backbone: ResNet-50 with FPN
         Backbone = new ResNet<T>(ResNetVariant.ResNet50);
-        Neck = new FPN<T>(Backbone.OutputChannels, outputChannels: 256);
+        Neck = new FPN<T>(Backbone.OutputChannels.ToArray(), outputChannels: 256);
 
         // Region Proposal Network
         _rpn = new RPN<T>(256, hiddenDim);

@@ -739,6 +739,11 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        // Deferred-shape layer cloned before its first Forward has empty
+        // _kernels/_biases placeholders. Return an empty vector so Clone
+        // can roundtrip via SetParameters; the cloned layer materialises
+        // its real weights when its first Forward fires.
+        if (!IsShapeResolved) return new Vector<T>(0);
         return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
     }
 
@@ -781,6 +786,23 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        // Round-trip from saved parameters: derive inputDepth from vector length.
+        // Layout: kernels [inputDepth, outputDepth, K, K] + biases [outputDepth].
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            int kernelArea = OutputDepth * KernelSize * KernelSize;
+            if (OutputDepth <= 0 || kernelArea <= 0)
+                throw new InvalidOperationException(
+                    "Cannot SetParameters on deferred-shape DeconvolutionalLayer before OutputDepth/KernelSize are known.");
+            int candidateInputDepth = (parameters.Length - OutputDepth) / kernelArea;
+            if (candidateInputDepth <= 0
+                || candidateInputDepth * kernelArea + OutputDepth != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer inputDepth for DeconvolutionalLayer from {parameters.Length} parameters.");
+            ResolveFromShape(new[] { candidateInputDepth, 1, 1 });
+        }
+
         int expectedLength = _kernels.Length + _biases.Length;
         if (parameters.Length != expectedLength)
         {

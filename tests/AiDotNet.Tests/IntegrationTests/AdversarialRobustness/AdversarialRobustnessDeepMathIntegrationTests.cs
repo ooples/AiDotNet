@@ -126,6 +126,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
                 _weights[i] -= learningRate * gradients[i];
         }
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+        public void Dispose() { /* test mock holds no resources */ }
     }
 
     #endregion

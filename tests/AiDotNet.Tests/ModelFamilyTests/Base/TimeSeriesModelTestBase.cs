@@ -43,7 +43,7 @@ public abstract class TimeSeriesModelTestBase
         using var _arena = TensorArena.Create();
         if (!IsForecastingModel) return;
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng, noise: 0.1);
 
         model.Train(trainX, trainY);
@@ -129,7 +129,7 @@ public abstract class TimeSeriesModelTestBase
         if (!CanCaptureTrend) return;
 
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng, noise: 0.5);
 
         model.Train(trainX, trainY);
@@ -178,7 +178,7 @@ public abstract class TimeSeriesModelTestBase
         using var _arena = TensorArena.Create();
         if (!IsForecastingModel) return;
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng, noise: 0.5);
 
         model.Train(trainX, trainY);
@@ -210,7 +210,7 @@ public abstract class TimeSeriesModelTestBase
         using var _arena = TensorArena.Create();
         if (!IsForecastingModel) return;
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng, noise: 0.5);
 
         model.Train(trainX, trainY);
@@ -319,7 +319,7 @@ public abstract class TimeSeriesModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
 
         model.Train(trainX, trainY);
@@ -339,7 +339,7 @@ public abstract class TimeSeriesModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
 
         model.Train(trainX, trainY);
@@ -357,7 +357,7 @@ public abstract class TimeSeriesModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
 
         model.Train(trainX, trainY);
@@ -371,7 +371,7 @@ public abstract class TimeSeriesModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
         var (testX, _) = ModelTestHelpers.GenerateTimeSeriesData(TestLength, rng);
 
@@ -390,7 +390,7 @@ public abstract class TimeSeriesModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
 
         model.Train(trainX, trainY);
@@ -403,7 +403,7 @@ public abstract class TimeSeriesModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
 
         model.Train(trainX, trainY);

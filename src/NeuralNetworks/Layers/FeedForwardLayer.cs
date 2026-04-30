@@ -520,8 +520,11 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // EnsureInitializedFromInput resolves lazy shapes via
+        // OnFirstForward and then internally calls EnsureInitialized;
+        // the redundant second EnsureInitialized was a no-op but
+        // misleading.
         EnsureInitializedFromInput(input);
-        EnsureInitialized();
         Input = input;
 
         // Mirror DenseLayer: dynamically resize the weight matrix when the caller's
@@ -612,7 +615,6 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
-        EnsureInitialized();
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
@@ -620,6 +622,14 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
         var input = inputs[0];
+
+        // Lazy-shape resolution must happen BEFORE EnsureInitialized:
+        // a lazily-constructed FeedForwardLayer holds the -1 sentinel
+        // for input feature size and EnsureInitialized() would overflow
+        // on TensorAllocator.Rent. EnsureInitializedFromInput resolves
+        // shapes via OnFirstForward (no-op once resolved) then defers
+        // to EnsureInitialized for actual weight allocation.
+        EnsureInitializedFromInput(input);
 
         // MatMul: input @ _weights
         var matmul = gpuEngine.BatchedMatMulGpu(input, _weights);
@@ -727,6 +737,12 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        // Deferred-shape lazy layer — return empty vector so Clone /
+        // SetParameters / ParameterCount roundtrip on uninitialised
+        // layers (real params materialise on first Forward and the
+        // next Collect picks them up).
+        if (!IsShapeResolved) return new Vector<T>(0);
+
         EnsureInitialized();
         // Bulk copy from contiguous tensor storage — replaces nested scalar loops
         return Vector<T>.Concatenate(
@@ -762,6 +778,23 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Round-trip from saved parameters: derive inputSize from vector
+        // length + known outputSize. Fixes #1221 serialize/deserialize drop.
+        if (!IsShapeResolved)
+        {
+            if (parameters.Length == 0) return;
+            int outputSize = OutputShape[0];
+            if (outputSize <= 0)
+                throw new InvalidOperationException(
+                    "Cannot SetParameters on a deferred-shape FeedForwardLayer before outputSize is known.");
+            int candidateInput = (parameters.Length - outputSize) / outputSize;
+            if (candidateInput <= 0 || candidateInput * outputSize + outputSize != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer inputSize for FeedForwardLayer from {parameters.Length} parameters " +
+                    $"and outputSize={outputSize}.");
+            ResolveFromShape(new[] { candidateInput });
+        }
+
         EnsureInitialized();
         int weightLen = _weights.Length;
         int biasLen = _biases.Length;

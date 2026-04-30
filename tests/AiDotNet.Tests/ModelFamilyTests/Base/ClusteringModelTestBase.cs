@@ -46,7 +46,7 @@ public abstract class ClusteringModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
@@ -73,7 +73,7 @@ public abstract class ClusteringModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
@@ -280,7 +280,7 @@ public abstract class ClusteringModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
@@ -339,7 +339,7 @@ public abstract class ClusteringModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
@@ -366,7 +366,7 @@ public abstract class ClusteringModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
@@ -392,7 +392,7 @@ public abstract class ClusteringModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
@@ -415,7 +415,7 @@ public abstract class ClusteringModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
@@ -432,7 +432,7 @@ public abstract class ClusteringModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
         var (testX, _) = GenerateData(TestSamples, NumClusters, Features, rng);
 
@@ -446,7 +446,7 @@ public abstract class ClusteringModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
@@ -464,7 +464,7 @@ public abstract class ClusteringModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
@@ -479,7 +479,7 @@ public abstract class ClusteringModelTestBase
         if (!HasFlatParameters) return;
 
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);

@@ -139,6 +139,7 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     /// </remarks>
     public virtual T EstimateAverageTreatmentEffect(Matrix<T> features)
     {
+        ThrowIfDisposed();
         if (features.Rows == 0)
             throw new ArgumentException("Feature matrix cannot be empty (0 rows).", nameof(features));
 
@@ -352,6 +353,7 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     /// </summary>
     public virtual byte[] Serialize()
     {
+        ThrowIfDisposed();
         ModelPersistenceGuard.EnforceBeforeSerialize();
         return SerializeInternalUnchecked();
     }
@@ -387,6 +389,7 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     /// </summary>
     public virtual void Deserialize(byte[] modelData)
     {
+        ThrowIfDisposed();
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         DeserializeInternalUnchecked(modelData);
     }
@@ -427,6 +430,7 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     /// </summary>
     public virtual void Train(Matrix<T> x, Vector<T> y)
     {
+        ThrowIfDisposed();
         // Causal-inference models from the meta-learner family
         // (Künzel et al. 2019 "Metalearners for estimating heterogeneous
         // treatment effects") are usually trained from three signals
@@ -620,6 +624,7 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
 
     public virtual void SaveModel(string filePath)
     {
+        ThrowIfDisposed();
         byte[] serializedData = Serialize();
         byte[] envelopedData = ModelFileHeader.WrapWithHeader(
             serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
@@ -631,6 +636,7 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     /// </summary>
     public virtual void LoadModel(string filePath)
     {
+        ThrowIfDisposed();
         byte[] serializedData = File.ReadAllBytes(filePath);
 
         // Extract payload from AIMF envelope
@@ -644,6 +650,7 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     /// </summary>
     public virtual void SaveState(Stream stream)
     {
+        ThrowIfDisposed();
         byte[] serializedData = Serialize();
         stream.Write(serializedData, 0, serializedData.Length);
     }
@@ -653,6 +660,7 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     /// </summary>
     public virtual void LoadState(Stream stream)
     {
+        ThrowIfDisposed();
         using var memoryStream = new MemoryStream();
         stream.CopyTo(memoryStream);
         byte[] serializedData = memoryStream.ToArray();
@@ -843,4 +851,35 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     }
 
     #endregion
+
+    // --- IDisposable (issue #1136 plan part 3) ---
+
+    private bool _disposed;
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Releases resources held by this causal model. Override + call base for layer/tensor cleanup.</summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+    }
+
+    /// <summary>
+    /// Throws <see cref="ObjectDisposedException"/> if <see cref="Dispose"/> has already
+    /// been called. Subclasses must call this from any public entry point that touches
+    /// model state. The base class also calls it from <see cref="Train"/>,
+    /// <see cref="EstimateAverageTreatmentEffect"/>, <see cref="Serialize"/>,
+    /// <see cref="Deserialize"/>, <see cref="SaveModel"/>, <see cref="LoadModel"/>,
+    /// <see cref="SaveState"/>, and <see cref="LoadState"/>.
+    /// </summary>
+    protected void ThrowIfDisposed()
+    {
+        if (_disposed) throw new System.ObjectDisposedException(GetType().FullName);
+    }
 }

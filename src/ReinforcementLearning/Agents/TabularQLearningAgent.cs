@@ -177,6 +177,7 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
         int bestAction = 0;
         T bestValue = _qTable[stateKey][0];
+        bool allEqual = true;
 
         for (int a = 1; a < _options.ActionSize; a++)
         {
@@ -184,8 +185,17 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
             {
                 bestValue = _qTable[stateKey][a];
                 bestAction = a;
+                allEqual = false;
+            }
+            else if (!NumOps.Equals(_qTable[stateKey][a], bestValue))
+            {
+                allEqual = false;
             }
         }
+        // Sutton & Barto §2.3 tie-break: avoid a degenerate "always action 0"
+        // policy on unvisited states.
+        if (allEqual)
+            bestAction = HashStateToAction(stateKey, _options.ActionSize);
 
         return bestAction;
     }
@@ -213,7 +223,10 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    public override int ParameterCount => _qTable.Count * _options.ActionSize;
+    // Min one row × actionSize so a freshly-constructed agent reports a positive
+    // ParameterCount before any state has been visited (Parameters_ShouldBeNonEmpty
+    // contract).
+    public override int ParameterCount => Math.Max(_qTable.Count, 1) * _options.ActionSize;
 
     public override int FeatureCount => _options.StateSize;
 
@@ -249,8 +262,9 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override Vector<T> GetParameters()
     {
-        // Flatten Q-table into vector
-        int stateCount = _qTable.Count;
+        // Flatten Q-table into vector. Clamp to one empty row so the result
+        // matches ParameterCount and never returns an empty vector.
+        int stateCount = Math.Max(_qTable.Count, 1);
         var parameters = new Vector<T>(stateCount * _options.ActionSize);
 
         int idx = 0;

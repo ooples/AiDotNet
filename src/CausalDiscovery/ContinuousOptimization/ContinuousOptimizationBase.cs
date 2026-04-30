@@ -47,6 +47,15 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     protected double HTolerance { get; set; } = 1e-8;
 
     /// <summary>
+    /// Modulus used to cycle column-specific perturbations during data standardization.
+    /// The value is the largest prime under 100, chosen so column indices that are
+    /// multiples of small numbers (2, 3, 5) do not collide. Bounds the maximum
+    /// perturbation at <c>1 + 1e-8 * 97 ≈ 1 + 9.7e-7</c>, which stays numerically
+    /// negligible regardless of the number of columns.
+    /// </summary>
+    private const int PerturbationCycleModulus = 97;
+
+    /// <summary>
     /// Loss type: "l2" (least squares), "logistic", or "poisson".
     /// </summary>
     protected string LossType { get; set; } = "l2";
@@ -326,11 +335,12 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
 
             // Standardize and add tiny column-specific perturbation to break exact collinearity.
             // The perturbation must stay numerically negligible regardless of dimensionality,
-            // so we use a small base step (1e-8) and modulo-cycle the column index. This keeps
-            // the maximum perturbation bounded at ~ 1e-6 even at d ≈ 100 columns, instead of
-            // growing linearly to 1e-2 with the previous (1 + 1e-4 * (j+1)) scheme.
+            // so we use a small base step and modulo-cycle the column index by a prime
+            // (PerturbationCycleModulus = 97). This keeps the maximum perturbation bounded
+            // at ~ 1e-6 even at d ≈ 100 columns, instead of growing linearly to 1e-2 with
+            // the previous (1 + 1e-4 * (j+1)) scheme.
             const double perturbBase = 1e-8;
-            double perturbScale = 1.0 + perturbBase * ((j % 97) + 1);
+            double perturbScale = 1.0 + perturbBase * ((j % PerturbationCycleModulus) + 1);
             T perturbT = NumOps.FromDouble(perturbScale);
             for (int i = 0; i < n; i++)
                 result[i, j] = NumOps.Multiply(NumOps.Divide(NumOps.Subtract(data[i, j], mean), std), perturbT);

@@ -768,4 +768,22 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IPa
     }
 
     #endregion
+
+    // --- IDisposable (issue #1136 plan part 3) ---
+
+    private bool _disposed;
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Releases resources held by this survival model. Override + call base for layer/tensor cleanup.</summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+    }
 }

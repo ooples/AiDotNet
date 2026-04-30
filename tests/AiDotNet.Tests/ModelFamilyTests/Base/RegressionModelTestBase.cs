@@ -119,7 +119,7 @@ public abstract class RegressionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng, noise: 0.5);
         var (testX, testY) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng, noise: 0.5);
 
@@ -251,7 +251,7 @@ public abstract class RegressionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         int nFeatures = Math.Max(Features, 1);
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(200, nFeatures, rng, noise: 0.01);
 
@@ -294,7 +294,7 @@ public abstract class RegressionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(200, Features, rng, noise: 0.5);
 
         model.Train(trainX, trainY);
@@ -333,7 +333,7 @@ public abstract class RegressionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         int nFeatures = Math.Max(Features, 1);
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(200, nFeatures, rng, noise: 0.01);
 
@@ -444,7 +444,7 @@ public abstract class RegressionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng, noise: 0.1);
         var (testX, testY) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng, noise: 0.1);
 
@@ -471,7 +471,7 @@ public abstract class RegressionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
         var (testX, _) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng);
 
@@ -499,7 +499,7 @@ public abstract class RegressionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
         var (testX, _) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng);
 
@@ -522,7 +522,7 @@ public abstract class RegressionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
 
         model.Train(trainX, trainY);
@@ -546,7 +546,7 @@ public abstract class RegressionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
         var (testX, _) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng);
 
@@ -570,7 +570,7 @@ public abstract class RegressionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
 
         model.Train(trainX, trainY);
@@ -587,7 +587,7 @@ public abstract class RegressionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
 
         model.Train(trainX, trainY);
@@ -610,7 +610,7 @@ public abstract class RegressionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
 
         model.Train(trainX, trainY);
@@ -641,7 +641,7 @@ public abstract class RegressionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         int n = TrainSamples;
         var x = new Matrix<double>(n, Features);
         var y = new Vector<double>(n);
@@ -680,7 +680,7 @@ public abstract class RegressionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         int n = TrainSamples;
         var x = new Matrix<double>(n, Features);
         var y = new Vector<double>(n);
@@ -716,7 +716,7 @@ public abstract class RegressionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         int n = TrainSamples;
         var x = new Matrix<double>(n, 1);
         var y = new Vector<double>(n);

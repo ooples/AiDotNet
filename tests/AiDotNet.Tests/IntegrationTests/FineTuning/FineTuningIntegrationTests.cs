@@ -161,6 +161,8 @@ public class FineTuningIntegrationTests
         }
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+        public void Dispose() { /* test mock holds no resources */ }
     }
 
     private static Vector<double> CreateVector(int size)

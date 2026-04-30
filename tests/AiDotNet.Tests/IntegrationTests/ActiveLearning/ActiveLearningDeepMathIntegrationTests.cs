@@ -775,5 +775,7 @@ public class ActiveLearningDeepMathIntegrationTests
         public void ApplyGradients(Vector<double> gradients, double learningRate) { }
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+        public void Dispose() { /* test mock holds no resources */ }
     }
 }

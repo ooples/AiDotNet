@@ -1949,6 +1949,8 @@ public class AdversarialRobustnessIntegrationTests
         }
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+        public void Dispose() { /* test mock holds no resources */ }
     }
 
     #endregion

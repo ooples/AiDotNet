@@ -44,12 +44,12 @@ public abstract class BackboneBase<T> : NeuralNetworkBase<T>, AiDotNet.Interface
     /// <summary>
     /// Number of output channels for each feature level.
     /// </summary>
-    public abstract int[] OutputChannels { get; }
+    public abstract IReadOnlyList<int> OutputChannels { get; }
 
     /// <summary>
     /// The stride (downsampling factor) at each feature level.
     /// </summary>
-    public abstract int[] Strides { get; }
+    public abstract IReadOnlyList<int> Strides { get; }
 
     /// <summary>
     /// Creates a new backbone with a default dynamic-spatial architecture.

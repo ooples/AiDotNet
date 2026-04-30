@@ -41,7 +41,7 @@ public abstract class AnomalyDetectorTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateNormalData(rng);
         model.Train(trainX, trainY);
 
@@ -81,7 +81,7 @@ public abstract class AnomalyDetectorTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateNormalData(rng);
         model.Train(trainX, trainY);
 
@@ -99,7 +99,7 @@ public abstract class AnomalyDetectorTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateNormalData(rng);
         model.Train(trainX, trainY);
 
@@ -115,7 +115,7 @@ public abstract class AnomalyDetectorTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateNormalData(rng);
         model.Train(trainX, trainY);
 
@@ -132,7 +132,7 @@ public abstract class AnomalyDetectorTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateNormalData(rng);
         model.Train(trainX, trainY);
         Assert.Equal(TrainSamples, model.Predict(trainX).Length);
@@ -144,7 +144,7 @@ public abstract class AnomalyDetectorTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateNormalData(rng);
         model.Train(trainX, trainY);
         Assert.NotNull(model.GetModelMetadata());
@@ -156,7 +156,7 @@ public abstract class AnomalyDetectorTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        using var model = CreateModel();
         var (trainX, trainY) = GenerateNormalData(rng);
         model.Train(trainX, trainY);
         Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)model).GetParameters().Length > 0, "Trained anomaly detector should have parameters.");

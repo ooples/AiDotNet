@@ -232,6 +232,8 @@ internal class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<dou
     }
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+    public void Dispose() { /* test mock holds no resources */ }
 }
 
 internal class SecondOrderMatrixModel : LinearVectorModel, ISecondOrderGradientComputable<double, Matrix<double>, Vector<double>>
@@ -479,4 +481,6 @@ internal class TensorEmbeddingModel : IFullModel<double, Matrix<double>, Tensor<
     }
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+    public void Dispose() { /* test mock holds no resources */ }
 }

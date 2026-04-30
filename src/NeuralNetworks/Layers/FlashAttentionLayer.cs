@@ -395,6 +395,9 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
         // computes gradients through Engine.FlashAttention + FlashAttentionBackward.
     }
 
+    /// <inheritdoc />
+    public override int ParameterCount => _queryWeights.Length * 4 + _outputBias.Length;
+
     /// <summary>
     /// Gets all layer parameters as a single vector.
     /// </summary>

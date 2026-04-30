@@ -707,8 +707,8 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// </summary>
     protected virtual Tensor<T> CombineTextAndSpeakerEmbeddings(Tensor<T> textEmbedding, Tensor<T> speakerEmbedding)
     {
-        // Concatenate along feature dimension
-        return Engine.TensorConcatenate<T>(new[] { textEmbedding, speakerEmbedding }, axis: -1);
+        // Concatenate along feature (last) dimension. Tensors NuGet rejects axis=-1.
+        return Engine.TensorConcatenate<T>(new[] { textEmbedding, speakerEmbedding }, axis: textEmbedding._shape.Length - 1);
     }
 
     /// <summary>
@@ -779,7 +779,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// </summary>
     protected virtual Tensor<T> ConcatenateLatents(Tensor<T> a, Tensor<T> b)
     {
-        return Engine.TensorConcatenate<T>(new[] { a, b }, axis: -1);
+        return Engine.TensorConcatenate<T>(new[] { a, b }, axis: a._shape.Length - 1);
     }
 
     /// <summary>
@@ -787,7 +787,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// </summary>
     protected virtual Tensor<T> ConcatenateAudio(Tensor<T> a, Tensor<T> b)
     {
-        return Engine.TensorConcatenate<T>(new[] { a, b }, axis: -1);
+        return Engine.TensorConcatenate<T>(new[] { a, b }, axis: a._shape.Length - 1);
     }
 
     #endregion

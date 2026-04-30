@@ -126,7 +126,11 @@ public class VoxelCNN<T> : NeuralNetworkBase<T>
             inputType: Enums.InputType.ThreeDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
             inputHeight: 32, inputWidth: 32, inputDepth: 32,
-            outputSize: 1))
+            // Default outputSize matches the conv feature-extraction width:
+            // baseFilters (32) × 2^(numConvBlocks-1) = 32 × 4 = 128. The
+            // parameterless ctor is a "feature extractor" preset; classification
+            // heads should configure architecture.OutputSize explicitly.
+            outputSize: 128))
     {
     }
 
@@ -214,11 +218,35 @@ public class VoxelCNN<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
+        // Conv3DLayer expects rank-5 [batch, channels, depth, height, width].
+        // Tests construct unbatched [channels, depth, height, width] (rank-4)
+        // and FlattenLayer's nn.Flatten(start_dim=1) contract treats axis 0 as
+        // batch — passing rank-4 here makes the channel count get treated as
+        // the batch dim, leaving spurious extra ranks downstream and producing
+        // [128, 1] instead of [128] (the bug behind VoxelCNN's
+        // OutputDimension_ShouldMatchExpectedShape and downstream MSE rank-mismatch
+        // failures). Auto-add a leading batch dim for rank-4 inputs and strip it
+        // back off the output so the unbatched Tensor<T> contract is preserved.
+        bool addedBatchDim = false;
+        if (input.Rank == 4)
+        {
+            input = Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3] });
+            addedBatchDim = true;
+        }
 
         Tensor<T> output = input;
         foreach (var layer in Layers)
         {
             output = layer.Forward(output);
+        }
+
+        if (addedBatchDim && output.Rank >= 2 && output.Shape[0] == 1)
+        {
+            // Squeeze the synthetic batch axis back out so the test sees [features]
+            // not [1, features].
+            var squeezed = new int[output.Rank - 1];
+            for (int i = 1; i < output.Rank; i++) squeezed[i - 1] = output.Shape[i];
+            output = Engine.Reshape(output, squeezed);
         }
         return output;
     }

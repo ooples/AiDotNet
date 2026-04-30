@@ -157,6 +157,7 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
     {
         int bestAction = 0;
         T bestValue = ComputeQValue(state, 0);
+        bool allEqual = true;
 
         for (int a = 1; a < _options.ActionSize; a++)
         {
@@ -165,7 +166,27 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
             {
                 bestValue = value;
                 bestAction = a;
+                allEqual = false;
             }
+            else if (!NumOps.Equals(value, bestValue))
+            {
+                allEqual = false;
+            }
+        }
+
+        // Sutton & Barto §2.3 tie-break — break ties using a state-dependent
+        // hash so untrained agents don't return action 0 for every input.
+        if (allEqual)
+        {
+            // Build a key from the actual numeric state so close-but-distinct
+            // states still produce distinct keys.
+            var sb = new System.Text.StringBuilder(state.Length * 8);
+            for (int i = 0; i < state.Length; i++)
+            {
+                sb.Append(NumOps.ToDouble(state[i]).ToString("F4", System.Globalization.CultureInfo.InvariantCulture));
+                sb.Append(',');
+            }
+            bestAction = HashStateToAction(sb.ToString(), _options.ActionSize);
         }
 
         return bestAction;

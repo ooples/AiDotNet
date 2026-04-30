@@ -215,14 +215,28 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// </summary>
     protected override void OnFirstForward(Tensor<T> input)
     {
+        // Forward() already handles rank-5 and higher via GetReductionAxes — the
+        // shape-resolution step just needs to record concrete dims so derived ops
+        // can reason about them. For rank-5 NCDHW (the 3D/voxel case used by
+        // VoxelCNN, Voxel U-Net, and other volumetric models) we collapse the
+        // depth axis into the spatial dims for the resolved-shape record so the
+        // existing rank-3 [C, H, W]-style OutputShape contract still applies; the
+        // actual forward reduces all middle dims regardless of how many there are.
         int rank = input.Shape.Length;
-        int c, h, w;
-        if (rank == 4) { c = input.Shape[1]; h = input.Shape[2]; w = input.Shape[3]; }
-        else if (rank == 3) { c = input.Shape[0]; h = input.Shape[1]; w = input.Shape[2]; }
+        int c, hOut, wOut;
+        if (rank == 5)
+        {
+            // [B, C, D, H, W] — record [C, D, H*W] so OutputShape stays rank-3.
+            c = input.Shape[1];
+            hOut = input.Shape[2];
+            wOut = input.Shape[3] * input.Shape[4];
+        }
+        else if (rank == 4) { c = input.Shape[1]; hOut = input.Shape[2]; wOut = input.Shape[3]; }
+        else if (rank == 3) { c = input.Shape[0]; hOut = input.Shape[1]; wOut = input.Shape[2]; }
         else throw new ArgumentException(
-            $"GlobalPoolingLayer requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {rank}.",
+            $"GlobalPoolingLayer requires rank-3, rank-4, or rank-5 input; got rank {rank}.",
             nameof(input));
-        ResolveShapes(new[] { c, h, w }, new[] { c, 1, 1 });
+        ResolveShapes(new[] { c, hOut, wOut }, new[] { c, 1, 1 });
     }
 
     /// <summary>

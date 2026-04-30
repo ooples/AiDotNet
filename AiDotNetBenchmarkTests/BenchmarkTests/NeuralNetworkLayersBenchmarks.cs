@@ -61,6 +61,14 @@ public class NeuralNetworkLayersBenchmarks
         _dropoutLayer = new DropoutLayer<double>(dropoutRate: 0.5);
         _batchNormLayer = new BatchNormalizationLayer<double>();
         _layerNormLayer = new LayerNormalizationLayer<double>();
+
+        // Warm lazy layers so the shape-resolution / weight-allocation cost
+        // does not contaminate steady-state Forward() measurements.
+        _denseLayer.Forward(_input);
+        _activationLayer.Forward(_input);
+        _dropoutLayer.Forward(_input);
+        _batchNormLayer.Forward(_input);
+        _layerNormLayer.Forward(_input);
     }
 
     #region Dense Layer
@@ -197,13 +205,13 @@ public class NeuralNetworkLayersBenchmarks
     [Benchmark]
     public BatchNormalizationLayer<double> BatchNormLayer_Create()
     {
-        return new BatchNormalizationLayer<double>(InputSize);
+        return new BatchNormalizationLayer<double>();
     }
 
     [Benchmark]
     public LayerNormalizationLayer<double> LayerNormLayer_Create()
     {
-        return new LayerNormalizationLayer<double>(InputSize);
+        return new LayerNormalizationLayer<double>();
     }
 
     #endregion

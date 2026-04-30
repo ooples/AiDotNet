@@ -100,6 +100,7 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     /// <param name="labels">Binary label matrix [n_samples, n_labels].</param>
     public void Train(Matrix<T> features, Matrix<T> labels)
     {
+        ThrowIfDisposed();
         NumFeatures = features.Columns;
         NumLabels = labels.Columns;
         NumClasses = 2; // Binary classification per label
@@ -120,6 +121,7 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     /// <returns>Binary label matrix.</returns>
     public virtual Matrix<T> Predict(Matrix<T> features)
     {
+        ThrowIfDisposed();
         if (NumLabels == 0)
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
@@ -220,6 +222,7 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     /// <inheritdoc />
     public virtual byte[] Serialize()
     {
+        ThrowIfDisposed();
         ModelPersistenceGuard.EnforceBeforeSerialize();
         return SerializeInternalUnchecked();
     }
@@ -252,6 +255,7 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     /// <inheritdoc />
     public virtual void Deserialize(byte[] modelData)
     {
+        ThrowIfDisposed();
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         DeserializeInternalUnchecked(modelData);
     }
@@ -319,6 +323,7 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
 
     public virtual void SaveModel(string path)
     {
+        ThrowIfDisposed();
         if (string.IsNullOrWhiteSpace(path))
         {
             throw new ArgumentException("File path cannot be null or empty.", nameof(path));
@@ -341,6 +346,7 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     /// <inheritdoc />
     public virtual void LoadModel(string path)
     {
+        ThrowIfDisposed();
         if (string.IsNullOrWhiteSpace(path))
         {
             throw new ArgumentException("File path cannot be null or empty.", nameof(path));
@@ -366,6 +372,7 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     /// <inheritdoc />
     public virtual void SaveState(System.IO.Stream stream)
     {
+        ThrowIfDisposed();
         byte[] serializedData = Serialize();
         stream.Write(serializedData, 0, serializedData.Length);
     }
@@ -373,6 +380,7 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     /// <inheritdoc />
     public virtual void LoadState(System.IO.Stream stream)
     {
+        ThrowIfDisposed();
         using var memoryStream = new System.IO.MemoryStream();
         stream.CopyTo(memoryStream);
         byte[] serializedData = memoryStream.ToArray();
@@ -481,6 +489,34 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
         }
 
         return gradients;
+    }
+
+    // --- IDisposable (issue #1136 plan part 3) ---
+
+    private bool _disposed;
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Releases resources held by this multi-label classifier. Override + call base for layer/tensor cleanup.</summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+    }
+
+    /// <summary>
+    /// Throws <see cref="ObjectDisposedException"/> if <see cref="Dispose"/> has already
+    /// been called. Subclasses must call this from any public entry point that touches
+    /// model state.
+    /// </summary>
+    protected void ThrowIfDisposed()
+    {
+        if (_disposed) throw new System.ObjectDisposedException(GetType().FullName);
     }
 
     /// <summary>
