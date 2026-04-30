@@ -184,7 +184,10 @@ public class SDTurboModel<T> : LatentDiffusionModelBase<T>
                 TrainTimesteps = 1000,
                 BetaStart = 0.00085,
                 BetaEnd = 0.012,
-                BetaSchedule = BetaSchedule.ScaledLinear
+                BetaSchedule = BetaSchedule.ScaledLinear,
+                // SDTurbo paper (Sauer et al. 2023, "Adversarial Diffusion Distillation"):
+                // single-step generation by design.
+                DefaultInferenceSteps = 1
             },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             architecture)
