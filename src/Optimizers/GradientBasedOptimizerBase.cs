@@ -3,6 +3,11 @@ using AiDotNet.Data.Sampling;
 using AiDotNet.Engines;
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.MixedPrecision;
+// 0.68.0 of AiDotNet.Tensors introduced its own MixedPrecisionConfig under
+// Engines.Autodiff (the engine-side fp16/bf16 mixed-precision plumbing the
+// repo asked for in ooples/AiDotNet.Tensors#276). Alias the local one to a
+// distinct name so the two coexist without ambiguity at every reference.
+using LocalMixedPrecisionConfig = AiDotNet.MixedPrecision.MixedPrecisionConfig;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -518,7 +523,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </example>
     /// <exception cref="NotSupportedException">Thrown when T is not float.</exception>
     /// <exception cref="InvalidOperationException">Thrown when mixed-precision is already enabled.</exception>
-    internal virtual void EnableMixedPrecision(MixedPrecisionConfig? config = null)
+    internal virtual void EnableMixedPrecision(LocalMixedPrecisionConfig? config = null)
     {
         // Check that T is float
         if (typeof(T) != typeof(float))
