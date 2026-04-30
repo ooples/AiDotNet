@@ -6,6 +6,11 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Interpretability.Explainers;
 using AiDotNet.MixedPrecision;
+// 0.68.0 of AiDotNet.Tensors introduced its own MixedPrecisionConfig under
+// Engines.Autodiff (the engine-side fp16/bf16 mixed-precision plumbing the
+// repo asked for in ooples/AiDotNet.Tensors#276). Alias the local one to a
+// distinct name so the two coexist without ambiguity at every reference.
+using LocalMixedPrecisionConfig = AiDotNet.MixedPrecision.MixedPrecisionConfig;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
@@ -2642,7 +2647,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </example>
     /// <exception cref="NotSupportedException">Thrown when T is not float.</exception>
     /// <exception cref="InvalidOperationException">Thrown when mixed-precision is already enabled.</exception>
-    internal virtual void EnableMixedPrecision(MixedPrecisionConfig? config = null)
+    internal virtual void EnableMixedPrecision(LocalMixedPrecisionConfig? config = null)
     {
         // Check that T is float
         if (typeof(T) != typeof(float))
