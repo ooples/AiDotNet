@@ -128,6 +128,8 @@ internal class InferenceOptimizer<T>
             }
         }
 
+        ResolveLazyLayers(workingModel);
+
         bool anyApplied = ApplyAttentionOptimizations(workingModel);
         InferenceDiagnostics.RecordDecision("InferenceOptimizer", "AttentionRewrites", enabled: anyApplied, reason: anyApplied ? "Applied" : "NoApplicableLayersOrDisabled");
         anyApplied |= ApplyWeightOnlyQuantization(workingModel);
@@ -444,6 +446,33 @@ internal class InferenceOptimizer<T>
         return TryAllocatePagedSequenceId(cache, initialTokens, out sequenceId);
     }
 
+    /// <summary>
+    /// Walks layers in order and resolves any lazy ones using the running output shape,
+    /// so subsequent rewrites/quantization see concrete shapes on every layer.
+    /// </summary>
+    private static void ResolveLazyLayers(NeuralNetworkBase<T> model)
+    {
+        int[]? running = null;
+        var modelInput = model.Architecture?.GetInputShape();
+        if (modelInput is { Length: > 0 } && modelInput.All(d => d > 0))
+            running = modelInput;
+
+        for (int i = 0; i < model.Layers.Count; i++)
+        {
+            var layer = model.Layers[i];
+            if (layer is LayerBase<T> lb && !lb.IsShapeResolved
+                && running is { Length: > 0 } && running.All(d => d > 0))
+            {
+                try { lb.ResolveFromShape(running); }
+                catch { /* leave unresolved if the running shape is incompatible */ }
+            }
+
+            var outShape = layer.GetOutputShape();
+            if (outShape is { Length: > 0 } && outShape.All(d => d > 0))
+                running = outShape;
+        }
+    }
+
     private bool HasOptimizableAttentionLayers(NeuralNetworkBase<T> model)
     {
         foreach (var layer in model.Layers)
@@ -510,6 +539,18 @@ internal class InferenceOptimizer<T>
                 if (inputShape.Length < 2)
                 {
                     continue;
+                }
+
+                // Resolve lazy MHA from the previous layer's concrete output shape
+                // so seqLen/embDim are positive before constructing replacement layers.
+                if (!mha.IsShapeResolved && i > 0)
+                {
+                    var prevOut = model.Layers[i - 1].GetOutputShape();
+                    if (prevOut.Length > 0 && prevOut.All(d => d > 0))
+                    {
+                        mha.ResolveFromShape(prevOut);
+                        inputShape = mha.GetInputShape();
+                    }
                 }
 
                 int seqLen = inputShape[0];
@@ -734,6 +775,13 @@ internal class InferenceOptimizer<T>
             {
                 try
                 {
+                    if (!dense.IsShapeResolved && i > 0)
+                    {
+                        var prevOut = model.Layers[i - 1].GetOutputShape();
+                        if (prevOut.Length > 0 && prevOut.All(d => d > 0))
+                            dense.ResolveFromShape(prevOut);
+                    }
+
                     var replacement = dense.VectorActivation != null
                         ? new QuantizedDenseLayer(dense, dense.VectorActivation)
                         : new QuantizedDenseLayer(dense);
@@ -754,6 +802,13 @@ internal class InferenceOptimizer<T>
             {
                 try
                 {
+                    if (!mha.IsShapeResolved && i > 0)
+                    {
+                        var prevOut = model.Layers[i - 1].GetOutputShape();
+                        if (prevOut.Length > 0 && prevOut.All(d => d > 0))
+                            mha.ResolveFromShape(prevOut);
+                    }
+
                     var replacement = new QuantizedAttentionLayer(mha, mode);
                     if (replacement is ILayer<T> typedReplacement)
                     {

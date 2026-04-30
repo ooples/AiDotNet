@@ -2058,8 +2058,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return false;
         }
 
-        // Check for dimension compatibility in case of Reshape or Flatten layers
-        if (prevLayer is ReshapeLayer<T> reshapeLayer)
+        // Check for dimension compatibility in case of Reshape or Flatten layers.
+        // Lazy current layers carry -1 placeholders; defer the product check to first forward.
+        if (prevLayer is ReshapeLayer<T> reshapeLayer && !currentIsLazy)
         {
             return reshapeLayer.GetOutputShape().Aggregate((a, b) => a * b) ==
                    currentLayer.GetInputShape().Aggregate((a, b) => a * b);

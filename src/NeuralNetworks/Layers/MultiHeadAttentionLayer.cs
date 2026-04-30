@@ -420,6 +420,12 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
         var shape = input.Shape.ToArray();
         ResolveShapes(shape, shape);
+
+        // The Forward path calls EnsureWeightsAllocated() before EnsureInitialized();
+        // public ResolveFromShape only walks the OnFirstForward → EnsureInitialized
+        // chain, so we need to allocate Q/K/V/O explicitly here for callers that
+        // pre-resolve a lazy MHA (e.g. inference quantization, optimizer rewrites).
+        EnsureWeightsAllocated();
     }
 
     /// <summary>
