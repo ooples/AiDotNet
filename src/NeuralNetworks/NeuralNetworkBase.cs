@@ -1963,8 +1963,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // For simple feedforward networks, the first layer might be Dense
         if (layer is DenseLayer<T> denseLayer)
         {
-            // Ensure the dense layer doesn't have any inputs (it's the first layer)
-            return denseLayer.GetInputShape().Length == 1 && denseLayer.GetInputShape()[0] > 0;
+            // Lazy DenseLayer carries InputShape = [-1] until first forward; treat as valid.
+            var shape = denseLayer.GetInputShape();
+            return shape.Length == 1 && (shape[0] > 0 || shape[0] == -1);
         }
 
         // For recurrent networks, the first layer might be LSTM or GRU
