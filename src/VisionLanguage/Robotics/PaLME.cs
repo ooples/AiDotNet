@@ -213,7 +213,34 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
         return actions;
     }
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultRoboticsActionLayers(_options.VisionDim, _options.DecoderDim, 256, _options.NumVisionLayers, _options.NumDecoderLayers, 2, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
+            return;
+        }
+        // Use the architecture's OutputSize (or fall back to ActionDimension) as
+        // the final action-token dimension so the action head produces the
+        // requested output width. The previous hardcoded 256 broke
+        // OutputDimension_ShouldMatchExpectedShape and Training_ShouldReduceLoss
+        // because the model emitted 256-dim outputs while tests expected the
+        // architecture's configured size.
+        int actionTokenDim = Architecture.OutputSize > 0
+            ? Architecture.OutputSize
+            : Math.Max(1, _options.ActionDimension);
+        // Token sequence is reduced to a single per-sequence vector by the
+        // final pooling — append a GlobalAveragePoolingLayer + reshape so the
+        // model returns [B, actionTokenDim] instead of [B, S, actionTokenDim].
+        // Tests expect a flat output matching the architecture OutputSize.
+        Layers.AddRange(LayerHelper<T>.CreateDefaultRoboticsActionLayers(
+            _options.VisionDim, _options.DecoderDim, actionTokenDim,
+            _options.NumVisionLayers, _options.NumDecoderLayers, 2,
+            _options.NumHeads, _options.DropoutRate));
+        ComputeEncoderDecoderBoundary();
+    }
     private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 2; }
     private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
     public override Tensor<T> Predict(Tensor<T> input)
@@ -221,49 +248,114 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
 
+        // Disable training-mode behavior (Dropout active, BatchNorm batch stats)
+        // for the forward pass. Training-mode state is process-wide on the
+        // model instance, so any caller that previously called Train without
+        // explicitly toggling back leaves Dropout active and Predict becomes
+        // non-deterministic between back-to-back calls (caught by the
+        // Predict_ShouldBeDeterministic invariant test).
+        SetTrainingMode(false);
+
         // Convert NCHW image input → BSC (batch, sequence, embedding) tokens
         // via patch embedding when the input is rank-3 [C, H, W] or rank-4
-        // [B, C, H, W]. Already-tokenized inputs (rank-2/-3 BSC) are passed
-        // straight through to the layer stack.
-        var c = input;
+        // [B, C, H, W]. Already-tokenized inputs are passed straight through.
+        var c = TokenizeImageInput(input);
+        foreach (var l in Layers) c = l.Forward(c);
+        // Reduce [B, S, E] → [B, E] by mean-pooling over the sequence axis,
+        // then squeeze the batch dim back off when the input was unbatched.
+        // PaLM-E §3 (Driess et al. 2023) uses the action-head pooled token;
+        // we approximate with GAP since the test contracts assert a flat
+        // output matching architecture.OutputSize.
+        return PoolSequence(c, wasBatched: input.Rank == 4);
+    }
+
+    private Tensor<T> PoolSequence(Tensor<T> bse, bool wasBatched)
+    {
+        if (bse.Rank != 3) return bse;
+        int b = bse.Shape[0];
+        int s = bse.Shape[1];
+        int e = bse.Shape[2];
+        var pooled = new Tensor<T>(new[] { b, e });
+        var src = bse.AsSpan();
+        var dst = pooled.AsWritableSpan();
+        T invS = NumOps.FromDouble(1.0 / Math.Max(1, s));
+        for (int bi = 0; bi < b; bi++)
+        {
+            for (int ei = 0; ei < e; ei++)
+            {
+                T sum = NumOps.Zero;
+                for (int si = 0; si < s; si++)
+                {
+                    sum = NumOps.Add(sum, src[bi * s * e + si * e + ei]);
+                }
+                dst[bi * e + ei] = NumOps.Multiply(sum, invS);
+            }
+        }
+        // Unbatched input → strip the synthetic batch axis we added in
+        // TokenizeImageInput so the test sees a rank-1 [E] result.
+        if (!wasBatched && b == 1)
+        {
+            return Engine.Reshape(pooled, new[] { e });
+        }
+        return pooled;
+    }
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// Override the tape-driven training-mode forward to inject the same patch
+    /// embedding + NCHW→BSC reshape Predict applies. TrainWithTape iterates the
+    /// <see cref="Layers"/> collection through this method to drive the
+    /// gradient tape; without the override, the first MHA in the encoder
+    /// reads raw image width as the embedding dim and throws.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var tokenized = TokenizeImageInput(input);
+        var bse = base.ForwardForTraining(tokenized);
+        return PoolSequence(bse, wasBatched: input.Rank == 4);
+    }
+
+    private Tensor<T> TokenizeImageInput(Tensor<T> input)
+    {
         bool isImage = (input.Rank == 3 && input.Shape[0] == 3) ||
                        (input.Rank == 4 && input.Shape[1] == 3);
-        if (isImage)
-        {
-            // Lazily allocate patch-embed Conv2D on first image we see.
-            // visionDim filters, stride=kernel=PatchSize → non-overlapping patches.
-            if (_patchEmbed is null)
-            {
-                _patchEmbed = new NeuralNetworks.Layers.ConvolutionalLayer<T>(
-                    outputDepth: _options.VisionDim,
-                    kernelSize: PatchSize,
-                    stride: PatchSize,
-                    padding: 0,
-                    activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<T>());
-            }
-            var patched = _patchEmbed.Forward(c); // [B, VisionDim, H/p, W/p] or [VisionDim, H/p, W/p]
-            // Reshape NCHW → BSC: permute (B, C, H, W) → (B, H, W, C), then
-            // flatten (B, H*W, C). For unbatched rank-3 input we add a synthetic
-            // batch axis so Engine.TensorPermute / Engine.Reshape have a
-            // consistent rank to operate on.
-            int b, ch, h, w;
-            if (patched.Rank == 4)
-            {
-                b = patched.Shape[0]; ch = patched.Shape[1]; h = patched.Shape[2]; w = patched.Shape[3];
-            }
-            else
-            {
-                b = 1; ch = patched.Shape[0]; h = patched.Shape[1]; w = patched.Shape[2];
-                patched = Engine.Reshape(patched, new[] { 1, ch, h, w });
-            }
-            var bhwc = Engine.TensorPermute(patched, new[] { 0, 2, 3, 1 }).Contiguous();
-            c = Engine.Reshape(bhwc, new[] { b, h * w, ch });
-        }
+        if (!isImage) return input;
 
-        foreach (var l in Layers) c = l.Forward(c);
-        return c;
+        if (_patchEmbed is null)
+        {
+            _patchEmbed = new NeuralNetworks.Layers.ConvolutionalLayer<T>(
+                outputDepth: _options.VisionDim,
+                kernelSize: PatchSize,
+                stride: PatchSize,
+                padding: 0,
+                activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<T>());
+        }
+        var patched = _patchEmbed.Forward(input);
+        int b, ch, h, w;
+        if (patched.Rank == 4)
+        {
+            b = patched.Shape[0]; ch = patched.Shape[1]; h = patched.Shape[2]; w = patched.Shape[3];
+        }
+        else
+        {
+            b = 1; ch = patched.Shape[0]; h = patched.Shape[1]; w = patched.Shape[2];
+            patched = Engine.Reshape(patched, new[] { 1, ch, h, w });
+        }
+        var bhwc = Engine.TensorPermute(patched, new[] { 0, 2, 3, 1 }).Contiguous();
+        return Engine.Reshape(bhwc, new[] { b, h * w, ch });
     }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
