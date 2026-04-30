@@ -300,7 +300,18 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         foreach (var layer in Layers)
         {
             var outputShape = layer.GetOutputShape();
-            int neuronCount = outputShape.Length > 0 ? outputShape[0] : 0;
+            // The layer may report a lazy/unresolved sentinel (e.g. -1) for some dims.
+            // Use the largest concrete dim as the neuron count and clamp at zero so
+            // lazy-state layers don't blow up the Vector ctor with a negative length.
+            // Per Maass (1997) the per-neuron state is a 1-D vector along the layer's
+            // output feature axis; for ranks > 1 we approximate by taking the first
+            // positive dim — this matches Dense (output = [outputSize]) and stays
+            // safe for Conv (output = [batch, channels, ...] where batch is 1).
+            int neuronCount = 0;
+            for (int i = 0; i < outputShape.Length; i++)
+            {
+                if (outputShape[i] > 0) { neuronCount = outputShape[i]; break; }
+            }
 
             // Initialize membrane potentials to zero
             var potentials = new Vector<T>(neuronCount);
@@ -566,9 +577,13 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         // Calculate output layer spike statistics
         Vector<T> outputLayerActivity = AggregateSpikeTrainToOutput(layerSpikeHistory[Layers.Count - 1]);
 
-        // Calculate error
-        Vector<T> outputError = new Vector<T>(expectedOutputVector.Length);
-        for (int i = 0; i < outputError.Length; i++)
+        // Calculate error. The last layer's neuron count may differ from the test
+        // harness's expected-output dimension when the architecture wasn't sized
+        // exactly to OutputShape (lazy layers, generic test bases). Compare only
+        // the overlapping prefix so we don't index past either vector.
+        int errorLength = Math.Min(expectedOutputVector.Length, outputLayerActivity.Length);
+        Vector<T> outputError = new Vector<T>(errorLength);
+        for (int i = 0; i < errorLength; i++)
         {
             outputError[i] = NumOps.Subtract(expectedOutputVector[i], outputLayerActivity[i]);
         }

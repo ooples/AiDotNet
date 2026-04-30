@@ -529,8 +529,8 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> ConcatenateEmbeddings(Tensor<T> embedding1, Tensor<T> embedding2)
     {
-        // Concatenate along embedding dimension (last axis) using hardware-accelerated engine
-        return Engine.TensorConcatenate<T>(new[] { embedding1, embedding2 }, axis: -1);
+        // Concatenate along embedding (last) dimension. Tensors NuGet rejects axis=-1.
+        return Engine.TensorConcatenate<T>(new[] { embedding1, embedding2 }, axis: embedding1._shape.Length - 1);
     }
 
     /// <summary>

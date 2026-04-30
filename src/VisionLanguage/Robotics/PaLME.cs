@@ -61,6 +61,17 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
     private int _encoderLayerEnd;
 
+    // Patch-embedding Conv2D — projects raw image pixels [B, 3, H, W] into a
+    // sequence of `VisionDim`-dimensional tokens before the LayerNorm/MHA stack.
+    // Per ViT/PaLM-E §3 (Driess et al. 2023), the image is split into
+    // non-overlapping patches via a single Conv2D with kernel = stride =
+    // patch_size, then flattened to [B, num_patches, VisionDim]. Without this
+    // step the very first MHA layer in the encoder receives raw NCHW pixels
+    // and reads `W` (e.g. 128) as the embedding dim, which mismatches the
+    // [VisionDim, VisionDim] (1408×1408) Q/K/V weights and throws.
+    private NeuralNetworks.Layers.ConvolutionalLayer<T>? _patchEmbed;
+    private int PatchSize => Math.Max(1, _options.ImageSize / 16);
+
     public PaLME(NeuralNetworkArchitecture<T> architecture, string modelPath, PaLMEOptions? options = null) : base(architecture) { _options = options ?? new PaLMEOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
     public PaLME(NeuralNetworkArchitecture<T> architecture, PaLMEOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new PaLMEOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
 
@@ -205,7 +216,53 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultRoboticsActionLayers(_options.VisionDim, _options.DecoderDim, 256, _options.NumVisionLayers, _options.NumDecoderLayers, 2, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
     private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 2; }
     private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+
+        // Convert NCHW image input → BSC (batch, sequence, embedding) tokens
+        // via patch embedding when the input is rank-3 [C, H, W] or rank-4
+        // [B, C, H, W]. Already-tokenized inputs (rank-2/-3 BSC) are passed
+        // straight through to the layer stack.
+        var c = input;
+        bool isImage = (input.Rank == 3 && input.Shape[0] == 3) ||
+                       (input.Rank == 4 && input.Shape[1] == 3);
+        if (isImage)
+        {
+            // Lazily allocate patch-embed Conv2D on first image we see.
+            // visionDim filters, stride=kernel=PatchSize → non-overlapping patches.
+            if (_patchEmbed is null)
+            {
+                _patchEmbed = new NeuralNetworks.Layers.ConvolutionalLayer<T>(
+                    outputDepth: _options.VisionDim,
+                    kernelSize: PatchSize,
+                    stride: PatchSize,
+                    padding: 0,
+                    activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<T>());
+            }
+            var patched = _patchEmbed.Forward(c); // [B, VisionDim, H/p, W/p] or [VisionDim, H/p, W/p]
+            // Reshape NCHW → BSC: permute (B, C, H, W) → (B, H, W, C), then
+            // flatten (B, H*W, C). For unbatched rank-3 input we add a synthetic
+            // batch axis so Engine.TensorPermute / Engine.Reshape have a
+            // consistent rank to operate on.
+            int b, ch, h, w;
+            if (patched.Rank == 4)
+            {
+                b = patched.Shape[0]; ch = patched.Shape[1]; h = patched.Shape[2]; w = patched.Shape[3];
+            }
+            else
+            {
+                b = 1; ch = patched.Shape[0]; h = patched.Shape[1]; w = patched.Shape[2];
+                patched = Engine.Reshape(patched, new[] { 1, ch, h, w });
+            }
+            var bhwc = Engine.TensorPermute(patched, new[] { 0, 2, 3, 1 }).Contiguous();
+            c = Engine.Reshape(bhwc, new[] { b, h * w, ch });
+        }
+
+        foreach (var l in Layers) c = l.Forward(c);
+        return c;
+    }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);

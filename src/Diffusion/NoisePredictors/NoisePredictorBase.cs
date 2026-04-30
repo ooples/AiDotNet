@@ -329,12 +329,18 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <summary>
     /// Creates a <see cref="DenseLayer{T}"/> with lazy weight allocation —
     /// weight/bias tensors stay zero-sized until the first Forward() call.
+    /// Resolves shape eagerly (without consuming RNG) so <c>ParameterCount</c>,
+    /// <c>GetParameters</c>, and <c>SetParameters</c> work before the first forward pass.
     /// </summary>
     protected static DenseLayer<T> LazyDense(
         int inputSize,
         int outputSize,
         IActivationFunction<T>? activation = null)
-        => new DenseLayer<T>(outputSize, activation, InitializationStrategies<T>.Lazy);
+    {
+        var layer = new DenseLayer<T>(outputSize, activation, InitializationStrategies<T>.Lazy);
+        layer.ResolveShapesOnly(new[] { inputSize });
+        return layer;
+    }
 
     /// <summary>
     /// Creates a <see cref="DenseLayer{T}"/> with a vector activation and lazy weight
@@ -346,7 +352,11 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         int inputSize,
         int outputSize,
         IVectorActivationFunction<T> vectorActivation)
-        => new DenseLayer<T>(outputSize, vectorActivation, InitializationStrategies<T>.Lazy);
+    {
+        var layer = new DenseLayer<T>(outputSize, vectorActivation, InitializationStrategies<T>.Lazy);
+        layer.ResolveShapesOnly(new[] { inputSize });
+        return layer;
+    }
 
     /// <summary>
     /// Creates a <see cref="LayerNormalizationLayer{T}"/> pre-resolved against

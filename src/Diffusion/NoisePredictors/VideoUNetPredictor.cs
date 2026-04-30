@@ -597,12 +597,15 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             x = ApplyTemporalProcessing(block.TemporalResBlock, x);
         }
 
-        // Spatial attention
+        // Spatial attention. MHA expects [batch, seq, embed_dim]; spatial features
+        // arrive as NCHW [B, C, H, W]. Reshape to [B, H*W, C] before the layer and
+        // back after — without this MHA reads H or W as the embedding dim and
+        // throws a weight-mismatch ArgumentException.
         if (block.SpatialAttention != null)
         {
             x = isVideo
-                ? ProcessVideoFrames(x, frame => block.SpatialAttention.Forward(frame))
-                : block.SpatialAttention.Forward(x);
+                ? ProcessVideoFrames(x, frame => SpatialAttentionForward(block.SpatialAttention, frame))
+                : SpatialAttentionForward(block.SpatialAttention, x);
         }
 
         // Temporal attention (only for video)
@@ -635,11 +638,43 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             }
 
             x = isVideo
-                ? ProcessVideoFrames(x, frame => crossAttnBase.Forward(frame, conditioning))
-                : crossAttnBase.Forward(x, conditioning);
+                ? ProcessVideoFrames(x, frame => SpatialCrossAttentionForward(crossAttnBase, frame, conditioning))
+                : SpatialCrossAttentionForward(crossAttnBase, x, conditioning);
         }
 
         return x;
+    }
+
+    // Reshape NCHW [B, C, H, W] → [B, H*W, C] for self-attention, then back.
+    // MultiHeadAttentionLayer treats last-dim as embedding; passing NCHW directly
+    // makes it read W (8) as embed and the [C, C] weights mismatch.
+    private Tensor<T> SpatialAttentionForward(ILayer<T> attn, Tensor<T> nchw)
+    {
+        int b = nchw.Shape[0];
+        int c = nchw.Shape[1];
+        int h = nchw.Shape[2];
+        int w = nchw.Shape[3];
+        // [B, C, H, W] → [B, H, W, C] → [B, H*W, C]
+        var bhwc = Engine.TensorPermute(nchw, new[] { 0, 2, 3, 1 }).Contiguous();
+        var seq = Engine.Reshape(bhwc, new[] { b, h * w, c });
+        var attended = attn.Forward(seq);
+        // [B, H*W, C] → [B, H, W, C] → [B, C, H, W]
+        var attendedHwc = Engine.Reshape(attended, new[] { b, h, w, c });
+        return Engine.TensorPermute(attendedHwc, new[] { 0, 3, 1, 2 }).Contiguous();
+    }
+
+    // Same NCHW↔BSC reshape for cross-attention (query is spatial, KV is conditioning).
+    private Tensor<T> SpatialCrossAttentionForward(LayerBase<T> attn, Tensor<T> nchw, Tensor<T> kv)
+    {
+        int b = nchw.Shape[0];
+        int c = nchw.Shape[1];
+        int h = nchw.Shape[2];
+        int w = nchw.Shape[3];
+        var bhwc = Engine.TensorPermute(nchw, new[] { 0, 2, 3, 1 }).Contiguous();
+        var seq = Engine.Reshape(bhwc, new[] { b, h * w, c });
+        var attended = attn.Forward(seq, kv);
+        var attendedHwc = Engine.Reshape(attended, new[] { b, h, w, c });
+        return Engine.TensorPermute(attendedHwc, new[] { 0, 3, 1, 2 }).Contiguous();
     }
 
     /// <summary>

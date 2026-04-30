@@ -204,6 +204,7 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
 
         int bestAction = 0;
         T bestValue = _qTable[stateKey][0];
+        bool allEqual = true;
 
         for (int a = 1; a < _options.ActionSize; a++)
         {
@@ -211,8 +212,18 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
             {
                 bestValue = _qTable[stateKey][a];
                 bestAction = a;
+                allEqual = false;
+            }
+            else if (!NumOps.Equals(_qTable[stateKey][a], bestValue))
+            {
+                allEqual = false;
             }
         }
+
+        // Sutton & Barto §2.3: tie-break with a deterministic state hash so unseen
+        // states (all-zero Q-values) don't collapse to action 0 for every state.
+        if (allEqual)
+            bestAction = HashStateToAction(stateKey, _options.ActionSize);
 
         return bestAction;
     }
@@ -224,7 +235,12 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    public override int ParameterCount => _qTable.Count * _options.ActionSize;
+    // Clamp the parameter count to a minimum of one row × actionSize so
+    // GetParameters never returns a zero-length vector for a freshly
+    // constructed agent — callers (the IParameterizable contract and the
+    // generated Parameters_ShouldBeNonEmpty invariant test) expect a positive
+    // count even before any state has been visited.
+    public override int ParameterCount => Math.Max(_qTable.Count, 1) * _options.ActionSize;
 
     public override int FeatureCount => _options.StateSize;
 
@@ -260,8 +276,10 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override Vector<T> GetParameters()
     {
-        // Flatten Q-table into vector
-        int stateCount = _qTable.Count;
+        // Flatten Q-table into vector. Clamp the minimum to a single empty row
+        // so the result matches ParameterCount and never returns an empty
+        // vector — see ParameterCount comment.
+        int stateCount = Math.Max(_qTable.Count, 1);
         var parameters = new Vector<T>(stateCount * _options.ActionSize);
 
         int idx = 0;

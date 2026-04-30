@@ -488,43 +488,25 @@ public class StandardVAE<T> : VAEModelBase<T>
 
     private int CalculateParameterCount()
     {
+        // Walk the same layers GetParameters walks and sum their actual ParameterCount.
+        // Must match GetParameters().Length exactly — earlier "approximate" formulas
+        // diverged from the real per-layer count and broke contract tests asserting
+        // ParameterCount == GetParameters().Length.
         long count = 0;
-
-        // Input conv
-        count += _inputChannels * _baseChannels * 9 + _baseChannels;
-
-        // Encoder blocks
-        for (int level = 0; level < _channelMultipliers.Length; level++)
-        {
-            var channels = _baseChannels * _channelMultipliers[level];
-            count += _numResBlocksPerLevel * (channels * channels * 2);
-            if (level < _channelMultipliers.Length - 1)
-            {
-                count += channels * channels * 9;
-            }
-        }
-
-        // Latent projections
-        var lastChannels = _baseChannels * _channelMultipliers[^1];
-        count += lastChannels * _latentChannels * 9 * 2; // mean + logvar
-        count += _latentChannels * _latentChannels; // quant conv
-        count += _latentChannels * lastChannels * 9; // post-quant
-
-        // Decoder blocks (similar to encoder)
-        for (int level = _channelMultipliers.Length - 1; level >= 0; level--)
-        {
-            var channels = _baseChannels * _channelMultipliers[level];
-            count += _numResBlocksPerLevel * (channels * channels * 2);
-            if (level > 0)
-            {
-                count += channels * channels * 9;
-            }
-        }
-
-        // Output conv
-        count += _baseChannels * _inputChannels * 9 + _inputChannels;
-
+        AddLayerCount(ref count, _inputConv);
+        for (int i = 0; i < _encoderLayers.Count; i++) AddLayerCount(ref count, _encoderLayers[i]);
+        AddLayerCount(ref count, _meanConv);
+        AddLayerCount(ref count, _logVarConv);
+        AddLayerCount(ref count, _quantConv);
+        AddLayerCount(ref count, _postQuantConv);
+        for (int i = 0; i < _decoderLayers.Count; i++) AddLayerCount(ref count, _decoderLayers[i]);
+        AddLayerCount(ref count, _outputConv);
         return (int)Math.Min(count, int.MaxValue);
+    }
+
+    private static void AddLayerCount(ref long count, ILayer<T>? layer)
+    {
+        if (layer != null) count += layer.ParameterCount;
     }
 
     /// <inheritdoc />

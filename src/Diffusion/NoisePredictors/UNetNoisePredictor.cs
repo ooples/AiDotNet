@@ -880,24 +880,32 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private int CalculateParameterCount()
     {
-        // Approximate parameter count based on architecture
+        // Walk the same layers GetParameters walks and sum their actual ParameterCount.
+        // Must match GetParameters().Length exactly — the previous "approximate" formula
+        // diverged from the real count and broke contract tests asserting equality.
         long count = 0;
-
-        // Input/output convolutions
-        count += _inputChannels * _baseChannels * 9 + _baseChannels;
-        count += _baseChannels * _outputChannels * 9 + _outputChannels;
-
-        // Time embedding MLP
-        count += (_timeEmbeddingDim / 4) * _timeEmbeddingDim + _timeEmbeddingDim;
-        count += _timeEmbeddingDim * _timeEmbeddingDim + _timeEmbeddingDim;
-
-        // Estimate blocks
-        foreach (var channels in _channelMultipliers.Select(mult => _baseChannels * mult))
-        {
-            count += _numResBlocks * (channels * channels * 2); // Rough estimate per res block
-        }
-
+        AddLayerCount(ref count, _inputConv);
+        AddLayerCount(ref count, _timeEmbedMlp1);
+        AddLayerCount(ref count, _timeEmbedMlp2);
+        for (int i = 0; i < _encoderBlocks.Count; i++) AddBlockCount(ref count, _encoderBlocks[i]);
+        for (int i = 0; i < _middleBlocks.Count; i++) AddBlockCount(ref count, _middleBlocks[i]);
+        for (int i = 0; i < _decoderBlocks.Count; i++) AddBlockCount(ref count, _decoderBlocks[i]);
+        AddLayerCount(ref count, _outputConv);
         return (int)Math.Min(count, int.MaxValue);
+    }
+
+    private static void AddLayerCount(ref long count, ILayer<T>? layer)
+    {
+        if (layer != null) count += layer.ParameterCount;
+    }
+
+    private static void AddBlockCount(ref long count, UNetBlock block)
+    {
+        AddLayerCount(ref count, block.ResBlock);
+        AddLayerCount(ref count, block.AttentionBlock);
+        AddLayerCount(ref count, block.CrossAttentionBlock);
+        AddLayerCount(ref count, block.Downsample);
+        AddLayerCount(ref count, block.Upsample);
     }
 
     /// <inheritdoc />

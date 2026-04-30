@@ -264,6 +264,10 @@ public class TripleTextConditioner<T> : IConditioningModule<T>
     /// <returns>Combined pooled embedding [batchSize, 2048].</returns>
     private Tensor<T> ConcatenatePooledEmbeddings(Tensor<T> clipLPooled, Tensor<T> clipGPooled)
     {
-        return AiDotNetEngine.Current.TensorConcatenate<T>(new[] { clipLPooled, clipGPooled }, axis: -1);
+        // Pooled tensors arrive as [batchSize, embedDim]; the upstream Tensor
+        // implementation rejects negative axis values, so resolve to the explicit
+        // last-dim index here rather than passing axis=-1.
+        int axis = clipLPooled._shape.Length - 1;
+        return AiDotNetEngine.Current.TensorConcatenate<T>(new[] { clipLPooled, clipGPooled }, axis: axis);
     }
 }

@@ -68,6 +68,42 @@ public class DenseLoRAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
+    /// Initializes a new Dense LoRA adapter wrapping a base layer that is in deferred-shape
+    /// state (e.g. a PyTorch-style lazy <see cref="NeuralNetworks.Layers.DenseLayer{T}"/>
+    /// constructed without an explicit inputSize). Pre-resolves the base layer to the supplied
+    /// <paramref name="inputSize"/> so the LoRA decomposition has concrete dimensions to work
+    /// against — without this overload, lazy DenseLayer reports <c>InputShape = [-1]</c>, the
+    /// inner <c>LoRALayer</c> ctor receives <c>inputSize = -1</c>, and throws
+    /// <c>ArgumentOutOfRangeException : Input size must be positive</c>.
+    /// </summary>
+    /// <param name="baseLayer">The Dense or FullyConnected layer to adapt with LoRA.</param>
+    /// <param name="inputSize">The base layer's resolved input feature dimension.</param>
+    /// <param name="rank">The rank of the LoRA decomposition.</param>
+    /// <param name="alpha">The LoRA scaling factor (defaults to rank if negative).</param>
+    /// <param name="freezeBaseLayer">Whether to freeze the base layer's parameters during training.</param>
+    public DenseLoRAAdapter(
+        NeuralNetworks.Layers.LayerBase<T> baseLayer,
+        int inputSize,
+        int rank,
+        double alpha = -1,
+        bool freezeBaseLayer = true)
+        : this(EnsureResolved(baseLayer, inputSize), rank, alpha, freezeBaseLayer)
+    {
+    }
+
+    private static ILayer<T> EnsureResolved(NeuralNetworks.Layers.LayerBase<T> baseLayer, int inputSize)
+    {
+        if (baseLayer is null) throw new ArgumentNullException(nameof(baseLayer));
+        if (inputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputSize), "inputSize must be positive.");
+        if (!baseLayer.IsShapeResolved)
+        {
+            baseLayer.ResolveShapesOnly(new[] { inputSize });
+        }
+        return baseLayer;
+    }
+
+    /// <summary>
     /// Merges the LoRA adaptation into the base layer and returns the merged Dense layer.
     /// </summary>
     /// <returns>A new DenseLayer with LoRA weights merged into the base layer's weights.</returns>

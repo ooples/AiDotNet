@@ -212,6 +212,7 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         EnsureStateExists(stateKey);
         int bestAction = 0;
         T bestValue = NumOps.Add(_qTable1[stateKey][0], _qTable2[stateKey][0]);
+        bool allEqual = true;
 
         for (int a = 1; a < _options.ActionSize; a++)
         {
@@ -220,8 +221,21 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
             {
                 bestValue = sumValue;
                 bestAction = a;
+                allEqual = false;
+            }
+            else if (!NumOps.Equals(sumValue, bestValue))
+            {
+                allEqual = false;
             }
         }
+
+        // Sutton & Barto §2.3: when all action-values are tied (typical for an
+        // unvisited state with zero-initialized Q-tables), default argmax always
+        // returns action 0 — a degenerate policy that produces the same action for
+        // every unseen state. Break ties deterministically by state hash so the
+        // policy stays distinct across states without injecting non-determinism.
+        if (allEqual)
+            bestAction = HashStateToAction(stateKey, _options.ActionSize);
         return bestAction;
     }
 

@@ -124,10 +124,45 @@ public class SiTPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
+        // SiT (per Ma et al. 2024) is a transformer over 2x2 patches: patchify
+        // [B, C, H, W] → [B, (H/2)*(W/2), C*4], run the dense+block stack on the
+        // token dim, then unpatchify back to [B, C, H, W] so the predicted noise
+        // matches the input shape. Without patchify/unpatchify the dense layers
+        // collapse on the wrong axis and PredictNoise returns a tensor whose
+        // element count is patchDim/C × the input — failing the latent-length
+        // check in DiffusionModelBase.Generate.
         var (_, embed, blocks, final_) = EnsureInitialized();
-        var x = embed.Forward(noisySample);
+
+        int b = noisySample.Shape[0];
+        int c = noisySample.Shape[1];
+        int h = noisySample.Shape[2];
+        int w = noisySample.Shape[3];
+        const int patchSize = 2;
+        if (h % patchSize != 0 || w % patchSize != 0)
+        {
+            throw new ArgumentException(
+                $"SiT requires spatial dims divisible by {patchSize}; got [{h},{w}].",
+                nameof(noisySample));
+        }
+        int hp = h / patchSize;
+        int wp = w / patchSize;
+
+        // Patchify: [B, C, H, W] → [B, hp, patchSize, wp, patchSize, C] via
+        // permute, then flatten to [B, hp*wp, C*patchSize*patchSize].
+        var permuted = Engine.TensorPermute(noisySample, new[] { 0, 2, 3, 1 }).Contiguous(); // [B,H,W,C]
+        var reshaped = Engine.Reshape(permuted, new[] { b, hp, patchSize, wp, patchSize, c });
+        var patchOrdered = Engine.TensorPermute(reshaped, new[] { 0, 1, 3, 2, 4, 5 }).Contiguous();
+        var tokens = Engine.Reshape(patchOrdered, new[] { b, hp * wp, c * patchSize * patchSize });
+
+        var x = embed.Forward(tokens);
         foreach (var block in blocks) x = block.Forward(x);
-        return final_.Forward(x);
+        var outTokens = final_.Forward(x); // [B, hp*wp, C*patchSize*patchSize]
+
+        // Unpatchify: reverse of the above.
+        var outPatched = Engine.Reshape(outTokens, new[] { b, hp, wp, patchSize, patchSize, c });
+        var outOrdered = Engine.TensorPermute(outPatched, new[] { 0, 1, 3, 2, 4, 5 }).Contiguous();
+        var outBhwc = Engine.Reshape(outOrdered, new[] { b, h, w, c });
+        return Engine.TensorPermute(outBhwc, new[] { 0, 3, 1, 2 }).Contiguous();
     }
 
     /// <inheritdoc />

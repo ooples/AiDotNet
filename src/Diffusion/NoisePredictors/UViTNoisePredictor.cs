@@ -471,8 +471,8 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
     {
-        // Concatenate along feature dimension (last dim)
-        return Engine.TensorConcatenate<T>(new[] { a, b }, axis: -1);
+        // Concatenate along feature dimension (last dim). Tensors NuGet rejects axis=-1.
+        return Engine.TensorConcatenate<T>(new[] { a, b }, axis: a._shape.Length - 1);
     }
 
     #endregion

@@ -523,13 +523,19 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     private T CalculateBinaryLoss(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
+        // Discriminator outputs may be rank-1 [batch] or rank-2 [batch, 1]; index by
+        // flat span so this works for any rank. Same fix as CalculateBinaryGradients.
         T totalLoss = NumOps.Zero;
         T epsilon = NumOps.FromDouble(1e-10);
+        int perSample = predictions.Length / Math.Max(1, batchSize);
+        var predFlat = predictions.AsSpan();
+        var targetFlat = targets.AsSpan();
 
         for (int i = 0; i < batchSize; i++)
         {
-            T prediction = predictions[i, 0];
-            T target = targets[i, 0];
+            int idx = i * perSample;
+            T prediction = predFlat[idx];
+            T target = targetFlat[idx];
 
             T logP = NumOps.Log(NumOps.Add(prediction, epsilon));
             T logOneMinusP = NumOps.Log(NumOps.Add(NumOps.Subtract(NumOps.One, prediction), epsilon));
@@ -555,14 +561,24 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
+        // Discriminator outputs may be rank-1 [batch] or rank-2 [batch, 1] depending
+        // on the architecture. Indexing predictions[i, 0] crashes on rank-1 with
+        // "Number of indices must match the tensor's rank." Walk the underlying
+        // flat data instead so we work for any rank that flattens to one scalar
+        // per sample.
         var gradients = new Tensor<T>(predictions._shape);
         T epsilon = NumOps.FromDouble(1e-10);
         T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
+        int perSample = predictions.Length / Math.Max(1, batchSize);
+        var predFlat = predictions.AsSpan();
+        var targetFlat = targets.AsSpan();
+        var gradFlat = gradients.AsWritableSpan();
 
         for (int i = 0; i < batchSize; i++)
         {
-            T p = predictions[i, 0];
-            T t = targets[i, 0];
+            int idx = i * perSample;
+            T p = predFlat[idx];
+            T t = targetFlat[idx];
 
             // Clamp predictions to avoid numerical instability
             if (NumOps.LessThan(p, epsilon))
@@ -577,7 +593,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
                 NumOps.Subtract(p, t),
                 NumOps.Add(pTimesOneMinusP, epsilon)
             );
-            gradients[i, 0] = NumOps.Divide(gradient, NumOps.FromDouble(batchSize));
+            gradFlat[idx] = NumOps.Divide(gradient, NumOps.FromDouble(batchSize));
         }
 
         return gradients;
@@ -880,6 +896,35 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
             _lossFunction,
             NumOps.ToDouble(_cycleConsistencyLambda),
             NumOps.ToDouble(_identityLambda));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// CycleGAN owns four sub-networks (two generators + two discriminators) outside
+    /// the inherited <c>Layers</c> list, so the base ParameterCount (which only sums
+    /// <c>Layers</c>) reports 0 — that's the symptom behind the "GAN has only 0
+    /// parameters" invariant test failure. Aggregate the four networks here.
+    /// </remarks>
+    public override int ParameterCount =>
+        GeneratorAtoB.GetParameterCount() +
+        GeneratorBtoA.GetParameterCount() +
+        DiscriminatorA.GetParameterCount() +
+        DiscriminatorB.GetParameterCount();
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var a2b = GeneratorAtoB.GetParameters();
+        var b2a = GeneratorBtoA.GetParameters();
+        var dA = DiscriminatorA.GetParameters();
+        var dB = DiscriminatorB.GetParameters();
+        var combined = new Vector<T>(a2b.Length + b2a.Length + dA.Length + dB.Length);
+        int idx = 0;
+        for (int i = 0; i < a2b.Length; i++) combined[idx++] = a2b[i];
+        for (int i = 0; i < b2a.Length; i++) combined[idx++] = b2a[i];
+        for (int i = 0; i < dA.Length; i++) combined[idx++] = dA[i];
+        for (int i = 0; i < dB.Length; i++) combined[idx++] = dB[i];
+        return combined;
     }
 
     /// <summary>
