@@ -35,12 +35,16 @@ public static class TapeTrainingStep<T>
     private static int _cachedVersion;
     [ThreadStatic]
     private static int _cachedLayerCount;
+    [ThreadStatic]
+    private static ILayer<T>? _cachedFirstLayer;
 
     // Level 2 cache: trainable layer references for ZeroGrad
     [ThreadStatic]
     private static ITrainableLayer<T>[]? _cachedTrainableLayers;
     [ThreadStatic]
     private static int _cachedTrainableVersion;
+    [ThreadStatic]
+    private static ILayer<T>? _cachedTrainableFirstLayer;
 
     /// <summary>
     /// Executes a single training step using tape-based autodiff.
@@ -107,11 +111,16 @@ public static class TapeTrainingStep<T>
     public static IReadOnlyList<Tensor<T>> CollectParameters(IEnumerable<ILayer<T>> layers, int structureVersion = 0)
     {
         var layerList = layers as IList<ILayer<T>> ?? layers.ToList();
+        ILayer<T>? firstLayer = layerList.Count > 0 ? layerList[0] : null;
 
-        // Level 1 cache hit: same version + same layer count = no structural change
+        // Level 1 cache hit: same version + same layer count + same first-layer
+        // identity = same network (the version+count alone are not unique across
+        // sibling networks like CycleGAN's 2 generators + 2 discriminators that
+        // can share both values).
         if (_cachedParameters is not null
             && _cachedVersion == structureVersion
             && _cachedLayerCount == layerList.Count
+            && ReferenceEquals(_cachedFirstLayer, firstLayer)
             && structureVersion >= 0)
         {
             return _cachedParameters;
@@ -127,6 +136,7 @@ public static class TapeTrainingStep<T>
         _cachedParameters = parameters;
         _cachedVersion = structureVersion;
         _cachedLayerCount = layerList.Count;
+        _cachedFirstLayer = firstLayer;
 
         return _cachedParameters;
     }
@@ -169,8 +179,12 @@ public static class TapeTrainingStep<T>
     /// </summary>
     public static ITrainableLayer<T>[] CollectTrainableLayers(IEnumerable<ILayer<T>> layers, int structureVersion = 0)
     {
+        var layerList = layers as IList<ILayer<T>> ?? layers.ToList();
+        ILayer<T>? firstLayer = layerList.Count > 0 ? layerList[0] : null;
+
         if (_cachedTrainableLayers is not null
             && _cachedTrainableVersion == structureVersion
+            && ReferenceEquals(_cachedTrainableFirstLayer, firstLayer)
             && structureVersion >= 0)
         {
             return _cachedTrainableLayers;
@@ -178,11 +192,12 @@ public static class TapeTrainingStep<T>
 
         var trainableLayers = new List<ITrainableLayer<T>>();
         var seen = new HashSet<ILayer<T>>(TensorReferenceComparer<ILayer<T>>.Instance);
-        CollectTrainableRecursive(layers, trainableLayers, seen);
+        CollectTrainableRecursive(layerList, trainableLayers, seen);
 
         var result = trainableLayers.ToArray();
         _cachedTrainableLayers = result;
         _cachedTrainableVersion = structureVersion;
+        _cachedTrainableFirstLayer = firstLayer;
         return result;
     }
 
@@ -223,6 +238,8 @@ public static class TapeTrainingStep<T>
     public static void InvalidateCache()
     {
         _cachedParameters = null;
+        _cachedFirstLayer = null;
         _cachedTrainableLayers = null;
+        _cachedTrainableFirstLayer = null;
     }
 }
