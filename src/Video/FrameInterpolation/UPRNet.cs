@@ -430,10 +430,13 @@ public class UPRNet<T> : FrameInterpolationBase<T>
                     int y1 = y0 + 1;
                     double dx = srcX - x0;
                     double dy = srcY - y0;
-                    int x0c = Math.Clamp(x0, 0, w - 1);
-                    int x1c = Math.Clamp(x1, 0, w - 1);
-                    int y0c = Math.Clamp(y0, 0, h - 1);
-                    int y1c = Math.Clamp(y1, 0, h - 1);
+                    // MathHelper.Clamp is the net471-compatible clamp helper —
+                    // System.Math.Clamp doesn't exist on net471, but the
+                    // codebase's MathHelper polyfill works on every TFM.
+                    int x0c = MathHelper.Clamp(x0, 0, w - 1);
+                    int x1c = MathHelper.Clamp(x1, 0, w - 1);
+                    int y0c = MathHelper.Clamp(y0, 0, h - 1);
+                    int y1c = MathHelper.Clamp(y1, 0, h - 1);
                     for (int ci = 0; ci < c; ci++)
                     {
                         int chOff = bi * c * hw + ci * hw;
@@ -488,16 +491,16 @@ public class UPRNet<T> : FrameInterpolationBase<T>
                     int y0 = (int)Math.Floor(srcY);
                     int y1 = y0 + 1;
                     double dy = srcY - y0;
-                    int y0c = Math.Clamp(y0, 0, oldH - 1);
-                    int y1c = Math.Clamp(y1, 0, oldH - 1);
+                    int y0c = MathHelper.Clamp(y0, 0, oldH - 1);
+                    int y1c = MathHelper.Clamp(y1, 0, oldH - 1);
                     for (int j = 0; j < newW; j++)
                     {
                         double srcX = (j + 0.5) * sx - 0.5;
                         int x0 = (int)Math.Floor(srcX);
                         int x1 = x0 + 1;
                         double dx = srcX - x0;
-                        int x0c = Math.Clamp(x0, 0, oldW - 1);
-                        int x1c = Math.Clamp(x1, 0, oldW - 1);
+                        int x0c = MathHelper.Clamp(x0, 0, oldW - 1);
+                        int x1c = MathHelper.Clamp(x1, 0, oldW - 1);
                         double v00 = NumOps.ToDouble(src[chSrcOff + y0c * oldW + x0c]);
                         double v01 = NumOps.ToDouble(src[chSrcOff + y0c * oldW + x1c]);
                         double v10 = NumOps.ToDouble(src[chSrcOff + y1c * oldW + x0c]);

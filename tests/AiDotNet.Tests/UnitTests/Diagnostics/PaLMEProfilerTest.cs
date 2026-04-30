@@ -28,11 +28,28 @@ public class PaLMEProfilerTest
     private readonly ITestOutputHelper _out;
     public PaLMEProfilerTest(ITestOutputHelper o) => _out = o;
 
+    /// <summary>
+    /// Allocated-bytes counter that compiles on every TFM the test project
+    /// targets. <c>GC.GetTotalAllocatedBytes</c> ships in .NET Core 3.0+ but
+    /// not net471; <c>GC.GetTotalMemory</c> measures live memory rather than
+    /// cumulative allocations but is the closest available proxy on the older
+    /// framework. Profiler reports are wall-clock dominated; this fallback is
+    /// good enough to flag whether a stage is allocating heavily.
+    /// </summary>
+    private static long GetTotalAllocated()
+    {
+#if NETCOREAPP3_0_OR_GREATER || NET5_0_OR_GREATER
+        return GC.GetTotalAllocatedBytes(precise: true);
+#else
+        return GC.GetTotalMemory(forceFullCollection: false);
+#endif
+    }
+
     [Fact(Skip = "Manual profiler — exhibits OutOfMemoryException at 255s on the paper-faithful 562B config (decoder MHA alone needs 134GB at double precision). Remove Skip when investigating engine-side memory issues.")]
     public async Task Profile_PaLME_DefaultConfig_FullBreakdown()
     {
         await Task.Yield();
-        long allocBefore = GC.GetTotalAllocatedBytes(precise: true);
+        long allocBefore = GetTotalAllocated();
         int gen0Before = GC.CollectionCount(0);
         int gen1Before = GC.CollectionCount(1);
         int gen2Before = GC.CollectionCount(2);
@@ -49,7 +66,7 @@ public class PaLMEProfilerTest
         var swCtor = Stopwatch.StartNew();
         var model = new PaLME<double>(arch);
         swCtor.Stop();
-        long allocAfterCtor = GC.GetTotalAllocatedBytes(precise: true);
+        long allocAfterCtor = GetTotalAllocated();
         _out.WriteLine($"Architecture: {swArch.ElapsedMilliseconds} ms");
         _out.WriteLine($"PaLME ctor:   {swCtor.ElapsedMilliseconds} ms");
         _out.WriteLine($"  Layers.Count = {model.Layers.Count}");
@@ -60,7 +77,7 @@ public class PaLMEProfilerTest
         var swPC = Stopwatch.StartNew();
         int pc = model.ParameterCount;
         swPC.Stop();
-        long allocAfterPC = GC.GetTotalAllocatedBytes(precise: true);
+        long allocAfterPC = GetTotalAllocated();
         _out.WriteLine($"ParameterCount: {swPC.ElapsedMilliseconds} ms (count={pc:N0})");
         _out.WriteLine($"  GC alloc during ParameterCount: {(allocAfterPC - allocAfterCtor) / 1024.0 / 1024.0:F1} MB");
 
@@ -77,7 +94,7 @@ public class PaLMEProfilerTest
         // first via the public TokenizeImageInput call we exercise below.
         _out.WriteLine("\nPer-layer Forward breakdown:");
         long totalForwardMs = 0;
-        long allocBeforeForward = GC.GetTotalAllocatedBytes(precise: true);
+        long allocBeforeForward = GetTotalAllocated();
         var swTotal = Stopwatch.StartNew();
         Tensor<double> c;
         try
@@ -98,7 +115,7 @@ public class PaLMEProfilerTest
             return;
         }
         swTotal.Stop();
-        long allocAfterForward = GC.GetTotalAllocatedBytes(precise: true);
+        long allocAfterForward = GetTotalAllocated();
         totalForwardMs = swTotal.ElapsedMilliseconds;
         _out.WriteLine($"Total wall-clock: {totalForwardMs} ms");
         _out.WriteLine($"GC alloc during Forward: {(allocAfterForward - allocBeforeForward) / 1024.0 / 1024.0:F1} MB");
