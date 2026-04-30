@@ -264,21 +264,16 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(PatchEmbeddingLayer<>))
         {
-            // PatchEmbeddingLayer(int imageHeight, int imageWidth, int channels, int patchSize, int embeddingDim)
-            // Input shape: [channels, imageHeight, imageWidth]
-            // Output shape: [numPatches, embeddingDim]
-            if (inputShape.Length < 3)
-                throw new InvalidOperationException(
-                    $"PatchEmbeddingLayer requires input shape [channels, height, width] but got {inputShape.Length} dimensions.");
+            // PatchEmbeddingLayer(int patchSize, int embeddingDim) — lazy ctor;
+            // image H/W and channels resolve from first Forward input.
             if (outputShape.Length < 2)
                 throw new InvalidOperationException(
                     $"PatchEmbeddingLayer requires output shape [numPatches, embeddingDim] but got {outputShape.Length} dimensions.");
 
-            int channels = inputShape[0];
-            int imageHeight = inputShape[1];
-            int imageWidth = inputShape[2];
             int patchEmbedDim = outputShape[1];
             int numPatches = outputShape[0];
+            int imageHeight = inputShape.Length > 1 ? inputShape[1] : 0;
+            int imageWidth = inputShape.Length > 2 ? inputShape[2] : 0;
 
             int patchSize;
             int? metadataPatchSize = TryGetInt(additionalParams, "PatchSize");
@@ -286,35 +281,29 @@ public static class DeserializationHelper
             {
                 patchSize = metadataPatchSize.Value;
             }
-            else if (numPatches > 0 && imageWidth > 0)
+            else if (numPatches > 0 && imageHeight > 0 && imageWidth > 0)
             {
-                // Derive: numPatches = (H/P) * (W/P) → P = H / sqrt(numPatches * H/W)
                 double sqrtVal = Math.Sqrt((double)numPatches * imageHeight / imageWidth);
                 patchSize = sqrtVal > 0 ? (imageHeight / (int)Math.Round(sqrtVal)) : 16;
             }
             else
             {
-                throw new InvalidOperationException(
-                    $"PatchEmbeddingLayer requires PatchSize metadata or valid shape (numPatches={numPatches}, imageWidth={imageWidth}).");
+                patchSize = 16;
             }
 
-            // Constructor: PatchEmbeddingLayer(int, int, int, int, int, IActivationFunction?, IInitializationStrategy?)
             var ctor = type.GetConstructors()
-                .FirstOrDefault(c => c.GetParameters().Length >= 5 &&
-                    c.GetParameters().Take(5).All(p => p.ParameterType == typeof(int)));
+                .FirstOrDefault(c => c.GetParameters().Length >= 2 &&
+                    c.GetParameters()[0].ParameterType == typeof(int) &&
+                    c.GetParameters()[1].ParameterType == typeof(int));
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find PatchEmbeddingLayer constructor.");
             }
-            // Build args: 5 required ints + fill optional params with null
             var ctorParams = ctor.GetParameters();
             var args = new object?[ctorParams.Length];
-            args[0] = imageHeight;
-            args[1] = imageWidth;
-            args[2] = channels;
-            args[3] = patchSize;
-            args[4] = patchEmbedDim;
-            for (int i = 5; i < ctorParams.Length; i++)
+            args[0] = patchSize;
+            args[1] = patchEmbedDim;
+            for (int i = 2; i < ctorParams.Length; i++)
                 args[i] = null;
             instance = ctor.Invoke(args);
         }
@@ -397,12 +386,17 @@ public static class DeserializationHelper
             }
             instance = ctor.Invoke(new object[] { numHeads, feedForwardDim });
 
-            // Pre-resolve shapes from the saved inputShape so GetParameters/SetParameters
-            // see fully-allocated sublayer tensors before SetParameters runs.
+            // Pre-resolve and allocate sublayer weights from the saved inputShape so
+            // SetParameters can populate them. We need full ResolveFromShape (not just
+            // ResolveShapesOnly) because TransformerEncoderLayer constructs its
+            // sublayers in EnsureInitialized.
             if (instance is LayerBase<T> layerBase && inputShape.Length > 0)
             {
-                int[] resolvedShape = inputShape.Select(d => d > 0 ? d : 1).ToArray();
-                layerBase.ResolveShapesOnly(resolvedShape);
+                int[] resolvedShape = embeddingSize > 0
+                    ? inputShape.Select(d => d > 0 ? d : 1).ToArray()
+                    : (numHeads > 0 ? new[] { 1, numHeads * 64 } : new[] { 1, 64 });
+                if (resolvedShape[^1] <= 0) resolvedShape[^1] = embeddingSize > 0 ? embeddingSize : 64;
+                layerBase.ResolveFromShape(resolvedShape);
             }
         }
         else if (genericDef == typeof(TransformerDecoderLayer<>))

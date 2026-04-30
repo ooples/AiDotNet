@@ -30046,19 +30046,29 @@ public static class LayerHelper<T>
         int visionFfnDim = visionHiddenDim * 4;
         int temporalFfnDim = visionHiddenDim * 4;
         int textFfnDim = textHiddenDim * 4;
+        int numPatches = (imageSize / patchSize) * (imageSize / patchSize);
+        int frameSeqLen = numPatches + 1; // +1 for CLS token
 
         // Vision frame encoder (shared across frames)
-        yield return new PatchEmbeddingLayer<T>(patchSize, visionHiddenDim);
+        var patchEmbed = new PatchEmbeddingLayer<T>(patchSize, visionHiddenDim);
+        patchEmbed.ResolveFromShape(new[] { channels, imageSize, imageSize });
+        yield return patchEmbed;
 
+        int[] frameTokenShape = new[] { frameSeqLen, visionHiddenDim };
         for (int i = 0; i < numFrameEncoderLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>( numHeads, visionFfnDim);
+            var enc = new TransformerEncoderLayer<T>(numHeads, visionFfnDim);
+            enc.ResolveFromShape(frameTokenShape);
+            yield return enc;
         }
 
-        // Temporal encoder layers
+        // Temporal encoder layers operate over the sequence of frame embeddings.
+        int[] temporalTokenShape = new[] { 1, visionHiddenDim };
         for (int i = 0; i < numTemporalLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>( numHeads, temporalFfnDim);
+            var enc = new TransformerEncoderLayer<T>(numHeads, temporalFfnDim);
+            enc.ResolveFromShape(temporalTokenShape);
+            yield return enc;
         }
 
         // Video projection
@@ -30068,9 +30078,12 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabularySize, textHiddenDim);
 
         // Text encoder layers
+        int[] textTokenShape = new[] { maxSequenceLength, textHiddenDim };
         for (int i = 0; i < numTextLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>( numHeads, textFfnDim);
+            var enc = new TransformerEncoderLayer<T>(numHeads, textFfnDim);
+            enc.ResolveFromShape(textTokenShape);
+            yield return enc;
         }
 
         // Text projection
