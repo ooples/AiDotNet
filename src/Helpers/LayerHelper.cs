@@ -30046,15 +30046,21 @@ public static class LayerHelper<T>
         int visionFfnDim = visionHiddenDim * 4;
         int temporalFfnDim = visionHiddenDim * 4;
         int textFfnDim = textHiddenDim * 4;
-        int numPatches = (imageSize / patchSize) * (imageSize / patchSize);
-        int frameSeqLen = numPatches + 1; // +1 for CLS token
 
-        // Vision frame encoder (shared across frames)
-        var patchEmbed = new PatchEmbeddingLayer<T>(patchSize, visionHiddenDim);
-        patchEmbed.ResolveFromShape(new[] { channels, imageSize, imageSize });
-        yield return patchEmbed;
+        // Vision frame encoder. PatchEmbedding stays lazy — its cached spatial
+        // dims (_imageHeight, _numPatches) derive from the actual frame shape on
+        // first forward, so eager-resolving at the option default (224x224) would
+        // make the layer reject any other resolution at runtime. Weights size
+        // depends only on (patchSize, channels, embeddingDim), so deferring
+        // weight allocation to first forward is free in terms of param count.
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionHiddenDim);
 
-        int[] frameTokenShape = new[] { frameSeqLen, visionHiddenDim };
+        // TransformerEncoderLayer's only resolved dim is _embeddingSize from
+        // input.Shape[^1] — independent of seq length — so eager resolve at a
+        // synthetic seqLen=1 is safe and gives the network non-zero ParameterCount
+        // before the first forward (closes the freshly-built-model parameter
+        // count gap that lazy ctors introduced).
+        int[] frameTokenShape = new[] { 1, visionHiddenDim };
         for (int i = 0; i < numFrameEncoderLayers; i++)
         {
             var enc = new TransformerEncoderLayer<T>(numHeads, visionFfnDim);
@@ -30062,7 +30068,6 @@ public static class LayerHelper<T>
             yield return enc;
         }
 
-        // Temporal encoder layers operate over the sequence of frame embeddings.
         int[] temporalTokenShape = new[] { 1, visionHiddenDim };
         for (int i = 0; i < numTemporalLayers; i++)
         {
@@ -30078,7 +30083,7 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabularySize, textHiddenDim);
 
         // Text encoder layers
-        int[] textTokenShape = new[] { maxSequenceLength, textHiddenDim };
+        int[] textTokenShape = new[] { 1, textHiddenDim };
         for (int i = 0; i < numTextLayers; i++)
         {
             var enc = new TransformerEncoderLayer<T>(numHeads, textFfnDim);
