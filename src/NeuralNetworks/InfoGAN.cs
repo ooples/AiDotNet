@@ -165,12 +165,12 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the generator network.
     /// </summary>
-    public ConvolutionalNeuralNetwork<T> Generator { get; private set; }
+    public NeuralNetworkBase<T> Generator { get; private set; }
 
     /// <summary>
     /// Gets the discriminator network.
     /// </summary>
-    public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
+    public NeuralNetworkBase<T> Discriminator { get; private set; }
 
     /// <summary>
     /// Gets the auxiliary Q network that predicts latent codes from images.
@@ -189,7 +189,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// - This forces generator to use codes meaningfully
     /// </para>
     /// </remarks>
-    public ConvolutionalNeuralNetwork<T> QNetwork { get; private set; }
+    public NeuralNetworkBase<T> QNetwork { get; private set; }
 
     /// <summary>
     /// Gets the total number of trainable parameters in the InfoGAN.
@@ -197,6 +197,22 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     public override int ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount() + QNetwork.GetParameterCount();
 
     private ILossFunction<T> _lossFunction;
+
+    /// <summary>
+    /// Picks the right sub-network backbone for a generator / discriminator /
+    /// Q-network architecture: a CNN when the architecture has 2-D/3-D input
+    /// (image-domain InfoGAN per Chen et al. 2016 §4.1/§4.4), and an MLP
+    /// otherwise (tabular / mixture-of-categoricals per §4.2). Without this
+    /// dispatch the test scaffold's 1-D OneDimensional architecture sends
+    /// tabular input through CreateDefaultCNNLayers and throws
+    /// "CNN requires 2D or 3D input".
+    /// </summary>
+    private static NeuralNetworkBase<T> CreateBackboneForArchitecture(NeuralNetworkArchitecture<T> arch)
+    {
+        if (arch.InputType == InputType.TwoDimensional || arch.InputType == InputType.ThreeDimensional)
+            return new ConvolutionalNeuralNetwork<T>(arch);
+        return new FeedForwardNeuralNetwork<T>(arch);
+    }
 
     /// <summary>
     /// Creates the combined InfoGAN architecture with correct dimension handling.
@@ -332,9 +348,14 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         _latentCodeSize = latentCodeSize;
         _mutualInfoCoefficient = NumOps.FromDouble(mutualInfoCoefficient);
 
-        Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
-        Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
-        QNetwork = new ConvolutionalNeuralNetwork<T>(qNetworkArchitecture);
+        // InfoGAN per Chen et al. 2016 §4: the generator/discriminator/Q
+        // networks use a CNN backbone for image inputs (MNIST §4.1, CelebA
+        // §4.4) and an MLP backbone for tabular / 1D inputs (mixture-of-
+        // categoricals §4.2). Pick the right backbone per architecture so a
+        // 1D architecture doesn't fail with "CNN requires 2D or 3D input".
+        Generator = CreateBackboneForArchitecture(generatorArchitecture);
+        Discriminator = CreateBackboneForArchitecture(discriminatorArchitecture);
+        QNetwork = CreateBackboneForArchitecture(qNetworkArchitecture);
 
         // Initialize optimizers - use provided optimizers or create default Adam optimizers
         _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator);

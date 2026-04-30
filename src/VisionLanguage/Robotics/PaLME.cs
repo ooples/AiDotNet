@@ -73,7 +73,34 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     private int PatchSize => Math.Max(1, _options.ImageSize / 16);
 
     public PaLME(NeuralNetworkArchitecture<T> architecture, string modelPath, PaLMEOptions? options = null) : base(architecture) { _options = options ?? new PaLMEOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public PaLME(NeuralNetworkArchitecture<T> architecture, PaLMEOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new PaLMEOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public PaLME(NeuralNetworkArchitecture<T> architecture, PaLMEOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    {
+        _options = options ?? new PaLMEOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+
+        // Opt the paper-faithful 562B config (Driess et al. 2023) into the
+        // engine-side weight streaming + GPU offload that AiDotNet.Tensors
+        // 0.68.0 ships. Without this, materialising every layer's MHA / FFN
+        // weights at the same time hits ~140 GB at double precision and
+        // OOMs on every commodity machine. The defaults here track what
+        // PaLM-E's reference codebase would do at this scale: 16 GB
+        // resident budget, automatic best-fit scheme (managed unified
+        // memory when the GPU supports it, pinned host otherwise), and a
+        // backing store next to the system temp dir.
+        ConfigureWeightLifetime(
+            new AiDotNet.Tensors.LinearAlgebra.GpuOffloadOptions
+            {
+                PreferredScheme = AiDotNet.Tensors.LinearAlgebra.OffloadScheme.Auto,
+                StreamingPoolMaxResidentBytes = 16L * 1024 * 1024 * 1024,
+                StreamingBackingStorePath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet-palme-weights")
+            });
+    }
 
     public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName; public int ActionDimension => _options.ActionDimension;
     public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
