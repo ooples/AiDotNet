@@ -541,16 +541,38 @@ internal class InferenceOptimizer<T>
                     continue;
                 }
 
-                // Resolve lazy MHA from the previous layer's concrete output shape
-                // so seqLen/embDim are positive before constructing replacement layers.
-                if (!mha.IsShapeResolved && i > 0)
+                // Resolve lazy MHA before reading seqLen/embDim. Prefer the previous
+                // layer's concrete output shape; fall back to a synthetic [1, embDim]
+                // shape derived from the layer's known head config (weight allocation
+                // depends only on embDim, not seqLen).
+                if (!mha.IsShapeResolved)
                 {
-                    var prevOut = model.Layers[i - 1].GetOutputShape();
-                    if (prevOut.Length > 0 && prevOut.All(d => d > 0))
+                    int[]? candidate = null;
+                    if (i > 0)
                     {
-                        mha.ResolveFromShape(prevOut);
-                        inputShape = mha.GetInputShape();
+                        var prevOut = model.Layers[i - 1].GetOutputShape();
+                        if (prevOut.Length >= 2 && prevOut.All(d => d > 0))
+                            candidate = prevOut;
                     }
+
+                    if (candidate is null && inputShape.Length >= 2 && inputShape[^1] > 0)
+                    {
+                        candidate = new[] { 1, inputShape[^1] };
+                    }
+
+                    if (candidate is not null)
+                    {
+                        try
+                        {
+                            mha.ResolveFromShape(candidate);
+                            inputShape = mha.GetInputShape();
+                        }
+                        catch (ArgumentException) { /* fall through */ }
+                    }
+                }
+                if (inputShape.Length < 2 || inputShape.Any(d => d <= 0))
+                {
+                    continue;
                 }
 
                 int seqLen = inputShape[0];
