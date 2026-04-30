@@ -3991,32 +3991,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             var layer = DeserializationHelper.CreateLayerFromType<T>(layerType, inputShape, outputShape, additionalParams);
 
             // Lazy layers need their shape resolved before SetParameters can size sub-layer
-            // weights. Use the serialized inputShape if it's concrete; otherwise fall back
-            // to the previously-deserialized layer's resolved output shape, then to the
-            // architecture's input shape for the very first layer.
-            if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
+            // weights. The serialized inputShape is concrete by definition when the source
+            // model had run a forward pass; if a layer's saved shape contains -1 placeholders
+            // there is no safe shape to feed it (rank/dim conventions vary per layer type),
+            // so leave it lazy and let SetParameters surface a clear error.
+            if (layer is LayerBase<T> lb && !lb.IsShapeResolved
+                && inputShape is { Length: > 0 } && inputShape.All(d => d > 0))
             {
-                int[]? resolveShape = null;
-                if (inputShape is { Length: > 0 } && inputShape.All(d => d > 0))
-                {
-                    resolveShape = inputShape;
-                }
-                else if (_layers.Count > 0)
-                {
-                    var prevOut = _layers[_layers.Count - 1].GetOutputShape();
-                    if (prevOut is { Length: > 0 } && prevOut.All(d => d > 0))
-                        resolveShape = prevOut;
-                }
-
-                if (resolveShape is null)
-                {
-                    var archIn = Architecture?.GetInputShape();
-                    if (archIn is { Length: > 0 } && archIn.All(d => d > 0))
-                        resolveShape = archIn;
-                }
-
-                if (resolveShape is not null)
-                    lb.ResolveFromShape(resolveShape);
+                try { lb.ResolveFromShape(inputShape); }
+                catch (ArgumentException) { /* layer rejects this shape; leave lazy */ }
             }
 
             // Apply parameters if any
