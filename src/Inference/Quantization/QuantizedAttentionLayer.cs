@@ -93,6 +93,9 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
             ? InferenceQuantizationMode.WeightOnlyInt8
             : mode;
 
+        if (!source.IsShapeResolved)
+            source.ResolveFromShape(new[] { 1, _embeddingDimension });
+
         _qProj = QuantizeProjection(source.GetQueryWeights(), _embeddingDimension, _embeddingDimension, _format);
         _kProj = QuantizeProjection(source.GetKeyWeights(), _embeddingDimension, _embeddingDimension, _format);
         _vProj = QuantizeProjection(source.GetValueWeights(), _embeddingDimension, _embeddingDimension, _format);
