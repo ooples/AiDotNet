@@ -171,6 +171,15 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         _baseLayer = baseLayer;
         _freezeBaseLayer = freezeBaseLayer;
 
+        // Eagerly resolve a lazy base layer using our resolved input shape so its
+        // weights are allocated and ParameterCount is correct on construction.
+        if (_baseLayer is LayerBase<T> baseLb && !baseLb.IsShapeResolved)
+        {
+            var resolvedIn = GetInputShape();
+            if (resolvedIn.Length > 0 && resolvedIn.All(d => d > 0))
+                baseLb.ResolveFromShape(resolvedIn);
+        }
+
         // Create the LoRA layer - derived classes may override this via CreateLoRALayer
         _loraLayer = CreateLoRALayer(rank, alpha);
 
