@@ -447,8 +447,15 @@ internal class InferenceOptimizer<T>
     }
 
     /// <summary>
-    /// Walks layers in order and resolves any lazy ones using the running output shape,
-    /// so subsequent rewrites/quantization see concrete shapes on every layer.
+    /// Walks layers in order and resolves <em>shapes only</em> for any lazy ones using
+    /// the running output shape, so subsequent rewrites/quantization see concrete
+    /// shapes on every layer. Uses <see cref="LayerBase{T}.ResolveShapesOnly"/>
+    /// instead of <c>ResolveFromShape</c> so we do NOT eagerly allocate weights or
+    /// consume RNG state — that would (a) materialize the entire model up-front
+    /// (defeating streaming/offload for large lazy models) and (b) shift
+    /// initialization RNG before any real forward pass, perturbing determinism.
+    /// Targeted weight materialization happens later, only on layers actually
+    /// rewritten/quantized.
     /// </summary>
     private static void ResolveLazyLayers(NeuralNetworkBase<T> model)
     {
@@ -468,7 +475,11 @@ internal class InferenceOptimizer<T>
             {
                 try
                 {
-                    lb.ResolveFromShape(running);
+                    // Shape-only resolution: fills InputShape/OutputShape from the
+                    // running shape but leaves weight allocation deferred. The
+                    // downstream rewrite/quantize passes call ResolveFromShape on
+                    // the specific layers they touch.
+                    lb.ResolveShapesOnly(running);
                 }
                 catch (ArgumentException ex)
                 {
