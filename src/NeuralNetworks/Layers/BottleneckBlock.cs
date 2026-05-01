@@ -207,6 +207,18 @@ public class BottleneckBlock<T> : LayerBase<T>
         RegisterSubLayer(_bn3);
         if (_downsampleConv is not null) RegisterSubLayer(_downsampleConv);
         if (_downsampleBn is not null) RegisterSubLayer(_downsampleBn);
+
+        // Eagerly resolve sub-layer shapes so ParameterCount reflects real weights
+        // immediately (lazy Conv/BN return 0 otherwise, causing SetParameters
+        // dispatch-by-slice to silently skip them).
+        _conv1.ResolveFromShape(new[] { inChannels, inputHeight, inputWidth });
+        _bn1.ResolveFromShape(new[] { 1, baseChannels, inputHeight, inputWidth });
+        _conv2.ResolveFromShape(new[] { baseChannels, inputHeight, inputWidth });
+        _bn2.ResolveFromShape(new[] { 1, baseChannels, outHeight, outWidth });
+        _conv3.ResolveFromShape(new[] { baseChannels, outHeight, outWidth });
+        _bn3.ResolveFromShape(new[] { 1, outChannels, outHeight, outWidth });
+        _downsampleConv?.ResolveFromShape(new[] { inChannels, inputHeight, inputWidth });
+        _downsampleBn?.ResolveFromShape(new[] { 1, outChannels, outHeight, outWidth });
     }
 
     // Constructor args round-trip for serialization. DeserializationHelper
