@@ -2766,6 +2766,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (options is null) throw new ArgumentNullException(nameof(options));
 
         WeightRegistry.Configure(options, allocator!);
+        _weightLifetimeConfigured = true;
+        RegisterTrainableTensorsWithWeightRegistry();
+    }
+
+    /// <summary>
+    /// True once <see cref="ConfigureWeightLifetime"/> has been called on this
+    /// network. Used by lazy-aware re-registration paths so newly-allocated
+    /// weights from a first forward pass can join the registry retroactively.
+    /// </summary>
+    private bool _weightLifetimeConfigured;
+
+    /// <summary>
+    /// Re-walks <see cref="Layers"/> and registers any trainable tensor whose
+    /// length is now positive (i.e., the layer's lazy weights resolved during
+    /// a forward pass after <see cref="ConfigureWeightLifetime"/> was called).
+    /// Idempotent: <see cref="WeightRegistry.RegisterWeight"/> is safe to invoke
+    /// on a tensor that's already registered.
+    /// </summary>
+    /// <remarks>
+    /// Call this after a warm-up forward pass on lazy models so layers like
+    /// <c>MultiHeadAttentionLayer</c> (whose Q/K/V/O start as 0×0 placeholders)
+    /// get their real weights into the streaming pool. <see cref="ConfigureWeightLifetime"/>
+    /// alone runs before any forward and can therefore only see the
+    /// already-allocated subset.
+    /// </remarks>
+    public void RefreshWeightRegistry()
+    {
+        if (!_weightLifetimeConfigured) return;
         RegisterTrainableTensorsWithWeightRegistry();
     }
 
@@ -2775,6 +2803,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <see cref="ConfigureWeightLifetime"/> on this network and recursively
     /// invoked by composite-network overrides on their sub-networks.
     /// </summary>
+    /// <remarks>
+    /// Tensors with <c>Length == 0</c> are skipped — they are placeholder
+    /// allocations from lazy layers (e.g. <c>MultiHeadAttentionLayer</c>'s
+    /// 0×0 Q/K/V/O before first forward) and have nothing to offload yet.
+    /// Once a real forward pass resolves their shape, callers should invoke
+    /// <see cref="RefreshWeightRegistry"/> to pick up the now-allocated tensors.
+    /// </remarks>
     protected void RegisterTrainableTensorsWithWeightRegistry()
     {
         for (int i = 0; i < Layers.Count; i++)
