@@ -453,6 +453,14 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 for (int i = 0; i < lastSpikingIdx; i++)
                     probe = Layers[i].Forward(probe);
                 spikingOutputSize = probe.Length;
+                // The probe forward mutated SpikingLayer membrane / refractory state
+                // (each layer accumulates LIF dynamics across calls). If we leave
+                // that state in place, the simulation loop below would start from
+                // a non-zero baseline and produce different spike rates than a
+                // fresh run — which is the whole point of ResetState() above. Reset
+                // again so the simulation loop sees the same clean slate it would
+                // have seen without the probe.
+                ResetState();
             }
         }
         var accumSpikes = new T[spikingOutputSize];
