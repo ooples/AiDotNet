@@ -66,8 +66,27 @@ public class ContextFlow<T> : NestedLearningBase<T>, IContextFlow<T>
         if (currentLevel < 0 || currentLevel >= _numLevels)
             throw new ArgumentException($"Invalid level: {currentLevel}");
 
-        // Transform input through level-specific transformation
-        var transformed = _transformationMatrices[currentLevel].Multiply(input);
+        // Transform input through level-specific transformation. Hand-rolled
+        // matrix-vector product (instead of Matrix<T>.Multiply) so the
+        // accumulation order is bit-deterministic regardless of memory
+        // alignment of the underlying matrix storage. The library's optimized
+        // Matrix<T>.Multiply uses SIMD that can produce alignment-dependent
+        // rounding (~1e-7 drift) when called on freshly-allocated matrices in
+        // a serialize/deserialize round-trip — same numeric data, different
+        // SIMD reduction order. HopeNetwork's Clone_ShouldProduceIdenticalOutput
+        // requires bit-exact reproducibility so that two networks with
+        // identical parameters yield identical predictions.
+        var matrix = _transformationMatrices[currentLevel];
+        var transformed = new Vector<T>(_contextDimension);
+        for (int row = 0; row < _contextDimension; row++)
+        {
+            T sum = NumOps.Zero;
+            for (int col = 0; col < _contextDimension; col++)
+            {
+                sum = NumOps.Add(sum, NumOps.Multiply(matrix[row, col], input[col]));
+            }
+            transformed[row] = sum;
+        }
 
         // Update context state with exponential moving average (momentum-like)
         T momentum = NumOps.FromDouble(0.9);

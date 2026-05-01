@@ -182,8 +182,15 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
 
         var current = input;
 
-        // Self-referential optimization: model optimizes its own memory
-        if (_metaState != null)
+        // Self-referential optimization: model optimizes its own memory.
+        // Skip when meta-state is all zero (untrained network) — the
+        // multiplication would be identity (modulationFactor = 1 + 0 * rate
+        // = 1), and skipping the work avoids allocating a new Vector that
+        // would have different memory alignment than the input tensor (which
+        // perturbs SIMD reduction order downstream by ~1e-7 between
+        // freshly-constructed networks and serialize/deserialize-cloned
+        // networks — required for HopeNetwork Clone_ShouldProduceIdenticalOutput).
+        if (_metaState != null && !IsMetaStateZero(_metaState))
         {
             current = ApplySelfModification(current, _metaState);
 
@@ -243,6 +250,16 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     /// Applies self-modification to input based on meta-state.
     /// Implements self-referential optimization.
     /// </summary>
+    private static bool IsMetaStateZero(Vector<T> metaState)
+    {
+        for (int i = 0; i < metaState.Length; i++)
+        {
+            if (!_numOps.Equals(metaState[i], _numOps.Zero))
+                return false;
+        }
+        return true;
+    }
+
     private Tensor<T> ApplySelfModification(Tensor<T> input, Vector<T> metaState)
     {
         var inputVec = input.ToVector();
@@ -683,6 +700,53 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             numCMSLevels: _numCMSLevels,
             numRecurrentLayers: _numRecurrentLayers,
             inContextLearningLevels: _inContextLearningLevels);
+
+        return newHope;
+    }
+
+    /// <summary>
+    /// Cloning HopeNetwork via the default DeepCopy path (serialize/deserialize)
+    /// produces a network whose Predict output drifts from the original by
+    /// roughly 1e-7 even though every parameter and meta-state value matches
+    /// bit-exactly. The drift comes from the deserialized layers being created
+    /// through DeserializationHelper.CreateLayerFromType rather than through
+    /// LayerHelper.CreateHopeNetworkLayers, which leaves the persistent-tensor
+    /// registration and layer-internal sub-tensor allocation in a slightly
+    /// different memory layout than the source network — and Hope's chained
+    /// CMS / context-flow / recurrent forward path is sensitive enough to this
+    /// layout that the SIMD reduction order ends up different. The
+    /// Clone_ShouldProduceIdenticalOutput invariant requires bit-exact
+    /// reproducibility, so we override Clone to take the deterministic
+    /// fresh-construct + UpdateParameters path (proven bit-identical to the
+    /// source network in the probe test) instead of the default serialize-roundtrip.
+    /// </summary>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
+    {
+        var newHope = new HopeNetwork<T>(
+            architecture: Architecture,
+            optimizer: null,
+            lossFunction: LossFunction,
+            hiddenDim: _hiddenDim,
+            numCMSLevels: _numCMSLevels,
+            numRecurrentLayers: _numRecurrentLayers,
+            inContextLearningLevels: _inContextLearningLevels);
+
+        // Copy trainable parameters across all layers.
+        var allParams = GetParameters();
+        if (allParams.Length > 0 && allParams.Length == newHope.ParameterCount)
+        {
+            newHope.UpdateParameters(allParams);
+        }
+
+        // Copy Hope-specific runtime state.
+        if (_metaState != null)
+        {
+            newHope._metaState = new Vector<T>(_metaState.Length);
+            for (int i = 0; i < _metaState.Length; i++)
+                newHope._metaState[i] = _metaState[i];
+        }
+        newHope._adaptationStep = _adaptationStep;
+        newHope._selfModificationRate = _selfModificationRate;
 
         return newHope;
     }
