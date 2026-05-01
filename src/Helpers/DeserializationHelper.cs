@@ -1230,9 +1230,19 @@ public static class DeserializationHelper
         }
         else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".ContinuumMemorySystemLayer`1"))
         {
-            // ContinuumMemorySystemLayer(int[] inputShape, int hiddenDim, ...)
-            // All parameters after the first two have default values
-            int hiddenDim = inputShape.Length > 0 ? inputShape[inputShape.Length - 1] : 256;
+            // ContinuumMemorySystemLayer(int[] inputShape, int hiddenDim,
+            //                            int numFrequencyLevels = 3, ...)
+            // numFrequencyLevels controls the count of internal MLP blocks
+            // (Hope passes 5 from inContextLearningLevels per Behrouz et al.
+            // 2025 §3.2). If the saved value isn't restored, the default 3
+            // is used and the deserialized layer's ParameterCount is 3/5 of
+            // the saved vector — SetParameters then rejects with
+            // "Parameter vector length (X) does not match total parameters (Y)"
+            // and Clone fails. Read NumFrequencyLevels from additionalParams
+            // (serialized by the layer alongside its weights).
+            int hiddenDim = TryGetInt(additionalParams, "HiddenDim")
+                ?? (inputShape.Length > 0 ? inputShape[inputShape.Length - 1] : 256);
+            int numFreqLevels = TryGetInt(additionalParams, "NumFrequencyLevels") ?? 3;
             var ctor = type.GetConstructors()
                 .Where(c => c.GetParameters().Length >= 2 &&
                        c.GetParameters()[0].ParameterType == typeof(int[]) &&
@@ -1247,7 +1257,10 @@ public static class DeserializationHelper
                 args[1] = hiddenDim;
                 for (int pi = 2; pi < parameters.Length; pi++)
                 {
-                    args[pi] = parameters[pi].HasDefaultValue ? parameters[pi].DefaultValue : null;
+                    if (parameters[pi].Name == "numFrequencyLevels")
+                        args[pi] = numFreqLevels;
+                    else
+                        args[pi] = parameters[pi].HasDefaultValue ? parameters[pi].DefaultValue : null;
                 }
                 instance = ctor.Invoke(args);
             }
