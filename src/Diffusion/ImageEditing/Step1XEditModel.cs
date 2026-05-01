@@ -79,7 +79,14 @@ public class Step1XEditModel<T> : LatentDiffusionModelBase<T>
         NeuralNetworkArchitecture<T>? architecture = null, DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null, SiTPredictor<T>? predictor = null,
         StandardVAE<T>? vae = null, IConditioningModule<T>? conditioner = null, int? seed = null)
-        : base(options ?? new DiffusionModelOptions<T> { TrainTimesteps = 1000, BetaStart = 0.0001, BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear },
+        : base(options ?? new DiffusionModelOptions<T> {
+                // Step1X-Edit (StepFun 2025) is a single-step rectified-flow editor —
+                // SchedulerConfig.CreateRectifiedFlow() trains for 1-step inference,
+                // so the diffusion-base default of 50 steps wastes 49 expensive
+                // forward passes through the 28-block SiT predictor and times out
+                // contract tests. Override to DEFAULT_STEPS=1 to match the paper.
+                TrainTimesteps = 1000, BetaStart = 0.0001, BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear,
+                DefaultInferenceSteps = DEFAULT_STEPS },
             scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateRectifiedFlow()), architecture)
     {
         _conditioner = conditioner;
@@ -90,7 +97,13 @@ public class Step1XEditModel<T> : LatentDiffusionModelBase<T>
     [MemberNotNull(nameof(_predictor), nameof(_vae))]
     private void InitializeLayers(SiTPredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
     {
-        _predictor = predictor ?? new SiTPredictor<T>(seed: seed);
+        // The noise predictor operates on the VAE's latent representation, not
+        // raw RGB pixels. Default SiTPredictor.inputChannels=4 was a mismatch
+        // for Step1X (LATENT_CHANNELS=16) and made LatentDiffusionModelBase's
+        // CanonicalizeGenShape rewrite the user's [B, 16, H, W] latent input
+        // into [B, 4, H, W], producing output that no longer matched the input
+        // shape and breaking OutputShape_ShouldMatchInputShape.
+        _predictor = predictor ?? new SiTPredictor<T>(inputChannels: LATENT_CHANNELS, seed: seed);
         _vae = vae ?? new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS,
             baseChannels: 128, channelMultipliers: [1, 2, 4, 4], numResBlocksPerLevel: 2,
             latentScaleFactor: 1.5305, seed: seed);

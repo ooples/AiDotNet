@@ -50,7 +50,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
     [ResearchPaper("SiT: Exploring Flow and Diffusion-based Generative Models with Scalable Interpolant Transformers", "https://arxiv.org/abs/2401.08740")]
 public class SiTPredictor<T> : NoisePredictorBase<T>
 {
-    private readonly int _inputChannels;
+    private int _inputChannels;
     private readonly int _hiddenSize;
     private readonly int _numLayers;
     private readonly int _numHeads;
@@ -131,6 +131,18 @@ public class SiTPredictor<T> : NoisePredictorBase<T>
         // collapse on the wrong axis and PredictNoise returns a tensor whose
         // element count is patchDim/C × the input — failing the latent-length
         // check in DiffusionModelBase.Generate.
+        // Resolve _inputChannels from the actual input on first forward — SiT
+        // models constructed with the wrong default (latent_channels=4 vs the
+        // diffusion test harness which passes 16-channel pixel input) would
+        // otherwise build _finalLayer with the wrong patchDim, producing a
+        // tensor that cannot be reshaped back to the input's channel count.
+        // Lazy resolution keeps the model adaptive without breaking callers
+        // that pass the documented default.
+        if (!_initialized && noisySample.Rank >= 2 && noisySample.Shape[1] > 0)
+        {
+            _inputChannels = noisySample.Shape[1];
+        }
+
         var (_, embed, blocks, final_) = EnsureInitialized();
 
         int b = noisySample.Shape[0];
