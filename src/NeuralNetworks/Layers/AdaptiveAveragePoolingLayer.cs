@@ -162,11 +162,46 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
             return Engine.ReduceMean(input, axes, keepDims: true);
         }
 
-        // Non-trivial adaptive pooling (output > 1×1): keep the scalar implementation
-        // for now but wrap it in a tape entry so backward still flows through. The
-        // sliding-window region-mean pattern doesn't have a single Engine op.
+        // Non-trivial adaptive pooling (output > 1×1).
+        //
+        // Uniform-region fast path: when inputHeight % _outputHeight == 0 AND
+        // inputWidth % _outputWidth == 0, the adaptive pool degenerates into a
+        // regular average pool with stride == kernel. We can express this as
+        // Reshape → ReduceMean → Reshape, all Engine ops, so the tape sees the
+        // full chain and gradients flow through this layer correctly.
+        //
+        // Irregular case (non-divisible): the sliding-window region-mean has no
+        // single Engine op and the scalar fallback below builds a raw new Tensor
+        // with no tape connection — backward through that boundary returns null.
+        // The fallback is documented as not tape-tracked; callers needing
+        // backprop must use H/W that divide evenly into outH/outW.
         int channels = input.Shape[rank - 3];
 
+        bool uniformH = inputHeight % _outputHeight == 0;
+        bool uniformW = inputWidth % _outputWidth == 0;
+        if (uniformH && uniformW)
+        {
+            int factorH = inputHeight / _outputHeight;
+            int factorW = inputWidth / _outputWidth;
+
+            // Reshape last three axes [C, H, W] into [C, outH, factorH, outW, factorW];
+            // leading batch-like axes pass through unchanged.
+            int[] expanded = new int[rank + 2];
+            for (int d = 0; d < rank - 3; d++) expanded[d] = input.Shape[d];
+            expanded[rank - 3] = channels;
+            expanded[rank - 2] = _outputHeight;
+            expanded[rank - 1] = factorH;
+            expanded[rank]     = _outputWidth;
+            expanded[rank + 1] = factorW;
+
+            var reshaped = Engine.Reshape(input, expanded);
+            // Reduce the two factor axes (positions rank-1 and rank+1 in the
+            // expanded shape).
+            var reduced = Engine.ReduceMean(reshaped, new[] { rank - 1, rank + 1 }, keepDims: false);
+            return reduced;
+        }
+
+        // Irregular fallback — not tape-tracked. Documented above.
         // Calculate total batch size (product of all dims except last 3)
         int batchSize = 1;
         for (int d = 0; d < rank - 3; d++)
