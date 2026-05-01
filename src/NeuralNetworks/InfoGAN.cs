@@ -805,6 +805,23 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         return Generator.Predict(input);
     }
 
+    /// <summary>
+    /// Defines the InfoGAN forward graph for tape-based training. InfoGAN's
+    /// generator / discriminator / Q-network live outside <c>Layers</c>
+    /// (which is intentionally empty), so the default
+    /// <c>ForwardForTraining</c> would walk an empty layer chain and return
+    /// the raw input. Overriding to dispatch through
+    /// <c>Generator.ForwardForTraining</c> matches the inference-side
+    /// <c>Predict</c> contract and lets <c>tape.ComputeGradients</c> flow
+    /// back into the generator's weights. Discriminator + Q-network +
+    /// mutual-information losses are handled by <see cref="TrainStep"/>.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        return Generator.ForwardForTraining(input);
+    }
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         int batchSize = expectedOutput.Shape[0];
