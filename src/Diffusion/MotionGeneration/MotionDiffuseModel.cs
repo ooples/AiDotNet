@@ -82,8 +82,12 @@ public class MotionDiffuseModel<T> : LatentDiffusionModelBase<T>
     [MemberNotNull(nameof(_predictor), nameof(_vae))]
     private void InitializeLayers(SiTPredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
     {
-        _predictor = predictor ?? new SiTPredictor<T>(seed: seed);
-        _vae = vae ?? new StandardVAE<T>(inputChannels: 3, latentChannels: 4,
+        // MotionDiffuse (Zhang et al. 2022) §3.2: cross-modal transformer
+        // diffuses on motion latents. The standard motion-VAE produces
+        // VAE_LATENT_CHANNELS-dim latents — the predictor's input-channel
+        // slot must match.
+        _predictor = predictor ?? new SiTPredictor<T>(inputChannels: VAE_LATENT_CHANNELS, seed: seed);
+        _vae = vae ?? new StandardVAE<T>(inputChannels: 3, latentChannels: VAE_LATENT_CHANNELS,
             baseChannels: 128, channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
     }
 

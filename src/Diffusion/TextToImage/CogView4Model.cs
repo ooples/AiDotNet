@@ -193,7 +193,10 @@ public class CogView4Model<T> : LatentDiffusionModelBase<T>
         StandardVAE<T>? vae,
         int? seed)
     {
-        _predictor = predictor ?? new SiTPredictor<T>(seed: seed);
+        // CogView4 (Zhipu 2024) uses an SDXL-style 16-channel VAE (cf. paper
+        // §3.2 / model card: the bilingual T2I pipeline runs the DiT/SiT-style
+        // backbone on 16-channel latents). Predictor input slot must match.
+        _predictor = predictor ?? new SiTPredictor<T>(inputChannels: COGVIEW_LATENT_CHANNELS, seed: seed);
 
         _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3,
@@ -308,7 +311,9 @@ public class CogView4Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPredictor = new SiTPredictor<T>();
+        // Clone must preserve the latent channel count so SetParameters lines
+        // up with the original predictor's weight layout.
+        var clonedPredictor = new SiTPredictor<T>(inputChannels: COGVIEW_LATENT_CHANNELS);
         clonedPredictor.SetParameters(_predictor.GetParameters());
 
         var clonedVae = new StandardVAE<T>(

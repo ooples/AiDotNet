@@ -56,6 +56,16 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ResearchPaper("Step1X-Edit", "https://arxiv.org/abs/2504.17761", Year = 2025, Authors = "StepFun")]
 public class Step1XEditModel<T> : LatentDiffusionModelBase<T>
 {
+    // Step1X-Edit (StepFun 2025) §3 architecture summary: 16-channel latent
+    // SDXL-class VAE, MM-DiT backbone trained with rectified-flow distillation
+    // for *single-step* inference at deployment time. Defaults below match
+    // the paper's deployment-time inference configuration:
+    //   - LATENT_CHANNELS=16 matches the SDXL/Flux-style VAE (paper §3.2).
+    //   - DEFAULT_STEPS=1 matches the paper's 1-step distilled editor; the
+    //     diffusion-base default of 50 inference steps would waste 49 forward
+    //     passes through a model that was trained to denoise in one shot.
+    //   - DEFAULT_GUIDANCE=1.0 matches the paper's guidance-free single-step
+    //     inference (CFG only used at training time).
     private const int LATENT_CHANNELS = 16;
     private const double DEFAULT_GUIDANCE = 1.0;
     private const int DEFAULT_STEPS = 1;

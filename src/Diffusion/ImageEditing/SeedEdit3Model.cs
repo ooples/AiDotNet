@@ -89,7 +89,7 @@ public class SeedEdit3Model<T> : LatentDiffusionModelBase<T>
     [MemberNotNull(nameof(_predictor), nameof(_vae))]
     private void InitializeLayers(SiTPredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
     {
-        _predictor = predictor ?? new SiTPredictor<T>(seed: seed);
+        _predictor = predictor ?? new SiTPredictor<T>(inputChannels: LATENT_CHANNELS, seed: seed);
         _vae = vae ?? new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS,
             baseChannels: 128, channelMultipliers: [1, 2, 4, 4], numResBlocksPerLevel: 2,
             latentScaleFactor: 1.5305, seed: seed);

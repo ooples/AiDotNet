@@ -82,8 +82,12 @@ public class MoMaskModel<T> : LatentDiffusionModelBase<T>
     [MemberNotNull(nameof(_predictor), nameof(_vae))]
     private void InitializeLayers(SiTPredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
     {
-        _predictor = predictor ?? new SiTPredictor<T>(seed: seed);
-        _vae = vae ?? new StandardVAE<T>(inputChannels: 3, latentChannels: 4,
+        // MoMask (Guo et al. 2024) operates on motion VQ-VAE latents — paper §3.1
+        // sets the residual VQ codebook embedding dim to 512, but the test
+        // contract here just requires the predictor's input-channel slot to
+        // match the VAE's output. Use VAE_LATENT_CHANNELS for both.
+        _predictor = predictor ?? new SiTPredictor<T>(inputChannels: VAE_LATENT_CHANNELS, seed: seed);
+        _vae = vae ?? new StandardVAE<T>(inputChannels: 3, latentChannels: VAE_LATENT_CHANNELS,
             baseChannels: 128, channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
     }
 

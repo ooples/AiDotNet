@@ -197,7 +197,10 @@ public class Ideogram3Model<T> : LatentDiffusionModelBase<T>
         StandardVAE<T>? vae,
         int? seed)
     {
-        _predictor = predictor ?? new SiTPredictor<T>(seed: seed);
+        // Ideogram 3.0 uses a 16-channel SDXL/Flux-class VAE (no published
+        // architecture paper; aligning to its public 16-channel latent
+        // matches the VAE we instantiate just below).
+        _predictor = predictor ?? new SiTPredictor<T>(inputChannels: IDEOGRAM_LATENT_CHANNELS, seed: seed);
 
         _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3,
@@ -312,7 +315,7 @@ public class Ideogram3Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPredictor = new SiTPredictor<T>();
+        var clonedPredictor = new SiTPredictor<T>(inputChannels: IDEOGRAM_LATENT_CHANNELS);
         clonedPredictor.SetParameters(_predictor.GetParameters());
 
         var clonedVae = new StandardVAE<T>(
