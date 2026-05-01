@@ -222,13 +222,29 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
     /// <inheritdoc />
     public virtual Tensor<T> Generate(int[] shape, int numInferenceSteps = 50, int? seed = null)
+        => Generate(shape, numInferenceSteps, seed, initialSample: null);
+
+    /// <summary>
+    /// Internal Generate that optionally accepts an explicit starting sample.
+    /// When <paramref name="initialSample"/> is null, fresh Gaussian noise is
+    /// drawn (the standard text-to-image / unconditional-generation path).
+    /// When non-null, the supplied vector is used as the initial noisy sample
+    /// and the denoising loop runs starting from it — this is what
+    /// <see cref="Predict(Tensor{T})"/> uses to honour its
+    /// "input is the noisy starting point" contract (cf. PyTorch diffusers'
+    /// <c>pipeline(latents=...)</c> override). Using a hash of the input for
+    /// the RNG seed and then discarding the input would defeat the contract,
+    /// since the model's output would no longer depend on the input values
+    /// themselves — failing tests like NoiseSchedule_ShouldBeMonotonic that
+    /// scale the input and expect the output magnitude to track the scale.
+    /// </summary>
+    protected virtual Tensor<T> Generate(int[] shape, int numInferenceSteps, int? seed, Vector<T>? initialSample)
     {
         if (shape == null || shape.Length == 0)
             throw new ArgumentException("Shape must be a non-empty array.", nameof(shape));
         if (numInferenceSteps <= 0)
             throw new ArgumentOutOfRangeException(nameof(numInferenceSteps), "Must be positive.");
 
-        // Validate all dimensions are positive
         var invalidDims = shape.Where(d => d <= 0).ToArray();
         if (invalidDims.Length > 0)
             throw new ArgumentOutOfRangeException(nameof(shape), $"All dimensions must be positive, but found {invalidDims[0]}.");
@@ -236,10 +252,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // Suppress tape recording during inference (like PyTorch torch.no_grad())
         using var _ = new NoGradScope<T>();
 
-        // Set up random generator
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
-
-        // Initialize with random noise using checked arithmetic to detect overflow
         long totalElements = 1;
         foreach (var dim in shape)
         {
@@ -249,7 +261,20 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         if (totalElements > int.MaxValue)
             throw new ArgumentException("Total tensor size exceeds maximum supported size.", nameof(shape));
 
-        var sample = SampleNoise((int)totalElements, rng);
+        Vector<T> sample;
+        if (initialSample is not null)
+        {
+            if (initialSample.Length != (int)totalElements)
+                throw new ArgumentException(
+                    $"initialSample.Length ({initialSample.Length}) must equal the product of shape ({(int)totalElements}).",
+                    nameof(initialSample));
+            sample = initialSample;
+        }
+        else
+        {
+            var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+            sample = SampleNoise((int)totalElements, rng);
+        }
 
         // Set up the scheduler for inference
         _scheduler.SetTimesteps(numInferenceSteps);
@@ -445,12 +470,19 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// <inheritdoc />
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
-        int seed = 0;
-        for (int i = 0; i < Math.Min(input.Length, 16); i++)
-        {
-            seed = unchecked(seed * 31 + NumOps.ToDouble(input[i]).GetHashCode());
-        }
-        return Generate(input._shape, _options.DefaultInferenceSteps, seed);
+        // Diffusion Predict semantics: the input IS the noisy starting sample,
+        // not a seed source. The denoising loop starts from `input` and runs
+        // backward through the scheduler timesteps. Hashing the input to a
+        // seed and then sampling fresh noise (the previous behaviour) makes
+        // the output independent of the input *values* — only of the seed —
+        // which violates the "scaling the input scales the output" invariant
+        // that NoiseSchedule_ShouldBeMonotonic checks. Mirrors PyTorch
+        // diffusers' `pipeline(latents=...)` start-from-latents path.
+        var initial = new Vector<T>(input.Length);
+        var src = input.AsSpan();
+        var dst = initial.AsWritableSpan();
+        src.CopyTo(dst);
+        return Generate(input._shape, _options.DefaultInferenceSteps, seed: null, initialSample: initial);
     }
 
     /// <inheritdoc />
