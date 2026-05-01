@@ -221,10 +221,17 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
             // correctly without falling through to the outSize*2 heuristic.
             return w0.Shape[0] > 0 ? w0.Shape[0] : -1;
         }
-        // DenseLayer convention: [outFeatures, inFeatures] ⇒ axis 1 is input.
-        // Conv2D weight convention: [outC, inC, kH, kW] ⇒ axis 1 is input channels.
-        // In both cases axis 1 is the canonical "fan-in" axis. The trailing dim
-        // would be wrong for Conv2D (kernel width, not channel count).
+        if (w0.Shape.Length == 2)
+        {
+            // DenseLayer convention: weights are allocated as [inputSize, outputSize]
+            // (see DenseLayer's TensorAllocator.Rent<T>([inputSize, outputSize])).
+            // The fan-in axis is therefore Shape[0], NOT Shape[1] — returning
+            // Shape[1] would yield the output size and produce wrong adapter
+            // dimensions on every Dense layer once lazily resolved.
+            return w0.Shape[0] > 0 ? w0.Shape[0] : -1;
+        }
+        // Conv weight convention (rank ≥ 3): [outC, inC, ...spatial] ⇒ axis 1 is
+        // input channels. The trailing dim would be wrong (kernel width / depth).
         return w0.Shape[1] > 0 ? w0.Shape[1] : -1;
     }
 

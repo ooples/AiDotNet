@@ -173,10 +173,17 @@ public abstract class FrameInterpolationBase<T> : VideoNeuralNetworkBase<T>
     /// Two-frame interpolation models accept either:
     /// <list type="bullet">
     ///   <item>A rank-4 frame sequence <c>[N, C, H, W]</c> — calls
-    ///         <see cref="InterpolateSequence"/>.</item>
-    ///   <item>A channel-concatenated frame pair <c>[2C, H, W]</c> or
-    ///         <c>[B, 2C, H, W]</c> emitted by the standard test scaffold —
-    ///         splits and calls <see cref="Interpolate"/> with t = 0.5.</item>
+    ///         <see cref="InterpolateSequence"/>. Rank-4 input is always treated
+    ///         as a sequence; previously this routed even-channel sequences
+    ///         (RGBA, 2-channel optical flow, etc.) into the pair-concat path
+    ///         and split them by channel instead of frame.</item>
+    ///   <item>A channel-concatenated frame pair <c>[2C, H, W]</c> emitted by the
+    ///         standard test scaffold — splits and calls <see cref="Interpolate"/>
+    ///         with t = 0.5. Batched channel-concatenated input <c>[B, 2C, H, W]</c>
+    ///         is no longer auto-detected (it is indistinguishable from a frame
+    ///         sequence with even C); callers needing batched pair-concat must
+    ///         iterate the batch dimension and call <see cref="Interpolate"/>
+    ///         directly.</item>
     /// </list>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)

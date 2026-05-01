@@ -88,10 +88,10 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
         // Stream / offload PaLM-E's 562B weights — at double precision the
         // chain otherwise OOMs at ~140 GB resident. Per PaLMEOptions.WeightOffloadOptions
-        // contract: non-null is honoured as-is; null skips the automatic
-        // ConfigureWeightLifetime call so the caller can opt out. Callers who
-        // want the sensible streaming default below should pass it explicitly
-        // (or call ConfigureWeightLifetime themselves later).
+        // contract: non-null is honoured as-is; null skips ConfigureWeightLifetime
+        // entirely. Callers running the model at full size should supply a
+        // streaming-offload instance via PaLMEOptions.WeightOffloadOptions or
+        // call ConfigureWeightLifetime themselves post-construction.
         if (_options.WeightOffloadOptions is { } callerOffload)
         {
             ConfigureWeightLifetime(callerOffload);
