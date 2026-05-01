@@ -3629,6 +3629,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "YingLong" => 1024,
             "TimeGrad" => 168,
             "TFC" => 200,
+            // NBEATSFinance uses NBEATSModelOptions.LookbackWindow = 10 by
+            // default. NBEATSFinance.Forward validates input length against
+            // this lookback window, throwing if it's anything else.
+            "NBEATSFinance" => 10,
             // TimesNet (Wu et al. 2023 ICLR) defaults SequenceLength=96 in
             // TimesNetOptions. The first conv is sized inputWidth=96 inside
             // CreateDefaultTimesNetLayers, so the test's rank-1 input length
