@@ -712,6 +712,53 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Clone via fresh-construct + UpdateParameters rather than the default
+    /// serialize/deserialize roundtrip. The serialize path drives the
+    /// patch-embedding / transformer / classification-head layers through
+    /// DeserializationHelper.CreateLayerFromType, which leaves their
+    /// persistent-tensor registration in a slightly different memory layout
+    /// than LayerHelper.CreateVisionTransformerLayers — the resulting clone
+    /// is parameter-equivalent but its forward output drifts from the source
+    /// by ~1e-2 (the issue #1221 class flagged in
+    /// Clone_AfterTraining_ShouldPreserveLearnedWeights). Going through the
+    /// fresh-construct + UpdateParameters path keeps both networks identical
+    /// down to bit-exactness.
+    /// </summary>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
+    {
+        var newViT = new VisionTransformer<T>(
+            Architecture,
+            _imageHeight,
+            _imageWidth,
+            _channels,
+            _patchSize,
+            _numClasses,
+            _hiddenDim,
+            _numLayers,
+            _numHeads,
+            _mlpDim,
+            LossFunction);
+
+        // Lazy ViT layers (PatchEmbedding, TransformerEncoder) defer weight
+        // allocation until the first forward pass. Before that, their
+        // ParameterCount is 0 and the network's total ParameterCount excludes
+        // them — UpdateParameters would then receive a vector sized only for
+        // cls token + positional embeddings + classification head and refuse
+        // to distribute the remaining encoder/MLP weights. Run a single
+        // probe Predict to resolve every lazy layer before copying params.
+        var probe = new Tensor<T>(new[] { 1, _channels, _imageHeight, _imageWidth });
+        try { newViT.Predict(probe); } catch { /* probe is best-effort */ }
+
+        var allParams = GetParameters();
+        if (allParams.Length > 0 && allParams.Length == newViT.ParameterCount)
+        {
+            newViT.UpdateParameters(allParams);
+        }
+
+        return newViT;
+    }
+
+    /// <summary>
     /// Gets all model parameters in a single vector.
     /// </summary>
     /// <returns>A vector containing CLS token, positional embeddings, and all layer parameters in sequence.</returns>
