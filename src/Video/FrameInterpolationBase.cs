@@ -182,56 +182,32 @@ public abstract class FrameInterpolationBase<T> : VideoNeuralNetworkBase<T>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
-        bool isPairConcat = (input.Rank == 3 && input.Shape[0] % 2 == 0 && input.Shape[0] > 0) ||
-                            (input.Rank == 4 && input.Shape[1] % 2 == 0);
+        // Rank-4 always means a frame *sequence* [N, C, H, W]. Treating it as
+        // a channel-concatenated pair purely on "C is even" misclassified
+        // RGBA (C=4), depth-with-confidence (C=2), and any other multi-channel
+        // sequence input. The unambiguous channel-concat shape is rank-3
+        // [2C, H, W] — that's what we keep here.
+        bool isPairConcat = input.Rank == 3 && input.Shape[0] % 2 == 0 && input.Shape[0] > 0;
         if (isPairConcat) return InterpolatePairConcat(input);
         return InterpolateSequence(input);
     }
 
     private Tensor<T> InterpolatePairConcat(Tensor<T> pair)
     {
-        bool batched = pair.Rank == 4;
-        int batch = batched ? pair.Shape[0] : 1;
-        int channels = (batched ? pair.Shape[1] : pair.Shape[0]) / 2;
-        int height = batched ? pair.Shape[2] : pair.Shape[1];
-        int width = batched ? pair.Shape[3] : pair.Shape[2];
-        int hw = height * width;
-        int frameStride = channels * hw;
-        int pairStride = 2 * frameStride;
+        // Predict only routes rank-3 [2C, H, W] tensors here (see the rank-4
+        // disambiguation in Predict). Rank-4 batched pair-concat is therefore
+        // unreachable from the public surface; callers that need batched
+        // pair-concat should iterate batches and call Interpolate directly.
+        int channels = pair.Shape[0] / 2;
+        int height = pair.Shape[1];
+        int width = pair.Shape[2];
+        int frameStride = channels * height * width;
         var src = pair.AsSpan();
 
-        if (!batched || batch == 1)
-        {
-            var frame0 = new Tensor<T>([channels, height, width]);
-            var frame1 = new Tensor<T>([channels, height, width]);
-            src.Slice(0, frameStride).CopyTo(frame0.AsWritableSpan());
-            src.Slice(frameStride, frameStride).CopyTo(frame1.AsWritableSpan());
-            return Interpolate(frame0, frame1, t: 0.5);
-        }
-
-        // Batched [B, 2C, H, W]: interpolate each pair independently and stack
-        // along axis 0. Subclasses' Interpolate accepts a single 3-D frame, so
-        // we cannot delegate to a single batched call.
-        Tensor<T>? result = null;
-        for (int n = 0; n < batch; n++)
-        {
-            var frame0 = new Tensor<T>([channels, height, width]);
-            var frame1 = new Tensor<T>([channels, height, width]);
-            int batchOff = n * pairStride;
-            src.Slice(batchOff, frameStride).CopyTo(frame0.AsWritableSpan());
-            src.Slice(batchOff + frameStride, frameStride).CopyTo(frame1.AsWritableSpan());
-            var interp = Interpolate(frame0, frame1, t: 0.5);
-
-            if (result is null)
-            {
-                int outC = interp.Shape[0];
-                int outH = interp.Shape[1];
-                int outW = interp.Shape[2];
-                result = new Tensor<T>([batch, outC, outH, outW]);
-            }
-            int frameSize = interp.Length;
-            interp.AsSpan().CopyTo(result.AsWritableSpan().Slice(n * frameSize, frameSize));
-        }
-        return result ?? new Tensor<T>([batch, channels, height, width]);
+        var frame0 = new Tensor<T>([channels, height, width]);
+        var frame1 = new Tensor<T>([channels, height, width]);
+        src.Slice(0, frameStride).CopyTo(frame0.AsWritableSpan());
+        src.Slice(frameStride, frameStride).CopyTo(frame1.AsWritableSpan());
+        return Interpolate(frame0, frame1, t: 0.5);
     }
 }
