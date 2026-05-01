@@ -903,13 +903,18 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(hiddenSize, hiddenActivation);
         currentSize = hiddenSize;
 
-        // Residual blocks using Dense layers
+        // Residual blocks using Dense layers. The inner DenseLayer must report
+        // matching input/output shapes for ResidualLayer.ValidateInnerLayer to
+        // succeed — its ctor reports input as [-1] (lazy) until first forward,
+        // so we eagerly resolve to [currentSize] here.
         for (int i = 0; i < blockCount; i++)
         {
             for (int j = 0; j < blockSize; j++)
             {
+                var inner = new DenseLayer<T>(currentSize, hiddenActivation);
+                inner.ResolveFromShape(new[] { currentSize });
                 yield return new ResidualLayer<T>(
-                    innerLayer: new DenseLayer<T>(currentSize, hiddenActivation),
+                    innerLayer: inner,
                     activationFunction: new LeakyReLUActivation<T>()
                 );
             }
@@ -3873,9 +3878,9 @@ public static class LayerHelper<T>
         int numResidualBlocks = Math.Max(1, hiddenLayerCount / 2);
         for (int i = 0; i < numResidualBlocks; i++)
         {
-            yield return new ResidualLayer<T>(
-                new DenseLayer<T>(hiddenLayerSize, hiddenActivation),
-                hiddenActivation);
+            var inner = new DenseLayer<T>(hiddenLayerSize, hiddenActivation);
+            inner.ResolveFromShape(new[] { hiddenLayerSize });
+            yield return new ResidualLayer<T>(inner, hiddenActivation);
         }
 
         // Output layer - linear for energy/solution values

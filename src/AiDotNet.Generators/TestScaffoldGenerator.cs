@@ -3710,12 +3710,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
 
+        string ctx = paperCtx.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
         return className switch
         {
             // TimesNet (Wu et al. 2023): paper-faithful multivariate input
             // [B, S, M]. M = TimesNetOptions.NumFeatures default 7.
-            "TimesNet" => $"1, {paperCtx.ToString(System.Globalization.CultureInfo.InvariantCulture)}, 7",
-            _ => paperCtx.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "TimesNet" => $"1, {ctx}, 7",
+
+            // Kronos (financial OHLCV decoder): paper-faithful multi-feature
+            // candlestick input. KronosOptions.NumCandlestickFeatures = 5
+            // (open/high/low/close/volume). The first ReshapeLayer expects
+            // contextLength * numCandlestickFeatures elements.
+            "Kronos" => $"{ctx}, 5",
+
+            _ => ctx,
         };
     }
 

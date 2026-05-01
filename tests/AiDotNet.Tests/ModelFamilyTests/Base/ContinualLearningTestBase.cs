@@ -21,7 +21,14 @@ public abstract class ContinualLearningTestBase
     /// <summary>Creates a mock neural network for testing.</summary>
     protected virtual INeuralNetwork<double> CreateMockNetwork()
     {
-        return new FeedForwardNeuralNetwork<double>();
+        // Architecture must match CreateTestTaskData's [8, 4] shape so the
+        // tape-based ComputeGradients path doesn't trip on a predicted/target
+        // mismatch when AfterTask runs a forward pass.
+        return new FeedForwardNeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 4));
     }
 
     /// <summary>Number of model parameters for test data generation.</summary>

@@ -1182,6 +1182,8 @@ public static class DeserializationHelper
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? innerActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             var innerLayer = new DenseLayer<T>(innerOutputSize, innerActivation as IActivationFunction<T>);
+            // Eagerly resolve so ValidateInnerLayer sees concrete matching shapes.
+            innerLayer.ResolveFromShape(new[] { innerInputSize });
 
             // Create ResidualLayer directly to avoid constructor ambiguity
             object? residualActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
