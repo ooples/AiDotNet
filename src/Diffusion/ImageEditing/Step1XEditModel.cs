@@ -80,11 +80,6 @@ public class Step1XEditModel<T> : LatentDiffusionModelBase<T>
         INoiseScheduler<T>? scheduler = null, SiTPredictor<T>? predictor = null,
         StandardVAE<T>? vae = null, IConditioningModule<T>? conditioner = null, int? seed = null)
         : base(options ?? new DiffusionModelOptions<T> {
-                // Step1X-Edit (StepFun 2025) is a single-step rectified-flow editor —
-                // SchedulerConfig.CreateRectifiedFlow() trains for 1-step inference,
-                // so the diffusion-base default of 50 steps wastes 49 expensive
-                // forward passes through the 28-block SiT predictor and times out
-                // contract tests. Override to DEFAULT_STEPS=1 to match the paper.
                 TrainTimesteps = 1000, BetaStart = 0.0001, BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear,
                 DefaultInferenceSteps = DEFAULT_STEPS },
             scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateRectifiedFlow()), architecture)

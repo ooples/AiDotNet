@@ -161,7 +161,7 @@ public class SiTPredictor<T> : NoisePredictorBase<T>
 
         // Patchify: [B, C, H, W] → [B, hp, patchSize, wp, patchSize, C] via
         // permute, then flatten to [B, hp*wp, C*patchSize*patchSize].
-        var permuted = Engine.TensorPermute(noisySample, new[] { 0, 2, 3, 1 }).Contiguous(); // [B,H,W,C]
+        var permuted = Engine.TensorPermute(noisySample, new[] { 0, 2, 3, 1 }).Contiguous();
         var reshaped = Engine.Reshape(permuted, new[] { b, hp, patchSize, wp, patchSize, c });
         var patchOrdered = Engine.TensorPermute(reshaped, new[] { 0, 1, 3, 2, 4, 5 }).Contiguous();
         var tokens = Engine.Reshape(patchOrdered, new[] { b, hp * wp, c * patchSize * patchSize });

@@ -315,12 +315,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             }
             if (sanitizedCount > 0)
             {
-                // Trace at warning level so this diagnostic is visible
-                // when listeners are attached but doesn't pollute the
-                // happy path. Surfacing the count + timestep gives
-                // anyone debugging a "blank output" complaint enough
-                // to localize whether instability hits early (high t)
-                // or late (small t).
                 System.Diagnostics.Trace.TraceWarning(
                     $"DiffusionModelBase.Generate: sanitized {sanitizedCount} non-finite element(s) at timestep {timestep}.");
             }
@@ -451,9 +445,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// <inheritdoc />
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
-        // For diffusion models, prediction is generating samples.
-        // Use a deterministic seed derived from the input so Predict is reproducible
-        // across clones and repeated calls with the same input.
         int seed = 0;
         for (int i = 0; i < Math.Min(input.Length, 16); i++)
         {

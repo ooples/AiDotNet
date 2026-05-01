@@ -504,10 +504,20 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         // If latent shape is provided, use it directly; otherwise assume image dimensions
         int[] latentShape;
 
+        // Track whether the caller asked for latent-space output. When the
+        // input shape is already latent (channel dim == LatentChannels) we
+        // preserve latent semantics: noise predictor only, no VAE decode.
+        // This matches PyTorch's `pipeline(... output_type='latent')`. It
+        // also avoids a multi-hundred-second VAE decode at default sizes
+        // when the caller never wanted pixels — confirmed by dotnet-trace
+        // showing DecodeFromLatent dominates wall clock for latent input.
+        bool inputIsLatent = false;
+
         if (shape.Length >= 4 && shape[1] == LatentChannels)
         {
             // Already latent shape
             latentShape = shape;
+            inputIsLatent = true;
         }
         else if (shape.Length >= 4)
         {
@@ -529,7 +539,20 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         // Generate in latent space
         var latentSample = base.Generate(latentShape, numInferenceSteps, seed);
 
-        // Decode to image
+        // Latent-in / latent-out semantics: caller already supplied a latent,
+        // so skip the (expensive) VAE decode and return the latent directly.
+        if (inputIsLatent)
+        {
+            for (int i = 0; i < latentSample.Length; i++)
+            {
+                double v = NumOps.ToDouble(latentSample[i]);
+                if (double.IsNaN(v) || double.IsInfinity(v))
+                    latentSample[i] = NumOps.Zero;
+            }
+            return latentSample;
+        }
+
+        // Pixel-space output: decode the latent through the VAE.
         var decoded = DecodeFromLatent(latentSample);
 
         // Final NaN/Inf guard. Ho et al. 2020 §3.2 and Song et al. 2020
