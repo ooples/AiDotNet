@@ -2743,6 +2743,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// machinery — streaming pool, pinned-host, and GPU offload — so models
     /// larger than RAM can run without OOMing.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Process-global side effect:</b> this method calls
+    /// <see cref="WeightRegistry.Configure"/>, which mutates a process-wide
+    /// singleton. Calling it on one model instance changes the offload
+    /// configuration seen by every other model in the process. The method is
+    /// instance-scoped only because it also walks <see cref="Layers"/> and
+    /// registers their parameter tensors with the registry.
+    /// </para>
+    /// <para>
+    /// Composite networks that own sub-networks outside <see cref="Layers"/>
+    /// (e.g. <c>InfoGAN</c>, <c>CycleGAN</c>, encoder-decoder VLMs) override
+    /// this method to also forward the call to each sub-network so their
+    /// trainable tensors are registered.
+    /// </para>
+    /// </remarks>
     public virtual void ConfigureWeightLifetime(
         GpuOffloadOptions options,
         IGpuOffloadAllocator? allocator = null)
@@ -2750,7 +2766,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (options is null) throw new ArgumentNullException(nameof(options));
 
         WeightRegistry.Configure(options, allocator!);
+        RegisterTrainableTensorsWithWeightRegistry();
+    }
 
+    /// <summary>
+    /// Walks <see cref="Layers"/> and registers each layer's trainable tensors
+    /// with the process-wide <see cref="WeightRegistry"/>. Used by
+    /// <see cref="ConfigureWeightLifetime"/> on this network and recursively
+    /// invoked by composite-network overrides on their sub-networks.
+    /// </summary>
+    protected void RegisterTrainableTensorsWithWeightRegistry()
+    {
         for (int i = 0; i < Layers.Count; i++)
         {
             if (Layers[i] is not LayerBase<T> layer) continue;
@@ -3997,13 +4023,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Lazy layers need their shape resolved before SetParameters can size sub-layer
             // weights. The serialized inputShape is concrete by definition when the source
             // model had run a forward pass; if a layer's saved shape contains -1 placeholders
-            // there is no safe shape to feed it (rank/dim conventions vary per layer type),
-            // so leave it lazy and let SetParameters surface a clear error.
-            if (layer is LayerBase<T> lb && !lb.IsShapeResolved
-                && inputShape is { Length: > 0 } && inputShape.All(d => d > 0))
+            // and this is the network's first layer, fall back to the architecture's input
+            // shape (the only authoritative concrete shape we have at this point).
+            if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
             {
-                try { lb.ResolveFromShape(inputShape); }
-                catch (ArgumentException) { /* layer rejects this shape; leave lazy */ }
+                int[]? candidate = inputShape is { Length: > 0 } && inputShape.All(d => d > 0)
+                    ? inputShape
+                    : null;
+                if (candidate is null && _layers.Count == 0)
+                {
+                    var archShape = Architecture?.GetInputShape();
+                    if (archShape is { Length: > 0 } && archShape.All(d => d > 0))
+                        candidate = archShape;
+                }
+                if (candidate is { Length: > 0 })
+                {
+                    try { lb.ResolveFromShape(candidate); }
+                    catch (ArgumentException) { /* layer rejects this shape; leave lazy */ }
+                }
             }
 
             // Apply parameters if any

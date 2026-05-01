@@ -4,7 +4,9 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -771,6 +773,22 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         _generatorOptimizer.Reset();
         _discriminatorOptimizer.Reset();
         _qNetworkOptimizer.Reset();
+    }
+
+    /// <summary>
+    /// Forwards weight-lifetime configuration to the generator, discriminator,
+    /// and Q-network sub-networks. Without this override the registry-side
+    /// effect would still happen (it is process-global), but the sub-networks'
+    /// trainable tensors would not be registered, defeating the offload path.
+    /// </summary>
+    public override void ConfigureWeightLifetime(
+        GpuOffloadOptions options,
+        IGpuOffloadAllocator? allocator = null)
+    {
+        base.ConfigureWeightLifetime(options, allocator);
+        Generator.ConfigureWeightLifetime(options, allocator);
+        Discriminator.ConfigureWeightLifetime(options, allocator);
+        QNetwork.ConfigureWeightLifetime(options, allocator);
     }
 
     protected override void InitializeLayers()
