@@ -149,6 +149,33 @@ public class DeepCompressionVAE<T> : VAEModelBase<T>
                 activationFunction: activation));
             channels = outChannels;
         }
+
+        // Eagerly resolve all encoder/decoder layers via a probe forward so
+        // ParameterCount > 0 holds immediately after construction (lazy
+        // ConvolutionalLayer / DeconvolutionalLayer report 0 params until
+        // their first forward; FastGenContractTests.DeepCompressionVAE_*
+        // checks ParameterCount before any real input is fed).
+        ProbeLayersForLazyResolution();
+    }
+
+    private void ProbeLayersForLazyResolution()
+    {
+        // Probe spatial size = max(64, downsampleFactor * 2) so the chain
+        // of stride-2 downsamples never collapses below 1x1.
+        int probeSize = Math.Max(64, _downsampleFactor * 2);
+        var probe = new Tensor<T>(new[] { _inputChannels, probeSize, probeSize });
+        try
+        {
+            var x = probe;
+            foreach (var layer in _encoderLayers) x = layer.Forward(x);
+            foreach (var layer in _decoderLayers) x = layer.Forward(x);
+        }
+        catch
+        {
+            // Best-effort: if a non-default config produces an unexpected
+            // shape mismatch the contract test that depends on
+            // ParameterCount > 0 will surface it.
+        }
     }
 
     /// <inheritdoc />
