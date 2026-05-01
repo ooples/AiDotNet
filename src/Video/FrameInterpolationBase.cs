@@ -183,7 +183,7 @@ public abstract class FrameInterpolationBase<T> : VideoNeuralNetworkBase<T>
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         bool isPairConcat = (input.Rank == 3 && input.Shape[0] % 2 == 0 && input.Shape[0] > 0) ||
-                            (input.Rank == 4 && input.Shape[1] % 2 == 0 && input.Shape[0] == 1);
+                            (input.Rank == 4 && input.Shape[1] % 2 == 0);
         if (isPairConcat) return InterpolatePairConcat(input);
         return InterpolateSequence(input);
     }
@@ -191,22 +191,47 @@ public abstract class FrameInterpolationBase<T> : VideoNeuralNetworkBase<T>
     private Tensor<T> InterpolatePairConcat(Tensor<T> pair)
     {
         bool batched = pair.Rank == 4;
+        int batch = batched ? pair.Shape[0] : 1;
         int channels = (batched ? pair.Shape[1] : pair.Shape[0]) / 2;
         int height = batched ? pair.Shape[2] : pair.Shape[1];
         int width = batched ? pair.Shape[3] : pair.Shape[2];
-
-        var frame0 = new Tensor<T>([channels, height, width]);
-        var frame1 = new Tensor<T>([channels, height, width]);
-        var src = pair.AsSpan();
-        var f0 = frame0.AsWritableSpan();
-        var f1 = frame1.AsWritableSpan();
         int hw = height * width;
-        int batchOff = batched ? 0 : 0;
-        for (int c = 0; c < channels; c++)
+        int frameStride = channels * hw;
+        int pairStride = 2 * frameStride;
+        var src = pair.AsSpan();
+
+        if (!batched || batch == 1)
         {
-            src.Slice(batchOff + c * hw, hw).CopyTo(f0.Slice(c * hw, hw));
-            src.Slice(batchOff + (channels + c) * hw, hw).CopyTo(f1.Slice(c * hw, hw));
+            var frame0 = new Tensor<T>([channels, height, width]);
+            var frame1 = new Tensor<T>([channels, height, width]);
+            src.Slice(0, frameStride).CopyTo(frame0.AsWritableSpan());
+            src.Slice(frameStride, frameStride).CopyTo(frame1.AsWritableSpan());
+            return Interpolate(frame0, frame1, t: 0.5);
         }
-        return Interpolate(frame0, frame1, t: 0.5);
+
+        // Batched [B, 2C, H, W]: interpolate each pair independently and stack
+        // along axis 0. Subclasses' Interpolate accepts a single 3-D frame, so
+        // we cannot delegate to a single batched call.
+        Tensor<T>? result = null;
+        for (int n = 0; n < batch; n++)
+        {
+            var frame0 = new Tensor<T>([channels, height, width]);
+            var frame1 = new Tensor<T>([channels, height, width]);
+            int batchOff = n * pairStride;
+            src.Slice(batchOff, frameStride).CopyTo(frame0.AsWritableSpan());
+            src.Slice(batchOff + frameStride, frameStride).CopyTo(frame1.AsWritableSpan());
+            var interp = Interpolate(frame0, frame1, t: 0.5);
+
+            if (result is null)
+            {
+                int outC = interp.Shape[0];
+                int outH = interp.Shape[1];
+                int outW = interp.Shape[2];
+                result = new Tensor<T>([batch, outC, outH, outW]);
+            }
+            int frameSize = interp.Length;
+            interp.AsSpan().CopyTo(result.AsWritableSpan().Slice(n * frameSize, frameSize));
+        }
+        return result ?? new Tensor<T>([batch, channels, height, width]);
     }
 }

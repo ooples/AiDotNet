@@ -69,7 +69,7 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
 
     public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim;
 
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = TokenizeIfNCHW(p); for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
 
     /// <summary>
     /// Generates text using PaLI-3's efficient SigLIP-based architecture.
@@ -91,7 +91,7 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
         // Step 1: SigLIP ViT encoder (sigmoid-based contrastive pretraining)
-        var encoderOut = p;
+        var encoderOut = TokenizeIfNCHW(p);
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
 
@@ -129,15 +129,33 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
         SetTrainingMode(false);
-        var c = PatchEmbedHelper.TokenizeImageNCHWToBSC(
-            input, _options.VisionDim, _options.ImageSize, ref _patchEmbed, Engine);
+        var c = TokenizeIfNCHW(input);
         foreach (var l in Layers) c = l.Forward(c);
         return c;
     }
 
     private ConvolutionalLayer<T>? _patchEmbed;
+
+    private Tensor<T> TokenizeIfNCHW(Tensor<T> input) =>
+        PatchEmbedHelper.TokenizeImageNCHWToBSC(
+            input, _options.VisionDim, _options.ImageSize, ref _patchEmbed, Engine);
+
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        if (_patchEmbed is not null)
+        {
+            int pc = _patchEmbed.ParameterCount;
+            if (pc > 0)
+            {
+                _patchEmbed.UpdateParameters(parameters.Slice(idx, pc));
+                idx += pc;
+            }
+        }
+        foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+    }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "PaLI-3-Native" : "PaLI-3-ONNX", Description = "PaLI-3 Vision Language Models: Smaller, Faster, Stronger (Chen et al., 2023)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "PaLI-3"; m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString(); return m; }

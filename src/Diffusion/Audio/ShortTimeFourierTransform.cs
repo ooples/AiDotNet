@@ -154,16 +154,28 @@ public class ShortTimeFourierTransform<T>
         // to librosa's default behaviour. Preserve windowLength = original
         // nFft when not explicitly passed so the window function still
         // uses the requested length.
+        int requestedNFft = nFft;
         int requestedWindowLength = windowLength ?? nFft;
         if ((nFft & (nFft - 1)) != 0)
         {
+            // Largest representable pow2 in int32 is 1<<30 (2^30 = ~1.07B samples).
+            // Anything above that would overflow when we shift left, so cap and
+            // throw instead of looping into negative territory.
+            const int maxPow2 = 1 << 30;
+            if (nFft > maxPow2)
+                throw new ArgumentOutOfRangeException(
+                    nameof(nFft),
+                    $"nFft={nFft} exceeds the largest representable power-of-two FFT size ({maxPow2}).");
             int pow2 = 1;
             while (pow2 < nFft) pow2 <<= 1;
             nFft = pow2;
         }
 
         _nFft = nFft;
-        _hopLength = hopLength ?? nFft / 4;
+        // Default hop must be derived from the caller-requested nFft (librosa's
+        // contract). Whisper requests nFft=400 ⇒ hop=100; if we compute hop from
+        // the rounded-up 512 we get 128, breaking the 400-sample frame cadence.
+        _hopLength = hopLength ?? requestedNFft / 4;
         _windowLength = requestedWindowLength;
         _center = center;
         _padMode = padMode;

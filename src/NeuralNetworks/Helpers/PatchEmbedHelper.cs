@@ -21,9 +21,19 @@ public static class PatchEmbedHelper
     {
         if (input is null) throw new System.ArgumentNullException(nameof(input));
         if (engine is null) throw new System.ArgumentNullException(nameof(engine));
+        if (visionDim <= 0)
+            throw new System.ArgumentOutOfRangeException(nameof(visionDim), "visionDim must be positive.");
+        if (imageSize <= 0)
+            throw new System.ArgumentOutOfRangeException(nameof(imageSize), "imageSize must be positive.");
 
-        bool isImage = (input.Rank == 3 && input.Shape[0] == 3) ||
-                       (input.Rank == 4 && input.Shape[1] == 3);
+        // 3-channel images can be either [3,H,W] (rank-3, no batch) or [B,3,H,W].
+        // Rank-3 with first dim 3 is ambiguous with already-tokenized
+        // [B=3, S, C], so additionally require Shape[1]==Shape[2] (square H==W
+        // is the universal ViT input convention) before treating it as an image.
+        // Rank-4 is unambiguous: NCHW with C=3.
+        bool isImage =
+            (input.Rank == 4 && input.Shape[1] == 3) ||
+            (input.Rank == 3 && input.Shape[0] == 3 && input.Shape[1] == input.Shape[2] && input.Shape[1] == imageSize);
         if (!isImage) return input;
 
         int patchSize = System.Math.Max(1, imageSize / 16);

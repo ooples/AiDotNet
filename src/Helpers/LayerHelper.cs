@@ -30043,6 +30043,15 @@ public static class LayerHelper<T>
         int vocabularySize = 49408,
         int maxSequenceLength = 77)
     {
+        if (patchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patchSize), "patchSize must be positive.");
+        if (imageSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(imageSize), "imageSize must be positive.");
+        if (imageSize % patchSize != 0)
+            throw new ArgumentException(
+                $"imageSize ({imageSize}) must be evenly divisible by patchSize ({patchSize}); ViT-style patch embedding requires (imageSize / patchSize)² complete patches.",
+                nameof(imageSize));
+
         int visionFfnDim = visionHiddenDim * 4;
         int temporalFfnDim = visionHiddenDim * 4;
         int textFfnDim = textHiddenDim * 4;
@@ -30068,7 +30077,12 @@ public static class LayerHelper<T>
             yield return enc;
         }
 
-        int[] temporalTokenShape = new[] { 1, visionHiddenDim };
+        // Temporal encoder operates over a frame sequence [seqLen, embeddingDim].
+        // seqLen is the runtime number of frames in the clip; TransformerEncoderLayer
+        // resolves only the trailing embeddingDim, so the placeholder seqLen we
+        // pass here doesn't affect parameter allocation. Use 8 as a documented
+        // typical short-clip length rather than the misleading sentinel 1.
+        int[] temporalTokenShape = new[] { 8, visionHiddenDim };
         for (int i = 0; i < numTemporalLayers; i++)
         {
             var enc = new TransformerEncoderLayer<T>(numHeads, temporalFfnDim);

@@ -456,6 +456,9 @@ internal class InferenceOptimizer<T>
         var modelInput = model.Architecture?.GetInputShape();
         if (modelInput is { Length: > 0 } && modelInput.All(d => d > 0))
             running = modelInput;
+        else
+            System.Diagnostics.Debug.WriteLine(
+                "InferenceOptimizer.ResolveLazyLayers: model.Architecture has no concrete input shape; lazy layers will only be resolved when an upstream layer's output shape becomes available.");
 
         for (int i = 0; i < model.Layers.Count; i++)
         {
@@ -463,8 +466,18 @@ internal class InferenceOptimizer<T>
             if (layer is LayerBase<T> lb && !lb.IsShapeResolved
                 && running is { Length: > 0 } && running.All(d => d > 0))
             {
-                try { lb.ResolveFromShape(running); }
-                catch { /* leave unresolved if the running shape is incompatible */ }
+                try
+                {
+                    lb.ResolveFromShape(running);
+                }
+                catch (ArgumentException ex)
+                {
+                    // Shape mismatch between running shape and what this lazy layer expects:
+                    // legitimate (e.g., 1-D running shape feeding a Conv2D). Leave unresolved
+                    // and surface for diagnostics.
+                    System.Diagnostics.Debug.WriteLine(
+                        $"InferenceOptimizer.ResolveLazyLayers: layer index {i} ({layer.GetType().Name}) refused running shape [{string.Join(",", running)}]: {ex.Message}");
+                }
             }
 
             var outShape = layer.GetOutputShape();

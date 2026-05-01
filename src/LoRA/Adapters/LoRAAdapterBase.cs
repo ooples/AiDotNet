@@ -209,6 +209,25 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// This method lets each adapter type create the right kind of LoRA layer.
     /// </para>
     /// </remarks>
+    private static int InferInputSizeFromWeights(IReadOnlyList<Tensor<T>> weights)
+    {
+        if (weights.Count == 0) return -1;
+        var w0 = weights[0];
+        if (w0.Shape.Length == 0) return -1;
+        if (w0.Shape.Length == 1)
+        {
+            // 1-D parameter (LayerNorm gamma/beta, BatchNorm scale/shift):
+            // input == output == Shape[0]. Returning this lets LoRA wrap them
+            // correctly without falling through to the outSize*2 heuristic.
+            return w0.Shape[0] > 0 ? w0.Shape[0] : -1;
+        }
+        // DenseLayer convention: [outFeatures, inFeatures] ⇒ axis 1 is input.
+        // Conv2D weight convention: [outC, inC, kH, kW] ⇒ axis 1 is input channels.
+        // In both cases axis 1 is the canonical "fan-in" axis. The trailing dim
+        // would be wrong for Conv2D (kernel width, not channel count).
+        return w0.Shape[1] > 0 ? w0.Shape[1] : -1;
+    }
+
     private static int[] ResolveBaseInputShape(ILayer<T> baseLayer)
     {
         var shape = baseLayer.GetInputShape();
@@ -216,9 +235,8 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
 
         if (baseLayer is LayerBase<T> layerBase)
         {
-            var weights = layerBase.GetTrainableParameters();
-            if (weights.Count > 0 && weights[0].Shape.Length >= 2 && weights[0].Shape[1] > 0)
-                return new[] { weights[0].Shape[1] };
+            int inferred = InferInputSizeFromWeights(layerBase.GetTrainableParameters());
+            if (inferred > 0) return new[] { inferred };
         }
 
         // Convention encoded by the LoRA test suite (Assert.Equal(10, ...) on
@@ -234,9 +252,8 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         int outputSize = GetOutputShape()[0];
         if (inputSize <= 0 && _baseLayer is LayerBase<T> layerBase)
         {
-            var weights = layerBase.GetTrainableParameters();
-            if (weights.Count > 0 && weights[0].Shape.Length >= 2 && weights[0].Shape[1] > 0)
-                inputSize = weights[0].Shape[1];
+            int inferred = InferInputSizeFromWeights(layerBase.GetTrainableParameters());
+            if (inferred > 0) inputSize = inferred;
         }
         if (inputSize <= 0) inputSize = outputSize * 2;
         return new LoRALayer<T>(inputSize, outputSize, rank, alpha);

@@ -44,6 +44,8 @@ public static class TapeTrainingStep<T>
     [ThreadStatic]
     private static int _cachedTrainableVersion;
     [ThreadStatic]
+    private static int _cachedTrainableLayerCount;
+    [ThreadStatic]
     private static ILayer<T>? _cachedTrainableFirstLayer;
 
     /// <summary>
@@ -184,6 +186,7 @@ public static class TapeTrainingStep<T>
 
         if (_cachedTrainableLayers is not null
             && _cachedTrainableVersion == structureVersion
+            && _cachedTrainableLayerCount == layerList.Count
             && ReferenceEquals(_cachedTrainableFirstLayer, firstLayer)
             && structureVersion >= 0)
         {
@@ -197,6 +200,7 @@ public static class TapeTrainingStep<T>
         var result = trainableLayers.ToArray();
         _cachedTrainableLayers = result;
         _cachedTrainableVersion = structureVersion;
+        _cachedTrainableLayerCount = layerList.Count;
         _cachedTrainableFirstLayer = firstLayer;
         return result;
     }
@@ -238,8 +242,10 @@ public static class TapeTrainingStep<T>
     public static void InvalidateCache()
     {
         _cachedParameters = null;
+        _cachedLayerCount = 0;
         _cachedFirstLayer = null;
         _cachedTrainableLayers = null;
+        _cachedTrainableLayerCount = 0;
         _cachedTrainableFirstLayer = null;
     }
 }

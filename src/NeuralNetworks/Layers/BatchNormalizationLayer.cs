@@ -223,7 +223,20 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             _zeroInitGammaPending = true;
             return;
         }
-        _gamma = Tensor<T>.CreateDefault([InputShape[0]], NumOps.Zero);
+        // Zero out the existing _gamma in place rather than replacing the field
+        // with a fresh tensor. Replacement would orphan any existing trainable-
+        // parameter registration (RegisterTrainableParameter holds the original
+        // ref) and break the parameter buffer's view alignment if a buffer was
+        // already built around the old tensor.
+        if (_gamma is { Length: > 0 })
+        {
+            var span = _gamma.Data.Span;
+            for (int i = 0; i < span.Length; i++) span[i] = NumOps.Zero;
+        }
+        else
+        {
+            _gamma = Tensor<T>.CreateDefault([InputShape[0]], NumOps.Zero);
+        }
     }
 
     /// <summary>

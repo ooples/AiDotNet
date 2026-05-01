@@ -74,15 +74,35 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(input);
         SetTrainingMode(false);
-        var c = PatchEmbedHelper.TokenizeImageNCHWToBSC(
-            input, _options.VisionEmbeddingDim, _options.ImageSize, ref _patchEmbed, Engine);
+        var c = TokenizeIfNCHW(input);
         foreach (var l in Layers) c = l.Forward(c);
         return c;
     }
 
     private ConvolutionalLayer<T>? _patchEmbed;
+
+    private Tensor<T> TokenizeIfNCHW(Tensor<T> input) =>
+        PatchEmbedHelper.TokenizeImageNCHWToBSC(
+            input, _options.VisionEmbeddingDim, _options.ImageSize, ref _patchEmbed, Engine);
+
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        // _patchEmbed lives outside Layers but is trainable in native mode. Apply
+        // its slice first so its weights are kept in sync during training.
+        if (_patchEmbed is not null)
+        {
+            int pc = _patchEmbed.ParameterCount;
+            if (pc > 0)
+            {
+                _patchEmbed.UpdateParameters(parameters.Slice(idx, pc));
+                idx += pc;
+            }
+        }
+        foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+    }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "BiomedCLIP-Native" : "BiomedCLIP-ONNX", Description = "BiomedCLIP: A Multimodal Biomedical Foundation Model (Zhang et al., 2023)", FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers }; m.AdditionalInfo["Architecture"] = "BiomedCLIP"; m.AdditionalInfo["Domain"] = _options.Domain.ToString(); m.AdditionalInfo["Dataset"] = _options.Dataset.ToString(); m.AdditionalInfo["MedicalTextEncoder"] = _options.MedicalTextEncoder; return m; }
@@ -90,7 +110,7 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string ip = reader.ReadString(); if (!string.IsNullOrEmpty(ip)) _options.ImageEncoderModelPath = ip; string tp = reader.ReadString(); if (!string.IsNullOrEmpty(tp)) _options.TextEncoderModelPath = tp; _options.ImageSize = reader.ReadInt32(); _options.VisionEmbeddingDim = reader.ReadInt32(); _options.TextEmbeddingDim = reader.ReadInt32(); _options.ProjectionDim = reader.ReadInt32(); _options.Temperature = reader.ReadDouble(); _options.Domain = (DomainSpecialization)reader.ReadInt32(); if (!_useNativeMode && _options.ImageEncoderModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxImageEncoder = new OnnxModel<T>(p, _options.OnnxOptions); if (_options.TextEncoderModelPath is { } t2 && !string.IsNullOrEmpty(t2)) OnnxTextEncoder = new OnnxModel<T>(t2, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ImageEncoderModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new BiomedCLIP<T>(Architecture, mp, _options); return new BiomedCLIP<T>(Architecture, _options); }
     private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var enc = _tokenizer.Encode(text); int sl = Math.Min(enc.TokenIds.Count, _options.MaxSequenceLength); var tk = new Tensor<T>([sl]); for (int i = 0; i < sl; i++) tk[i] = NumOps.FromDouble(enc.TokenIds[i]); return tk; }
-    private Tensor<T> ForwardVisionEncoder(Tensor<T> input) { var c = input; for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c); return c; }
+    private Tensor<T> ForwardVisionEncoder(Tensor<T> input) { var c = TokenizeIfNCHW(input); for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c); return c; }
     private Tensor<T> ForwardTextEncoder(Tensor<T> tokens) { var c = tokens; for (int i = _visionLayerEnd; i < Layers.Count; i++) c = Layers[i].Forward(c); return c; }
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(BiomedCLIP<T>)); }
     protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; if (disposing) { OnnxImageEncoder?.Dispose(); OnnxTextEncoder?.Dispose(); } base.Dispose(disposing); }
