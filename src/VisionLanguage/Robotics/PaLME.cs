@@ -87,16 +87,15 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         InitializeLayers();
 
         // Stream / offload PaLM-E's 562B weights — at double precision the
-        // chain otherwise OOMs at ~140 GB resident. Honour caller-supplied
-        // offload options if provided; fall back to a sensible default that
-        // can still be overridden by re-calling ConfigureWeightLifetime later.
-        var offload = _options.WeightOffloadOptions ?? new GpuOffloadOptions
+        // chain otherwise OOMs at ~140 GB resident. Per PaLMEOptions.WeightOffloadOptions
+        // contract: non-null is honoured as-is; null skips the automatic
+        // ConfigureWeightLifetime call so the caller can opt out. Callers who
+        // want the sensible streaming default below should pass it explicitly
+        // (or call ConfigureWeightLifetime themselves later).
+        if (_options.WeightOffloadOptions is { } callerOffload)
         {
-            PreferredScheme = OffloadScheme.Auto,
-            StreamingPoolMaxResidentBytes = 16L * 1024 * 1024 * 1024,
-            StreamingBackingStorePath = Path.Combine(Path.GetTempPath(), "aidotnet-palme-weights")
-        };
-        ConfigureWeightLifetime(offload);
+            ConfigureWeightLifetime(callerOffload);
+        }
     }
 
     public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName; public int ActionDimension => _options.ActionDimension;
