@@ -510,6 +510,20 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
                 sigmaMax = svd.S[i];
         }
 
+        // Degenerate case: σ_max = 0 means the entire design matrix is the
+        // zero matrix (all-collinear features or a numerical-collapse input).
+        // The Tikhonov solve below would give 0/0 = NaN for every singular
+        // value and produce an all-NaN weight vector. Return zeros instead —
+        // the model just predicts the bias term (whatever was column 0 of X).
+        double sigmaMaxD = NumOps.ToDouble(sigmaMax);
+        if (!(sigmaMaxD > 0) || double.IsNaN(sigmaMaxD))
+        {
+            var zeroWeights = new Vector<T>(svd.Vt.Columns);
+            if (Regularization != null)
+                zeroWeights = Regularization.Regularize(zeroWeights);
+            return zeroWeights;
+        }
+
         // Tikhonov-regularized SVD solve: weights = V · diag(σ / (σ² + λ²)) · Uᵀ · y.
         // Unlike a hard tolerance-based pseudoinverse this smoothly damps
         // small singular values instead of zeroing them, which matters
