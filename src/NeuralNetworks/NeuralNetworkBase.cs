@@ -2982,15 +2982,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             using var tape = new GradientTape<T>();
             var output = ForwardForTraining(input);
 
-            // Align output shape to target: squeeze leading batch dim when batch=1
-            // (ForwardForTraining may add a batch dim that the target doesn't have).
-            // Must go through Engine so the gradient tape records the reshape —
-            // direct Tensor<T>.Reshape bypasses the tape and breaks backward flow
-            // between ForwardForTraining and the loss. Use the internal _shape
-            // field (zero-alloc) rather than Shape.ToArray().
+            // Align output shape to target: when ranks mismatch, ALWAYS reshape the
+            // target (a leaf tensor not on the tape) rather than the network output
+            // (which IS on the tape). Reshape's tape-backward path does not always
+            // propagate gradients through to its source tensor in the current Tensors
+            // engine, so reshaping `output` would break the gradient chain between
+            // ForwardForTraining's last op and the loss — leaving the optimizer with
+            // no grads for the network's trainable params (issue surfaced by ResNet's
+            // GradientFlow_ShouldBeNonZeroAndFinite). Reshaping `expected` instead
+            // keeps `output` tape-connected end-to-end. Use the internal _shape field
+            // (zero-alloc) rather than Shape.ToArray().
             if (output.Rank > expected.Rank && output.Shape[0] == 1 && output.Length == expected.Length)
             {
-                output = Engine.Reshape(output, expected._shape);
+                expected = Engine.Reshape(expected, output._shape);
             }
             else if (expected.Rank > output.Rank && expected.Shape[0] == 1 && expected.Length == output.Length)
             {
