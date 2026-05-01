@@ -10965,16 +10965,34 @@ public static class LayerHelper<T>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="vocabSize">The size of the vocabulary.</param>
     /// <param name="embeddingDimension">The dimension of the embedding vectors.</param>
-    /// <returns>A collection of layers forming a GloVe model.</returns>
+    /// <returns>The four GloVe parameter layers in canonical paper order:
+    ///   W (word embeddings), W̃ (context embeddings), b (word biases), b̃ (context biases).</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> GloVe creates word embeddings by learning from the co-occurrence
-    /// statistics of words. It uses two sets of embeddings and two sets of biases.
+    /// Paper reference: Pennington, Socher, Manning (2014), "GloVe: Global Vectors
+    /// for Word Representation", Eq. 8: <c>J = Σ_ij f(X_ij)·(w_i^T w̃_j + b_i + b̃_j − log X_ij)²</c>.
+    /// The four parameter sets are:
+    /// </para>
+    /// <list type="number">
+    ///   <item><b>W</b> — word embedding matrix [vocab × d]; paper's <c>w_i</c>.</item>
+    ///   <item><b>W̃</b> — context embedding matrix [vocab × d]; paper's <c>w̃_j</c>.
+    ///         Same shape as W; the symmetry is what allows the paper's "use W + W̃"
+    ///         final-vector recipe (Section 4.3 footnote 5).</item>
+    ///   <item><b>b</b> — word bias vector [vocab × 1]; paper's <c>b_i</c>.</item>
+    ///   <item><b>b̃</b> — context bias vector [vocab × 1]; paper's <c>b̃_j</c>.</item>
+    /// </list>
+    /// <para>
+    /// <b>Important:</b> these layers are <b>not</b> a sequential feed-forward stack;
+    /// chaining their <c>Forward</c> calls would be meaningless. The GloVe model's
+    /// <c>Forward</c> method consumes them as paper components: it returns
+    /// <c>W[input] + W̃[input]</c> at inference (paper Section 4.3 footnote 5),
+    /// and a future pair-objective trainer would compute
+    /// <c>dot(W[i], W̃[j]) + b[i] + b̃[j]</c> per Eq. 8.
     /// </para>
     /// <para>
-    /// <b>Note:</b> The layers returned by this method are <b>not</b> intended to be used as a sequential
-    /// feed-forward stack. They represent the four components (W, W_tilde, b, b_tilde) required for
-    /// the GloVe model's custom forward pass.
+    /// <b>For Beginners:</b> GloVe creates word embeddings by learning from the co-occurrence
+    /// statistics of words. It uses two sets of embeddings (W and W̃) and two sets of
+    /// biases (b and b̃) — four components in total.
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultGloVeLayers(
@@ -10986,15 +11004,17 @@ public static class LayerHelper<T>
         if (vocabSize < 1) throw new ArgumentOutOfRangeException(nameof(vocabSize));
         if (embeddingDimension < 1) throw new ArgumentOutOfRangeException(nameof(embeddingDimension));
 
-        // GloVe training is typically dot(W_i, W_tilde_j) + b_i + b_tilde_j = log(X_ij)
-        // To represent this sequentially for standard backprop:
-        // Input is a pair of indices (i, j).
-        // This is tricky for a strictly sequential ILayer stack.
-        // However, for inference/embedding lookup, we just need W and W_tilde.
-        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension); // W
-        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension); // W_tilde
-        yield return new EmbeddingLayer<T>(vocabSize, 1); // b
-        yield return new EmbeddingLayer<T>(vocabSize, 1); // b_tilde
+        // Paper uses integer token indices; force the four embedding layers
+        // into Indices mode so the model never silently switches to continuous
+        // linear projection (the paper does not define that path).
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension)   // W       (paper w_i)
+            { InputMode = EmbeddingInputMode.Indices };
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension)   // W̃       (paper w̃_j)
+            { InputMode = EmbeddingInputMode.Indices };
+        yield return new EmbeddingLayer<T>(vocabSize, 1)                    // b       (paper b_i)
+            { InputMode = EmbeddingInputMode.Indices };
+        yield return new EmbeddingLayer<T>(vocabSize, 1)                    // b̃       (paper b̃_j)
+            { InputMode = EmbeddingInputMode.Indices };
     }
 
     /// <summary>
