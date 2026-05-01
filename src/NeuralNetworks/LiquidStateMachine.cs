@@ -475,6 +475,16 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
             layer.SetTrainingMode(true);
         try
         {
+            // Maass 2002 LSM training assumes the reservoir starts from a known
+            // (zero) initial state for each training example. Without this
+            // reset the reservoir's recurrent state evolves across iterations,
+            // so each Train call backprops through a different effective
+            // network — gradient descent then optimizes a moving target and
+            // the readout's loss can drift upward instead of decreasing
+            // (Training_ShouldReduceLoss invariant). ResetState propagates to
+            // ReservoirLayer and zeros _reservoirState before the tape runs.
+            ResetState();
+
             TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
