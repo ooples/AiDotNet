@@ -364,6 +364,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
 
+      - name: Free runner disk space
+        # ubuntu-latest images ship with Android SDK, .NET preinstalls, Haskell, CodeQL,
+        # PowerShell, Boost, and ~14GB of unused tooling. Tests on the largest shards
+        # (Diffusion S-Z, Generated, Diffusion J-R, ModelFamily-NN, Unit-08e) generate
+        # enough coverage + dump output to fill the runner volume mid-run, killing the
+        # job with `IOException: No space left on device`. Drop the heaviest preinstalls
+        # before tests start. ~25-30 GB freed.
+        run: |
+          sudo rm -rf /usr/share/dotnet/shared || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /opt/hostedtoolcache/PyPy || true
+          sudo rm -rf /opt/hostedtoolcache/Ruby || true
+          sudo rm -rf /opt/hostedtoolcache/go || true
+          sudo rm -rf /usr/share/swift || true
+          sudo rm -rf /usr/share/miniconda || true
+          sudo rm -rf /usr/local/share/boost || true
+          sudo rm -rf /usr/local/share/powershell || true
+          sudo apt-get clean
+          df -h /
+
       - name: Setup .NET 10.0
         uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5
         with:
