@@ -140,6 +140,33 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
 
         // Initialize meta-state for self-referential optimization
         _metaState = new Vector<T>(_hiddenDim);
+
+        // Eagerly resolve lazy layer weights via a probe forward so
+        // ParameterCount > 0 holds immediately after construction. The CMS
+        // and Recurrent layers Hope is built from defer their weight
+        // allocation to first forward (the codebase-wide PyTorch lazy-conv2d
+        // pattern); without the probe, AssociativeMemoryTestBase's
+        // Parameters_ShouldBeNonEmpty invariant fails on a freshly-built
+        // network even though the architecture is paper-correct.
+        ProbeLayersForLazyResolution();
+    }
+
+    private void ProbeLayersForLazyResolution()
+    {
+        try
+        {
+            var probe = new Tensor<T>(new[] { _hiddenDim });
+            var current = probe;
+            foreach (var layer in Layers)
+                current = layer.Forward(current);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            // Best-effort: shape mismatches under non-default configurations
+            // surface via the actual test paths rather than masking here.
+            System.Diagnostics.Debug.WriteLine(
+                $"HopeNetwork.ProbeLayersForLazyResolution skipped: {ex.Message}");
+        }
     }
 
     /// <summary>

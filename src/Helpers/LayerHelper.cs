@@ -23237,12 +23237,28 @@ public static class LayerHelper<T>
         int numVisionLayers = 24,
         int numDecoderLayers = 32,
         int numHeads = 12,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int patchSize = 14,
+        int inputChannels = 3)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int visionFfnDim = visionDim * 4;
         int decoderFfnDim = decoderDim * 4;
+
+        // === CLIP ViT patch embedding ===
+        // Per Radford et al. 2021 (CLIP) §2.4 / Dosovitskiy et al. 2020 (ViT)
+        // §3: a Conv2d(in_channels, visionDim, kernel=patchSize, stride=patchSize)
+        // splits the image into non-overlapping patches, then flattens spatial
+        // dims to produce a [B, num_patches, visionDim] token sequence ready
+        // for self-attention. ViT-L/14 (the LLaVA / GeoChat / Ferret / Shikra
+        // / Cambrian / etc. CLIP backbone per their respective paper §3.1)
+        // uses patchSize=14, embeddingDim=1024. PatchEmbeddingLayer is the
+        // codebase's tape-tracked impl that does the conv + flatten + permute
+        // into BSC token format. Without it the downstream
+        // MultiHeadAttentionLayer reads spatial dims as feature dim and the
+        // weight shape mismatch is unrecoverable.
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim);
 
         // === Vision Encoder (CLIP ViT) ===
         yield return new LayerNormalizationLayer<T>();

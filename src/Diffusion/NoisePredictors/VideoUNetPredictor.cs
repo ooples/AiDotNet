@@ -506,20 +506,36 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             x = AddImageCondition(x, imageCond, numFrames);
         }
 
-        // Store skip connections
+        // Store skip connections — one per spatial level, captured at the
+        // level boundary right before each Downsample. Per DDPM (Ho et al.
+        // 2020) §C "Architecture details" and Ronneberger et al. 2015 §2,
+        // U-Net skips are level-tagged: each spatial level transfers a single
+        // tensor across the network at the level boundary, and the decoder
+        // consumes it at the matching level right after Upsample. Saving a
+        // skip after every ResBlock (multiple per level) and popping LIFO
+        // makes the decoder consume the wrong-level skip first — at one
+        // spatial size — and then concat fails because non-channel dims
+        // don't match. Saving exactly one skip per Downsample / consuming
+        // exactly one skip per Upsample keeps spatial dims synchronised by
+        // construction across the symmetric encoder/decoder pyramid.
         var skips = new List<Tensor<T>>();
 
         // Encoder
-        foreach (var block in _encoderBlocks)
+        for (int i = 0; i < _encoderBlocks.Count; i++)
         {
+            var block = _encoderBlocks[i];
             if (block.Downsample != null)
             {
+                // Snapshot the level's output (post the preceding ResBlock(s))
+                // BEFORE downsampling so the saved skip lives at the current
+                // spatial size, matching what the decoder will see post-
+                // Upsample at the same level.
+                skips.Add(x);
                 x = ApplyDownsample(block.Downsample, x, isVideo);
             }
             else
             {
                 x = ApplyVideoBlock(block, x, timeEmbed, textConditioning, isVideo);
-                skips.Add(x);
             }
         }
 
@@ -529,22 +545,27 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             x = ApplyVideoBlock(block, x, timeEmbed, textConditioning, isVideo);
         }
 
-        // Decoder
+        // Decoder: Upsample to a level then concat with that level's skip
+        // exactly once before running the level's ResBlock(s). Skips pop in
+        // reverse order — last-saved (deepest level) is the first consumed
+        // because the decoder ascends from the bottleneck toward the input.
         var skipIdx = skips.Count - 1;
+        bool consumeSkipNext = false;
         foreach (var block in _decoderBlocks)
         {
             if (block.Upsample != null)
             {
                 x = ApplyUpsample(block.Upsample, x, isVideo);
+                consumeSkipNext = true;
             }
             else
             {
-                if (skipIdx >= 0)
+                if (consumeSkipNext && skipIdx >= 0)
                 {
                     x = ConcatenateChannels(x, skips[skipIdx], isVideo);
                     skipIdx--;
+                    consumeSkipNext = false;
                 }
-
                 x = ApplyVideoBlock(block, x, timeEmbed, textConditioning, isVideo);
             }
         }
