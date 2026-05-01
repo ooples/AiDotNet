@@ -460,6 +460,19 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             RegisterSubLayer(_feedForward2);
             RegisterSubLayer(_norm2);
 
+            // Eagerly resolve sub-layers using the known embedding size so their
+            // ParameterCount reflects real weights immediately. Without this,
+            // SetParameters dispatch (which slices by ParameterCount) sees 0 for
+            // lazy FeedForwardLayer (-1 input × outDim + outDim = 0) and silently
+            // skips its serialized weights — fixes the post-deserialize Predict
+            // mismatch in VideoCLIP / VLM Clone tests.
+            int[] subInputShape = new[] { _embeddingSize };
+            _selfAttention.ResolveFromShape(new[] { 1, _embeddingSize });
+            _norm1.ResolveFromShape(subInputShape);
+            _feedForward1.ResolveFromShape(subInputShape);
+            _feedForward2.ResolveFromShape(new[] { _feedForwardDim });
+            _norm2.ResolveFromShape(subInputShape);
+
             _isInitialized = true;
         }
     }
