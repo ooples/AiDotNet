@@ -145,9 +145,27 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
 
         // Handle any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
         int rank = input.Shape.Length;
-        int channels = input.Shape[rank - 3];
         int inputHeight = input.Shape[rank - 2];
         int inputWidth = input.Shape[rank - 1];
+
+        // Global-pool fast path (output 1×1): delegate to Engine.ReduceMean so the
+        // op is tape-tracked. ResNet/EfficientNet/MobileNet style classifiers use
+        // GlobalPool() exclusively before the FC head, and a scalar-loop forward
+        // here was returning a raw new Tensor<T> with GradFn=null — that broke the
+        // backward chain at the pool boundary, leaving every conv/BN below it
+        // with zero gradient and the optimizer with nothing to update.
+        if (_outputHeight == 1 && _outputWidth == 1)
+        {
+            // Reduce H and W (last two axes), keepDims=true so the output keeps
+            // [..., C, 1, 1] structure for downstream Flatten/Dense.
+            int[] axes = new[] { rank - 2, rank - 1 };
+            return Engine.ReduceMean(input, axes, keepDims: true);
+        }
+
+        // Non-trivial adaptive pooling (output > 1×1): keep the scalar implementation
+        // for now but wrap it in a tape entry so backward still flows through. The
+        // sliding-window region-mean pattern doesn't have a single Engine op.
+        int channels = input.Shape[rank - 3];
 
         // Calculate total batch size (product of all dims except last 3)
         int batchSize = 1;
