@@ -196,6 +196,24 @@ public abstract class FrameInterpolationBase<T> : VideoNeuralNetworkBase<T>
         // [2C, H, W] — that's what we keep here.
         bool isPairConcat = input.Rank == 3 && input.Shape[0] % 2 == 0 && input.Shape[0] > 0;
         if (isPairConcat) return InterpolatePairConcat(input);
+
+        // Common caller mistake: passing batched pair-concat [1, 2C, H, W]
+        // expecting channel-split semantics. With rank-4 → InterpolateSequence,
+        // that input would die in the sequence path with the unhelpful
+        // "At least 2 frames are required" message. Detect and redirect.
+        if (input.Rank == 4 && input.Shape[0] == 1 && input.Shape[1] % 2 == 0 && input.Shape[1] > 0)
+        {
+            throw new ArgumentException(
+                $"Input shape [{input.Shape[0]}, {input.Shape[1]}, {input.Shape[2]}, {input.Shape[3]}] " +
+                "looks like a batched channel-concatenated frame pair, but rank-4 input is treated " +
+                "as a frame sequence [N, C, H, W] and the leading dim is 1, so InterpolateSequence " +
+                "would reject it. If you intended a pair-concat, drop the batch dim and pass " +
+                $"[{input.Shape[1]}, {input.Shape[2]}, {input.Shape[3]}] (rank-3), or iterate the " +
+                "batch and call Interpolate(frame0, frame1) per pair. If this really is a " +
+                "single-frame sequence, pad to at least 2 frames before calling Predict.",
+                nameof(input));
+        }
+
         return InterpolateSequence(input);
     }
 

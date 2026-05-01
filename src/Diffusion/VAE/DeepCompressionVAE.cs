@@ -170,11 +170,14 @@ public class DeepCompressionVAE<T> : VAEModelBase<T>
             foreach (var layer in _encoderLayers) x = layer.Forward(x);
             foreach (var layer in _decoderLayers) x = layer.Forward(x);
         }
-        catch
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            // Best-effort: if a non-default config produces an unexpected
-            // shape mismatch the contract test that depends on
-            // ParameterCount > 0 will surface it.
+            // Best-effort against shape-arithmetic mismatches; ParameterCount > 0
+            // contract tests will surface a degenerate non-default config.
+            // Engine-level failures (DllNotFound, OOM, NullReference, etc.)
+            // fall through so partially-initialized state isn't silently masked.
+            System.Diagnostics.Debug.WriteLine(
+                $"[DeepCompressionVAE.ProbeLayersForLazyResolution] suppressed shape-probe error: {ex.GetType().Name}: {ex.Message}");
         }
     }
 

@@ -179,11 +179,16 @@ public class EQVAEModel<T> : VAEModelBase<T>
             foreach (var layer in _encoderLayers) x = layer.Forward(x);
             foreach (var layer in _decoderLayers) x = layer.Forward(x);
         }
-        catch
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            // Probe is best-effort; if shape arithmetic doesn't line up for an
-            // unusual configuration (non-default base / latent channels) the
-            // test that depends on ParameterCount > 0 will surface it.
+            // Probe is best-effort against shape-arithmetic mismatches; if a
+            // non-default base/latent-channel config yields a degenerate spatial
+            // dim, the ParameterCount > 0 test surfaces it. Engine/kernel-level
+            // failures (DllNotFound, OutOfMemory, NullReference, etc.) are NOT
+            // swallowed — they fall through so partially-initialized state is
+            // never silently masked.
+            System.Diagnostics.Debug.WriteLine(
+                $"[EQVAEModel.ProbeLayersForLazyResolution] suppressed shape-probe error: {ex.GetType().Name}: {ex.Message}");
         }
     }
 
