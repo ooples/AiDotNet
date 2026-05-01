@@ -157,6 +157,34 @@ public class EQVAEModel<T> : VAEModelBase<T>
             outputDepth: _inputChannels,
             kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new TanhActivation<T>()));
+
+        // Eagerly resolve all encoder/decoder layers via a probe forward so
+        // ParameterCount / GetParameters work before any real training input
+        // is fed. Without this, every Conv/Deconv reports 0 params (lazy
+        // weight allocation deferred to first forward), which breaks the
+        // FastGenContractTests.EQVAEModel_DefaultConstructor_CreatesValidVAE
+        // invariant of "ParameterCount > 0 after construction".
+        ProbeLayersForLazyResolution();
+    }
+
+    private void ProbeLayersForLazyResolution()
+    {
+        // Use a 64×64 probe so the 4× stride-2 downsamples reduce to a 4×4
+        // feature map without any spatial dim hitting zero.
+        const int probeSize = 64;
+        var probe = new Tensor<T>(new[] { _inputChannels, probeSize, probeSize });
+        try
+        {
+            var x = probe;
+            foreach (var layer in _encoderLayers) x = layer.Forward(x);
+            foreach (var layer in _decoderLayers) x = layer.Forward(x);
+        }
+        catch
+        {
+            // Probe is best-effort; if shape arithmetic doesn't line up for an
+            // unusual configuration (non-default base / latent channels) the
+            // test that depends on ParameterCount > 0 will surface it.
+        }
     }
 
     /// <inheritdoc />
