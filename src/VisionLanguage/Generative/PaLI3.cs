@@ -141,6 +141,57 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
             input, _options.VisionDim, _options.ImageSize, ref _patchEmbed, Engine);
 
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
+
+    // _patchEmbed lives outside Layers but is trainable in native mode. Override
+    // ParameterCount / GetParameters / SetParameters / UpdateParameters together
+    // so all four agree on the layout: _patchEmbed slice first, then Layers in
+    // order. Without this, the optimizer reads N params via GetParameters and
+    // hands back N to UpdateParameters — but UpdateParameters consumes
+    // _patchEmbed.ParameterCount extra slots from the front, shifting every
+    // Layer's slice and corrupting weights.
+    public override int ParameterCount =>
+        (_patchEmbed?.ParameterCount ?? 0) +
+        Layers.Sum(l => l.ParameterCount);
+
+    public override Vector<T> GetParameters()
+    {
+        var perLayer = Layers.Select(l => l.GetParameters()).ToList();
+        int patchLen = _patchEmbed?.ParameterCount ?? 0;
+        int total = patchLen + perLayer.Sum(p => p.Length);
+        var result = new Vector<T>(total);
+        int idx = 0;
+        if (patchLen > 0)
+        {
+            var patchParams = _patchEmbed!.GetParameters();
+            for (int i = 0; i < patchParams.Length; i++) result[idx++] = patchParams[i];
+        }
+        foreach (var p in perLayer)
+        {
+            for (int i = 0; i < p.Length; i++) result[idx++] = p[i];
+        }
+        return result;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        if (_patchEmbed is not null)
+        {
+            int pc = _patchEmbed.ParameterCount;
+            if (pc > 0)
+            {
+                _patchEmbed.SetParameters(parameters.Slice(idx, pc));
+                idx += pc;
+            }
+        }
+        foreach (var l in Layers)
+        {
+            int c = l.ParameterCount;
+            l.SetParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
