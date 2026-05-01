@@ -519,6 +519,64 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
+    /// Defines the Siamese forward graph for tape-based training. Input is a
+    /// pair tensor [B, 2, ...features]; we slice into the two halves along
+    /// axis 1, run each through the shared subnetwork's training-time forward
+    /// (so its layer chain records on the tape), concatenate the two
+    /// embeddings, and run the output similarity head. The base
+    /// <c>ForwardForTraining</c> walks <c>Layers</c> sequentially with the
+    /// raw pair tensor, which is wrong for Siamese — the first sub-layer
+    /// expects a single example, not a [B, 2, ...] pair. Overriding here
+    /// keeps every op tape-tracked so <c>tape.ComputeGradients</c> can flow
+    /// back into the subnetwork weights and the output layer.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank < 2 || input.Shape[1] != 2)
+            throw new ArgumentException(
+                $"SiameseNetwork.ForwardForTraining expects a pair tensor [B, 2, ...]; got shape [{string.Join(",", input._shape)}].",
+                nameof(input));
+
+        // Slice the [B, 2, ...] pair into two [B, ...] halves on axis 1. Use
+        // TensorSlice (tape-tracked, propagates gradient back into `input`).
+        var pairShape = input._shape;
+        int rank = pairShape.Length;
+
+        var startA = new int[rank];
+        var startB = new int[rank];
+        startB[1] = 1;
+        var halfLen = new int[rank];
+        for (int d = 0; d < rank; d++) halfLen[d] = pairShape[d];
+        halfLen[1] = 1;
+
+        var halfA = Engine.TensorSlice(input, startA, halfLen);
+        var halfB = Engine.TensorSlice(input, startB, halfLen);
+
+        // Drop the singleton axis-1 so subnetwork's layer chain sees its
+        // expected input rank ([B, ...features]). Reshape is tape-tracked.
+        var unbatchedShape = new int[rank - 1];
+        unbatchedShape[0] = pairShape[0];
+        for (int d = 2; d < rank; d++) unbatchedShape[d - 1] = pairShape[d];
+
+        var input1 = Engine.Reshape(halfA, unbatchedShape);
+        var input2 = Engine.Reshape(halfB, unbatchedShape);
+
+        // Run each through the shared subnetwork's training-time forward so
+        // its own layer chain records on the tape. Same subnetwork instance
+        // ⇒ shared weights, shared gradients.
+        var emb1 = _subnetwork.ForwardForTraining(input1);
+        var emb2 = _subnetwork.ForwardForTraining(input2);
+
+        // Combine the two embeddings and run the similarity head. Concat
+        // along the trailing feature axis so the output layer sees twice the
+        // embedding width — matching CombineEmbeddings' shape contract.
+        int featureAxis = emb1.Rank - 1;
+        var combined = Engine.TensorConcatenate(new[] { emb1, emb2 }, featureAxis);
+        return _outputLayer.Forward(combined);
+    }
+
+    /// <summary>
     /// Serializes Siamese network-specific data to a binary writer.
     /// </summary>
     /// <param name="writer">The binary writer to write to.</param>
