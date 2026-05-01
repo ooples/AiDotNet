@@ -457,6 +457,12 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input, Tensor<T> memory)
     {
+        // The standard Forward(input) path triggers OnFirstForward via
+        // EnsureInitializedFromInput. This overload bypasses that, so the
+        // lazy weight allocation never runs and _keyWeights stays at its
+        // initial [0, 0] sentinel — matmul then throws on incompatible dims.
+        EnsureInitializedFromInput(input);
+
         _lastInput = input;
         _lastMemory = memory;
 

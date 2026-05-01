@@ -486,6 +486,14 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input, Tensor<T> memory)
     {
+        // The standard Forward(input) path triggers OnFirstForward via
+        // EnsureInitializedFromInput. This overload bypasses that, so the
+        // lazy weight allocation never runs and _queryWeights stays at its
+        // initial [0, 0] sentinel — Shape[0] is then 0 and the dimension
+        // adaptation below allocates with actualInputDim, which is correct,
+        // but only when the layer has run at least once. Force init here.
+        EnsureInitializedFromInput(input);
+
         _lastInput = input;
         _lastMemory = memory;
 
