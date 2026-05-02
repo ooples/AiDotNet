@@ -354,6 +354,33 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         PatchEmbedHelper.TokenizeImageNCHWToBSC(
             input, _options.VisionDim, _options.ImageSize, ref _patchEmbed, Engine);
 
+    /// <summary>
+    /// Surfaces _patchEmbed (which lives outside Layers) to the base
+    /// weight-registry walker so its trainable tensors land in the
+    /// streaming pool when ConfigureWeightLifetime is called.
+    /// </summary>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+    {
+        yield return _patchEmbed;
+    }
+
+    /// <summary>
+    /// Lazily creates _patchEmbed when the incoming parameter vector is
+    /// longer than the layer-sum, indicating the saved model was trained
+    /// in vision mode. Builds it by running a probe NCHW tensor through
+    /// the helper, which constructs and weight-allocates the conv. Idempotent.
+    /// </summary>
+    private void EnsurePatchEmbedForParameterVector(int paramVectorLength)
+    {
+        if (_patchEmbed is not null) return;
+        long layerSum = 0L;
+        for (int i = 0; i < Layers.Count; i++) layerSum += Layers[i].ParameterCount;
+        if (paramVectorLength <= layerSum) return;
+
+        var probe = new Tensor<T>(new[] { 1, 3, _options.ImageSize, _options.ImageSize });
+        TokenizeImageInput(probe);
+    }
+
     /// <inheritdoc />
     /// <remarks>
     /// PaLME owns a patch-embedding Conv2D outside the standard
@@ -431,6 +458,12 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        // If the saved parameter vector includes patch-embed weights but
+        // _patchEmbed hasn't been instantiated (no image has flowed through
+        // yet), construct it now so the slice layout matches the saved
+        // vector. Otherwise the patch-embed slice silently drops.
+        EnsurePatchEmbedForParameterVector(parameters.Length);
+
         // Layout matches GetParameters: [base layer params ...] [patch-embed params].
         int patchCount = _patchEmbed?.ParameterCount ?? 0;
         int baseCount = parameters.Length - patchCount;
@@ -451,6 +484,7 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        EnsurePatchEmbedForParameterVector(parameters.Length);
         int idx = 0;
         foreach (var l in Layers)
         {
@@ -502,5 +536,17 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new PaLME<T>(Architecture, mp, _options); return new PaLME<T>(Architecture, _options); }
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(PaLME<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (disposing)
+        {
+            // _patchEmbed lives outside Layers; dispose it explicitly so the
+            // conv's weights/buffers get released alongside the rest of the
+            // model rather than leaking until GC.
+            if (_patchEmbed is IDisposable pe) pe.Dispose();
+        }
+        base.Dispose(disposing);
+    }
 }

@@ -288,7 +288,20 @@ public static class DeserializationHelper
             }
             else
             {
-                patchSize = 16;
+                // Refuse to silently default — without metadata or shape data
+                // we'd reconstruct a PatchEmbeddingLayer at the wrong grid
+                // and SetParameters would fail the parameter-count check (or
+                // worse, succeed and load weights into a wrong-shape kernel).
+                // Surface the missing-info case loudly so the caller knows
+                // the saved model needs the PatchSize entry in additionalParams
+                // or an inputShape with concrete H/W.
+                throw new InvalidOperationException(
+                    "Cannot deserialize PatchEmbeddingLayer: PatchSize is missing " +
+                    "from layer metadata AND inputShape does not carry concrete " +
+                    "image dimensions to back-derive it from numPatches. Re-save " +
+                    "the model on a build that emits PatchSize via " +
+                    "PatchEmbeddingLayer.GetMetadata, or pass an inputShape with " +
+                    "positive height/width when constructing the layer manually.");
             }
 
             var ctor = type.GetConstructors()

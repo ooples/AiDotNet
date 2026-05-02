@@ -140,7 +140,45 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
         PatchEmbedHelper.TokenizeImageNCHWToBSC(
             input, _options.VisionDim, _options.ImageSize, ref _patchEmbed, Engine);
 
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        // Tokenize NCHW image inputs the same way Predict does so the
+        // tape-based training loop sees the patch-embedded BSC sequence
+        // the encoder layer stack expects (otherwise NCHW images would
+        // crash the first encoder layer's shape check or train against
+        // a wrong-shape gradient path).
+        TrainWithTape(TokenizeIfNCHW(input), expected);
+        SetTrainingMode(false);
+    }
+
+    /// <summary>
+    /// Surfaces _patchEmbed (which lives outside Layers) to the base
+    /// weight-registry walker so its trainable tensors land in the
+    /// streaming pool when ConfigureWeightLifetime is called.
+    /// </summary>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+    {
+        yield return _patchEmbed;
+    }
+
+    /// <summary>
+    /// Lazily creates _patchEmbed when the incoming parameter vector is
+    /// longer than the layer-sum, indicating the saved model was trained
+    /// in vision mode. Builds it by running a probe NCHW tensor through
+    /// the helper, which constructs and weight-allocates the conv. Idempotent.
+    /// </summary>
+    private void EnsurePatchEmbedForParameterVector(int paramVectorLength)
+    {
+        if (_patchEmbed is not null) return;
+        int layerSum = 0;
+        foreach (var l in Layers) layerSum += l.ParameterCount;
+        if (paramVectorLength <= layerSum) return;
+
+        var probe = new Tensor<T>(new[] { 1, 3, _options.ImageSize, _options.ImageSize });
+        TokenizeIfNCHW(probe);
+    }
 
     // _patchEmbed lives outside Layers but is trainable in native mode. Override
     // ParameterCount / GetParameters / SetParameters / UpdateParameters together
@@ -174,6 +212,12 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
 
     public override void SetParameters(Vector<T> parameters)
     {
+        // If the saved parameter vector includes patch-embed weights but
+        // this instance hasn't seen an image yet, lazy-create _patchEmbed
+        // so the slice layout matches the saved vector. Otherwise the
+        // patch-embed slice silently drops.
+        EnsurePatchEmbedForParameterVector(parameters.Length);
+
         int idx = 0;
         if (_patchEmbed is not null)
         {
@@ -195,6 +239,7 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        EnsurePatchEmbedForParameterVector(parameters.Length);
         int idx = 0;
         if (_patchEmbed is not null)
         {
@@ -214,5 +259,17 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new PaLI3<T>(Architecture, mp, _options); return new PaLI3<T>(Architecture, _options); }
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(PaLI3<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (disposing)
+        {
+            // _patchEmbed lives outside Layers; dispose it explicitly so the
+            // conv's weights/buffers get released alongside the rest of the
+            // model rather than leaking until GC.
+            if (_patchEmbed is IDisposable pe) pe.Dispose();
+        }
+        base.Dispose(disposing);
+    }
 }

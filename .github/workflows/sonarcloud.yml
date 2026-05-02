@@ -372,7 +372,15 @@ jobs:
         # job with `IOException: No space left on device`. Drop the heaviest preinstalls
         # before tests start. ~25-30 GB freed.
         run: |
-          sudo rm -rf /usr/share/dotnet/shared || true
+          # NOTE: do NOT delete /usr/share/dotnet/shared — actions/setup-dotnet
+          # below installs the requested SDK alongside the runner-image
+          # frameworks, and several reusable composite actions (and our own
+          # later steps) expect the preinstalled host frameworks to remain
+          # discoverable. We also do NOT delete /usr/local/share/powershell:
+          # multiple later steps in this job run with `shell: pwsh`, so
+          # removing PowerShell here would break them. Limit cleanup to
+          # genuinely unused languages/tools to free disk for the largest
+          # test shards without breaking the toolchain we depend on.
           sudo rm -rf /usr/local/lib/android || true
           sudo rm -rf /opt/ghc || true
           sudo rm -rf /opt/hostedtoolcache/CodeQL || true
@@ -382,7 +390,6 @@ jobs:
           sudo rm -rf /usr/share/swift || true
           sudo rm -rf /usr/share/miniconda || true
           sudo rm -rf /usr/local/share/boost || true
-          sudo rm -rf /usr/local/share/powershell || true
           sudo apt-get clean
           df -h /
 

@@ -160,15 +160,33 @@ public class DeepCompressionVAE<T> : VAEModelBase<T>
 
     private void ProbeLayersForLazyResolution()
     {
-        // Probe spatial size = max(64, downsampleFactor * 2) so the chain
-        // of stride-2 downsamples never collapses below 1x1.
+        // Resolve each Conv/Deconv layer's shape AND allocate its weights
+        // WITHOUT running convolution compute. ResolveFromShape walks the
+        // shape inference path (OnFirstForward) and then EnsureInitialized,
+        // so ParameterCount becomes nonzero immediately but no activations
+        // are computed and no engine kernels are invoked at construction
+        // time. Probe spatial size = max(64, downsampleFactor*2) so the
+        // stride-2 chain never collapses below 1×1.
         int probeSize = Math.Max(64, _downsampleFactor * 2);
-        var probe = new Tensor<T>(new[] { _inputChannels, probeSize, probeSize });
+        int[] shape = new[] { 1, _inputChannels, probeSize, probeSize };
         try
         {
-            var x = probe;
-            foreach (var layer in _encoderLayers) x = layer.Forward(x);
-            foreach (var layer in _decoderLayers) x = layer.Forward(x);
+            foreach (var layer in _encoderLayers)
+            {
+                if (layer is LayerBase<T> lb)
+                {
+                    lb.ResolveFromShape(shape);
+                    shape = lb.GetOutputShape();
+                }
+            }
+            foreach (var layer in _decoderLayers)
+            {
+                if (layer is LayerBase<T> lb)
+                {
+                    lb.ResolveFromShape(shape);
+                    shape = lb.GetOutputShape();
+                }
+            }
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {

@@ -169,24 +169,41 @@ public class EQVAEModel<T> : VAEModelBase<T>
 
     private void ProbeLayersForLazyResolution()
     {
-        // Use a 64×64 probe so the 4× stride-2 downsamples reduce to a 4×4
-        // feature map without any spatial dim hitting zero.
+        // Resolve each Conv/Deconv layer's shape AND allocate its weights
+        // WITHOUT running convolution compute. ResolveFromShape walks the
+        // shape inference path (OnFirstForward) and then EnsureInitialized,
+        // so ParameterCount becomes nonzero immediately but no activations
+        // are computed and no engine kernels are invoked at construction
+        // time. The 64×64 probe matches the 4× stride-2 downsample chain so
+        // each spatial dim stays positive through the encoder.
         const int probeSize = 64;
-        var probe = new Tensor<T>(new[] { _inputChannels, probeSize, probeSize });
+        int[] shape = new[] { 1, _inputChannels, probeSize, probeSize };
         try
         {
-            var x = probe;
-            foreach (var layer in _encoderLayers) x = layer.Forward(x);
-            foreach (var layer in _decoderLayers) x = layer.Forward(x);
+            foreach (var layer in _encoderLayers)
+            {
+                if (layer is LayerBase<T> lb)
+                {
+                    lb.ResolveFromShape(shape);
+                    shape = lb.GetOutputShape();
+                }
+            }
+            foreach (var layer in _decoderLayers)
+            {
+                if (layer is LayerBase<T> lb)
+                {
+                    lb.ResolveFromShape(shape);
+                    shape = lb.GetOutputShape();
+                }
+            }
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            // Probe is best-effort against shape-arithmetic mismatches; if a
-            // non-default base/latent-channel config yields a degenerate spatial
-            // dim, the ParameterCount > 0 test surfaces it. Engine/kernel-level
-            // failures (DllNotFound, OutOfMemory, NullReference, etc.) are NOT
-            // swallowed — they fall through so partially-initialized state is
-            // never silently masked.
+            // Best-effort against shape-arithmetic mismatches; non-default
+            // base/latent-channel configs may yield a degenerate spatial dim.
+            // Engine/kernel-level failures (DllNotFound, OutOfMemory,
+            // NullReference, etc.) are NOT swallowed — they fall through so
+            // partially-initialized state is never silently masked.
             System.Diagnostics.Debug.WriteLine(
                 $"[EQVAEModel.ProbeLayersForLazyResolution] suppressed shape-probe error: {ex.GetType().Name}: {ex.Message}");
         }

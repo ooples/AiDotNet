@@ -157,6 +157,15 @@ namespace AiDotNet.NeuralNetworks
         ///         Production callers should pass <c>vocabSize</c> = 400K to match the
         ///         largest paper experiment on Common Crawl 42B.</item>
         /// </list>
+        /// <para>
+        /// <b>Breaking change vs. earlier in this branch:</b> the parameterless
+        /// constructor previously defaulted <c>inputSize</c>/<c>outputSize</c> to
+        /// <c>768</c> (the BERT-base hidden width, which is unrelated to GloVe).
+        /// It now defaults to <c>100</c> to match the paper. Callers that
+        /// relied on the old 768-dim default must opt in explicitly:
+        /// <c>new GloVe&lt;T&gt;(new NeuralNetworkArchitecture&lt;T&gt;(... inputSize: 768, outputSize: 768))</c>.
+        /// Use <see cref="CreateBertCompatible"/> for that exact configuration.
+        /// </para>
         /// </remarks>
         public GloVe()
             : this(new NeuralNetworkArchitecture<T>(
@@ -166,6 +175,27 @@ namespace AiDotNet.NeuralNetworks
                 outputSize: 100))
         {
         }
+
+        /// <summary>
+        /// Creates a GloVe instance with the legacy 768-dim default that this
+        /// project's parameterless constructor used before the paper-faithful
+        /// <c>d = 100</c> switch. Provided as an explicit opt-in so consumers
+        /// that depended on the previous 768-dim default can keep building it
+        /// in one line without having to spell out a full
+        /// <see cref="NeuralNetworkArchitecture{T}"/>.
+        /// </summary>
+        /// <remarks>
+        /// 768 is the BERT-base hidden width. It is not a GloVe-paper choice;
+        /// it was an accidental project default. New code targeting the GloVe
+        /// paper should use the parameterless constructor (d = 100) or pass
+        /// d ∈ {50, 100, 200, 300} explicitly.
+        /// </remarks>
+        public static GloVe<T> CreateBertCompatible() =>
+            new GloVe<T>(new NeuralNetworkArchitecture<T>(
+                inputType: Enums.InputType.OneDimensional,
+                taskType: Enums.NeuralNetworkTaskType.Regression,
+                inputSize: 768,
+                outputSize: 768));
 
         /// <summary>
         /// Initializes a new instance of the GloVe model.

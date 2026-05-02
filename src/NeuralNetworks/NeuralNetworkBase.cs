@@ -2039,10 +2039,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected virtual bool AreLayersCompatible(ILayer<T> prevLayer, ILayer<T> currentLayer)
     {
-        // Lazy layers report InputShape = [-1] until first Forward — skip the
-        // strict shape-equality check; resolution happens at first forward.
+        // Lazy layers report InputShape = [-1] (or empty) until first Forward —
+        // skip the strict shape-equality check; resolution happens at first
+        // forward. Empty-shape layers are shape-agnostic by design (e.g.
+        // DropoutLayer, ActivationLayer constructed without an explicit
+        // InputShape) and would have been incorrectly rejected by the
+        // SequenceEqual check otherwise.
         var currentInputShape = currentLayer.GetInputShape();
-        bool currentIsLazy = currentInputShape.Length > 0 && currentInputShape.Any(d => d <= 0);
+        bool currentIsLazy = currentInputShape.Length == 0
+                             || currentInputShape.Any(d => d <= 0);
         if (!currentIsLazy && !Enumerable.SequenceEqual(prevLayer.GetOutputShape(), currentInputShape))
             return false;
 
@@ -2739,9 +2744,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
-    /// Opts the model into the AiDotNet.Tensors 0.68.0 weight-lifetime
-    /// machinery — streaming pool, pinned-host, and GPU offload — so models
-    /// larger than RAM can run without OOMing.
+    /// Opts the model into the AiDotNet.Tensors weight-lifetime machinery —
+    /// streaming pool, pinned-host, and GPU offload — so models larger than
+    /// RAM can run without OOMing. Requires the version of AiDotNet.Tensors
+    /// pinned in <c>Directory.Packages.props</c>; the underlying
+    /// <see cref="WeightRegistry"/> APIs were introduced in the 0.68 line and
+    /// have remained stable since.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -2765,7 +2773,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
 
-        WeightRegistry.Configure(options, allocator!);
+        // WeightRegistry.Configure's `offloadAllocator` parameter is itself
+        // optional and defaults to null when omitted, so a null forward
+        // here is correct (no need for the null-forgiving `!` operator,
+        // which the project bans). Branching keeps the signature explicit
+        // for callers that did pass an allocator.
+        if (allocator is null)
+            WeightRegistry.Configure(options);
+        else
+            WeightRegistry.Configure(options, allocator);
         _weightLifetimeConfigured = true;
         RegisterTrainableTensorsWithWeightRegistry();
     }
@@ -2821,7 +2837,33 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 WeightRegistry.RegisterWeight(tensor);
             }
         }
+
+        // Composite models often own trainable layers outside of the
+        // <see cref="Layers"/> list — e.g. VLMs that lazy-construct a
+        // patch-embedding ConvolutionalLayer in a separate field once an
+        // image input arrives. Subclasses override
+        // <see cref="GetExtraTrainableLayers"/> to surface those so their
+        // weights also land in the offload registry. Default returns an
+        // empty enumerable and is a no-op.
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is null) continue;
+            foreach (var tensor in extra.GetTrainableParameters())
+            {
+                if (tensor is null || tensor.Length == 0) continue;
+                WeightRegistry.RegisterWeight(tensor);
+            }
+        }
     }
+
+    /// <summary>
+    /// Override-point for subclasses that own trainable layers outside
+    /// <see cref="Layers"/> (e.g. a lazy patch-embedding conv kept in its
+    /// own field) so those layers' tensors also flow through the weight
+    /// registry. Default implementation returns an empty enumerable.
+    /// </summary>
+    protected virtual IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => System.Linq.Enumerable.Empty<LayerBase<T>?>();
 
     /// <summary>
     /// Disables memory management and releases associated resources.
@@ -3083,14 +3125,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Resolve optimizer
             var opt = optimizer ?? GetOrCreateBaseOptimizer();
 
-            // Re-evaluation callback applies same shape alignment as initial forward.
-            // Engine.Reshape so the tape records the reshape when this is called
-            // inside the optimizer's Step; also zero-alloc via the _shape field.
+            // Re-evaluation callback applies the SAME alignment policy the
+            // initial forward used: reshape the target (a leaf tensor not on
+            // the tape), never the tape-tracked forward output, so the
+            // gradient chain between the tape's last op and the loss stays
+            // intact across the optimizer's per-step recomputation. The
+            // earlier "Engine.Reshape(fwd, tgt._shape)" form snapped the
+            // chain because Reshape's tape-backward path doesn't always
+            // propagate gradients through to its source — the same problem
+            // that the initial-forward fix at line ~3060 was added to avoid,
+            // surfaced again here when the optimizer re-evaluated the loss.
             Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> tgt)
             {
                 var fwd = ForwardForTraining(inp);
                 if (fwd.Rank > tgt.Rank && fwd.Shape[0] == 1 && fwd.Length == tgt.Length)
-                    fwd = Engine.Reshape(fwd, tgt._shape);
+                {
+                    // Caller constructs a fresh re-evaluation context per call
+                    // and discards `tgt` after, so the leaf-side reshape is
+                    // safe — it doesn't clobber the original target tensor
+                    // the trainer holds.
+                    tgt = Engine.Reshape(tgt, fwd._shape);
+                }
+                else if (tgt.Rank > fwd.Rank && tgt.Shape[0] == 1 && tgt.Length == fwd.Length)
+                {
+                    tgt = Engine.Reshape(tgt, fwd._shape);
+                }
+                _ = tgt; // suppress unused warning — the loss callback below sees the aligned tgt
                 return fwd;
             }
 

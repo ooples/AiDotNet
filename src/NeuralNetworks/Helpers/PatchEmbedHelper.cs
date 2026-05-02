@@ -29,12 +29,41 @@ public static class PatchEmbedHelper
         // 3-channel images can be either [3,H,W] (rank-3, no batch) or [B,3,H,W].
         // Rank-3 with first dim 3 is ambiguous with already-tokenized
         // [B=3, S, C], so additionally require Shape[1]==Shape[2] (square H==W
-        // is the universal ViT input convention) before treating it as an image.
-        // Rank-4 is unambiguous: NCHW with C=3.
+        // is the universal ViT input convention) AND Shape[1]==imageSize
+        // before treating it as an image.
+        //
+        // Rank-4 with C=3 is unambiguous as far as channel count goes, but
+        // we must still validate H/W against imageSize: patchSize is derived
+        // from imageSize (imageSize/16), so a [B,3,H,W] tensor at a
+        // different resolution would silently get tokenized with a patch
+        // size that doesn't match the actual frame geometry, producing
+        // wrong-grid embeddings. Require H==W==imageSize for the rank-4
+        // path too — callers passing a different resolution must reshape /
+        // resize first.
         bool isImage =
-            (input.Rank == 4 && input.Shape[1] == 3) ||
-            (input.Rank == 3 && input.Shape[0] == 3 && input.Shape[1] == input.Shape[2] && input.Shape[1] == imageSize);
-        if (!isImage) return input;
+            (input.Rank == 4 && input.Shape[1] == 3
+                && input.Shape[2] == imageSize && input.Shape[3] == imageSize) ||
+            (input.Rank == 3 && input.Shape[0] == 3
+                && input.Shape[1] == input.Shape[2] && input.Shape[1] == imageSize);
+        if (!isImage)
+        {
+            // Surface mismatched-resolution NCHW images explicitly rather
+            // than silently routing them through as already-tokenized
+            // [B,S,C] — the rank-3 [B,3,...] case below already does this
+            // via the Shape[1]==Shape[2] gate, but rank-4 with C=3 was
+            // previously a silent miscompute.
+            if (input.Rank == 4 && input.Shape[1] == 3)
+            {
+                throw new System.ArgumentException(
+                    $"PatchEmbedHelper expects rank-4 image input at resolution " +
+                    $"[B, 3, {imageSize}, {imageSize}] (matching the imageSize this " +
+                    $"helper was built for); got [{string.Join(",", input._shape)}]. " +
+                    $"Resize the image to {imageSize}x{imageSize} or rebuild the " +
+                    $"helper with the matching imageSize before passing it in.",
+                    nameof(input));
+            }
+            return input;
+        }
 
         int patchSize = System.Math.Max(1, imageSize / 16);
         if (patchEmbed is null)

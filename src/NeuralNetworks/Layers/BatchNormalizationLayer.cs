@@ -232,10 +232,48 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         {
             var span = _gamma.Data.Span;
             for (int i = 0; i < span.Length; i++) span[i] = NumOps.Zero;
+            return;
         }
-        else
+
+        // Lazy / placeholder _gamma path. Re-run the standard initialization
+        // sequence so we end up with a fully wired layer:
+        //   - all four state tensors (_gamma, _beta, _runningMean,
+        //     _runningVariance) sized to InputShape[0] with their canonical
+        //     defaults
+        //   - _gamma + _beta registered with RegisterTrainableParameter so
+        //     the parameter buffer + weight registry pick them up
+        // Only then zero _gamma in place. Earlier code created a fresh
+        // _gamma tensor and skipped registration / _beta init, so a layer
+        // that hit ZeroInitGamma before its first forward ended up with
+        // _gamma trainable but unregistered, _beta still at the placeholder
+        // length 0, and the running stats absent — which silently produced
+        // identity-like normalization once Forward ran.
+        InitializeNormalizationParameters();
+        if (_gamma.Length > 0)
         {
-            _gamma = Tensor<T>.CreateDefault([InputShape[0]], NumOps.Zero);
+            var span = _gamma.Data.Span;
+            for (int i = 0; i < span.Length; i++) span[i] = NumOps.Zero;
+        }
+    }
+
+    /// <summary>
+    /// Allocates _gamma / _beta / _runningMean / _runningVariance to match
+    /// the resolved InputShape and registers gamma + beta as trainable.
+    /// Idempotent: tensors already at the right length are reused so the
+    /// existing RegisterTrainableParameter registrations stay valid.
+    /// </summary>
+    private void InitializeNormalizationParameters()
+    {
+        int channels = InputShape[0];
+        bool reinit = _gamma is null || _gamma.Length != channels;
+        if (reinit)
+        {
+            _gamma = Tensor<T>.CreateDefault([channels], NumOps.One);
+            _beta = Tensor<T>.CreateDefault([channels], NumOps.Zero);
+            _runningMean = Tensor<T>.CreateDefault([channels], NumOps.Zero);
+            _runningVariance = Tensor<T>.CreateDefault([channels], NumOps.One);
+            RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
+            RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
         }
     }
 

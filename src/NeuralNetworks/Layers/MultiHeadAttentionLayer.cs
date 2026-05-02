@@ -421,11 +421,17 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         var shape = input.Shape.ToArray();
         ResolveShapes(shape, shape);
 
-        // The Forward path calls EnsureWeightsAllocated() before EnsureInitialized();
-        // public ResolveFromShape only walks the OnFirstForward → EnsureInitialized
-        // chain, so we need to allocate Q/K/V/O explicitly here for callers that
-        // pre-resolve a lazy MHA (e.g. inference quantization, optimizer rewrites).
-        EnsureWeightsAllocated();
+        // OnFirstForward must NOT allocate Q/K/V/O weights here:
+        // LayerBase.ResolveShapesOnly invokes OnFirstForward to materialize
+        // shapes WITHOUT triggering weight allocation (so InferenceOptimizer
+        // / quantization pre-resolution doesn't burn RNG state and force
+        // potentially-multi-GB allocations on a path that only needs to
+        // know shapes). The Forward path's call into EnsureWeightsAllocated
+        // (one frame up the stack) is what actually allocates Q/K/V/O for
+        // real forwards. Tests that exercise the previous "ResolveFromShape
+        // followed immediately by GetParameters" flow will hit
+        // EnsureWeightsAllocated through GetParameters' own path — see
+        // EnsureInitialized below, which is the proper allocation hook.
     }
 
     /// <summary>

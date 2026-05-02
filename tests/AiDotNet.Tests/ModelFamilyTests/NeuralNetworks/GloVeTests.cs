@@ -1,6 +1,5 @@
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
