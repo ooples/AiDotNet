@@ -300,9 +300,22 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
     protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
 
     /// <inheritdoc />
+    /// <remarks>
+    /// EfficientNet's stem-and-blocks pipeline expects rank-4 <c>[B, C, H, W]</c>
+    /// per Tan &amp; Le 2019 §3 (input is a 4D image tensor). When the test
+    /// harness or a CNN-style caller hands us a single-sample rank-3
+    /// <c>[C, H, W]</c> tensor — and a target shaped to the per-sample output —
+    /// we promote both to a leading batch dim so downstream Conv/BN/SE blocks
+    /// see the canonical 4D shape and the loss target's rank matches the
+    /// promoted prediction. Without this, Conv2D treats <c>C</c> as the
+    /// batch axis and produces <c>[1280, NumClasses]</c> instead of
+    /// <c>[1, NumClasses]</c>, breaking
+    /// <see cref="LossFunctionBase{T}.EnsureTargetMatchesPredicted"/>.
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        TrainWithTape(input, expectedOutput, _optimizer);
+        var (processedInput, processedTarget) = EnsureBatchForCnnTraining(input, expectedOutput);
+        TrainWithTape(processedInput, processedTarget, _optimizer);
     }
 
     /// <inheritdoc />
