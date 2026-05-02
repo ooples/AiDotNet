@@ -176,6 +176,17 @@ public class DiffusionResBlock<T> : LayerBase<T>
         _lastInput = input;
         _lastForwardUsedTime = true;
 
+        // Eval-mode (no tape) can use the in-place Engine variants for the
+        // two element-wise adds in this block (broadcast-add of timeProj and
+        // residual-add). Each switched call eliminates one ~10 MB tensor
+        // allocation per ResBlock at SD shapes (320×64×64 doubles), and a
+        // CatVTON Predict has ~22 ResBlocks per UNet forward — so ~440 MB
+        // of allocation drops per Predict, cutting Gen0/Gen1 GC frequency.
+        // Tape-active mode keeps the allocating variants because the tape
+        // backward needs the pre-add tensor to recover gradients.
+        bool useInPlace = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
+                          || AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+
         // First block: GroupNorm → SiLU → Conv3x3
         var h = _norm1.Forward(input);
         _preSiLU1 = h;
@@ -213,7 +224,10 @@ public class DiffusionResBlock<T> : LayerBase<T>
             {
                 timeProj = Engine.Reshape(timeProj, new[] { timeProj.Shape[0], _outChannels, 1, 1 });
             }
-            h = Engine.TensorBroadcastAdd(h, timeProj);
+            if (useInPlace)
+                Engine.TensorBroadcastAddInPlace(h, timeProj);
+            else
+                h = Engine.TensorBroadcastAdd(h, timeProj);
         }
 
         // Skip connection
@@ -225,7 +239,19 @@ public class DiffusionResBlock<T> : LayerBase<T>
         h = ApplySiLU(h);
         h = _conv2.Forward(h);
 
-        // Add residual in-place
+        // Residual add — in place when no tape is recording, allocating
+        // otherwise (the tape backward needs the pre-add value).
+        if (useInPlace && residual._shape.Length == h._shape.Length)
+        {
+            bool sameShape = true;
+            for (int d = 0; d < h._shape.Length; d++)
+                if (h._shape[d] != residual._shape[d]) { sameShape = false; break; }
+            if (sameShape)
+            {
+                Engine.TensorAddInPlace(h, residual);
+                return h;
+            }
+        }
         h = Engine.TensorAdd(h, residual);
         return h;
     }
