@@ -2295,7 +2295,72 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
         using var _ = new NoGradScope<T>();
-        return PredictCompiled(input);
+
+        // Universal batch-dim auto-promotion (mirrors the Train path). When
+        // the caller passes an unbatched single sample whose rank exactly
+        // matches the architecture's effective unbatched rank, prepend a
+        // unit batch dim before flowing through Layers. Without this,
+        // FlattenLayer (and any other layer that treats axis 0 as batch)
+        // would interpret the channels axis of a rank-3 [C, H, W] image as
+        // 32 separate batch samples and emit [32, H*W] instead of
+        // [1, C*H*W] — collapsing the forward path to one filter's pre-
+        // softmax distribution.
+        var promoted = NormalizeInputBatchDim(input);
+
+        // Route through the eager forward instead of PredictCompiled. The
+        // compiled-plan cache in CompiledModelHost binds to the trace-time
+        // input tensor reference and replay reads stale data when called
+        // with a *different* tensor of the same shape (the canonical
+        // DifferentInputs / ScaledInput invariant failure: same shape, new
+        // values, but the cached plan returns the first call's output).
+        // PredictCompiled stays available for callers who explicitly opt in
+        // via CompileForward + identical-tensor replay; the default Predict
+        // path is eager so identical-shape-different-values calls return
+        // correct, value-dependent outputs.
+        return PredictEager(promoted);
+    }
+
+    /// <summary>
+    /// Read-only counterpart to <see cref="NormalizeBatchDim"/> for the
+    /// inference path: only the input is shape-normalized; targets aren't
+    /// involved in Predict. Returns the original tensor if the architecture
+    /// has no usable input shape or if input is already batched.
+    /// </summary>
+    private Tensor<T> NormalizeInputBatchDim(Tensor<T> input)
+    {
+        int expectedUnbatchedRank = GetExpectedUnbatchedInputRank();
+        if (expectedUnbatchedRank <= 0) return input;
+        if (input.Rank != expectedUnbatchedRank) return input;
+        return PromoteToBatchedTensor(input);
+    }
+
+    /// <summary>
+    /// Computes the effective unbatched input rank from the architecture's
+    /// input dimensions. <see cref="NeuralNetworkArchitecture{T}.GetInputShape"/>
+    /// is inconsistent across <see cref="InputType"/> variants — TwoDimensional
+    /// returns [H, W] (rank 2) but ConvNN-style consumers internally treat it
+    /// as [1, H, W] (rank 3) when InputDepth ≥ 1. This helper picks the rank
+    /// the model's first layer actually expects so auto-promote can fire on
+    /// the right unbatched signal.
+    /// </summary>
+    private int GetExpectedUnbatchedInputRank()
+    {
+        if (Architecture is null) return 0;
+        try
+        {
+            // Vision / spatial: InputHeight > 0 means [C, H, W] is the
+            // unbatched layout (rank 3). InputDepth defaults to 1 when not
+            // explicitly set on a TwoDimensional arch — paper-faithful CNN
+            // models (LeNet on MNIST, etc.) all assume a channel axis.
+            if (Architecture.InputHeight > 0 && Architecture.InputWidth > 0)
+                return 3;
+            // Sequence / feature: InputSize is the per-sample feature count;
+            // unbatched is rank 1 [F].
+            if (Architecture.InputSize > 0)
+                return 1;
+        }
+        catch { /* fall through */ }
+        return 0;
     }
 
     /// <summary>
@@ -3019,25 +3084,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     private (Tensor<T> Input, Tensor<T> Target) NormalizeBatchDim(Tensor<T> input, Tensor<T> target)
     {
-        int[]? archInputShape = null;
-        try { archInputShape = Architecture?.GetInputShape(); }
-        catch { archInputShape = null; }
+        int expectedUnbatchedRank = GetExpectedUnbatchedInputRank();
+        if (expectedUnbatchedRank <= 0) return (input, target);
 
-        if (archInputShape == null || archInputShape.Length == 0)
-            return (input, target);
-
-        // Only promote when input rank exactly matches the architecture's
-        // declared rank — this is the "unbatched single sample" signal. When
-        // input rank is one more than the architecture's, the caller already
-        // supplied a batched tensor and we must NOT promote.
-        bool inputNeedsPromote = input.Rank == archInputShape.Length;
+        // Only promote when input rank matches the unbatched rank exactly —
+        // when input rank is one more, the caller already supplied a batched
+        // tensor and we must NOT promote.
+        bool inputNeedsPromote = input.Rank == expectedUnbatchedRank;
         if (!inputNeedsPromote) return (input, target);
 
         var processedInput = PromoteToBatchedTensor(input);
 
-        // Promote target on the matching condition. Architecture doesn't
-        // expose declared output rank in a uniform way, so fall back to a
-        // rank-equality check vs the input's pre-promotion rank.
+        // Promote target on the matching condition.
         Tensor<T> processedTarget = target;
         if (target.Rank == input.Rank)
         {
