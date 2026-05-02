@@ -2164,7 +2164,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// queries on the parent network. Issue #1136 plan part 3 cleanup.
     /// Idempotent — runs at most once per network instance.
     /// </summary>
-    private void ResolveLazyLayerShapes()
+    protected void ResolveLazyLayerShapes()
     {
         if (_layerShapesResolved) return;
         if (Layers is null || Layers.Count == 0) return;
