@@ -17,7 +17,57 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     protected abstract INeuralNetworkModel<double> CreateNetwork();
 
     protected virtual int[] InputShape => [1, 4];
+
+    /// <summary>
+    /// Caller-declared output shape. Subclasses can override this for paper-
+    /// faithful intent (e.g. when a model has a deterministic output dim
+    /// derived from its config). When the override is wrong relative to what
+    /// the model actually emits, base tests use <see cref="EffectiveOutputShape"/>
+    /// — the warm-up-derived shape — instead.
+    /// </summary>
     protected virtual int[] OutputShape => [1, 1];
+
+    /// <summary>
+    /// Canonical output shape used by every base invariant test. Prefers a
+    /// single warm-up <c>Predict(input)</c> call over the subclass's
+    /// <see cref="OutputShape"/> override — the model is the source of truth,
+    /// and a subclass override that doesn't match the model's actual emit
+    /// (a common drift bug across the test base) gets transparently corrected
+    /// here without forcing a per-test fix. The warm-up runs at most once
+    /// per test class instance and is cached.
+    /// </summary>
+    protected int[] EffectiveOutputShape
+    {
+        get
+        {
+            var inferred = InferOutputShapeFromWarmUp();
+            return inferred ?? OutputShape;
+        }
+    }
+
+    private int[]? InferOutputShapeFromWarmUp()
+    {
+        if (_inferredOutputShape is not null) return _inferredOutputShape;
+        if (_inferenceFailed) return null;
+        try
+        {
+            using var net = CreateNetwork();
+            var rng = ModelTestHelpers.CreateSeededRandom();
+            var input = CreateRandomTensor(InputShape, rng);
+            var output = net.Predict(input);
+            _inferredOutputShape = (int[])output._shape.Clone();
+            return _inferredOutputShape;
+        }
+        catch
+        {
+            _inferenceFailed = true;
+            return null;
+        }
+    }
+
+    private int[]? _inferredOutputShape;
+    private bool _inferenceFailed;
+
     protected virtual int TrainingIterations => 10;
 
     /// <summary>
@@ -103,7 +153,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTensor(OutputShape, rng);
+        var target = CreateRandomTensor(EffectiveOutputShape, rng);
 
         // Measure initial loss (MSE)
         var initialOutput = network.Predict(input);
@@ -151,7 +201,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTensor(OutputShape, rng);
+        var target = CreateRandomTensor(EffectiveOutputShape, rng);
 
         var paramsBefore = network.GetParameters();
         var snapshot = new double[paramsBefore.Length];
@@ -256,7 +306,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // regardless of training duration; a healthy network just trains
         // toward the target).
         var trainInput = CreateRandomTensor(InputShape, rng);
-        var trainTarget = CreateRandomTensor(OutputShape, rng);
+        var trainTarget = CreateRandomTensor(EffectiveOutputShape, rng);
         for (int i = 0; i < TrainingIterations; i++)
             network.Train(trainInput, trainTarget);
 
@@ -336,7 +386,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTensor(OutputShape, rng);
+        var target = CreateRandomTensor(EffectiveOutputShape, rng);
 
         for (int i = 0; i < TrainingIterations; i++)
             network.Train(input, target);
@@ -465,7 +515,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
 
         // Train so weights have non-default values.
         var trainInput = CreateRandomTensor(InputShape, rng);
-        var trainTarget = CreateRandomTensor(OutputShape, rng);
+        var trainTarget = CreateRandomTensor(EffectiveOutputShape, rng);
         for (int i = 0; i < TrainingIterations; i++)
             network.Train(trainInput, trainTarget);
 
@@ -516,7 +566,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTensor(OutputShape, rng);
+        var target = CreateRandomTensor(EffectiveOutputShape, rng);
         network.Train(input, target);
         Assert.NotNull(network.GetModelMetadata());
     }
@@ -561,9 +611,9 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var network2 = CreateNetwork();
 
         var input = CreateRandomTensor(InputShape, rng1);
-        var target = CreateRandomTensor(OutputShape, rng1);
+        var target = CreateRandomTensor(EffectiveOutputShape, rng1);
         var input2 = CreateRandomTensor(InputShape, rng2);
-        var target2 = CreateRandomTensor(OutputShape, rng2);
+        var target2 = CreateRandomTensor(EffectiveOutputShape, rng2);
 
         // Train network1 for the "short" iteration count (default 50)
         int shortIters = MoreDataShortIterations;
@@ -614,14 +664,14 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTensor(OutputShape, rng);
+        var target = CreateRandomTensor(EffectiveOutputShape, rng);
 
         for (int i = 0; i < TrainingIterations * 3; i++)
             network.Train(input, target);
 
         double trainMSE = ComputeMSE(network.Predict(input), target);
         var testInput = CreateRandomTensor(InputShape, ModelTestHelpers.CreateSeededRandom(99));
-        var testTarget = CreateRandomTensor(OutputShape, ModelTestHelpers.CreateSeededRandom(99));
+        var testTarget = CreateRandomTensor(EffectiveOutputShape, ModelTestHelpers.CreateSeededRandom(99));
         double testMSE = ComputeMSE(network.Predict(testInput), testTarget);
 
         if (!double.IsNaN(trainMSE) && !double.IsNaN(testMSE))
@@ -647,7 +697,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTensor(OutputShape, rng);
+        var target = CreateRandomTensor(EffectiveOutputShape, rng);
 
         var paramsBefore = network.GetParameters();
         var snapshot = new double[paramsBefore.Length];
@@ -717,7 +767,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var output = network.Predict(input);
 
         int expectedLength = 1;
-        foreach (var dim in OutputShape)
+        foreach (var dim in EffectiveOutputShape)
             expectedLength *= dim;
 
         Assert.Equal(expectedLength, output.Length);

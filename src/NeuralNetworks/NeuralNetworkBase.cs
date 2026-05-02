@@ -2964,6 +2964,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Universal batch-dim auto-promotion. When the caller passes an
+        // unbatched single sample (matching the architecture's declared rank
+        // exactly), prepend a unit batch dim so downstream Conv/BN/Dense
+        // layers see the canonical [B, …] shape. Same logic for the target
+        // when its rank also matches an unbatched output. This removes the
+        // per-CNN-model EnsureBatchForCnnTraining boilerplate (CNN, VGG,
+        // ResNet, MobileNetV2, EfficientNet) and gives all NN models the
+        // same input-shape contract: pass either single-sample
+        // <c>[C,H,W]</c> / <c>[seq,F]</c> / <c>[F]</c> or batched
+        // <c>[B,C,H,W]</c> / <c>[B,seq,F]</c> / <c>[B,F]</c> — both work.
+        (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
+
         SetTrainingMode(true);
         try
         {
@@ -2987,6 +2999,52 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             SetTrainingMode(false);
         }
+    }
+
+    /// <summary>
+    /// Universal rank-N → rank-(N+1) batch-dim promotion. If the caller
+    /// supplied an unbatched single sample (input rank exactly equal to the
+    /// architecture's declared input rank), prepends a unit batch dim so
+    /// downstream layers see <c>[1, …]</c>. The target is promoted on the
+    /// same condition (its rank matches the unbatched output rank). When the
+    /// architecture lacks a usable shape, both tensors pass through
+    /// unchanged.
+    /// </summary>
+    /// <remarks>
+    /// Subsumes the per-CNN <c>EnsureBatchForCnnTraining</c> helper. CNN
+    /// models that already override <c>Train</c> can drop their explicit
+    /// promotion call once they delegate to <c>base.Train</c>; until then the
+    /// double-promote is suppressed because their override is what's invoked
+    /// (this base path runs only for models that don't override <c>Train</c>).
+    /// </remarks>
+    private (Tensor<T> Input, Tensor<T> Target) NormalizeBatchDim(Tensor<T> input, Tensor<T> target)
+    {
+        int[]? archInputShape = null;
+        try { archInputShape = Architecture?.GetInputShape(); }
+        catch { archInputShape = null; }
+
+        if (archInputShape == null || archInputShape.Length == 0)
+            return (input, target);
+
+        // Only promote when input rank exactly matches the architecture's
+        // declared rank — this is the "unbatched single sample" signal. When
+        // input rank is one more than the architecture's, the caller already
+        // supplied a batched tensor and we must NOT promote.
+        bool inputNeedsPromote = input.Rank == archInputShape.Length;
+        if (!inputNeedsPromote) return (input, target);
+
+        var processedInput = PromoteToBatchedTensor(input);
+
+        // Promote target on the matching condition. Architecture doesn't
+        // expose declared output rank in a uniform way, so fall back to a
+        // rank-equality check vs the input's pre-promotion rank.
+        Tensor<T> processedTarget = target;
+        if (target.Rank == input.Rank)
+        {
+            processedTarget = PromoteToBatchedTensor(target);
+        }
+
+        return (processedInput, processedTarget);
     }
 
     /// <summary>
