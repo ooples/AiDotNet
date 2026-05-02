@@ -245,7 +245,8 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // BLOCKED on ooples/AiDotNet.Tensors#286 — sparse-aware ParameterBuffer.
+        // BLOCKED on ooples/AiDotNet.Tensors#287 (filed #286, fix in PR #287)
+        // — sparse-aware ParameterBuffer + pattern-preserving SpMM autograd.
         //
         // The standard tape-based training path (TrainWithTape) requires every
         // trainable parameter to be visible to ParameterBuffer<T>, which today
