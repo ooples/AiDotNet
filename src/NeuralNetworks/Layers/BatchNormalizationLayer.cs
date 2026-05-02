@@ -382,7 +382,33 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// </summary>
     protected override void OnFirstForward(Tensor<T> input)
     {
-        int numFeatures = input.Rank >= 2 ? input.Shape[1] : input.Length;
+        // Per Ioffe & Szegedy 2015 §3 ("Batch Normalization"), BN normalizes per
+        // *channel* for image-like inputs. Channel position depends on input
+        // rank:
+        //   rank 1 [F]                — features in axis 0 (e.g., a flat vector)
+        //   rank 2 [B, F]             — features in axis 1 (the standard MLP layout)
+        //   rank 3 [C, H, W]          — channels in axis 0 (an unbatched image, no batch dim)
+        //   rank ≥ 4 [B, C, H, W, …]  — channels in axis 1 (the canonical NCHW image batch)
+        //
+        // Rank 3 is the case that surfaces during pre-resolve walks of CNN
+        // architectures (ConvolutionalLayer.GetOutputShape returns rank-3
+        // [C, H, W] without batch). Without this disambiguation, the prior
+        // line `numFeatures = input.Shape[1]` picked the H dim and sized
+        // _gamma / _beta / _runningMean / _runningVariance to H instead of C
+        // — the Forward path then OOM'd or threw a broadcast error on the
+        // first real `[B, C, H, W]` input ("scale [1, H, 1, 1] cannot be
+        // broadcast against [B, C, H, W]"). BN is only ever applied per-
+        // channel by paper-faithful CNN architectures (Conv → BN → ReLU);
+        // sequence models / transformers use LayerNorm per Ba et al. 2016,
+        // not BN, so there's no rank-3 ambiguity to mis-route here.
+        int rank = input.Shape.Length;
+        int numFeatures = rank switch
+        {
+            1 => input.Length,        // [F]
+            2 => input.Shape[1],      // [B, F]
+            3 => input.Shape[0],      // [C, H, W] — channels-first, unbatched
+            _ => input.Shape[1],      // [B, C, H, W, …] — NCHW batched
+        };
         if (numFeatures <= 0)
         {
             throw new ArgumentException(
