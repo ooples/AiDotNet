@@ -32267,12 +32267,17 @@ public static class LayerHelper<T>
         var identityActivation = new IdentityActivation<T>() as IActivationFunction<T>;
 
         // === Stacked Transformer Encoder layers ===
-        // Each layer has multi-head self-attention + feed-forward network with residual connections
+        // Each layer has multi-head self-attention + feed-forward network with residual connections.
+        // Pass embeddingSize = hiddenDimension so the encoder can declare its parameter count
+        // analytically before first forward — required by the model-family
+        // Parameters_ShouldBeNonEmpty existence check, which reads ParameterCount immediately
+        // after construction without running a forward pass.
         for (int layer = 0; layer < numTransformerLayers; layer++)
         {
             yield return new TransformerEncoderLayer<T>(
                 numHeads: numAttentionHeads,
-                feedForwardDim: intermediateDimension);
+                feedForwardDim: intermediateDimension,
+                embeddingSize: hiddenDimension);
 
             // Dropout between transformer layers for regularization
             if (dropoutRate > 0 && layer < numTransformerLayers - 1)
