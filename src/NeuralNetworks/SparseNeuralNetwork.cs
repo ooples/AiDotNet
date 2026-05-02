@@ -245,15 +245,28 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // SparseNeuralNetwork uses SparseLinearLayer whose SparseTensor weights
-        // are NOT visible to the tape's ParameterBuffer-based discovery (the
-        // flat dense buffer contract requires dense storage). TrainWithTape
-        // would therefore find zero trainable parameters from the layer chain
-        // and leave every weight unchanged. A full conversion to TrainWithTape
-        // requires teaching ParameterBuffer about SparseTensor — out of scope
-        // for this fix. We keep the manual Forward → ComputeGradients →
-        // UpdateParameters loop but address the three production-readiness
-        // issues the review flagged:
+        // BLOCKED on ooples/AiDotNet.Tensors#286 — sparse-aware ParameterBuffer.
+        //
+        // The standard tape-based training path (TrainWithTape) requires every
+        // trainable parameter to be visible to ParameterBuffer<T>, which today
+        // is dense-only. SparseLinearLayer<T> stores its weights as
+        // SparseTensor<T> (which is the whole point — O(NonZeroCount) storage
+        // instead of O(out × in)). Two interim alternatives were considered
+        // and rejected:
+        //   (A) Dense-shadow + sparsity mask: doubles memory at low sparsity,
+        //       defeats the layer's purpose at high sparsity (~100× cost at
+        //       sparsity 0.99). Not viable for the layer's actual use case.
+        //   (C) Custom SparseLinearLayer-only autograd op: works for this
+        //       layer but doesn't compose with the rest of the tape ecosystem.
+        // The production-ready fix is to extend ParameterBuffer<T> with
+        // SparseTensor support + add a tape-tracked SpMM backward in the
+        // Tensors repo (matches PyTorch's torch.sparse first-class autograd
+        // model). Filed as a Tensors-side PR; this layer's TrainWithTape
+        // conversion follows once the new package version is wired here.
+        //
+        // For now we keep the manual Forward → ComputeGradients →
+        // UpdateParameters loop, but the three production-readiness issues
+        // the review flagged ARE addressed regardless of the tape conversion:
         //   1. Validate prediction/target shape compatibility before indexing
         //      gradient buffers (was an unguarded indexer access).
         //   2. Throw on layers that aren't SparseLinearLayer<T> instead of
