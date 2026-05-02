@@ -1689,20 +1689,19 @@ public static class DeserializationHelper
     /// </remarks>
     private static object CreateLSTMLayer<T>(Type type, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams)
     {
-        // LSTMLayer(int inputSize, int hiddenSize, int[] inputShape, IActivationFunction<T>? activation = null, IActivationFunction<T>? recurrentActivation = null, IEngine? engine = null)
-        int inputSize = inputShape.Length >= 2 ? inputShape[^1] : inputShape[0];
+        // LSTMLayer(int hiddenSize, IActivationFunction<T>? activation = null, IActivationFunction<T>? recurrentActivation = null)
+        // Lazy layer — _inputSize is resolved from input shape on first forward.
         int hiddenSize = outputShape.Length >= 2 ? outputShape[^1] : outputShape[0];
 
         var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-        var engineType = typeof(IEngine);
-        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int[]), activationFuncType, activationFuncType, engineType });
+        var ctor = type.GetConstructor(new Type[] { typeof(int), activationFuncType, activationFuncType });
         if (ctor is null)
         {
-            throw new InvalidOperationException("Cannot find LSTMLayer constructor with (int, int, int[], IActivationFunction<T>, IActivationFunction<T>, IEngine).");
+            throw new InvalidOperationException("Cannot find LSTMLayer constructor with (int, IActivationFunction<T>, IActivationFunction<T>).");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke(new object?[] { inputSize, hiddenSize, inputShape, activation, null, null });
+        return ctor.Invoke(new object?[] { hiddenSize, activation, null });
     }
 
     private static bool TryParseLayerTypeIdentifier(

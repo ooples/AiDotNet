@@ -290,6 +290,89 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Computes gradients with respect to weights, biases, and input.
+    /// Stores _weightsGradient (dense matrix) and _biasesGradient internally;
+    /// returns dL/dx for upstream propagation. SparseNeuralNetwork drives this
+    /// directly because the tape can't see SparseTensor weights — see
+    /// <see cref="SparseNeuralNetwork{T}.Train"/> for the integration.
+    /// </summary>
+    public Tensor<T> ComputeGradients(Tensor<T> outputGradient)
+    {
+        if (_lastInput is null || _lastOutput is null)
+            throw new InvalidOperationException("Forward pass must run before ComputeGradients.");
+
+        var preActGradient = ComputeActivationDerivative(_lastOutput, outputGradient);
+
+        bool wasSingleSample = _lastInput.Rank == 1;
+        int batchSize = wasSingleSample ? 1 : _lastInput.Shape[0];
+
+        _weightsGradient = new Matrix<T>(OutputFeatures, InputFeatures);
+        _biasesGradient = new Vector<T>(OutputFeatures);
+
+        // Read both gradient and input via index helpers so we don't have to
+        // materialise reshaped views — single-sample tensors are rank-1
+        // [features], batched are rank-2 [batch, features].
+        T GetGrad(int b, int o) => wasSingleSample ? preActGradient[o] : preActGradient[b, o];
+        T GetInput(int b, int i) => wasSingleSample ? _lastInput[i] : _lastInput[b, i];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int o = 0; o < OutputFeatures; o++)
+            {
+                T g = GetGrad(b, o);
+                _biasesGradient[o] = _numOps.Add(_biasesGradient[o], g);
+                for (int i = 0; i < InputFeatures; i++)
+                {
+                    _weightsGradient[o, i] = _numOps.Add(
+                        _weightsGradient[o, i],
+                        _numOps.Multiply(g, GetInput(b, i)));
+                }
+            }
+        }
+
+        var inputGradient = new Tensor<T>(_lastInput._shape);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int nz = 0; nz < _weights.NonZeroCount; nz++)
+            {
+                int o = _weights.RowIndices[nz];
+                int i = _weights.ColumnIndices[nz];
+                T contribution = _numOps.Multiply(GetGrad(b, o), _weights.Values[nz]);
+                if (wasSingleSample)
+                    inputGradient[i] = _numOps.Add(inputGradient[i], contribution);
+                else
+                    inputGradient[b, i] = _numOps.Add(inputGradient[b, i], contribution);
+            }
+        }
+
+        return inputGradient;
+    }
+
+    private Tensor<T> ComputeActivationDerivative(Tensor<T> output, Tensor<T> upstream)
+    {
+        // Identity activation: dy/d(pre) = 1, gradient passes through unchanged.
+        if (ScalarActivation is null && VectorActivation is null)
+            return upstream;
+
+        var derivative = new Tensor<T>(output._shape);
+        if (ScalarActivation is not null)
+        {
+            for (int i = 0; i < output.Length; i++)
+                derivative[i] = ScalarActivation.Derivative(output[i]);
+        }
+        else
+        {
+            for (int i = 0; i < output.Length; i++)
+                derivative[i] = _numOps.One;
+        }
+
+        var result = new Tensor<T>(output._shape);
+        for (int i = 0; i < output.Length; i++)
+            result[i] = _numOps.Multiply(upstream[i], derivative[i]);
+        return result;
+    }
+
+    /// <summary>
     /// Updates the layer's parameters using the calculated gradients.
     /// Maintains sparsity pattern during updates.
     /// </summary>
