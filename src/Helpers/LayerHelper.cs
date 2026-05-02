@@ -23241,6 +23241,9 @@ public static class LayerHelper<T>
         int patchSize = 14,
         int inputChannels = 3)
     {
+        if (inputChannels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputChannels), "inputChannels must be positive.");
+
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int visionFfnDim = visionDim * 4;
@@ -23258,7 +23261,10 @@ public static class LayerHelper<T>
         // into BSC token format. Without it the downstream
         // MultiHeadAttentionLayer reads spatial dims as feature dim and the
         // weight shape mismatch is unrecoverable.
-        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim);
+        // Pass expectedInputChannels so a non-RGB caller (grayscale, 4-channel
+        // RGBA, depth-augmented inputs) gets a clear "wrong channel count"
+        // error on first forward instead of a wrong-shape downstream tensor.
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim, expectedInputChannels: inputChannels);
 
         // === Vision Encoder (CLIP ViT) ===
         yield return new LayerNormalizationLayer<T>();

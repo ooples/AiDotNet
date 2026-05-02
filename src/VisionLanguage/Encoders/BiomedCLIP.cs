@@ -175,6 +175,14 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
             l.SetParameters(parameters.Slice(idx, c));
             idx += c;
         }
+        // Verify every parameter element was consumed so trailing values
+        // (serialization version drift, mis-saved vectors) fail loudly
+        // instead of silently being ignored.
+        if (idx != parameters.Length)
+            throw new ArgumentException(
+                $"Parameter length mismatch in {nameof(SetParameters)}: consumed {idx}, " +
+                $"got {parameters.Length}. Check for serialization version drift.",
+                nameof(parameters));
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -192,6 +200,11 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
             }
         }
         foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        if (idx != parameters.Length)
+            throw new ArgumentException(
+                $"Parameter length mismatch in {nameof(UpdateParameters)}: consumed {idx}, " +
+                $"got {parameters.Length}. Check for serialization version drift.",
+                nameof(parameters));
     }
 
     /// <summary>

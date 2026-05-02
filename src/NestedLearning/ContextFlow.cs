@@ -63,8 +63,14 @@ public class ContextFlow<T> : NestedLearningBase<T>, IContextFlow<T>
 
     public Vector<T> PropagateContext(Vector<T> input, int currentLevel)
     {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
         if (currentLevel < 0 || currentLevel >= _numLevels)
             throw new ArgumentException($"Invalid level: {currentLevel}");
+        if (input.Length != _contextDimension)
+            throw new ArgumentException(
+                $"Expected input length {_contextDimension}, got {input.Length}.",
+                nameof(input));
 
         // Transform input through level-specific transformation. Hand-rolled
         // matrix-vector product (instead of Matrix<T>.Multiply) so the

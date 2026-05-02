@@ -272,8 +272,13 @@ public static class DeserializationHelper
 
             int patchEmbedDim = outputShape[1];
             int numPatches = outputShape[0];
-            int imageHeight = inputShape.Length > 1 ? inputShape[1] : 0;
-            int imageWidth = inputShape.Length > 2 ? inputShape[2] : 0;
+            // Use the trailing two axes as H/W so both CHW (rank 3) and NCHW
+            // (rank 4) deserialize correctly. Hard-coding inputShape[1]/[2]
+            // mapped to (C,H) for NCHW input and back-derived patchSize from
+            // the wrong axes — broken weight reattachment for any saved
+            // model whose recorded inputShape was rank-4.
+            int imageHeight = inputShape.Length >= 2 ? inputShape[inputShape.Length - 2] : 0;
+            int imageWidth = inputShape.Length >= 1 ? inputShape[inputShape.Length - 1] : 0;
 
             int patchSize;
             int? metadataPatchSize = TryGetInt(additionalParams, "PatchSize");
@@ -317,7 +322,32 @@ public static class DeserializationHelper
             args[0] = patchSize;
             args[1] = patchEmbedDim;
             for (int i = 2; i < ctorParams.Length; i++)
-                args[i] = null;
+            {
+                // Use the constructor's declared default value when available;
+                // for trailing parameters without a default, fall back to null
+                // for reference-type / Nullable<T> parameters and throw for
+                // non-nullable value types (the previous blanket null would
+                // fail at reflection invoke time for non-nullable value
+                // types like int / double / structs).
+                if (ctorParams[i].HasDefaultValue)
+                {
+                    args[i] = ctorParams[i].DefaultValue;
+                }
+                else if (!ctorParams[i].ParameterType.IsValueType ||
+                         Nullable.GetUnderlyingType(ctorParams[i].ParameterType) is not null)
+                {
+                    args[i] = null;
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"PatchEmbeddingLayer constructor parameter '{ctorParams[i].Name}' " +
+                        $"(type {ctorParams[i].ParameterType.Name}) has no default value and " +
+                        "is a non-nullable value type. Cannot deserialize without the explicit " +
+                        "value — re-save the model on a build that emits this parameter via " +
+                        "GetMetadata.");
+                }
+            }
             instance = ctor.Invoke(args);
         }
         else if (genericDef == typeof(PositionalEncodingLayer<>))
@@ -408,7 +438,16 @@ public static class DeserializationHelper
                 int[] resolvedShape = embeddingSize > 0
                     ? inputShape.Select(d => d > 0 ? d : 1).ToArray()
                     : (numHeads > 0 ? new[] { 1, numHeads * 64 } : new[] { 1, 64 });
-                if (resolvedShape[^1] <= 0) resolvedShape[^1] = embeddingSize > 0 ? embeddingSize : 64;
+                // Always pin the trailing axis to the embeddingSize the
+                // saved-shape declared. The previous form only corrected
+                // resolvedShape[^1] when it was <= 0 — a positive-but-stale
+                // last dim (e.g. saved shape carries a placeholder 1) would
+                // resolve the layer to the wrong embedding width and throw at
+                // SetParameters or load weights into a wrong-shape kernel.
+                if (embeddingSize > 0)
+                    resolvedShape[^1] = embeddingSize;
+                else if (resolvedShape[^1] <= 0)
+                    resolvedShape[^1] = numHeads > 0 ? numHeads * 64 : 64;
                 layerBase.ResolveFromShape(resolvedShape);
             }
         }

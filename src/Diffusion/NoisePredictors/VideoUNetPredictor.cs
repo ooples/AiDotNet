@@ -365,7 +365,33 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             TimeCondProjection = CreateTimeCondProjection(inChannels)
         });
 
-        // Build decoder (reverse of encoder)
+        // Build decoder (reverse of encoder).
+        //
+        // Per-level skip semantics: the encoder pushes ONE skip per level
+        // boundary (saved before each downsample). The decoder consumes
+        // exactly one skip per upsample boundary, applied to the FIRST
+        // ResBlock at each level except the deepest. Construction must
+        // reflect this contract — every other block receives only the prior
+        // block's output without skip augmentation.
+        //
+        // Channel-count math:
+        //   - Block 0 at level L (when L is not the deepest level):
+        //       upsample output: prior level's outChannels = multipliers[L+1] of
+        //         the level we just left (since decoder iterates max-1 → 0,
+        //         the "prior level" is the deeper one we just finished).
+        //       skip from encoder level L: multipliers[L].
+        //       Total input to ResBlock = multipliers[L+1] + multipliers[L].
+        //   - Block 0 at the deepest level (L == max-1, no upsample feeding
+        //     it, no skip): receives middle-block output directly.
+        //   - All non-zero blocks: receive prior block's output (outChannels
+        //     of the same level), no skip concat.
+        //
+        // The previous construction used `multipliers[level + 1]` as
+        // skipChannels (wrong — that's the deeper level, not the current
+        // level's encoder skip). It also used `outChannels` as skipChannels
+        // for non-zero blocks, doubling their input channel count. Both bugs
+        // produce SpatialResBlock weights at the wrong shape and the runtime
+        // forward pass would either throw or silently mis-compute features.
         for (int level = _channelMultipliers.Length - 1; level >= 0; level--)
         {
             var outChannels = _baseChannels * _channelMultipliers[level];
@@ -373,13 +399,28 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
             for (int block = 0; block <= _numResBlocks; block++)
             {
-                var skipChannels = block == 0 && level < _channelMultipliers.Length - 1
-                    ? _baseChannels * _channelMultipliers[level + 1]
-                    : outChannels;
+                int actualInChannels;
+                if (block == 0 && level < _channelMultipliers.Length - 1)
+                {
+                    // First block of a non-deepest level: receives upsample
+                    // output (inChannels at this point = previous level's
+                    // outChannels) concatenated with encoder skip from THIS
+                    // level (multipliers[level] × baseChannels).
+                    int skipChannels = _baseChannels * _channelMultipliers[level];
+                    actualInChannels = inChannels + skipChannels;
+                }
+                else
+                {
+                    // Either (a) first block of the deepest decoder level
+                    //   — no skip, no upsample, just middle-block output, or
+                    // (b) any non-first block — no skip, just prior block's
+                    //   output.
+                    actualInChannels = inChannels;
+                }
 
                 _decoderBlocks.Add(new VideoBlock
                 {
-                    SpatialResBlock = CreateSpatialResBlock(inChannels + skipChannels, outChannels),
+                    SpatialResBlock = CreateSpatialResBlock(actualInChannels, outChannels),
                     TemporalResBlock = CreateTemporalMixingBlock(),
                     SpatialAttention = useAttention ? CreateSpatialAttention(outChannels, level) : null,
                     TemporalAttention = useAttention ? CreateTemporalAttention(outChannels) : null,
@@ -389,7 +430,8 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
                 inChannels = outChannels;
             }
 
-            // Add upsampling except for first level
+            // Add upsampling except for the shallowest level (level 0 has no
+            // further level to ascend to).
             if (level > 0)
             {
                 _decoderBlocks.Add(new VideoBlock

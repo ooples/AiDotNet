@@ -105,14 +105,22 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     private readonly int _numPatches;
 
     /// <summary>
-    /// The classification token embedding.
+    /// The classification token embedding (rank-1 [hiddenDim] tensor).
+    /// Stored as Tensor&lt;T&gt; (not Vector&lt;T&gt;) so the tape-tracked
+    /// training forward can pass this field directly into Engine ops and
+    /// have gradients flow back to it. Wrapping it as a fresh constant
+    /// Tensor (the prior approach) severed the gradient chain and silently
+    /// froze the cls token even though the public parameter surface still
+    /// counted it as trainable.
     /// </summary>
-    private Vector<T> _clsToken;
+    private Tensor<T> _clsToken;
 
     /// <summary>
-    /// The positional embeddings for all patches plus the classification token.
+    /// The positional embeddings (rank-2 [_numPatches+1, hiddenDim] tensor).
+    /// Stored as Tensor&lt;T&gt; for the same gradient-flow reason as
+    /// <see cref="_clsToken"/>.
     /// </summary>
-    private Matrix<T> _positionalEmbeddings;
+    private Tensor<T> _positionalEmbeddings;
 
     /// <summary>
     /// The final classification head (MLP).
@@ -228,8 +236,8 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
 
         _numPatches = (imageHeight / patchSize) * (imageWidth / patchSize);
 
-        _clsToken = new Vector<T>(hiddenDim);
-        _positionalEmbeddings = new Matrix<T>(_numPatches + 1, hiddenDim);
+        _clsToken = new Tensor<T>(new[] { hiddenDim });
+        _positionalEmbeddings = new Tensor<T>(new[] { _numPatches + 1, hiddenDim });
 
         InitializeLayers();
     }
@@ -277,9 +285,9 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     private void InitializePositionalEmbeddings()
     {
         T scale = NumOps.Sqrt(NumOps.FromDouble(1.0 / _hiddenDim));
-        for (int i = 0; i < _positionalEmbeddings.Rows; i++)
+        for (int i = 0; i < _positionalEmbeddings.Shape[0]; i++)
         {
-            for (int j = 0; j < _positionalEmbeddings.Columns; j++)
+            for (int j = 0; j < _positionalEmbeddings.Shape[1]; j++)
             {
                 _positionalEmbeddings[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
             }
@@ -488,24 +496,27 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         // 1. Patch embedding (Layers[0]) — tape-tracked through layer.Forward.
         var patchEmbeddings = Layers[0].Forward(input4D); // [B, N, D]
 
-        // 2. Build cls token tensor as [B, 1, D] by broadcasting the learned
-        //    Vector<T> _clsToken across the batch.
-        var clsTensor = new Tensor<T>([batchSize, 1, _hiddenDim]);
-        for (int b = 0; b < batchSize; b++)
-            for (int d = 0; d < _hiddenDim; d++)
-                clsTensor[b, 0, d] = _clsToken[d];
+        // 2. Reshape the parameter cls token [D] into a [1, 1, D] tensor and
+        //    broadcast-add it across batch via Engine.TensorBroadcastTo. We
+        //    must NOT copy _clsToken into a fresh constant Tensor — that
+        //    severs the gradient chain and silently freezes the cls token
+        //    parameter. Reshape is a tape-tracked view op that keeps the
+        //    backward path connected to _clsToken.
+        var clsExpanded = Engine.Reshape(_clsToken, new[] { 1, 1, _hiddenDim });
+        var clsTensor = Engine.TensorBroadcastTo(clsExpanded, new[] { batchSize, 1, _hiddenDim });
 
         // 3. Concat cls token + patch embeddings along sequence axis (axis=1)
         //    → [B, N+1, D]. TensorConcatenate is tape-tracked so gradients flow
-        //    back into the patch embedding side.
+        //    back into the patch embedding AND _clsToken sides.
         var sequence = Engine.TensorConcatenate(new[] { clsTensor, patchEmbeddings }, axis: 1);
 
-        // 4. Add positional embeddings. Wrap _positionalEmbeddings as a
-        //    [1, N+1, D] tensor for broadcast-add across the batch.
-        var posEmbedding = new Tensor<T>([1, _numPatches + 1, _hiddenDim]);
-        for (int p = 0; p < _numPatches + 1; p++)
-            for (int d = 0; d < _hiddenDim; d++)
-                posEmbedding[0, p, d] = _positionalEmbeddings[p, d];
+        // 4. Add positional embeddings. Reshape the parameter
+        //    _positionalEmbeddings [N+1, D] into a [1, N+1, D] tensor for
+        //    broadcast-add across the batch. Same gradient-flow rationale
+        //    as the cls token above — must reference the field tensor
+        //    directly via tape-tracked Reshape, not copy into a fresh
+        //    constant.
+        var posEmbedding = Engine.Reshape(_positionalEmbeddings, new[] { 1, _numPatches + 1, _hiddenDim });
         var withPos = Engine.TensorBroadcastAdd(sequence, posEmbedding);
 
         // 5. Transformer encoder stack (Layers[1..count-2]) — each block is
@@ -557,9 +568,9 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
             _clsToken[i] = parameters[currentIndex++];
         }
 
-        for (int i = 0; i < _positionalEmbeddings.Rows; i++)
+        for (int i = 0; i < _positionalEmbeddings.Shape[0]; i++)
         {
-            for (int j = 0; j < _positionalEmbeddings.Columns; j++)
+            for (int j = 0; j < _positionalEmbeddings.Shape[1]; j++)
             {
                 _positionalEmbeddings[i, j] = parameters[currentIndex++];
             }
@@ -636,9 +647,9 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
             writer.Write(Convert.ToDouble(_clsToken[i]));
         }
 
-        for (int i = 0; i < _positionalEmbeddings.Rows; i++)
+        for (int i = 0; i < _positionalEmbeddings.Shape[0]; i++)
         {
-            for (int j = 0; j < _positionalEmbeddings.Columns; j++)
+            for (int j = 0; j < _positionalEmbeddings.Shape[1]; j++)
             {
                 writer.Write(Convert.ToDouble(_positionalEmbeddings[i, j]));
             }
@@ -682,9 +693,9 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
             _clsToken[i] = NumOps.FromDouble(reader.ReadDouble());
         }
 
-        for (int i = 0; i < _positionalEmbeddings.Rows; i++)
+        for (int i = 0; i < _positionalEmbeddings.Shape[0]; i++)
         {
-            for (int j = 0; j < _positionalEmbeddings.Columns; j++)
+            for (int j = 0; j < _positionalEmbeddings.Shape[1]; j++)
             {
                 _positionalEmbeddings[i, j] = NumOps.FromDouble(reader.ReadDouble());
             }
@@ -815,9 +826,9 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         }
 
         // Pack positional embeddings (row-major)
-        for (int i = 0; i < _positionalEmbeddings.Rows; i++)
+        for (int i = 0; i < _positionalEmbeddings.Shape[0]; i++)
         {
-            for (int j = 0; j < _positionalEmbeddings.Columns; j++)
+            for (int j = 0; j < _positionalEmbeddings.Shape[1]; j++)
             {
                 parameters[currentIndex++] = _positionalEmbeddings[i, j];
             }
@@ -844,7 +855,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         get
         {
             int count = _clsToken.Length;
-            count += _positionalEmbeddings.Rows * _positionalEmbeddings.Columns;
+            count += _positionalEmbeddings.Shape[0] * _positionalEmbeddings.Shape[1];
             count += Layers.Sum(layer => layer.ParameterCount);
             return count;
         }

@@ -2767,7 +2767,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// trainable tensors are registered.
     /// </para>
     /// </remarks>
-    public virtual void ConfigureWeightLifetime(
+    internal virtual void ConfigureWeightLifetime(
         GpuOffloadOptions options,
         IGpuOffloadAllocator? allocator = null)
     {
@@ -2807,7 +2807,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// alone runs before any forward and can therefore only see the
     /// already-allocated subset.
     /// </remarks>
-    public void RefreshWeightRegistry()
+    internal void RefreshWeightRegistry()
     {
         if (!_weightLifetimeConfigured) return;
         RegisterTrainableTensorsWithWeightRegistry();

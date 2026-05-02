@@ -296,10 +296,23 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     /// directly because the tape can't see SparseTensor weights — see
     /// <see cref="SparseNeuralNetwork{T}.Train"/> for the integration.
     /// </summary>
-    public Tensor<T> ComputeGradients(Tensor<T> outputGradient)
+    internal Tensor<T> ComputeGradients(Tensor<T> outputGradient)
     {
         if (_lastInput is null || _lastOutput is null)
             throw new InvalidOperationException("Forward pass must run before ComputeGradients.");
+
+        // Validate outputGradient shape so a mismatched gradient doesn't
+        // silently propagate wrong values via the rank-vs-batch helper
+        // closures below. Rank can legitimately differ when _lastInput was
+        // single-sample (rank-1) — accept either matching rank or the
+        // [features] / [batch, features] equivalence.
+        if (!ShapeMatchesLastOutput(outputGradient))
+        {
+            throw new ArgumentException(
+                $"Output gradient shape [{string.Join(", ", outputGradient.Shape)}] does not match " +
+                $"last output shape [{string.Join(", ", _lastOutput.Shape)}].",
+                nameof(outputGradient));
+        }
 
         var preActGradient = ComputeActivationDerivative(_lastOutput, outputGradient);
 
@@ -524,5 +537,23 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     private Matrix<T> TransposeMatrix(Matrix<T> matrix)
     {
         return matrix.Transpose();
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="grad"/> shape is consistent with
+    /// the last forward's output. _lastOutput can be rank-1 [features] for
+    /// single-sample input or rank-2 [batch, features] for batched input;
+    /// either case must match against the incoming gradient's actual shape.
+    /// </summary>
+    private bool ShapeMatchesLastOutput(Tensor<T> grad)
+    {
+        if (_lastOutput is null) return false;
+        if (grad.Rank != _lastOutput.Rank) return false;
+        if (grad.Length != _lastOutput.Length) return false;
+        for (int i = 0; i < grad.Rank; i++)
+        {
+            if (grad.Shape[i] != _lastOutput.Shape[i]) return false;
+        }
+        return true;
     }
 }

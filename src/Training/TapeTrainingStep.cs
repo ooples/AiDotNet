@@ -28,7 +28,19 @@ namespace AiDotNet.Training;
 /// </remarks>
 public static class TapeTrainingStep<T>
 {
-    // Level 1 cache: flattened parameter array from recursive walk
+    // Level 1 cache: flattened parameter array from recursive walk.
+    //
+    // Cache validity is keyed on a TOPOLOGY FINGERPRINT instead of just
+    // (firstLayer, count, version). The previous tuple key collided when
+    // two distinct graphs shared the same first top-level layer instance
+    // and the same count — e.g. CycleGAN's 2 generators + 2 discriminators
+    // that all start with a Conv2D and have similar layer counts. A cache
+    // hit on a wrong-graph entry could return stale tensors that ZeroGrad
+    // / optimizer updates would then operate on, silently corrupting
+    // training. The fingerprint is a deterministic FNV-1a hash over each
+    // layer's runtime type + ParameterCount, walked top-level only (the
+    // recursive walk happens on miss). One-time cost: ~O(layers); collision
+    // probability over a 64-bit FNV is negligible for any realistic graph.
     [ThreadStatic]
     private static List<Tensor<T>>? _cachedParameters;
     [ThreadStatic]
@@ -37,6 +49,8 @@ public static class TapeTrainingStep<T>
     private static int _cachedLayerCount;
     [ThreadStatic]
     private static ILayer<T>? _cachedFirstLayer;
+    [ThreadStatic]
+    private static ulong _cachedTopologyFingerprint;
 
     // Level 2 cache: trainable layer references for ZeroGrad
     [ThreadStatic]
@@ -47,6 +61,55 @@ public static class TapeTrainingStep<T>
     private static int _cachedTrainableLayerCount;
     [ThreadStatic]
     private static ILayer<T>? _cachedTrainableFirstLayer;
+    [ThreadStatic]
+    private static ulong _cachedTrainableTopologyFingerprint;
+
+    /// <summary>
+    /// Computes a topology fingerprint over the layer list using FNV-1a 64-bit.
+    /// Two distinct graphs with the same first layer and same count will have
+    /// different fingerprints whenever any layer's runtime type or
+    /// ParameterCount differs at any position — which catches the
+    /// collision case the prior (firstLayer, count) key missed.
+    /// </summary>
+    private static ulong ComputeTopologyFingerprint(IList<ILayer<T>> layers)
+    {
+        const ulong FnvOffsetBasis = 14695981039346656037UL;
+        const ulong FnvPrime = 1099511628211UL;
+        ulong hash = FnvOffsetBasis;
+        for (int i = 0; i < layers.Count; i++)
+        {
+            var layer = layers[i];
+            if (layer is null)
+            {
+                hash ^= 0xDEADBEEFUL;
+                hash *= FnvPrime;
+                continue;
+            }
+            // Hash the runtime type + parameter count + index. Type captures
+            // the layer kind; ParameterCount captures shape variation within
+            // a kind (e.g. Dense(64) vs Dense(128) at the same index); index
+            // ensures order matters.
+            hash ^= (ulong)i;
+            hash *= FnvPrime;
+            hash ^= (ulong)layer.GetType().GetHashCode();
+            hash *= FnvPrime;
+            try
+            {
+                hash ^= (ulong)layer.ParameterCount;
+                hash *= FnvPrime;
+            }
+            catch
+            {
+                // Some lazy layers may throw on ParameterCount before shape
+                // resolution (e.g. when InputShape is unresolved). Treat
+                // that as a stable contributing value so the cache still
+                // distinguishes them.
+                hash ^= 0xC0FFEEUL;
+                hash *= FnvPrime;
+            }
+        }
+        return hash;
+    }
 
     /// <summary>
     /// Executes a single training step using tape-based autodiff.
@@ -114,15 +177,19 @@ public static class TapeTrainingStep<T>
     {
         var layerList = layers as IList<ILayer<T>> ?? layers.ToList();
         ILayer<T>? firstLayer = layerList.Count > 0 ? layerList[0] : null;
+        ulong fingerprint = ComputeTopologyFingerprint(layerList);
 
-        // Level 1 cache hit: same version + same layer count + same first-layer
-        // identity = same network (the version+count alone are not unique across
-        // sibling networks like CycleGAN's 2 generators + 2 discriminators that
-        // can share both values).
+        // Cache hit ALSO requires topology fingerprint match. Without this,
+        // two sibling networks (e.g. CycleGAN's two generators) that happen
+        // to share the same first-layer instance and layer count would
+        // alias to the same cache entry — ZeroGrad / optimizer.step would
+        // then operate on the wrong network's parameter list. Fingerprint
+        // catches the collision class.
         if (_cachedParameters is not null
             && _cachedVersion == structureVersion
             && _cachedLayerCount == layerList.Count
             && ReferenceEquals(_cachedFirstLayer, firstLayer)
+            && _cachedTopologyFingerprint == fingerprint
             && structureVersion >= 0)
         {
             return _cachedParameters;
@@ -139,6 +206,7 @@ public static class TapeTrainingStep<T>
         _cachedVersion = structureVersion;
         _cachedLayerCount = layerList.Count;
         _cachedFirstLayer = firstLayer;
+        _cachedTopologyFingerprint = fingerprint;
 
         return _cachedParameters;
     }
@@ -183,11 +251,15 @@ public static class TapeTrainingStep<T>
     {
         var layerList = layers as IList<ILayer<T>> ?? layers.ToList();
         ILayer<T>? firstLayer = layerList.Count > 0 ? layerList[0] : null;
+        ulong fingerprint = ComputeTopologyFingerprint(layerList);
 
+        // Same topology-fingerprint guard as CollectParameters: prevents
+        // sibling-network cache collisions on (firstLayer, count) alone.
         if (_cachedTrainableLayers is not null
             && _cachedTrainableVersion == structureVersion
             && _cachedTrainableLayerCount == layerList.Count
             && ReferenceEquals(_cachedTrainableFirstLayer, firstLayer)
+            && _cachedTrainableTopologyFingerprint == fingerprint
             && structureVersion >= 0)
         {
             return _cachedTrainableLayers;
@@ -202,6 +274,7 @@ public static class TapeTrainingStep<T>
         _cachedTrainableVersion = structureVersion;
         _cachedTrainableLayerCount = layerList.Count;
         _cachedTrainableFirstLayer = firstLayer;
+        _cachedTrainableTopologyFingerprint = fingerprint;
         return result;
     }
 

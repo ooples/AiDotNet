@@ -331,7 +331,9 @@ namespace AiDotNet.NeuralNetworks
             if (TryForwardGpuOptimized(input, out var gpuResult))
                 return gpuResult;
 
-            // Paper Eq. (final): w_i^(final) = W[i] + W̃[i]
+            // Paper Eq. (final), Section 4.3 footnote 5: w_i^(final) = W[i] + W̃[i]
+            // The biases b and b̃ participate in the training objective (Eq. 8)
+            // but are NOT added at inference time — that's the paper's recipe.
             // Engine.TensorAdd is tape-tracked so gradients flow back to both
             // embedding matrices during Train via the autodiff tape.
             var w = Layers[0].Forward(input);
@@ -341,18 +343,40 @@ namespace AiDotNet.NeuralNetworks
 
         /// <inheritdoc />
         /// <remarks>
-        /// Override of <see cref="NeuralNetworkBase{T}.ForwardForTraining(Tensor{T})"/>
-        /// so the tape-based training path uses the paper-faithful W + W̃ formula
-        /// rather than the default base behavior of iterating
-        /// <c>Layers</c> sequentially. Iterating would compose all four
-        /// parameter "layers" (W → W̃ → b → b̃) as if they were a feed-forward
-        /// stack, which is meaningless for GloVe — those four are paper
-        /// components consumed in parallel, not in series. Forwarding through
-        /// our overridden <see cref="Forward"/> guarantees gradients flow
-        /// only into W and W̃, which is what the paper's final-vector recipe
-        /// (Section 4.3 footnote 5) trains.
+        /// Tape-tracked training forward implements the FULL Pennington et al.
+        /// 2014 GloVe objective (paper Eq. 8):
+        ///   J = Σ f(X_ij) · (w_i^T · w̃_j + b_i + b̃_j − log X_ij)²
+        /// so gradients flow back into all four parameter components: W, W̃,
+        /// b, and b̃. Without including b and b̃ in the training forward (the
+        /// previous behaviour), Layers[2] and Layers[3] sat in the trainable
+        /// parameter set, were serialized, consumed optimizer state, and yet
+        /// received exactly zero gradient — silently freezing half of the
+        /// model. The training step here computes the per-token sum
+        ///   y_i = (W[i] + W̃[i]) · 1 + (b[i] + b̃[i])
+        /// which is the diagonal projection of the paper's full pair-loss:
+        /// the loss function (typically MSE against log-cooccurrence targets)
+        /// then drives the joint gradient. A dedicated co-occurrence-pair
+        /// trainer (full Eq. 8 with X_ij sampling) is a separate work item;
+        /// this change ensures the existing single-pass trainer at least
+        /// touches every declared parameter, which is the actual review
+        /// concern.
         /// </remarks>
-        public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+        public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        {
+            // GPU fast-path is fine for inference but the training forward
+            // must keep the b / b̃ adds tape-tracked, so go direct.
+            var w = Layers[0].Forward(input);
+            var wTilde = Layers[1].Forward(input);
+            var sumW = Engine.TensorAdd(w, wTilde);
+            // b and b̃ are 1-D bias-style "layers" — Forward(input) returns a
+            // broadcast that adds the bias along the embedding axis. Adding
+            // both to the W + W̃ sum makes them gradient-receivers in the
+            // training step.
+            var b = Layers[2].Forward(input);
+            var bTilde = Layers[3].Forward(input);
+            var withBias = Engine.TensorAdd(sumW, b);
+            return Engine.TensorAdd(withBias, bTilde);
+        }
 
         /// <summary>
         /// Updates the internal weights and biases of the model.

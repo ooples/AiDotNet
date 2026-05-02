@@ -188,6 +188,9 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     private void ValidateInputShape(Tensor<T> input, string operationName)
     {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
         var expectedShape = Architecture.GetInputShape();
         if (input.Rank == expectedShape.Length + 1)
         {

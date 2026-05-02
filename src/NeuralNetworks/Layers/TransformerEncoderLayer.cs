@@ -341,6 +341,11 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         get
         {
+            // Eager-dim ctor materializes sublayers at construction so this
+            // path always sees real counts. Lazy ctor (embeddingSize == -1)
+            // returns 0 until the first forward triggers EnsureInitialized
+            // — that's the historical contract for layers whose dimensions
+            // aren't known until input flows.
             if (_isInitialized)
             {
                 return _selfAttention.ParameterCount +
@@ -349,34 +354,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                        _feedForward2.ParameterCount +
                        _norm2.ParameterCount;
             }
-
-            // Pre-forward declarative path: when _embeddingSize is known
-            // (eager constructor), compute the parameter count analytically
-            // from constructor args so existence-check tests
-            // (Parameters_ShouldBeNonEmpty) and weight-registry walks see a
-            // non-zero count without forcing the sublayers to materialize.
-            //
-            // Per-block sublayer counts (matching the EnsureInitialized
-            // construction below):
-            //   MHA self-attention: 4 * d * d + d  (4 dim×dim projections + output bias)
-            //   LayerNorm × 2:      2 * (2 * d)    (gamma + beta per LN)
-            //   FeedForward d→ffd:  d * ffd + ffd  (weights + bias)
-            //   FeedForward ffd→d:  ffd * d + d    (weights + bias)
-            //
-            // When _embeddingSize is -1 (lazy ctor, dim not yet known from
-            // input shape), there is no way to declare an accurate count;
-            // returning 0 there is the safe and historically-compatible
-            // option. Use the eager constructor with embeddingSize to opt
-            // into the non-zero declarative path.
-            if (_embeddingSize <= 0) return 0;
-            long d = _embeddingSize;
-            long ffd = _feedForwardDim;
-            long mha = 4 * d * d + d;
-            long norms = 2 * (2 * d);
-            long ff1 = d * ffd + ffd;
-            long ff2 = ffd * d + d;
-            long total = mha + norms + ff1 + ff2;
-            return total > int.MaxValue ? int.MaxValue : (int)total;
+            return 0;
         }
     }
 
@@ -455,6 +433,18 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastAuxiliaryLoss = NumOps.Zero;
 
         _isInitialized = false;
+
+        // Eager-dim ctor (embeddingSize > 0): construct sublayers immediately
+        // so the GetParameters().Length == ParameterCount contract holds the
+        // moment the layer is constructed — matching PyTorch's
+        // nn.TransformerEncoderLayer / nn.MultiheadAttention which allocate
+        // at __init__. The lazy ctor (embeddingSize == -1) keeps the deferred
+        // path for callers that genuinely don't know the embedding width
+        // until the first forward.
+        if (_embeddingSize > 0)
+        {
+            EnsureInitialized();
+        }
     }
 
     /// <summary>
