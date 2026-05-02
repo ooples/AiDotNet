@@ -373,6 +373,31 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
         // LAPACK's "tiny rotation" guard against numerical drift.
 
         int n = matrix.Rows;
+
+        // Symmetry precondition: cyclic Jacobi assumes a symmetric input
+        // (the in-place rotation mirrors A[p,q] into A[q,p] without
+        // separately validating they were equal to start with). For a
+        // non-symmetric matrix the routine silently solves a different
+        // problem. Surface this as ArgumentException at the API
+        // boundary so callers get an actionable failure instead of
+        // wrong eigenpairs. Tolerance scaled by ‖A‖_∞ so the check
+        // works regardless of the matrix's overall magnitude.
+        T symmetryTol = NumOps.FromDouble(1e-10);
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = i + 1; j < matrix.Columns; j++)
+            {
+                T diff = NumOps.Abs(NumOps.Subtract(matrix[i, j], matrix[j, i]));
+                if (NumOps.GreaterThan(diff, symmetryTol))
+                {
+                    throw new ArgumentException(
+                        "Jacobi eigen decomposition requires a symmetric matrix; " +
+                        $"|A[{i},{j}] - A[{j},{i}]| = {diff} exceeds tolerance {symmetryTol}.",
+                        nameof(matrix));
+                }
+            }
+        }
+
         Matrix<T> A = matrix.Clone();
         Matrix<T> V = Matrix<T>.CreateIdentity(n);
         if (n <= 1)
@@ -398,24 +423,40 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
         // double precision. (LAPACK DSYEVJ caps at 30; we use 50 for safety
         // headroom on extreme inputs.)
         const int maxSweeps = 50;
+        bool converged = false;
 
         for (int sweep = 0; sweep < maxSweeps; sweep++)
         {
-            // Off-diagonal mass for the threshold trick (and the convergence
-            // check at the end of each sweep).
+            // Off-diagonal mass for the threshold trick AND the convergence
+            // check. Track BOTH the linear (sum of |apq| over p<q) and
+            // squared (sum of apq² over all i≠j) forms — the linear sum
+            // drives the LAPACK-style early-sweep threshold heuristic
+            // (compare per-element |apq| against threshold = 0.2 * sumOff /
+            // n²), the squared form drives the Frobenius-norm convergence
+            // check. The previous code mixed the two by scaling
+            // offDiagSumSq linearly which gave a threshold whose
+            // dimensionality didn't match either |apq| or |apq|² — the
+            // wrong set of pairs got rotated.
             T offDiagSumSq = SumSquaredOffDiagonal(A);
             if (NumOps.LessThan(offDiagSumSq, convergenceThresholdSq))
             {
+                converged = true;
                 break;
             }
+            T offDiagAbsSum = SumAbsUpperOffDiagonal(A);
 
-            // Threshold for the first three sweeps: 0.2 * sumOff / n^2.
-            // After that, threshold = 0 (rotate every above-eps pair).
+            // LAPACK DSYEVJ-style early-sweep threshold: rotate only pairs
+            // whose magnitude exceeds 0.2 * sumOff / n² during the first
+            // three sweeps (saves rotations on entries that haven't built
+            // up enough relative magnitude yet). Threshold and comparand
+            // are both LINEAR (|apq| vs threshold) — consistent units.
+            // After sweep 3 the threshold drops to zero (rotate every
+            // pair above the absolute tiny floor).
             T threshold;
             if (sweep < 3)
             {
                 T scale = NumOps.FromDouble(0.2 / ((double)n * n));
-                threshold = NumOps.Multiply(scale, offDiagSumSq);
+                threshold = NumOps.Multiply(scale, offDiagAbsSum);
             }
             else
             {
@@ -427,7 +468,7 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
                 for (int q = p + 1; q < n; q++)
                 {
                     T apq = A[p, q];
-                    T absApqSq = NumOps.Multiply(apq, apq);
+                    T absApq = NumOps.Abs(apq);
 
                     // After sweep 4, zero out entries that are negligible
                     // relative to the diagonals — saves a rotation that
@@ -436,7 +477,7 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
                     {
                         T diagScale = NumOps.Add(NumOps.Abs(A[p, p]), NumOps.Abs(A[q, q]));
                         T tinyAllowed = NumOps.Multiply(NumOps.FromDouble(100), NumOps.Multiply(machineEps, diagScale));
-                        if (NumOps.LessThan(NumOps.Abs(apq), tinyAllowed))
+                        if (NumOps.LessThan(absApq, tinyAllowed))
                         {
                             A[p, q] = zero;
                             A[q, p] = zero;
@@ -445,11 +486,12 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
                     }
 
                     // Skip below-threshold entries during the early sweeps.
-                    if (sweep < 3 && NumOps.LessThan(absApqSq, threshold))
+                    // Linear |apq| against linear threshold — units match.
+                    if (sweep < 3 && NumOps.LessThan(absApq, threshold))
                     {
                         continue;
                     }
-                    if (NumOps.LessThan(NumOps.Abs(apq), tiny))
+                    if (NumOps.LessThan(absApq, tiny))
                     {
                         continue;
                     }
@@ -517,6 +559,25 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
             }
         }
 
+        // Convergence guarantee: if the loop exhausts maxSweeps without
+        // hitting the convergence threshold, surface that as
+        // InvalidOperationException so the caller doesn't silently consume
+        // potentially-wrong eigenpairs. Matches LAPACK's
+        // 'INFO > 0 means did not converge' contract.
+        if (!converged)
+        {
+            T finalOffDiag = SumSquaredOffDiagonal(A);
+            if (NumOps.GreaterThanOrEquals(finalOffDiag, convergenceThresholdSq))
+            {
+                throw new InvalidOperationException(
+                    $"Jacobi eigen decomposition did not converge within {maxSweeps} sweeps. " +
+                    $"Final off-diagonal mass {finalOffDiag} >= convergence threshold " +
+                    $"{convergenceThresholdSq}. The input matrix may be too ill-conditioned " +
+                    "for the cyclic Jacobi algorithm; consider PowerIteration with deflation " +
+                    "or a Schur-based eigensolver.");
+            }
+        }
+
         Vector<T> eigenValues = MatrixHelper<T>.ExtractDiagonal(A);
         return (eigenValues, V);
     }
@@ -548,6 +609,26 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
             {
                 if (i == j) continue;
                 sum = NumOps.Add(sum, NumOps.Multiply(m[i, j], m[i, j]));
+            }
+        }
+        return sum;
+    }
+
+    /// <summary>
+    /// Sum of <c>|a[i,j]|</c> over the strict upper triangle (i &lt; j).
+    /// Drives the LAPACK-style early-sweep threshold in cyclic Jacobi:
+    /// rotate only pairs whose magnitude exceeds <c>0.2 * sumAbs / n²</c>.
+    /// Linear (not squared) so the threshold and per-element comparand
+    /// have matching units.
+    /// </summary>
+    private T SumAbsUpperOffDiagonal(Matrix<T> m)
+    {
+        T sum = NumOps.Zero;
+        for (int i = 0; i < m.Rows - 1; i++)
+        {
+            for (int j = i + 1; j < m.Columns; j++)
+            {
+                sum = NumOps.Add(sum, NumOps.Abs(m[i, j]));
             }
         }
         return sum;

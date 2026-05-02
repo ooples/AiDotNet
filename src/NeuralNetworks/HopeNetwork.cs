@@ -729,6 +729,14 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
     {
+        // Deep-copy options so the clone and source don't share mutable
+        // configuration state. MemberwiseClone is sufficient for the
+        // current HopeNetworkOptions (no reference-typed fields), but
+        // any future option fields of reference type would need
+        // explicit deep copies in a HopeNetworkOptions.Clone override
+        // following the same pattern.
+        var optionsCopy = (HopeNetworkOptions)_options.MemberwiseCloneOptions();
+
         var newHope = new HopeNetwork<T>(
             architecture: Architecture,
             optimizer: null,
@@ -737,7 +745,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             numCMSLevels: _numCMSLevels,
             numRecurrentLayers: _numRecurrentLayers,
             inContextLearningLevels: _inContextLearningLevels,
-            options: _options);
+            options: optionsCopy);
 
         // Copy trainable parameters across all layers.
         var allParams = GetParameters();

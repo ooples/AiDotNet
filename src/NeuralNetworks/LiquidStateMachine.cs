@@ -745,6 +745,10 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
             throw new ArgumentException("Input and expected output sequences must have the same length");
         }
 
+        // Empty sequence: nothing to train, and we must NOT enable
+        // training mode because the loop won't run to disable it again.
+        if (timeSeriesInput.Count == 0) return;
+
         // Reset state ONCE before the sequence; thereafter call TrainCore
         // with resetStateBeforeTrain=false so the reservoir's recurrent state
         // carries across timesteps. The previous form delegated to public
@@ -753,15 +757,22 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         // whole point of LSM time-series training.
         ResetState();
         SetTrainingMode(true);
-
-        // Process each time step
-        for (int i = 0; i < timeSeriesInput.Count; i++)
+        try
         {
-            // Preserve reservoir state across timesteps to maintain temporal
-            // dynamics. The reset that already ran above gave us the known
-            // zero initial state for the sequence's first step.
-            TrainCore(timeSeriesInput[i], timeSeriesExpectedOutput[i],
-                resetStateBeforeTrain: false);
+            for (int i = 0; i < timeSeriesInput.Count; i++)
+            {
+                // Preserve reservoir state across timesteps to maintain temporal
+                // dynamics. The reset that already ran above gave us the known
+                // zero initial state for the sequence's first step.
+                TrainCore(timeSeriesInput[i], timeSeriesExpectedOutput[i],
+                    resetStateBeforeTrain: false);
+            }
+        }
+        finally
+        {
+            // try/finally so a TrainCore throw mid-sequence doesn't leave
+            // the model stuck in training mode.
+            SetTrainingMode(false);
         }
     }
 

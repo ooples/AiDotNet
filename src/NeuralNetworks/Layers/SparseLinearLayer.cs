@@ -541,19 +541,42 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
 
     /// <summary>
     /// Returns true when <paramref name="grad"/> shape is consistent with
-    /// the last forward's output. _lastOutput can be rank-1 [features] for
-    /// single-sample input or rank-2 [batch, features] for batched input;
-    /// either case must match against the incoming gradient's actual shape.
+    /// the last forward's output. <c>_lastOutput</c> can be rank-1
+    /// <c>[features]</c> for single-sample input or rank-2
+    /// <c>[batch, features]</c> for batched input. The check accepts BOTH
+    /// the strict same-rank match AND the rank-1 ↔ rank-2 single-sample
+    /// equivalence: rank-1 <c>[features]</c> matches rank-2
+    /// <c>[1, features]</c> with the same feature count, since both
+    /// represent the same single-sample output and the per-element
+    /// gradient indexing in the manual backprop path treats them the
+    /// same way.
     /// </summary>
     private bool ShapeMatchesLastOutput(Tensor<T> grad)
     {
         if (_lastOutput is null) return false;
-        if (grad.Rank != _lastOutput.Rank) return false;
         if (grad.Length != _lastOutput.Length) return false;
-        for (int i = 0; i < grad.Rank; i++)
+
+        if (grad.Rank == _lastOutput.Rank)
         {
-            if (grad.Shape[i] != _lastOutput.Shape[i]) return false;
+            for (int i = 0; i < grad.Rank; i++)
+            {
+                if (grad.Shape[i] != _lastOutput.Shape[i]) return false;
+            }
+            return true;
         }
-        return true;
+
+        // Cross-rank single-sample equivalence: rank-1 [features] vs
+        // rank-2 [1, features]. Either side may carry the singleton.
+        // Reject anything else (e.g. rank-3 vs rank-1) — that's a real
+        // mismatch the manual backprop path can't handle.
+        if (grad.Rank == 1 && _lastOutput.Rank == 2 && _lastOutput.Shape[0] == 1)
+        {
+            return grad.Shape[0] == _lastOutput.Shape[1];
+        }
+        if (grad.Rank == 2 && _lastOutput.Rank == 1 && grad.Shape[0] == 1)
+        {
+            return grad.Shape[1] == _lastOutput.Shape[0];
+        }
+        return false;
     }
 }

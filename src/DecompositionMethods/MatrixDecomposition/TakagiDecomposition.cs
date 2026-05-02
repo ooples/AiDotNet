@@ -143,6 +143,26 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
         // use the matching sign convention.
 
         int n = matrix.Rows;
+
+        // Symmetry precondition: same as EigenDecomposition Jacobi —
+        // the in-place rotation mirrors A[p,q] into A[q,p] without
+        // separately validating they were equal to start with.
+        T symmetryTol = NumOps.FromDouble(1e-10);
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = i + 1; j < matrix.Columns; j++)
+            {
+                T diff = NumOps.Abs(NumOps.Subtract(matrix[i, j], matrix[j, i]));
+                if (NumOps.GreaterThan(diff, symmetryTol))
+                {
+                    throw new ArgumentException(
+                        "Takagi Jacobi decomposition requires a symmetric matrix; " +
+                        $"|A[{i},{j}] - A[{j},{i}]| = {diff} exceeds tolerance {symmetryTol}.",
+                        nameof(matrix));
+                }
+            }
+        }
+
         var S = new Matrix<T>(n, n);
         var V = Matrix<T>.CreateIdentityMatrix(n);
         var A = matrix.Clone();
@@ -160,20 +180,25 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
         T convergenceThresholdSq = NumOps.GreaterThan(frobTolSq, frobFloorSq) ? frobTolSq : frobFloorSq;
 
         const int maxSweeps = 50;
+        bool converged = false;
 
         for (int sweep = 0; sweep < maxSweeps; sweep++)
         {
             T offDiagSumSq = SumSquaredOffDiagonal(A);
             if (NumOps.LessThan(offDiagSumSq, convergenceThresholdSq))
             {
+                converged = true;
                 break;
             }
+            // Linear off-diag norm for the LAPACK-style early-sweep
+            // threshold (units must match per-element |apq| comparand).
+            T offDiagAbsSum = SumAbsUpperOffDiagonal(A);
 
             T threshold;
             if (sweep < 3)
             {
                 T scale = NumOps.FromDouble(0.2 / ((double)n * n));
-                threshold = NumOps.Multiply(scale, offDiagSumSq);
+                threshold = NumOps.Multiply(scale, offDiagAbsSum);
             }
             else
             {
@@ -185,13 +210,13 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
                 for (int q = p + 1; q < n; q++)
                 {
                     T apq = A[p, q];
-                    T absApqSq = NumOps.Multiply(apq, apq);
+                    T absApq = NumOps.Abs(apq);
 
                     if (sweep > 3)
                     {
                         T diagScale = NumOps.Add(NumOps.Abs(A[p, p]), NumOps.Abs(A[q, q]));
                         T tinyAllowed = NumOps.Multiply(NumOps.FromDouble(100), NumOps.Multiply(machineEps, diagScale));
-                        if (NumOps.LessThan(NumOps.Abs(apq), tinyAllowed))
+                        if (NumOps.LessThan(absApq, tinyAllowed))
                         {
                             A[p, q] = zero;
                             A[q, p] = zero;
@@ -199,11 +224,11 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
                         }
                     }
 
-                    if (sweep < 3 && NumOps.LessThan(absApqSq, threshold))
+                    if (sweep < 3 && NumOps.LessThan(absApq, threshold))
                     {
                         continue;
                     }
-                    if (NumOps.LessThan(NumOps.Abs(apq), tiny))
+                    if (NumOps.LessThan(absApq, tiny))
                     {
                         continue;
                     }
@@ -269,6 +294,22 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
                         V[i, q] = NumOps.Subtract(NumOps.Multiply(c, viq), NumOps.Multiply(s, vip));
                     }
                 }
+            }
+        }
+
+        // Convergence guarantee: surface non-convergence as
+        // InvalidOperationException so callers don't silently consume a
+        // potentially-wrong decomposition.
+        if (!converged)
+        {
+            T finalOffDiag = SumSquaredOffDiagonal(A);
+            if (NumOps.GreaterThanOrEquals(finalOffDiag, convergenceThresholdSq))
+            {
+                throw new InvalidOperationException(
+                    $"Takagi Jacobi decomposition did not converge within {maxSweeps} sweeps. " +
+                    $"Final off-diagonal mass {finalOffDiag} >= convergence threshold " +
+                    $"{convergenceThresholdSq}. Consider TakagiAlgorithmType.QR or " +
+                    "TakagiAlgorithmType.PowerIteration for ill-conditioned inputs.");
             }
         }
 
@@ -760,6 +801,26 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
             {
                 if (i == j) continue;
                 sum = NumOps.Add(sum, NumOps.Multiply(m[i, j], m[i, j]));
+            }
+        }
+        return sum;
+    }
+
+    /// <summary>
+    /// Sum of <c>|a[i,j]|</c> over the strict upper triangle (i &lt; j).
+    /// Drives the LAPACK-style early-sweep threshold heuristic in cyclic
+    /// Jacobi: rotate only pairs whose magnitude exceeds
+    /// <c>0.2 * sumAbs / n²</c>. Linear (not squared) so the threshold and
+    /// per-element comparand have matching units.
+    /// </summary>
+    private T SumAbsUpperOffDiagonal(Matrix<T> m)
+    {
+        T sum = NumOps.Zero;
+        for (int i = 0; i < m.Rows - 1; i++)
+        {
+            for (int j = i + 1; j < m.Columns; j++)
+            {
+                sum = NumOps.Add(sum, NumOps.Abs(m[i, j]));
             }
         }
         return sum;

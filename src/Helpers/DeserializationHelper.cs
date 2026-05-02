@@ -309,10 +309,28 @@ public static class DeserializationHelper
                     "positive height/width when constructing the layer manually.");
             }
 
-            var ctor = type.GetConstructors()
-                .FirstOrDefault(c => c.GetParameters().Length >= 2 &&
+            // Prefer the LEGACY 2+activation+init ctor over any newer
+            // overload that adds non-nullable trailing parameters. Older
+            // saved models don't carry metadata for new args, and falling
+            // through to a wider overload would either need that metadata
+            // or trip the "no default for non-nullable value type" guard.
+            // The legacy ctor signature is (int patchSize, int embeddingDim,
+            // IActivationFunction<T>?, IInitializationStrategy<T>?) — both
+            // trailing args are nullable reference types.
+            var allCtors = type.GetConstructors()
+                .Where(c => c.GetParameters().Length >= 2 &&
                     c.GetParameters()[0].ParameterType == typeof(int) &&
-                    c.GetParameters()[1].ParameterType == typeof(int));
+                    c.GetParameters()[1].ParameterType == typeof(int))
+                .ToArray();
+            var ctor = allCtors
+                // Score 0 = ideal: only nullable trailing params. Score 1 =
+                // has trailing value-type params (newer eager-channel ctor).
+                .OrderBy(c => c.GetParameters()
+                    .Skip(2)
+                    .Any(p => p.ParameterType.IsValueType
+                              && Nullable.GetUnderlyingType(p.ParameterType) is null) ? 1 : 0)
+                .ThenBy(c => c.GetParameters().Length)  // prefer fewer args
+                .FirstOrDefault();
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find PatchEmbeddingLayer constructor.");
@@ -323,15 +341,25 @@ public static class DeserializationHelper
             args[1] = patchEmbedDim;
             for (int i = 2; i < ctorParams.Length; i++)
             {
-                // Use the constructor's declared default value when available;
-                // for trailing parameters without a default, fall back to null
-                // for reference-type / Nullable<T> parameters and throw for
-                // non-nullable value types (the previous blanket null would
-                // fail at reflection invoke time for non-nullable value
-                // types like int / double / structs).
-                if (ctorParams[i].HasDefaultValue)
+                // Use the constructor's declared default value when
+                // available, normalising sentinel values that
+                // ParameterInfo can return:
+                //   - Type.Missing  → ctor.Invoke fails when this is
+                //                     forwarded as-is for value types.
+                //   - DBNull.Value  → same problem.
+                // Both indicate "no real default" and should be treated
+                // like the no-default case below. For reference-type /
+                // Nullable<T> params we fall back to null; for non-
+                // nullable value types we throw because there's no safe
+                // value to invent.
+                object? defaultValue = ctorParams[i].HasDefaultValue
+                    ? ctorParams[i].DefaultValue
+                    : null;
+                bool isSentinel = ReferenceEquals(defaultValue, Type.Missing)
+                                  || defaultValue is DBNull;
+                if (ctorParams[i].HasDefaultValue && !isSentinel)
                 {
-                    args[i] = ctorParams[i].DefaultValue;
+                    args[i] = defaultValue;
                 }
                 else if (!ctorParams[i].ParameterType.IsValueType ||
                          Nullable.GetUnderlyingType(ctorParams[i].ParameterType) is not null)

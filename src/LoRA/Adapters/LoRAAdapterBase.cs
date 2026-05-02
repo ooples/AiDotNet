@@ -231,7 +231,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// This method lets each adapter type create the right kind of LoRA layer.
     /// </para>
     /// </remarks>
-    private static int InferInputSizeFromWeights(IReadOnlyList<Tensor<T>> weights)
+    private static int InferInputSizeFromWeights(ILayer<T>? baseLayer, IReadOnlyList<Tensor<T>> weights)
     {
         if (weights.Count == 0) return -1;
 
@@ -263,11 +263,23 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
 
         if (matrix.Shape.Length == 2)
         {
-            // DenseLayer convention: weights are allocated as [inputSize, outputSize]
-            // (see DenseLayer's TensorAllocator.Rent<T>([inputSize, outputSize])).
-            // The fan-in axis is therefore Shape[0], NOT Shape[1] — returning
-            // Shape[1] would yield the output size and produce wrong adapter
-            // dimensions on every Dense layer once lazily resolved.
+            // FullyConnectedLayer<T> uses output-major storage:
+            // weights are allocated as [outputSize, inputSize] (see this
+            // class's MergeWeights / Forward paths at L504+ which assume
+            // that layout). For an FCL, the fan-in axis is Shape[1].
+            //
+            // DenseLayer<T> uses the inverse convention:
+            // weights are allocated as [inputSize, outputSize]
+            // (DenseLayer's TensorAllocator.Rent<T>([inputSize, outputSize])).
+            // For Dense, the fan-in axis is Shape[0].
+            //
+            // Without distinguishing, an FCL wrapped via lazy LoRA would
+            // produce LoRA tensors with swapped dimensions and crash on
+            // first forward.
+            if (baseLayer is FullyConnectedLayer<T>)
+            {
+                return matrix.Shape[1] > 0 ? matrix.Shape[1] : -1;
+            }
             return matrix.Shape[0] > 0 ? matrix.Shape[0] : -1;
         }
         // Conv weight convention (rank ≥ 3): [outC, inC, ...spatial] ⇒ axis 1 is
@@ -289,7 +301,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
 
         if (baseLayer is LayerBase<T> layerBase)
         {
-            int inferred = InferInputSizeFromWeights(layerBase.GetTrainableParameters());
+            int inferred = InferInputSizeFromWeights(baseLayer, layerBase.GetTrainableParameters());
             if (inferred > 0) return (new[] { inferred }, true);
         }
 
@@ -312,7 +324,9 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         int outputSize = GetOutputShape()[0];
         if (inputSize <= 0 && _baseLayer is LayerBase<T> layerBase)
         {
-            int inferred = InferInputSizeFromWeights(layerBase.GetTrainableParameters());
+            // Pass _baseLayer so InferInputSizeFromWeights can pick the
+            // right axis for output-major layers like FullyConnectedLayer.
+            int inferred = InferInputSizeFromWeights(_baseLayer, layerBase.GetTrainableParameters());
             if (inferred > 0) inputSize = inferred;
         }
         if (inputSize <= 0) inputSize = outputSize * 2;

@@ -85,25 +85,45 @@ public static class TapeTrainingStep<T>
                 hash *= FnvPrime;
                 continue;
             }
-            // Hash the runtime type + parameter count + index. Type captures
-            // the layer kind; ParameterCount captures shape variation within
-            // a kind (e.g. Dense(64) vs Dense(128) at the same index); index
-            // ensures order matters.
+            // Hash the runtime type + parameter count + index. Type
+            // captured by AssemblyQualifiedName.GetHashCode() — that's
+            // a stable string-derived hash. The bare GetType().GetHashCode()
+            // path is NOT specified to be deterministic across runtime
+            // versions or even processes, so two CycleGAN-shaped graphs
+            // could collide here despite genuinely different layer
+            // identities. Hashing the qualified name is what the
+            // 'deterministic' contract in the cache docs actually requires.
             hash ^= (ulong)i;
             hash *= FnvPrime;
-            hash ^= (ulong)layer.GetType().GetHashCode();
+            string typeName = layer.GetType().AssemblyQualifiedName ?? layer.GetType().FullName ?? "?";
+            hash ^= (ulong)typeName.GetHashCode(StringComparison.Ordinal);
             hash *= FnvPrime;
             try
             {
                 hash ^= (ulong)layer.ParameterCount;
                 hash *= FnvPrime;
             }
-            catch
+            catch (InvalidOperationException)
             {
-                // Some lazy layers may throw on ParameterCount before shape
-                // resolution (e.g. when InputShape is unresolved). Treat
-                // that as a stable contributing value so the cache still
-                // distinguishes them.
+                // Lazy layer with unresolved shape — ParameterCount may
+                // throw because it indexes into an unresolved InputShape.
+                // Treat as a stable contributing value so the cache still
+                // distinguishes pre/post-resolution.
+                hash ^= 0xC0FFEEUL;
+                hash *= FnvPrime;
+            }
+            catch (ArgumentException)
+            {
+                // Same as above: rank-mismatched shape access during a
+                // pre-resolution ParameterCount read.
+                hash ^= 0xC0FFEEUL;
+                hash *= FnvPrime;
+            }
+            catch (IndexOutOfRangeException)
+            {
+                // Direct shape array access on an empty / sentinel-valued
+                // InputShape. Same handling as the others — keep it
+                // narrow so unexpected exceptions still surface.
                 hash ^= 0xC0FFEEUL;
                 hash *= FnvPrime;
             }
