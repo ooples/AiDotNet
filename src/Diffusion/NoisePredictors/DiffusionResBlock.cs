@@ -57,6 +57,21 @@ public class DiffusionResBlock<T> : LayerBase<T>
     private bool _lastForwardUsedTime; // whether last forward was time-conditioned
     private int[]? _originalInputShape;
 
+    // Pre-allocated reusable buffers for the eval-mode fused fast path. The
+    // unfused two-step (Forward GroupNorm → ApplySiLU) allocates two ~10 MB
+    // tensors per ResBlock at SD 320×64×64 shapes; pooling these eliminates
+    // ~40 MB of per-ResBlock allocation churn (≈22 ResBlocks per UNet
+    // forward → ~880 MB removed from each Predict's GC pressure).
+    private Tensor<T>? _preAllocatedNorm1Out;
+    private Tensor<T>? _preAllocatedNorm2Out;
+
+    private static bool ShapeEquals(int[] a, int[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
+        return true;
+    }
+
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
@@ -187,11 +202,39 @@ public class DiffusionResBlock<T> : LayerBase<T>
         bool useInPlace = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
                           || AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
 
-        // First block: GroupNorm → SiLU → Conv3x3
-        var h = _norm1.Forward(input);
-        _preSiLU1 = h;
-        h = ApplySiLU(h);
-        h = _conv1.Forward(h);
+        Tensor<T> h;
+        if (useInPlace && input.Rank == 4)
+        {
+            // Fused fast path: GroupNorm + SiLU + Conv3x3 with the
+            // GroupNorm+SiLU result going straight into a pooled buffer.
+            // This replaces the 2-step (norm.Forward → ApplySiLU) which
+            // allocated 2 fresh ~10 MB tensors at SD shapes (320×64×64
+            // doubles). Lazy-allocate the buffer at the input shape —
+            // GroupNorm preserves NCHW dims so the SD UNet ResBlock's
+            // first-norm output is always input-shaped.
+            if (_preAllocatedNorm1Out is null
+                || !ShapeEquals(_preAllocatedNorm1Out._shape, input._shape))
+            {
+                _preAllocatedNorm1Out = new Tensor<T>(input._shape);
+            }
+            h = _preAllocatedNorm1Out;
+            Engine.GroupNormSwishInto(
+                h, input,
+                _norm1.NumGroups, _norm1.GetGammaTensor(), _norm1.GetBetaTensor(),
+                Convert.ToDouble(_norm1.GetEpsilon(), System.Globalization.CultureInfo.InvariantCulture));
+            // _preSiLU1 is only consumed by Backward; eval-mode skips it.
+            _preSiLU1 = null;
+            h = _conv1.Forward(h);
+        }
+        else
+        {
+            // Tape-active path: keep the allocating Forward chain so
+            // backward can recover the pre-SiLU tensor.
+            h = _norm1.Forward(input);
+            _preSiLU1 = h;
+            h = ApplySiLU(h);
+            h = _conv1.Forward(h);
+        }
 
         // Time conditioning: project time embed and add to feature maps.
         // Every op must go through Engine so the gradient tape records the
@@ -230,14 +273,37 @@ public class DiffusionResBlock<T> : LayerBase<T>
                 h = Engine.TensorBroadcastAdd(h, timeProj);
         }
 
-        // Skip connection
+        // Skip connection. Identity case (no skipConv) is alloc-free; the
+        // 1×1 conv case pools its own output via
+        // ConvolutionalLayer._preAllocatedOutput so no extra work needed.
         var residual = _skipConv is not null ? _skipConv.Forward(input) : input;
 
-        // Second block: GroupNorm → SiLU → Conv3x3
-        h = _norm2.Forward(h);
-        _preSiLU2 = h;
-        h = ApplySiLU(h);
-        h = _conv2.Forward(h);
+        // Second block: GroupNorm → SiLU → Conv3x3 — eval-mode uses the
+        // same fused-into-pooled-buffer fast path as norm1, sized to the
+        // post-conv1 tensor.
+        if (useInPlace && h.Rank == 4)
+        {
+            if (_preAllocatedNorm2Out is null
+                || !ShapeEquals(_preAllocatedNorm2Out._shape, h._shape))
+            {
+                _preAllocatedNorm2Out = new Tensor<T>(h._shape);
+            }
+            var n2 = _preAllocatedNorm2Out;
+            Engine.GroupNormSwishInto(
+                n2, h,
+                _norm2.NumGroups, _norm2.GetGammaTensor(), _norm2.GetBetaTensor(),
+                Convert.ToDouble(_norm2.GetEpsilon(), System.Globalization.CultureInfo.InvariantCulture));
+            _preSiLU2 = null;
+            h = n2;
+            h = _conv2.Forward(h);
+        }
+        else
+        {
+            h = _norm2.Forward(h);
+            _preSiLU2 = h;
+            h = ApplySiLU(h);
+            h = _conv2.Forward(h);
+        }
 
         // Residual add — in place when no tape is recording, allocating
         // otherwise (the tape backward needs the pre-add value).
