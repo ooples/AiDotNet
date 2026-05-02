@@ -87,16 +87,25 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
+        ThrowIfDisposed();
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        // Tokenize NCHW image inputs the same way Predict does so the
-        // tape-based training loop sees the patch-embedded BSC sequence
-        // the encoder layer stack actually expects. Without this, callers
-        // (and the model-family invariant tests) that pass an NCHW image
-        // would either crash on the first encoder layer's shape check or
-        // train against zero gradients flowing through a wrong-shape path.
-        TrainWithTape(TokenizeIfNCHW(input), expected);
-        SetTrainingMode(false);
+        try
+        {
+            // Tokenize NCHW image inputs the same way Predict does so the
+            // tape-based training loop sees the patch-embedded BSC sequence
+            // the encoder layer stack actually expects. Without this, callers
+            // (and the model-family invariant tests) that pass an NCHW image
+            // would either crash on the first encoder layer's shape check or
+            // train against zero gradients flowing through a wrong-shape path.
+            TrainWithTape(TokenizeIfNCHW(input), expected);
+        }
+        finally
+        {
+            // try/finally so a TrainWithTape throw doesn't leave the model
+            // stuck in training mode.
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

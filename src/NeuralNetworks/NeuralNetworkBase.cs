@@ -3135,29 +3135,36 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // propagate gradients through to its source — the same problem
             // that the initial-forward fix at line ~3060 was added to avoid,
             // surfaced again here when the optimizer re-evaluated the loss.
-            Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> tgt)
+            // Re-evaluation alignment: the optimizer hands us (input, target)
+            // pairs from its TapeStepContext. The forward path returns the
+            // tape-tracked prediction unchanged; alignment between prediction
+            // shape and target shape happens in the loss callback where the
+            // target is actually consumed. Reshaping `tgt` inside
+            // ComputeForward and returning only `fwd` (the previous behaviour)
+            // dropped the reshape on the floor — the loss callback received
+            // the closure-captured `expected` instead of the locally-aligned
+            // `tgt`. Moving alignment into the loss callback is what the
+            // reviewer suggested and it also keeps the gradient chain intact
+            // (we reshape the leaf target, never the tape-tracked prediction).
+            Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> tgt) => ForwardForTraining(inp);
+
+            Tensor<T> ComputeLossAligned(Tensor<T> pred, Tensor<T> tgt)
             {
-                var fwd = ForwardForTraining(inp);
-                if (fwd.Rank > tgt.Rank && fwd.Shape[0] == 1 && fwd.Length == tgt.Length)
+                if (pred.Rank > tgt.Rank && pred.Shape[0] == 1 && pred.Length == tgt.Length)
                 {
-                    // Caller constructs a fresh re-evaluation context per call
-                    // and discards `tgt` after, so the leaf-side reshape is
-                    // safe — it doesn't clobber the original target tensor
-                    // the trainer holds.
-                    tgt = Engine.Reshape(tgt, fwd._shape);
+                    tgt = Engine.Reshape(tgt, pred._shape);
                 }
-                else if (tgt.Rank > fwd.Rank && tgt.Shape[0] == 1 && tgt.Length == fwd.Length)
+                else if (tgt.Rank > pred.Rank && tgt.Shape[0] == 1 && tgt.Length == pred.Length)
                 {
-                    tgt = Engine.Reshape(tgt, fwd._shape);
+                    tgt = Engine.Reshape(tgt, pred._shape);
                 }
-                _ = tgt; // suppress unused warning — the loss callback below sees the aligned tgt
-                return fwd;
+                return loss.ComputeTapeLoss(pred, tgt);
             }
 
             var context = new TapeStepContext<T>(
                 trainableParams, grads, lossValue,
                 input, expected, ComputeForward,
-                (pred, tgt) => loss.ComputeTapeLoss(pred, tgt),
+                ComputeLossAligned,
                 paramBuffer);
 
             opt.Step(context);

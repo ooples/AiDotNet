@@ -149,7 +149,6 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
 
         T zero = NumOps.Zero;
         T one = NumOps.One;
-        T half = NumOps.FromDouble(0.5);
         T two = NumOps.FromDouble(2);
         T tiny = NumOps.FromDouble(1e-30);
         T machineEps = NumOps.FromDouble(1e-15);

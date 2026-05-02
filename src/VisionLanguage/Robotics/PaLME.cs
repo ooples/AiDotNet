@@ -87,7 +87,7 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         InitializeLayers();
 
         // Stream / offload PaLM-E's 562B weights — at double precision the
-        // chain otherwise OOMs at ~140 GB resident. Per PaLMEOptions.WeightOffloadOptions
+        // chain otherwise OOMs at ~4.5 TB resident. Per PaLMEOptions.WeightOffloadOptions
         // contract: non-null is honoured as-is; null skips ConfigureWeightLifetime
         // entirely. Callers running the model at full size should supply a
         // streaming-offload instance via PaLMEOptions.WeightOffloadOptions or

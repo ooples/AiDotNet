@@ -64,12 +64,13 @@ public class PaLMEOptions : VisionLanguageActionOptions
 
     /// <summary>
     /// Optional weight-lifetime / GPU-offload configuration applied during
-    /// native-mode construction. PaLM-E is 562B parameters at fp64 ⇒ ~140 GB
-    /// resident, so callers running the model in native mode at full size
-    /// should supply a streaming-offload instance here to avoid OOM. Default
-    /// is <c>null</c>, which means the PaLM-E constructor will NOT call
-    /// <c>ConfigureWeightLifetime</c> automatically — caller is responsible
-    /// for either supplying an instance or invoking
+    /// native-mode construction. PaLM-E is 562B parameters: raw weights are
+    /// ~4.5 TB at fp64 (562e9 × 8 B), ~2.25 TB at fp32, ~1.13 TB at fp16,
+    /// excluding activations / optimizer state. So callers running the model
+    /// in native mode at full size should supply a streaming-offload instance
+    /// here to avoid OOM. Default is <c>null</c>, which means the PaLM-E
+    /// constructor will NOT call <c>ConfigureWeightLifetime</c> automatically
+    /// — caller is responsible for either supplying an instance or invoking
     /// <c>ConfigureWeightLifetime</c> directly post-construction.
     /// </summary>
     public GpuOffloadOptions? WeightOffloadOptions { get; set; }

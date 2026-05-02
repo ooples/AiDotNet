@@ -382,7 +382,6 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
 
         T zero = NumOps.Zero;
         T one = NumOps.One;
-        T two = NumOps.FromDouble(2);
         T half = NumOps.FromDouble(0.5);
         T tiny = NumOps.FromDouble(1e-30);
         T machineEps = NumOps.FromDouble(1e-15);
