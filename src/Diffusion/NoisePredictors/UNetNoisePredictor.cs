@@ -813,12 +813,18 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     // step. Eval-mode (no tape) routes through the manual concat-into,
     // tape-mode keeps the allocating Engine.TensorConcatenate so the
     // backward op can recover the gradient split.
-    private readonly System.Collections.Generic.Dictionary<int, Tensor<T>> _concatPool = new();
+    // Pool key is a (batch, totalC, h, w) tuple — using a tuple instead of a
+    // packed int avoids the silent-collision bug the prior 32-bit packing
+    // had at higher resolutions: spatial = H*W can exceed 65 535 once
+    // H ≥ 256, so two distinct shapes (e.g. [1, 320, 256, 256] vs
+    // [1, 320, 1, 65 536]) would have hashed to the same key and the
+    // pool would have served back a wrong-shape buffer.
+    private readonly System.Collections.Generic.Dictionary<(int batch, int totalC, int h, int w), Tensor<T>> _concatPool = new();
 
     /// <summary>
     /// Concatenates two tensors along the channel dimension. Eval-mode uses
-    /// a pooled manual-copy buffer keyed by spatial dims + channel sum so
-    /// repeated decoder skip-merges at the same shape don't allocate.
+    /// a pooled manual-copy buffer keyed by exact shape so repeated decoder
+    /// skip-merges at the same shape don't allocate.
     /// </summary>
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
@@ -840,13 +846,10 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         int totalC = cA + cB;
         int spatial = h * w;
 
-        // Pool key encodes batch + total-channels + spatial as a 32-bit
-        // packed integer — multiple call sites at different shapes get
-        // separate pool entries, callers at matching shapes reuse.
-        int key = (batch * 65536 + totalC) * 65536 + spatial;
-        if (!_concatPool.TryGetValue(key, out var output)
-            || output._shape[0] != batch || output._shape[1] != totalC
-            || output._shape[2] != h || output._shape[3] != w)
+        // Tuple key — collision-free (each component is its own field, no
+        // packing into a fixed-width integer that could overflow).
+        var key = (batch, totalC, h, w);
+        if (!_concatPool.TryGetValue(key, out var output))
         {
             output = new Tensor<T>(new[] { batch, totalC, h, w });
             _concatPool[key] = output;

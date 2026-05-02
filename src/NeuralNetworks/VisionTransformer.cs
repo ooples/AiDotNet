@@ -746,15 +746,47 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         // cls token + positional embeddings + classification head and refuse
         // to distribute the remaining encoder/MLP weights. Run a single
         // probe Predict to resolve every lazy layer before copying params.
+        //
+        // Probe failures (OOM, missing engine backend, real shape regressions)
+        // would silently leave newViT with unresolved layers and
+        // ParameterCount mismatched against the source. The post-probe
+        // length-equality check below catches that mismatch and throws so
+        // the caller doesn't end up with a model that randomly drops the
+        // source's trained weights — earlier swallow-everything behaviour
+        // hid OOM and shape-validation regressions.
         var probe = new Tensor<T>(new[] { 1, _channels, _imageHeight, _imageWidth });
-        try { newViT.Predict(probe); } catch { /* probe is best-effort */ }
-
-        var allParams = GetParameters();
-        if (allParams.Length > 0 && allParams.Length == newViT.ParameterCount)
+        Exception? probeFailure = null;
+        try
         {
-            newViT.UpdateParameters(allParams);
+            newViT.Predict(probe);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            // Tolerate the narrow class of "input shape disagrees with the
+            // freshly-constructed lazy layer chain" errors that genuinely
+            // mean the probe couldn't run — the length-check below will
+            // surface it as a clean mismatch rather than a model with the
+            // source's data dropped. Capture the exception to chain it
+            // into the diagnostic if the length check trips.
+            probeFailure = ex;
         }
 
+        var allParams = GetParameters();
+        if (allParams.Length == 0)
+        {
+            return newViT;
+        }
+        if (allParams.Length != newViT.ParameterCount)
+        {
+            throw new InvalidOperationException(
+                $"VisionTransformer.Clone could not resolve the new instance's lazy layers " +
+                $"(source has {allParams.Length} parameters, clone has {newViT.ParameterCount}). " +
+                $"This typically means the probe Predict failed before all lazy weights were " +
+                $"allocated — the clone would otherwise silently lose the source's trained " +
+                $"weights, so the bug is surfaced here instead.",
+                probeFailure);
+        }
+        newViT.UpdateParameters(allParams);
         return newViT;
     }
 

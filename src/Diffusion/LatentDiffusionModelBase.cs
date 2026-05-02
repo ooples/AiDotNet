@@ -86,10 +86,14 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
             if (equal) return base.Predict(input);
         }
 
-        // Rebuild a shape-canonical input, preserving the first few values
-        // from the original (so the seed-derivation hash stays input-
-        // dependent) and zero-padding the rest. Then delegate to the base
-        // Predict which does the seed derive + Generate call.
+        // Rebuild a shape-canonical input by copying the original values
+        // into the leading prefix of the canonical-shape buffer (any extra
+        // channels picked up by the canonicalization stay zero). The base
+        // DiffusionModelBase.Predict no longer hashes the input to derive
+        // a seed — the prior commit in this branch
+        // (predict-treats-input-as-noisy-sample) wired Predict to forward
+        // the input as the initial sample to Generate so the prior comment
+        // about "seed-derivation hash" was stale once that landed.
         var shapedInput = new Tensor<T>(genShape);
         int copyLen = Math.Min(input.Length, shapedInput.Length);
         for (int i = 0; i < copyLen; i++)
