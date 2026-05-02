@@ -553,10 +553,29 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             }
         }
         var dummy = new Tensor<T>(inputShape);
-        OnFirstForward(dummy);
+        IsResolvingShapesOnly = true;
+        try
+        {
+            OnFirstForward(dummy);
+        }
+        finally
+        {
+            IsResolvingShapesOnly = false;
+        }
         // Intentionally NOT calling EnsureInitialized — weights stay deferred until
         // the first real forward pass so RNG state is preserved.
     }
+
+    /// <summary>
+    /// True only while <see cref="ResolveShapesOnly"/> is on the stack. Lazy
+    /// layers that would normally allocate weights from <c>OnFirstForward</c>
+    /// (e.g. <c>MultiHeadAttentionLayer</c>'s Q/K/V/O) can read this flag to
+    /// short-circuit allocation when only shape resolution is requested,
+    /// keeping <c>InferenceOptimizer.ResolveLazyLayers</c> RNG-neutral and
+    /// allocation-free without breaking <c>ResolveFromShape</c> (which DOES
+    /// expect weights to be allocated).
+    /// </summary>
+    protected bool IsResolvingShapesOnly { get; private set; }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
